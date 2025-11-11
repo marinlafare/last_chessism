@@ -16,11 +16,12 @@ from chessism_api.operations.models import PlayerCreateData
 
 async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
     """
-    Fetches a player's profile from the Chess.com API and returns it as a
-    PlayerCreateData Pydantic model instance.
+    Fetches a player's profile from the Chess.com API.
     """
     PLAYER_URL = constants.PLAYER.replace('{player}', player_name)
-    async with httpx.AsyncClient(timeout=5) as client:
+    
+    # --- FIX: Force HTTP/1.1 ---
+    async with httpx.AsyncClient(timeout=5, http2=False) as client:
         try:
             response = await client.get(
                 PLAYER_URL,
@@ -32,7 +33,7 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
 
             # --- Transformation to match PlayerCreateData Pydantic model ---
             processed_data = {} 
-            processed_data['player_name'] = player_name.lower() # Always use the requested player_name
+            processed_data['player_name'] = player_name.lower()
 
             processed_data['name'] = raw_data.get('name')
             processed_data['url'] = raw_data.get('url')
@@ -56,7 +57,7 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
                     print(f"Warning: Could not convert 'joined' ({joined_ts}) to int for {player_name}. Setting to 0.")
                     processed_data['joined'] = 0
             else:
-                processed_data['joined'] = 0
+                processed_data['joined'] = 0 # Default to 0 if joined is None
             
             processed_data['status'] = raw_data.get('status')
             processed_data['is_streamer'] = raw_data.get('is_streamer')
@@ -64,14 +65,9 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             processed_data['verified'] = raw_data.get('verified')
             processed_data['league'] = raw_data.get('league')
             
-            try:
-                # Validate data with the Pydantic model
-                player_data = PlayerCreateData(**processed_data)
-                return player_data # Return the Pydantic model instance
-            except Exception as pydantic_error:
-                print(f"Pydantic validation error for {player_name}: {pydantic_error}")
-                print(f"Data that failed validation: {processed_data}")
-                return None
+            # Use Pydantic to validate and create the data object
+            player_data = PlayerCreateData(**processed_data)
+            return player_data # Return the Pydantic model instance
 
         except httpx.HTTPStatusError as e:
             if e.response.status_code == 404:
@@ -80,19 +76,49 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             print(f"HTTP error for profile {player_name}: {e.response.status_code} - {e.response.text}")
             return None
         except httpx.RequestError as e:
-            # --- FIX: Use repr(e) for detailed network errors ---
+            # --- UPDATED: Use repr(e) for better error details ---
             print(f"Request error for profile {player_name}: {repr(e)}")
             return None
         except Exception as e:
-            # --- FIX: Use repr(e) for detailed general errors ---
-            print(f"An unexpected error occurred getting profile {player_name}: {repr(e)}")
+            print(f"An unexpected error occurred getting profile {player_name}: {e}")
+            return None
+
+
+# --- NEW FUNCTION: get_player_stats ---
+async def get_player_stats(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetches a player's stats from the Chess.com API.
+    Returns the raw JSON dictionary.
+    """
+    STATS_URL = constants.STATS.replace('{username}', player_name)
+    
+    async with httpx.AsyncClient(timeout=5, http2=False) as client:
+        try:
+            response = await client.get(
+                STATS_URL,
+                headers={"User-Agent": constants.USER_AGENT}
+            )
+            response.raise_for_status()
+            raw_data = response.json()
+            return raw_data
+
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 404:
+                print(f"Stats for '{player_name}' not found on Chess.com (404).")
+                return None
+            print(f"HTTP error for stats {player_name}: {e.response.status_code} - {e.response.text}")
+            return None
+        except httpx.RequestError as e:
+            print(f"Request error for stats {player_name}: {repr(e)}")
+            return None
+        except Exception as e:
+            print(f"An unexpected error occurred getting stats {player_name}: {e}")
             return None
 
 
 async def ask_twice(player_name: str, year: int, month: int, client: httpx.AsyncClient) -> Optional[httpx.Response]:
     """
     Fetches game archives for a specific month, with a retry logic.
-    Uses an existing httpx.AsyncClient instance.
     """
     month_str = f"{month:02d}"
 
@@ -111,7 +137,6 @@ async def ask_twice(player_name: str, year: int, month: int, client: httpx.Async
             headers={"User-Agent": constants.USER_AGENT}
         )
         
-        # Check for empty content on first try and retry if necessary
         if not games_response.content:
             await asyncio.sleep(1)
             games_response = await client.get(
@@ -135,10 +160,10 @@ async def ask_twice(player_name: str, year: int, month: int, client: httpx.Async
         print(f"HTTP error downloading month {year}-{month_str}: {e.response.status_code} - {e.response.text}")
         return None
     except httpx.RequestError as e:
-        print(f"Request error downloading month {year}-{month_str}: {repr(e)}")
+        print(f"Request error downloading month {year}-{month_str}: {e}")
         return None
     except Exception as e:
-        print(f"An unexpected error occurred downloading month {year}-{month_str}: {repr(e)}")
+        print(f"An unexpected error occurred downloading month {year}-{month_str}: {e}")
         return None
 
 
@@ -153,7 +178,6 @@ async def download_month(player_name: str, year: int, month: int, client: httpx.
 async def month_of_games(param: Dict[str, Any], client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
     """
     Downloads a month of games and returns as parsed JSON dictionary.
-    Passes the shared httpx.AsyncClient.
     """
     player_name = param["player_name"]
     year = param["year"]
@@ -181,39 +205,37 @@ async def month_of_games(param: Dict[str, Any], client: httpx.AsyncClient) -> Op
 async def download_months(
                         player_name: str,
                         valid_dates: List[str],
-                        min_delay_between_requests: float = 0.1
+                        # --- REMOVED: Concurrency parameters ---
+                        min_delay_between_requests: float = 0.5
                         ) -> Dict[int, Dict[int, List[Dict[str, Any]]]]:
     """
-    Downloads games for a player's month strings SERIALLY (one by one)
-    to comply with Chess.com API policies.
+    --- SERIAL VERSION ---
+    Downloads games for a player's month strings one by one
+    to comply with Chess.com policies.
     """
     all_games_by_month: Dict[int, Dict[int, List[Dict[str, Any]]]] = {}
     
-    async with httpx.AsyncClient(timeout=15) as shared_client:
-
-        print(f"Starting SERIAL download of {len(valid_dates)} months...")
+    # --- MODIFIED: Removed Semaphore ---
+    
+    async with httpx.AsyncClient(timeout=15, http2=False) as shared_client:
+        
+        print(f"Starting serial download of {len(valid_dates)} months...")
         start_time = time.time()
         
-        # --- FIX: Run in a serial for loop, not concurrently ---
-        for i, month_str in enumerate(valid_dates):
-            # Sleep *before* the request to rate limit
-            if i > 0: # Don't sleep before the very first request
-                await asyncio.sleep(min_delay_between_requests)
+        # --- MODIFIED: Use a simple for loop instead of asyncio.gather ---
+        for month_str in valid_dates:
+            await asyncio.sleep(min_delay_between_requests) # Respect rate limit
 
-            print(f"Downloading month {i+1}/{len(valid_dates)}: {month_str}...")
+            year_str, month_str_val = month_str.split('-')
+            year = int(year_str)
+            month = int(month_str_val)
+            param = {"player_name": player_name, "year": year, "month": month}
             
             try:
-                year_str, month_str_val = month_str.split('-')
-                year = int(year_str)
-                month = int(month_str_val)
-
-                param = {"player_name": player_name, "year": year, "month": month}
-                
-                # Use the shared client to make the request
                 result = await month_of_games(param, shared_client) 
 
                 if result is None:
-                    print(f"No data returned for {year}-{month}.")
+                    print(f"No data for {year}-{month}.")
                     continue
                 
                 if 'games' in result and result['games'] is not None:
@@ -221,14 +243,11 @@ async def download_months(
                         all_games_by_month[year] = {}
                     all_games_by_month[year][month] = result['games']
                 else:
-                    print(f"No games or invalid data for {year}-{month} (missing/empty 'games' key).")
+                    print(f"No games or invalid data for {year}-{month} (missing/empty 'games' key in parsed JSON).")
 
             except Exception as e:
-                # Log the exception but continue with the next month
-                print(f"An error occurred processing month {month_str}: {repr(e)}")
-                continue # Continue to the next month in the loop
-        # --- End of serial loop ---
-
+                print(f"An error occurred processing {month_str}: {e}")
+        
         end_time = time.time()
         print(f"Finished downloading {len(valid_dates)} months in {end_time - start_time:.2f} seconds.")
 

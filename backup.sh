@@ -2,6 +2,8 @@
 
 # This script creates a compressed backup of your PostgreSQL database.
 # It uses 'docker-compose exec' to run pg_dump inside the running 'db' container.
+# --- MODIFIED: This script will now delete the single most recent backup in
+#          the target directory before creating a new one. ---
 
 # --- Stop script on any error ---
 set -e
@@ -11,17 +13,36 @@ set -e
 CONTAINER_NAME="db"
 DB_USER="chessism_user"
 DB_NAME="chessism_db"
-
-# --- Backup Filename ---
-# Creates a filename like: backup-chessism_db-2025_11_10-22_15_30.dump
-FILENAME="backup-${DB_NAME}-$(date +%Y_%m_%d-%H_%M_%S).dump"
 OUTPUT_DIR="./backups" # We will create this directory
 
 # --- Create backup directory if it doesn't exist ---
 mkdir -p $OUTPUT_DIR
+
+# --- NEW: Find and delete the most recent backup ---
+echo "Checking for previous backup..."
+# Find the newest file in the directory matching the pattern
+# ls -t lists by modification time, newest first
+# head -n 1 takes only the first line
+# 2>/dev/null hides the "No such file or directory" error if no backups exist
+LATEST_BACKUP=$(ls -t "$OUTPUT_DIR"/backup-"$DB_NAME"-*.dump 2>/dev/null | head -n 1)
+
+if [ -f "$LATEST_BACKUP" ]; then
+    echo "Found previous backup: $LATEST_BACKUP"
+    echo "Deleting it..."
+    rm "$LATEST_BACKUP"
+    echo "Previous backup deleted."
+else
+    echo "No previous backups found."
+fi
+# --- END NEW SECTION ---
+
+
+# --- Backup Filename ---
+# Creates a filename like: backup-chessism_db-2025_11_10-22_15_30.dump
+FILENAME="backup-${DB_NAME}-$(date +%Y_%m_%d-%H_%M_%S).dump"
 FULL_PATH="$OUTPUT_DIR/$FILENAME"
 
-echo "Starting backup of database '$DB_NAME'..."
+echo "Starting new backup of database '$DB_NAME'..."
 
 # --- The Backup Command ---
 # docker-compose exec [service_name] [command_to_run]
@@ -36,5 +57,5 @@ docker-compose exec -T $CONTAINER_NAME pg_dump -U $DB_USER -d $DB_NAME -F c > $F
 
 # --- Success Message ---
 echo ""
-echo "✅ Backup complete!"
+echo "✅ New backup complete!"
 echo "File created at: $FULL_PATH"
