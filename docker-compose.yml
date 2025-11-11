@@ -1,0 +1,65 @@
+services:
+  # Service 1: The main Chessism API (Database, Players, Games)
+  chessism-api:
+    image: chessism-api:latest
+    build:
+      context: .  # Build from the root directory
+      dockerfile: Dockerfile # Using the NEW root Dockerfile
+    ports:
+      - "8000:8000" # Exposes the main API on port 8000
+    environment:
+      # This DATABASE_URL is passed to constants.py
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+    # --- The API service now depends on the DB service ---
+    depends_on:
+      - db
+    networks:
+      - chessism_net
+
+  # Service 2: The Leela Analysis Service (GPU-intensive)
+  leela-service:
+    image: leela-service:latest
+    build:
+      context: ./leela-service # Build from the leela-service directory
+      dockerfile: Dockerfile     # Using the Dockerfile inside that folder
+    ports:
+      - "9999:9999" # Exposes the Leela API on port 9999
+    environment:
+      - LC0_TARGET_GPU=0
+    # --- CRITICAL: This grants access to the NVIDIA GPU ---
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - chessism_net
+
+  # --- Service 3: The PostgreSQL Database ---
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: chessism_user
+      POSTGRES_PASSWORD: chessism_pass
+      POSTGRES_DB: chessism_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - chessism_net
+    ports:
+      # Optionally expose the DB to your host machine for debugging
+      # (e.g., connecting with DBeaver or pgAdmin)
+      # ==========================================================
+      #   FIX: Changed host port from 5432 to 5433
+      # ==========================================================
+      - "5433:5432"
+
+# --- Define shared resources ---
+networks:
+  chessism_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
