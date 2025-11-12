@@ -1,3 +1,191 @@
+
+    PART ONE: ROOT FILES
+            This is the chessism-api project, is a suite for chess analysis,
+            it's source is mainly the chess.com players and games.
+            
+        
+
+
+### main.py 
+#main.py
+import os
+from fastapi import FastAPI
+from contextlib import asynccontextmanager
+import constants
+
+# --- NEW: Import the fens router ---
+from chessism_api.routers import players, games, fens
+
+# --- NEW: Import the init_db function ---
+from chessism_api.database.engine import init_db
+# from database.database.db_interface import DBInterface
+
+CONN_STRING = constants.CONN_STRING
+
+# lifespan event handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # --- NEW: Call the init_db function on startup ---
+    if not CONN_STRING:
+        raise ValueError("DATABASE_URL environment variable is not set.")
+    await init_db(CONN_STRING)
+    # DBInterface.initialize_engine_and_session(CONN_STRING)
+    print(f"BASAL CHESSISM Server ON YO!... (DB: {CONN_STRING.split('@')[-1]})")
+    yield
+    print('BASAL CHESSISM Server DOWN YO!...')
+
+app = FastAPI(lifespan=lifespan)
+
+@app.get("/")
+def read_root():
+    return "BASAL CHESSISM server running."
+
+# --- NEW: Include the router ---
+# This makes the endpoint available at /players/current_players
+app.include_router(players.router, prefix="/players", tags=["Players"])
+
+# --- NEW: Include the games router ---
+app.include_router(games.router, prefix="/games", tags=["Games"])
+
+# --- NEW: Include the FENs router ---
+app.include_router(fens.router, prefix="/fens", tags=["FENs"])
+
+
+
+### Dockerfile 
+# This is the NEW Dockerfile for your main API (in the root directory)
+# It's a simple Python server.
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy the application code
+COPY main.py .
+COPY constants.py .
+
+# --- NEW: Copy the new API directory ---
+COPY chessism_api/ ./chessism_api
+
+# Expose the port the app runs on
+EXPOSE 8000
+
+# Run the Uvicorn server
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+
+
+### docker-compose.yml 
+services:
+  chessism-api:
+    build: .
+    image: chessism-api:latest
+    ports:
+      - "8000:8000"
+    environment:
+      # This URL tells the API to connect to the 'db' service
+      # on the internal Docker network.
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+    networks:
+      - chessism_net
+    # This wait is critical to prevent the API from crashing on startup
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      # This maps the local host directory ./api_logs to the container
+      # This is where 'illegall_fen.txt' is written.
+      - ./api_logs:/app/logs
+    # Note: Running as root is required since we removed the fragile 'user:' declaration.
+
+  leela-service:
+    build: ./leela-service
+    image: leela-service:latest
+    ports:
+      - "9999:9999"
+    environment:
+      - LC0_TARGET_GPU=0
+    networks:
+      - chessism_net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: chessism_user
+      POSTGRES_PASSWORD: chessism_pass
+      POSTGRES_DB: chessism_db
+    ports:
+      # Maps your host port 5433 to the container's 5432
+      - "5433:5432"
+    volumes:
+      # This maps the './db_data' folder on your host computer to the PostgreSQL data directory.
+      # This ensures database persistence.
+      - ./db_data:/var/lib/postgresql/data
+    networks:
+      - chessism_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chessism_user -d chessism_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  chessism_net:
+    driver: bridge
+
+
+
+### constants.py 
+import os
+
+CONN_STRING = os.environ.get("DATABASE_URL")
+
+if not CONN_STRING:
+    raise ValueError("DATABASE_URL environment variable is not set.")
+
+# --- Game Results Constants ---
+DRAW_RESULTS = ['50move', 'agreed', 'insufficient', 'repetition', 'stalemate', 'timevsinsufficient']
+LOSE_RESULTS = ['checkmated', 'resigned', 'threecheck', 'timeout', 'abandoned']
+WINING_RESULT = ['win', 'kingofthehill']
+
+# --- Other Constants ---
+USER_AGENT = "ChessismApp/1.0 (marinlafare@gmail.com)"
+LEADERBOARD = "https://api.chess.com/pub/leaderboards"
+STATS = "https://api.chess.com/pub/player/{username}/stats"
+PLAYER="https://api.chess.com/pub/player/{player}"
+DOWNLOAD_MONTH = "https://api.chess.com/pub/player/{player}/games/{year}/{month}"
+
+
+#USER_AGENT="Mozilla/5.0 (Macintosh; Intel Mac OS X x.y; rv:42.0) Gecko/20100101 Firefox/42.0"
+
+
+
+
+### requirements.txt 
+fastapi
+uvicorn
+python-dotenv
+sqlalchemy
+asyncpg
+pydantic
+httpx
+requests
+python-chess
+
+
+
+### testing_chessism.py 
 import httpx
 import asyncio
 import os
@@ -281,130 +469,4 @@ async def test_api_get_top_fens(limit: int = 20):
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
-async def test_api_get_sum_n_games(threshold: int = 10):
-    """
-    Calls the GET /fens/sum_n_games endpoint.
-    """
-    print(f"\n--- [API TEST] ---")
-    print(f"Fetching SUM(n_games) for FENs where n_games > {threshold}...")
-    
-    url = f"{API_BASE_URL}/fens/sum_n_games?threshold={threshold}"
-    
-    try:
-        # --- FIX: Disable HTTP/2, force HTTP/1.1 ---
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.get(url, timeout=60) # Give it a reasonable timeout
-        
-        response.raise_for_status()
-        
-        data = response.json()
-        
-        print("\n--- SUCCESS (Sum Data) ---")
-        pprint(data)
-        
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
-    except Exception as e:
-        print(f"\n--- UNEXPECTED ERROR ---")
-        print(repr(e))
-        
-async def test_api_run_analysis_job(
-    gpu_index: int, 
-    total_fens: int, 
-    batch_size: int, 
-    nodes: int
-):
-    """
-    Calls the POST /analysis/run_job endpoint.
-    This triggers a background task on the server.
-    """
-    print(f"\n--- [API TEST] ---")
-    print(f"Triggering analysis job on GPU {gpu_index} for {total_fens} FENs...")
-    
-    url = f"{API_BASE_URL}/analysis/run_job"
-    
-    payload = {
-        "gpu_index": gpu_index,
-        "total_fens_to_process": total_fens,
-        "batch_size": batch_size,
-        "nodes_limit": nodes
-    }
-    
-    try:
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
-        print("\nCheck your docker-compose logs to see the job progress.")
-        
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
-    except Exception as e:
-        print(f"\n--- UNEXPECTED ERROR ---")
-        print(repr(e))
 
-async def test_api_run_player_analysis_job(
-    player_name: str,
-    gpu_index: int, 
-    total_fens: int, 
-    batch_size: int, 
-    nodes: int
-):
-    """
-    Calls the POST /analysis/run_player_job endpoint.
-    This triggers a background task on the server.
-    """
-    print(f"\n--- [API TEST] ---")
-    print(f"Triggering PLAYER job for '{player_name}' on GPU {gpu_index}...")
-    
-    url = f"{API_BASE_URL}/analysis/run_player_job"
-    
-    payload = {
-        "player_name": player_name,
-        "gpu_index": gpu_index,
-        "total_fens_to_process": total_fens,
-        "batch_size": batch_size,
-        "nodes_limit": nodes
-    }
-    
-    try:
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Player Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
-        print("\nCheck your docker-compose logs to see the job progress.")
-        
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
-    except Exception as e:
-        print(f"\n--- UNEXPECTED ERROR ---")
-        print(repr(e))

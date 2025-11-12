@@ -5,7 +5,8 @@ from fastapi.responses import JSONResponse
 
 # --- FIXED IMPORTS ---
 from chessism_api.operations.fens import run_fen_generation_job
-from chessism_api.database.ask_db import get_top_fens
+# --- UPDATED IMPORT ---
+from chessism_api.database.ask_db import get_top_fens, get_sum_n_games
 # ---
 from typing import Dict, Any 
 
@@ -63,3 +64,25 @@ async def api_get_top_fens(limit: int = 20) -> JSONResponse:
         output_string += line
         
     return JSONResponse(content={"results": output_string})
+
+
+# --- NEW ENDPOINT ---
+@router.get("/sum_n_games")
+async def api_get_sum_n_games(threshold: int = 10) -> JSONResponse:
+    """
+    Calculates the sum of all n_games in the Fen table
+    where n_games > threshold.
+    """
+    if threshold < 0:
+        raise HTTPException(status_code=400, detail="Threshold must be a non-negative integer.")
+        
+    try:
+        total_sum = await get_sum_n_games(threshold)
+        
+        return JSONResponse(content={
+            "threshold": threshold,
+            "total_n_games_sum": total_sum
+        })
+    except Exception as e:
+        print(f"Error in /sum_n_games endpoint: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error while calculating sum.")

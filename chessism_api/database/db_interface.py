@@ -172,8 +172,8 @@ class DBInterface:
 
 
     async def upsert_main_fens(self,
-                                 objects_to_insert: ListOfDataObjects,
-                                 objects_to_update: ListOfDataObjects) -> bool:
+                                   objects_to_insert: ListOfDataObjects,
+                                   objects_to_update: ListOfDataObjects) -> bool:
         """
         PERFORMANCE WARNING: The update logic (for item in objects_to_update)
         runs session.get() inside a loop. This is an N+1 query problem
@@ -306,57 +306,64 @@ class DBInterface:
                 print(f"An error occurred during bulk update of game 'fens_done': {e}")
                 raise
                 
-    async def update_fen_analysis_data(self, analysis_data: ListOfDataObjects) -> int:
+    async def update_fen_analysis_data(self,
+                                           session: AsyncSession, # <-- MODIFIED: Use existing session
+                                           analysis_data: ListOfDataObjects) -> int:
         """
-        Updates 'score' and 'next_moves' for existing Fen records in a bulk operation.
+        Updates 'score' and 'next_moves' for existing Fen records in a bulk operation
+        using an EXISTING session (for transactional safety with FOR UPDATE).
         
         Args:
+            session: The active AsyncSession holding the row locks.
             analysis_data: List of dicts, each with 'fen', 'score', 'next_moves'.
         
         Returns:
             The number of rows updated.
         """
         if not analysis_data:
-            print("No analysis data provided for update.")
+            print("No analysis data provided for update.", flush=True)
             return 0
+            
+        # We do not use a 'with' block here, as the session is managed by the caller
+        try:
+            prepared_data = []
+            for item in analysis_data:
+                prepared_data.append({
+                    'p_fen': item['fen'],
+                    'p_score': item['score'],
+                    'p_next_moves': item['next_moves']
+                })
 
-        async with AsyncDBSession() as session:
-            try:
-                # Prepare data for bulk update.
-                # Keys must match the bindparam names.
-                prepared_data = []
-                for item in analysis_data:
-                    prepared_data.append({
-                        'p_fen': item['fen'],
-                        'p_score': item['score'],
-                        'p_next_moves': item['next_moves']
-                    })
-
-                stmt = (
-                    update(self.db_class)
-                    .where(self.db_class.fen == bindparam('p_fen'))
-                    .values(
-                        score=bindparam('p_score'),
-                        next_moves=bindparam('p_next_moves')
-                    )
+            # --- THE CORE FIX ---
+            # Use self.db_class.__table__ (Core) instead of self.db_class (ORM)
+            # to ensure compatibility with bulk parameter binding.
+            stmt = (
+                update(self.db_class.__table__) 
+                .where(self.db_class.fen == bindparam('p_fen'))
+                .values(
+                    score=bindparam('p_score'),
+                    next_moves=bindparam('p_next_moves')
                 )
-                
-                result = await session.execute(
-                    stmt,
-                    prepared_data, # Pass the entire list of parameters
-                    execution_options={"synchronize_session": False}
-                )
-                total_updated_rows = result.rowcount
-                # --- END FIX ---
-
-                await session.commit()
-                print(f"Successfully updated {total_updated_rows} FEN records with analysis data.")
-                return total_updated_rows
-            except Exception as e:
-                await session.rollback()
-                print(f"An error occurred during bulk update of FEN analysis data: {e}")
-                raise
-                
+            )
+            
+            result = await session.execute(
+                stmt,
+                prepared_data,
+                execution_options={"synchronize_session": False}
+            )
+            
+            # --- COSMETIC FIX for -1 rowcount ---
+            total_updated_rows = len(analysis_data)
+            
+            print(f"Successfully staged {total_updated_rows} FEN updates for analysis data (pending commit).", flush=True)
+            
+            # DO NOT COMMIT HERE. The caller (run_analysis_job) will commit.
+            return total_updated_rows
+        except Exception as e:
+            # DO NOT ROLL BACK HERE. The caller will roll back.
+            print(f"An error occurred during bulk update of FEN analysis data: {e}", flush=True)
+            raise
+            
 async def reset_all_game_fens_done_to_false() -> int:
     """
     Resets the 'fens_done' column to False for all Game records where it is currently True.

@@ -6,6 +6,8 @@ from typing import List, Dict, Any, Tuple, Set
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy import text, select, update, func
+# --- NEW IMPORT ---
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
@@ -258,3 +260,92 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
         fetch_as_dict=True
     )
     return result
+
+# --- NEW FUNCTION ---
+async def get_sum_n_games(threshold: int = 10) -> int:
+    """
+    Calculates the sum of all n_games in the Fen table where
+    n_games is greater than the specified threshold.
+    """
+    async with AsyncDBSession() as session:
+        try:
+            stmt = (
+                select(func.sum(Fen.n_games))
+                .where(Fen.n_games > threshold)
+            )
+            result = await session.execute(stmt)
+            total_sum = result.scalar()
+            
+            if total_sum is None:
+                return 0
+            # The sum might be a float or decimal, so cast to int.
+            return int(total_sum)
+            
+        except Exception as e:
+            print(f"Error calculating sum of n_games: {e}")
+            return 0 # Return 0 on error
+
+# --- NEW FUNCTION (Req 2 & 6) ---
+async def get_fens_for_analysis(session: AsyncSession, limit: int) -> List[str]:
+    """
+    Fetches a batch of FENs that have not been analyzed (score IS NULL).
+    It prioritizes by n_games (Req 2) and uses FOR UPDATE SKIP LOCKED
+    to prevent race conditions between parallel workers (Solution 2).
+    """
+    try:
+        # Use raw SQL for FOR UPDATE SKIP LOCKED
+        sql_query = text("""
+            SELECT fen
+            FROM fen
+            WHERE score IS NULL
+            ORDER BY n_games DESC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """)
+        
+        result = await session.execute(sql_query, {"limit": limit})
+        fens = result.scalars().all()
+        return fens
+        
+    except Exception as e:
+        print(f"Error fetching FENs for analysis: {e}")
+        # We must re-raise to trigger the rollback in the calling function
+        raise
+
+# --- NEW FUNCTION (Req 5) ---
+async def get_player_fens_for_analysis(
+    session: AsyncSession, 
+    player_name: str, 
+    limit: int
+) -> List[str]:
+    """
+    Fetches a batch of FENs associated with a specific player
+    that have not been analyzed (score IS NULL).
+    Uses FOR UPDATE SKIP LOCKED to prevent race conditions.
+    """
+    try:
+        # Use raw SQL for the JOIN and FOR UPDATE SKIP LOCKED
+        sql_query = text("""
+            SELECT f.fen
+            FROM fen AS f
+            JOIN game_fen_association AS gfa ON f.fen = gfa.fen_fen
+            JOIN game AS g ON gfa.game_link = g.link
+            WHERE 
+                (g.white = :player_name OR g.black = :player_name)
+                AND f.score IS NULL
+            ORDER BY f.n_games DESC
+            LIMIT :limit
+            FOR UPDATE SKIP LOCKED
+        """)
+        
+        result = await session.execute(
+            sql_query, 
+            {"player_name": player_name, "limit": limit}
+        )
+        fens = result.scalars().all()
+        return fens
+        
+    except Exception as e:
+        print(f"Error fetching player FENs for analysis: {e}")
+        # Re-raise to trigger rollback
+        raise

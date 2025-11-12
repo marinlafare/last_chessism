@@ -1,0 +1,250 @@
+
+            PART THREE: CHESSISM_API ROUTERS
+            This is the third part, it contains some general helpers for the api
+
+            
+
+
+### inner_api/routers/games.py 
+# chessism_api/routers/games.py
+
+# chessism_api/routers/games.py
+
+from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, HTTPException # <-- Added HTTPException
+from typing import Dict, Any # <-- Added typing
+
+# --- FIXED IMPORTS ---
+from chessism_api.operations.games import create_games, read_game, update_player_games
+from chessism_api.database.ask_db import open_async_request # <-- Fixed import
+# ---
+
+router = APIRouter()
+
+
+@router.get("/{link}") # --- FIX: Removed '/games' prefix ---
+async def api_read_game(link: str) -> JSONResponse:
+    """
+    Retrieves game information by its link.
+    """
+    print(f'api call for link: {link}')
+    try:
+        game = await read_game(link)
+        if not game: # Check if game list is empty
+            raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
+        # Return the first game found (links should be unique)
+        return JSONResponse(content=game[0])
+    except Exception as e:
+        print(f"Error fetching game {link}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+@router.post("") # --- FIX: Changed route from "/" to "" ---
+async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <-- Use Dict
+    """
+    data = {"player_name": "some_player_name"}
+    
+    Fetches every available game for the player_name
+    formats them and inserts them into DB.
+    """
+    try:
+        player_name = data["player_name"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+        
+    congratulation = await create_games(data)
+    return JSONResponse(content={"message": congratulation})
+
+
+# --- NEW ENDPOINT ---
+@router.post("/update")
+async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONResponse:
+    """
+    data = {"player_name": "some_player_name"}
+    
+    Fetches games from the last recorded month to the present.
+    """
+    try:
+        player_name = data["player_name"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+        
+    message = await update_player_games(data)
+    return JSONResponse(content={"message": message})
+
+
+
+### inner_api/routers/fens.py 
+#chessism_api/routers/fens.py
+
+from fastapi import APIRouter, BackgroundTasks, Body, HTTPException
+from fastapi.responses import JSONResponse
+
+# --- FIXED IMPORTS ---
+from chessism_api.operations.fens import run_fen_generation_job
+from chessism_api.database.ask_db import get_top_fens
+# ---
+from typing import Dict, Any 
+
+router = APIRouter()
+
+# --- MODIFIED: Re-ordered parameters ---
+# background_tasks (no default) must come BEFORE data (has default)
+@router.post("/generate")
+async def api_generate_fens(background_tasks: BackgroundTasks, data: Dict[str, int] = Body(...)):
+    """
+    Triggers a background task to generate FENs from un-processed games.
+    
+    Payload: {"total_games_to_process": 10000, "batch_size": 1000}
+    """
+    try:
+        total_games = data.get("total_games_to_process", 1000000)
+        batch_size = data.get("batch_size", 1000)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid payload format.")
+
+    print(f"Received request to generate FENs. Target: {total_games} games.")
+    
+    # Start the job in a background task
+    background_tasks.add_task(
+        run_fen_generation_job,
+        total_games_to_process=total_games,
+        batch_size=batch_size
+    )
+    
+    return JSONResponse(
+        status_code=202, # Accepted
+        content={"message": f"Batch job started: Generating FENs for {total_games} games."}
+    )
+
+# --- FINAL FIX: Route changed to /top to avoid internal conflicts with FastAPI's path handling ---
+@router.get("/top")
+async def api_get_top_fens(limit: int = 20) -> JSONResponse:
+    """
+    Retrieves the top N FENs with the highest n_games count and formats them as a string.
+    """
+    if limit <= 0 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100.")
+        
+    top_fens = await get_top_fens(limit)
+    
+    if not top_fens:
+        return JSONResponse(content={"message": "No FEN data available in the database."}, status_code=200)
+
+    # Format the data into the requested string format
+    output_string = ""
+    for index, fen_data in enumerate(top_fens):
+        line = f"{index + 1}.- n_games: {fen_data['n_games']} (FEN: {fen_data['fen']})"
+        if index < len(top_fens) - 1:
+            line += "\n"
+        output_string += line
+        
+    return JSONResponse(content={"results": output_string})
+
+
+
+### inner_api/routers/players.py 
+# chessism_api/routers/players.py
+
+from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
+from fastapi.responses import JSONResponse
+from typing import Dict, Any
+
+# --- UPDATED IMPORTS ---
+from chessism_api.operations.players import (
+    get_current_players_with_games_in_db, 
+    read_player, 
+    insert_player,
+    create_and_store_player_stats,
+    read_player_stats,
+    update_stats_for_all_primary_players
+)
+# ---
+
+router = APIRouter()
+
+@router.get("/current_players")
+async def api_get_current_players_with_games():
+    """
+    Fetches all players that have a full profile (joined != 0).
+    """
+    result = await get_current_players_with_games_in_db()
+    return JSONResponse(content=result)
+
+# --- RE-ORDERED: Specific routes first ---
+
+@router.post("/update-all-stats")
+async def api_update_all_stats(background_tasks: BackgroundTasks):
+    """
+    Triggers a long-running background task to update the stats
+    for EVERY primary player in the database.
+    
+    Responds immediately with a "Job Started" message.
+    """
+    print("Received request to update all player stats.")
+    background_tasks.add_task(update_stats_for_all_primary_players)
+    return JSONResponse(
+        status_code=202, # Accepted
+        content={"message": "Batch job started: Updating stats for all primary players in the background."}
+    )
+
+@router.get("/{player_name}/stats")
+async def api_get_player_stats(player_name: str) -> JSONResponse:
+    """
+    Fetches a player's stats from Chess.com and updates the local database.
+    1. Always attempts to fetch fresh data from the Chess.com API.
+    2. Saves the data to the DB (inserting or updating).
+    3. Returns the fresh data.
+    """
+    player_name_lower = player_name.lower()
+    
+    print(f"Fetching fresh stats for {player_name_lower} from Chess.com...")
+    try:
+        # This function handles the full "fetch and upsert" logic
+        new_stats_data = await create_and_store_player_stats(player_name_lower)
+        
+        if new_stats_data:
+            print(f"Successfully fetched and upserted stats for {player_name_lower}.")
+            # .model_dump() converts the Pydantic object to a dict
+            return JSONResponse(content=new_stats_data.model_dump())
+        else:
+            # This means get_player_stats() returned None
+            raise HTTPException(status_code=404, detail="Stats not found on Chess.com (or connection failed).")
+            
+    except Exception as e:
+        print(f"Error during stats fetch for {player_name_lower}: {repr(e)}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching stats.")
+
+
+# --- RE-ORDERED: General route last ---
+
+@router.get("/{player_name}")
+async def api_get_player_profile(player_name: str) -> JSONResponse:
+    """
+    Fetches a player's profile.
+    1. Tries to read from the local database.
+    2. If not found, attempts to fetch from Chess.com and save.
+    """
+    # 1. Try to read from the database first
+    player_data = await read_player(player_name)
+    
+    if player_data:
+        print(f"Found player {player_name} in database.")
+        return JSONResponse(content=player_data)
+
+    # 2. If not in DB, try to fetch from Chess.com (which also saves it)
+    print(f"Player {player_name} not in DB. Fetching from Chess.com...")
+    try:
+        new_player_data = await insert_player({"player_name": player_name})
+        
+        if new_player_data:
+            print(f"Successfully fetched and saved {player_name}.")
+            # .model_dump() converts the Pydantic object to a dict for the JSON response
+            return JSONResponse(content=new_player_data.model_dump())
+        else:
+            # This means get_profile() returned None (e.g., ConnectTimeout or 404 from Chess.com)
+            raise HTTPException(status_code=404, detail="Player not found in database or on Chess.com (or connection failed).")
+            
+    except Exception as e:
+        print(f"Error during insert_player fetch for {player_name}: {repr(e)}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching the player.")
+

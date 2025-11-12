@@ -5,37 +5,44 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # This URL tells the API to connect to the 'db' service
-      # on the internal Docker network.
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
     networks:
       - chessism_net
-    # This wait is critical to prevent the API from crashing on startup
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      # This maps the local host directory ./api_logs to the container
-      # This is where 'illegall_fen.txt' is written.
       - ./api_logs:/app/logs
-    # Note: Running as root is required since we removed the fragile 'user:' declaration.
 
-  leela-service:
+  # --- SERVICE FOR GPU 0 (RTX 4060) ---
+  leela-service-gpu0:
     build: ./leela-service
     image: leela-service:latest
+    runtime: nvidia # <-- USE THIS INSTEAD OF 'DEPLOY'
     ports:
-      - "9999:9999"
+      - "9999:9999" # Host port 9999
     environment:
+      - NVIDIA_VISIBLE_DEVICES=0 # <-- USE THIS TO SELECT HOST GPU 0
       - LC0_TARGET_GPU=0
+      - LC0_BACKEND=cuda-fp16
     networks:
       - chessism_net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+    # 'deploy' key removed
+
+  # --- SERVICE FOR GPU 1 (GTX 1070) ---
+  leela-service-gpu1:
+    build: ./leela-service
+    image: leela-service:latest
+    runtime: nvidia # <-- USE THIS INSTEAD OF 'DEPLOY'
+    ports:
+      - "9998:9999" # Host port 9998
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=1 # <-- USE THIS TO SELECT HOST GPU 1
+      - LC0_TARGET_GPU=0
+      - LC0_BACKEND=cuda
+    networks:
+      - chessism_net
+    # 'deploy' key removed
 
   db:
     image: postgres:15
@@ -44,11 +51,8 @@ services:
       POSTGRES_PASSWORD: chessism_pass
       POSTGRES_DB: chessism_db
     ports:
-      # Maps your host port 5433 to the container's 5432
       - "5433:5432"
     volumes:
-      # This maps the './db_data' folder on your host computer to the PostgreSQL data directory.
-      # This ensures database persistence.
       - ./db_data:/var/lib/postgresql/data
     networks:
       - chessism_net
