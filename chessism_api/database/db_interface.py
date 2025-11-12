@@ -2,7 +2,8 @@
 
 import os
 from typing import Any, List, Dict, TypeVar
-from sqlalchemy import select, insert, Integer, func, update, bindparam # Import func
+# --- MODIFIED: Import 'text' for raw SQL in the update ---
+from sqlalchemy import select, insert, Integer, func, update, bindparam, text
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -94,9 +95,24 @@ class DBInterface:
 
     async def create_all(self, data: ListOfDataObjects) -> bool:
         """
-        Inserts multiple records. Handles specific UPSERT logic for Fen.
-        For other models, it uses bulk_insert_mappings.
-        **This method chunks inserts to avoid parameter limits.**
+        Inserts multiple records in a NEW session.
+        Handles specific UPSERT logic for Fen.
+        """
+        async with AsyncDBSession() as session:
+            try:
+                # Use the new helper method, passing the session
+                await self.create_all_with_session(session, data)
+                await session.commit()
+                return True
+            except Exception as e:
+                await session.rollback()
+                raise
+
+    # --- NEW METHOD ---
+    async def create_all_with_session(self, session: AsyncSession, data: ListOfDataObjects) -> bool:
+        """
+        Inserts multiple records using an EXISTING session.
+        This is used for atomic transactions.
         """
         if not data:
             return True
@@ -115,48 +131,50 @@ class DBInterface:
             effective_batch_size = INSERT_BATCH_SIZE
 
         chunks = [data[i:i + effective_batch_size] for i in range(0, len(data), effective_batch_size)]
-
-        async with AsyncDBSession() as session:
-            try:
-                for i, chunk in enumerate(chunks):
-                    if not chunk:
-                        continue
-                    
-                    if self.db_class == Fen:
-                        stmt = pg_insert(self.db_class).values(chunk).on_conflict_do_update(
-                            index_elements=[self.db_class.fen],
-                            set_={
-                                'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
-                                'moves_counter': pg_insert(self.db_class).excluded.moves_counter,
-                                'next_moves': None,
-                                'score': None
-                            }
+        
+        valid_columns = {c.name for c in self.db_class.__table__.columns}
+        
+        # This function now uses the *provided* session and does NOT commit.
+        for i, chunk in enumerate(chunks):
+            if not chunk:
+                continue
+            
+            clean_chunk = []
+            for data_dict in chunk:
+                clean_dict = {
+                    k: v for k, v in data_dict.items() 
+                    if k in valid_columns
+                }
+                clean_chunk.append(clean_dict)
+            
+            if not clean_chunk:
+                continue 
+            
+            if self.db_class == Fen:
+                stmt = pg_insert(self.db_class).values(clean_chunk).on_conflict_do_update(
+                    index_elements=[self.db_class.fen],
+                    set_={
+                        'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
+                        'moves_counter': text(
+                            "CASE WHEN position(excluded.moves_counter in fen.moves_counter) > 0 "
+                            "THEN fen.moves_counter "
+                            "ELSE (fen.moves_counter || excluded.moves_counter) END"
                         )
-                        await session.execute(stmt) # Add await here
-                    else:
-                        await session.run_sync(
-                            lambda sync_session, c=chunk: sync_session.bulk_insert_mappings(self.db_class, c)
-                        )
-                        # Commit after each non-Fen chunk, as bulk_insert_mappings
-                        # doesn't auto-join the async transaction context
-                        await session.commit() 
-                        continue # Skip the final commit for this chunk
+                    }
+                )
+                await session.execute(stmt)
+            else:
+                await session.run_sync(
+                    lambda sync_session, c=clean_chunk: sync_session.bulk_insert_mappings(self.db_class, c)
+                )
+        return True
+    # --- END NEW METHOD ---
 
-                # Final commit for all pg_insert (Fen) chunks
-                if self.db_class == Fen:
-                    await session.commit()
-                
-                return True
-            except Exception as e:
-                await session.rollback()
-                raise
 
     async def upsert_main_fens(self,
                                  objects_to_insert: ListOfDataObjects,
                                  objects_to_update: ListOfDataObjects) -> bool:
         """
-        Inserts new MainFen records and updates existing ones.
-        ---
         PERFORMANCE WARNING: The update logic (for item in objects_to_update)
         runs session.get() inside a loop. This is an N+1 query problem
         and will be very slow for large update lists.
@@ -323,8 +341,6 @@ class DBInterface:
                     )
                 )
                 
-                # --- PERFORMANCE FIX ---
-                # Execute the bulk update in a single call, not in a loop.
                 result = await session.execute(
                     stmt,
                     prepared_data, # Pass the entire list of parameters

@@ -1,12 +1,11 @@
 #main.py
-
 import os
 from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import constants
 
-# --- NEW: Import the players router ---
-from chessism_api.routers import players, games # <-- ADDED 'games'
+# --- NEW: Import the fens router ---
+from chessism_api.routers import players, games, fens
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
@@ -18,6 +17,8 @@ CONN_STRING = constants.CONN_STRING
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # --- NEW: Call the init_db function on startup ---
+    if not CONN_STRING:
+        raise ValueError("DATABASE_URL environment variable is not set.")
     await init_db(CONN_STRING)
     # DBInterface.initialize_engine_and_session(CONN_STRING)
     print(f"BASAL CHESSISM Server ON YO!... (DB: {CONN_STRING.split('@')[-1]})")
@@ -36,3 +37,6 @@ app.include_router(players.router, prefix="/players", tags=["Players"])
 
 # --- NEW: Include the games router ---
 app.include_router(games.router, prefix="/games", tags=["Games"])
+
+# --- NEW: Include the FENs router ---
+app.include_router(fens.router, prefix="/fens", tags=["FENs"])

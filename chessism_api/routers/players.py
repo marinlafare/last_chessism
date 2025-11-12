@@ -1,6 +1,6 @@
-# chessism_api/router/players.py
+# chessism_api/routers/players.py
 
-from fastapi import APIRouter, HTTPException, Body
+from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
 from fastapi.responses import JSONResponse
 from typing import Dict, Any
 
@@ -9,7 +9,9 @@ from chessism_api.operations.players import (
     get_current_players_with_games_in_db, 
     read_player, 
     insert_player,
-    create_and_store_player_stats # <-- NEW
+    create_and_store_player_stats,
+    read_player_stats,
+    update_stats_for_all_primary_players
 )
 # ---
 
@@ -23,6 +25,52 @@ async def api_get_current_players_with_games():
     result = await get_current_players_with_games_in_db()
     return JSONResponse(content=result)
 
+# --- RE-ORDERED: Specific routes first ---
+
+@router.post("/update-all-stats")
+async def api_update_all_stats(background_tasks: BackgroundTasks):
+    """
+    Triggers a long-running background task to update the stats
+    for EVERY primary player in the database.
+    
+    Responds immediately with a "Job Started" message.
+    """
+    print("Received request to update all player stats.")
+    background_tasks.add_task(update_stats_for_all_primary_players)
+    return JSONResponse(
+        status_code=202, # Accepted
+        content={"message": "Batch job started: Updating stats for all primary players in the background."}
+    )
+
+@router.get("/{player_name}/stats")
+async def api_get_player_stats(player_name: str) -> JSONResponse:
+    """
+    Fetches a player's stats from Chess.com and updates the local database.
+    1. Always attempts to fetch fresh data from the Chess.com API.
+    2. Saves the data to the DB (inserting or updating).
+    3. Returns the fresh data.
+    """
+    player_name_lower = player_name.lower()
+    
+    print(f"Fetching fresh stats for {player_name_lower} from Chess.com...")
+    try:
+        # This function handles the full "fetch and upsert" logic
+        new_stats_data = await create_and_store_player_stats(player_name_lower)
+        
+        if new_stats_data:
+            print(f"Successfully fetched and upserted stats for {player_name_lower}.")
+            # .model_dump() converts the Pydantic object to a dict
+            return JSONResponse(content=new_stats_data.model_dump())
+        else:
+            # This means get_player_stats() returned None
+            raise HTTPException(status_code=404, detail="Stats not found on Chess.com (or connection failed).")
+            
+    except Exception as e:
+        print(f"Error during stats fetch for {player_name_lower}: {repr(e)}")
+        raise HTTPException(status_code=500, detail="An internal error occurred while fetching stats.")
+
+
+# --- RE-ORDERED: General route last ---
 
 @router.get("/{player_name}")
 async def api_get_player_profile(player_name: str) -> JSONResponse:
@@ -54,38 +102,3 @@ async def api_get_player_profile(player_name: str) -> JSONResponse:
     except Exception as e:
         print(f"Error during insert_player fetch for {player_name}: {repr(e)}")
         raise HTTPException(status_code=500, detail="An internal error occurred while fetching the player.")
-
-
-# --- NEW ENDPOINT for Player Stats ---
-@router.get("/{player_name}/stats")
-async def api_get_player_stats(player_name: str) -> JSONResponse:
-    """
-    Fetches a player's stats.
-    1. Tries to read from the local database.
-    2. If not found, attempts to fetch from Chess.com, save, and return.
-    """
-    player_name_lower = player_name.lower()
-    
-    # 1. Try to read from the database first
-    stats_data = await read_player_stats(player_name_lower)
-    
-    if stats_data:
-        print(f"Found stats for {player_name_lower} in database.")
-        return JSONResponse(content=stats_data)
-
-    # 2. If not in DB, try to fetch, store, and return
-    print(f"Stats for {player_name_lower} not in DB. Fetching from Chess.com...")
-    try:
-        new_stats_data = await create_and_store_player_stats(player_name_lower)
-        
-        if new_stats_data:
-            print(f"Successfully fetched and saved stats for {player_name_lower}.")
-            # .model_dump() converts the Pydantic object to a dict
-            return JSONResponse(content=new_stats_data.model_dump())
-        else:
-            # This means get_player_stats() returned None
-            raise HTTPException(status_code=404, detail="Stats not found on Chess.com (or connection failed).")
-            
-    except Exception as e:
-        print(f"Error during stats fetch for {player_name_lower}: {repr(e)}")
-        raise HTTPException(status_code=500, detail="An internal error occurred while fetching stats.")

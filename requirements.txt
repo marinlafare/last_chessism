@@ -6,3 +6,4 @@ asyncpg
 pydantic
 httpx
 requests
+python-chess

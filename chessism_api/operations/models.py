@@ -1,6 +1,4 @@
-# chessism_api/operations/models.py
-
-from typing import Optional, List, Any
+from typing import Optional, List, Any, Dict # <-- Import Dict
 from pydantic import BaseModel, Field
 
 # --- Pydantic model for creating a Player (used in operations/players.py) ---
@@ -96,6 +94,11 @@ class AnalysisTimesCreateData(BaseModel):
     analyse_time_limit:float
     nodes_limit:int
 
+#
+# --- THIS LINE WAS THE ERROR AND HAS BEEN REMOVED ---
+# from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData # <-- NEW
+#
+    
 # --- NEW: Pydantic model for creating PlayerStats ---
 # This defines the data we expect to parse from the API
 # and save to the database.
@@ -121,6 +124,8 @@ class PlayerStatsCreateData(BaseModel):
     chess_rapid_wins: Optional[int] = None
     chess_rapid_losses: Optional[int] = None
     chess_rapid_draws: Optional[int] = None
+    # --- NEW ---
+    chess_rapid_last_percentile: Optional[float] = None
 
     chess_blitz_last_rating: Optional[int] = None
     chess_blitz_best_rating: Optional[int] = None
@@ -128,6 +133,8 @@ class PlayerStatsCreateData(BaseModel):
     chess_blitz_wins: Optional[int] = None
     chess_blitz_losses: Optional[int] = None
     chess_blitz_draws: Optional[int] = None
+    # --- NEW ---
+    chess_blitz_last_percentile: Optional[float] = None
 
     chess_bullet_last_rating: Optional[int] = None
     chess_bullet_best_rating: Optional[int] = None
@@ -135,6 +142,8 @@ class PlayerStatsCreateData(BaseModel):
     chess_bullet_wins: Optional[int] = None
     chess_bullet_losses: Optional[int] = None
     chess_bullet_draws: Optional[int] = None
+    # --- NEW ---
+    chess_bullet_last_percentile: Optional[float] = None
 
     fide: Optional[int] = None
     puzzle_rush_best_score: Optional[int] = None
@@ -142,4 +151,4 @@ class PlayerStatsCreateData(BaseModel):
     tactics_lowest_rating: Optional[int] = None
     
     class Config:
-        from_attributes = True
+        from_attributes = True # Allow reading from the DB model

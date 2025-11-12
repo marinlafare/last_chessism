@@ -1,15 +1,26 @@
 #chessism_api/database/models.py
 
-from typing import Any
-from sqlalchemy import Column, ForeignKey, Integer, String, Float, BigInteger, Table
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
+from typing import Any, Dict
+from sqlalchemy import (
+    Column, ForeignKey, Integer, String, Float, BigInteger, Table,
+    DateTime, func, UniqueConstraint
+)
+from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
+
 Base = declarative_base()
 
 
-def to_dict(obj: Base) -> dict[str, Any]:
+def to_dict(obj: Base) -> Dict[str, Any]:
+    """
+    Serializes a SQLAlchemy ORM object into a dictionary.
+    """
     return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
+
+# --- REMOVED: Base.to_dict = to_dict ---
+# This "monkey-patching" can interfere with SQLAlchemy's
+# mapper configuration and relationship loading.
+
 
 class Player(Base):
     __tablename__ = "player"
@@ -21,12 +32,20 @@ class Player(Base):
     followers = Column('followers', Integer,nullable=True)
     country = Column('country', String, nullable=True)
     location = Column('location', String, nullable=True)
-    joined = Column('joined', Integer, nullable=True)
+    joined = Column('joined', BigInteger, nullable=True) # Use BigInteger for Unix timestamps
     status = Column('status', String, nullable=True)
     is_streamer = Column('is_streamer', Boolean, nullable=True)
     twitch_url = Column('twitch_url', String, nullable=True)
     verified = Column('verified', Boolean, nullable=True)
     league = Column('league', String, nullable=True)
+    
+    stats = relationship(
+        "PlayerStats", 
+        back_populates="player", 
+        uselist=False, # Signifies a one-to-one relationship
+        cascade="all, delete-orphan"
+    )
+
 class Game(Base):
     __tablename__ = 'game'
     link = Column('link',BigInteger, primary_key = True, unique = True)
@@ -39,7 +58,7 @@ class Game(Base):
     hour = Column("hour", Integer, nullable=False)
     minute = Column("minute", Integer, nullable=False)
     second = Column("second", Integer, nullable=False)
-       
+        
     white_elo = Column("white_elo", Integer, nullable=False)
     black_elo = Column("black_elo", Integer, nullable=False)
     white_result = Column("white_result", Float, nullable=False)
@@ -48,17 +67,20 @@ class Game(Base):
     black_str_result = Column("black_str_result", String, nullable=False)
     time_control = Column("time_control", String, nullable=False)
     eco = Column("eco", String, nullable=False)
-    time_elapsed = Column("time_elapsed", Integer, nullable=False)
+    
+    time_elapsed = Column("time_elapsed", Float, nullable=False)
+    
     n_moves = Column("n_moves", Integer, nullable=False)
     fens_done = Column('fens_done', Boolean, nullable = False)
     
     white_player = relationship(Player, foreign_keys=[white])
     black_player = relationship(Player, foreign_keys=[black])
-    fens = relationship( 
+    fens = relationship(
         'Fen',
         secondary='game_fen_association',
         back_populates='games'
     )
+
 class Month(Base):
     __tablename__ = "months"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -72,7 +94,13 @@ class Month(Base):
     year = Column("year", Integer, nullable=False, unique=False)
     month = Column("month", Integer, nullable=False, unique=False)
     n_games = Column("n_games",Integer, nullable=False, unique=False)
+    
     player = relationship(Player, foreign_keys=[player_name])
+    
+    __table_args__ = (
+        UniqueConstraint('player_name', 'year', 'month', name='_player_year_month_uc'),
+    )
+
 
 class Move(Base):
     __tablename__ = "moves"
@@ -86,7 +114,13 @@ class Move(Base):
     black_reaction_time = Column("black_reaction_time", Float, nullable=False)
     white_time_left = Column("white_time_left", Float, nullable=False)
     black_time_left = Column("black_time_left", Float, nullable=False)
+    
     game = relationship(Game, foreign_keys=[link])
+    
+    __table_args__ = (
+        UniqueConstraint('link', 'n_move', name='_game_link_move_num_uc'),
+    )
+
 
 class Fen(Base):
     __tablename__ = "fen"
@@ -95,16 +129,19 @@ class Fen(Base):
     moves_counter = Column('moves_counter',String, nullable = False)
     next_moves = Column('next_moves',String, nullable = True)
     score = Column('score', Float, nullable = True)
+    
     games = relationship(
         'Game',
         secondary='game_fen_association',
         back_populates='fens'
     )
+
 game_fen_association = Table(
     'game_fen_association', Base.metadata,
     Column('game_link', BigInteger, ForeignKey('game.link'), primary_key=True),
     Column('fen_fen', String, ForeignKey('fen.fen'), primary_key=True)
 )
+
 class AnalysisTimes(Base):
     __tablename__ = "analysis_times"
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -117,3 +154,53 @@ class AnalysisTimes(Base):
     fens_per_second = Column('fens_per_second', Float, nullable=False,unique=False)
     analyse_time_limit = Column('analyse_time_limit', Float, nullable=False,unique=False)
     nodes_limit = Column('nodes_limit', Integer, nullable=False, unique=False)
+
+
+class PlayerStats(Base):
+    __tablename__ = "player_stats"
+    
+    player_name = Column(
+        String, 
+        ForeignKey("player.player_name", ondelete="CASCADE"), 
+        primary_key=True
+    )
+    
+    last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    
+    player = relationship("Player", back_populates="stats")
+
+    # --- Rapid ---
+    chess_rapid_last_rating = Column(Integer, nullable=True)
+    chess_rapid_best_rating = Column(Integer, nullable=True)
+    chess_rapid_games = Column(Integer, nullable=True)
+    chess_rapid_wins = Column(Integer, nullable=True)
+    chess_rapid_losses = Column(Integer, nullable=True)
+    chess_rapid_draws = Column(Integer, nullable=True)
+    # --- NEW: Percentile ---
+    chess_rapid_last_percentile = Column(Float, nullable=True)
+
+    # --- Blitz ---
+    chess_blitz_last_rating = Column(Integer, nullable=True)
+    chess_blitz_best_rating = Column(Integer, nullable=True)
+    chess_blitz_games = Column(Integer, nullable=True)
+    chess_blitz_wins = Column(Integer, nullable=True)
+    chess_blitz_losses = Column(Integer, nullable=True)
+    chess_blitz_draws = Column(Integer, nullable=True)
+    # --- NEW: Percentile ---
+    chess_blitz_last_percentile = Column(Float, nullable=True)
+
+    # --- Bullet ---
+    chess_bullet_last_rating = Column(Integer, nullable=True)
+    chess_bullet_best_rating = Column(Integer, nullable=True)
+    chess_bullet_games = Column(Integer, nullable=True)
+    chess_bullet_wins = Column(Integer, nullable=True)
+    chess_bullet_losses = Column(Integer, nullable=True)
+    chess_bullet_draws = Column(Integer, nullable=True)
+    # --- NEW: Percentile ---
+    chess_bullet_last_percentile = Column(Float, nullable=True)
+
+    # --- Other ---
+    fide = Column(Integer, nullable=True)
+    puzzle_rush_best_score = Column(Integer, nullable=True)
+    tactics_highest_rating = Column(Integer, nullable=True)
+    tactics_lowest_rating = Column(Integer, nullable=True)

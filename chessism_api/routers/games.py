@@ -1,47 +1,64 @@
 # chessism_api/routers/games.py
 
-from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Body, HTTPException
-from typing import Dict, Any
+# chessism_api/routers/games.py
 
-from chessism_api.operations.games import create_games, read_game
-# (Removed unused imports)
+from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, HTTPException # <-- Added HTTPException
+from typing import Dict, Any # <-- Added typing
+
+# --- FIXED IMPORTS ---
+from chessism_api.operations.games import create_games, read_game, update_player_games
+from chessism_api.database.ask_db import open_async_request # <-- Fixed import
+# ---
 
 router = APIRouter()
 
-# --- NO CHANGE NEEDED HERE ---
-# FastAPI is smart enough to combine /games + /{link}
-@router.get("/{link}")
+
+@router.get("/{link}") # --- FIX: Removed '/games' prefix ---
 async def api_read_game(link: str) -> JSONResponse:
     """
     Retrieves game information by its link.
     """
     print(f'api call for link: {link}')
-    
     try:
         game = await read_game(link)
-        if not game: 
+        if not game: # Check if game list is empty
             raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
-        
-        # read_game returns a list, so we return the first item
-        return JSONResponse(content=game[0] if isinstance(game, list) and len(game) > 0 else game)
+        # Return the first game found (links should be unique)
+        return JSONResponse(content=game[0])
     except Exception as e:
         print(f"Error fetching game {link}: {e}")
         raise HTTPException(status_code=500, detail="Internal server error")
 
-# --- FIX: Path changed from "/" to "" ---
-# This makes the full path "/games" instead of "/games/"
-@router.post("")
-async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse:
+@router.post("") # --- FIX: Changed route from "/" to "" ---
+async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <-- Use Dict
     """
     data = {"player_name": "some_player_name"}
     
-    It fetches every available game for the player_name
+    Fetches every available game for the player_name
     formats them and inserts them into DB.
     """
-    if 'player_name' not in data:
-        raise HTTPException(status_code=400, detail="Missing 'player_name' in request body.")
+    try:
+        player_name = data["player_name"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+        
+    congratulation = await create_games(data)
+    return JSONResponse(content={"message": congratulation})
 
-    congratulation_message = await create_games(data) 
+
+# --- NEW ENDPOINT ---
+@router.post("/update")
+async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONResponse:
+    """
+    data = {"player_name": "some_player_name"}
     
-    return JSONResponse(content={"message": congratulation_message})
+    Fetches games from the last recorded month to the present.
+    """
+    try:
+        player_name = data["player_name"]
+    except KeyError:
+        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+        
+    message = await update_player_games(data)
+    return JSONResponse(content={"message": message})

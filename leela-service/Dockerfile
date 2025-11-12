@@ -1,5 +1,3 @@
-# This is your ORIGINAL Dockerfile, now living in leela-service/
-
 # ----------------------------------------------------------------------------------
 # STAGE 1: BUILDER - Compiles the lc0 binary (Cached after first successful run)
 # ----------------------------------------------------------------------------------
@@ -52,8 +50,10 @@ RUN pip3 install fastapi uvicorn python-chess pydantic
 # The binary and weights will be available at /usr/local/bin/
 COPY --from=builder /lc0-src/build/release/lc0 /usr/local/bin/lc0
 
-# Downloading the specified T1-512x15x8h-distilled network (ID 3395000.pb.gz)
-ENV STABLE_NETWORK_URL="https://storage.lczero.org/files/networks-contrib/t1-512x15x8h-distilled-swa-3395000.pb.gz"
+# ==============================================================================
+# UPDATED: Downloading the specified T1-256x10-distilled network (ID 2432500.pb.gz)
+# ==============================================================================
+ENV STABLE_NETWORK_URL="https://storage.lczero.org/files/networks-contrib/t1-256x10-distilled-swa-2432500.pb.gz"
 RUN wget -O /usr/local/bin/network.gz ${STABLE_NETWORK_URL}
 
 # --- SETUP APP USER AND COPY API SCRIPT ---
@@ -62,7 +62,7 @@ RUN mkdir /home/juser/app
 RUN chown -R juser:juser /home/juser
 
 # Copy the API script from your local machine into the container's app directory
-# This COPY command now correctly finds main.py inside the build context
+# Assumes 'main.py' is the new local file name
 COPY main.py /home/juser/app/main.py
 
 USER juser
