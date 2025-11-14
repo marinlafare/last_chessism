@@ -4,6 +4,7 @@ root = '/home/jon/workshop/real_chessism/last_chessism/'
 root_files = ['main.py', 'Dockerfile','docker-compose.yml', 'constants.py','requirements.txt', 'testing_chessism.py']
 service_folders = ['leela-service']
 butler_folder = 'chessism_api'
+utility_script = ["backup.sh","restore_db_from_backup.sh","start_temp_monitor.sh"]
 
 intro = """
     PART ONE: ROOT FILES
@@ -35,11 +36,17 @@ part_five = """
             This is the fifth part, it contains the 'database' part of the chessism_api:
             
             """
+part_six = """
+            Part six: utilities
+            This is the sixth part, it contains bash scripts for backup the database, restore the database,
+            and record the temperature of the nvidia cards
+            """
 prefixes = {0:intro,
            1:part_two,
            2:part_three,
            3:part_four,
-           4:part_five}
+           4:part_five,
+           5:part_six}
 
 def read_file_to_string(folder: str, filename:str) -> str:
     if folder == 'root':
@@ -124,3 +131,14 @@ def create_database_file_for_llm():
         result+= read_file_to_string(folder = "chessism_api/database", filename = file)
         result += "\n\n"
     write_txt_file(name= "five.txt", content = result)
+def create_utilities_file_for_llm():
+    stop_words= ['.ipynb_checkpoints', '__pycache__', '__init__.py','sources']
+    result = prefixes[5]
+    result += "\n"
+    for file in utility_script:
+        result += "\n\n"
+        result += f"### {file} \n"
+        with open(root+file, 'r', encoding='utf-8') as file:
+            string = file.read()
+        result += string + "\n\n"
+    write_txt_file(name= "six.txt", content = result)

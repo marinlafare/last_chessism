@@ -13,8 +13,8 @@ from fastapi import FastAPI
 from contextlib import asynccontextmanager
 import constants
 
-# --- NEW: Import the fens router ---
-from chessism_api.routers import players, games, fens
+# --- MODIFIED: Import the fens and new analysis router ---
+from chessism_api.routers import players, games, fens, analysis
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
@@ -49,6 +49,9 @@ app.include_router(games.router, prefix="/games", tags=["Games"])
 
 # --- NEW: Include the FENs router ---
 app.include_router(fens.router, prefix="/fens", tags=["FENs"])
+
+# --- NEW: Include the Analysis router ---
+app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
 
 
 
@@ -92,23 +95,38 @@ services:
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
     networks:
       - chessism_net
-    # This wait is critical to prevent the API from crashing on startup
+    # --- MODIFIED: Added depends_on for Leela services ---
     depends_on:
       db:
         condition: service_healthy
+      # --- THIS IS THE FIX ---
+      # The API will now wait for both Leela services to
+      # start before it starts itself.
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
     volumes:
       # This maps the local host directory ./api_logs to the container
       # This is where 'illegall_fen.txt' is written.
       - ./api_logs:/app/logs
-    # Note: Running as root is required since we removed the fragile 'user:' declaration.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
-  leela-service:
+  leela-service-gpu0:
     build: ./leela-service
-    image: leela-service:latest
+    image: leela-service-gpu0
     ports:
       - "9999:9999"
     environment:
       - LC0_TARGET_GPU=0
+      - LC0_BACKEND=cuda-fp16
+      - CUDA_VISIBLE_DEVICES=0
     networks:
       - chessism_net
     deploy:
@@ -116,8 +134,27 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
               capabilities: [gpu]
+              count: all
+
+  leela-service-gpu1:
+    build: ./leela-service
+    image: leela-service-gpu1
+    ports:
+      - "9998:9999"
+    environment:
+      - LC0_TARGET_GPU=0
+      - LC0_BACKEND=cuda
+      - CUDA_VISIBLE_DEVICES=1
+    networks:
+      - chessism_net
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
 
   db:
     image: postgres:15
@@ -126,11 +163,8 @@ services:
       POSTGRES_PASSWORD: chessism_pass
       POSTGRES_DB: chessism_db
     ports:
-      # Maps your host port 5433 to the container's 5432
       - "5433:5432"
     volumes:
-      # This maps the './db_data' folder on your host computer to the PostgreSQL data directory.
-      # This ensures database persistence.
       - ./db_data:/var/lib/postgresql/data
     networks:
       - chessism_net
@@ -452,6 +486,169 @@ async def test_api_get_top_fens(limit: int = 20):
         
         print("\n--- SUCCESS (Top FENs) ---")
         # Print the results string directly for clear output
+        if 'results' in data:
+            print(data['results'])
+        else:
+            pprint(data)
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+async def test_api_get_sum_n_games(threshold: int = 10):
+    """
+    Calls the GET /fens/sum_n_games endpoint.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching SUM(n_games) for FENs where n_games > {threshold}...")
+    
+    url = f"{API_BASE_URL}/fens/sum_n_games?threshold={threshold}"
+    
+    try:
+        # --- FIX: Disable HTTP/2, force HTTP/1.1 ---
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=60) # Give it a reasonable timeout
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        print("\n--- SUCCESS (Sum Data) ---")
+        pprint(data)
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+        
+async def test_api_run_analysis_job(
+    gpu_index: int, 
+    total_fens: int, 
+    batch_size: int, 
+    nodes: int
+):
+    """
+    Calls the POST /analysis/run_job endpoint.
+    This triggers a background task on the server.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Triggering analysis job on GPU {gpu_index} for {total_fens} FENs...")
+    
+    url = f"{API_BASE_URL}/analysis/run_job"
+    
+    payload = {
+        "gpu_index": gpu_index,
+        "total_fens_to_process": total_fens,
+        "batch_size": batch_size,
+        "nodes_limit": nodes
+    }
+    
+    try:
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.post(url, json=payload, timeout=30) 
+        
+        response.raise_for_status()
+        
+        print("\n--- SUCCESS (Job Started) ---")
+        print(f"Status Code: {response.status_code}") # Should be 202
+        pprint(response.json())
+        print("\nCheck your docker-compose logs to see the job progress.")
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+
+async def test_api_run_player_analysis_job(
+    player_name: str,
+    gpu_index: int, 
+    total_fens: int, 
+    batch_size: int, 
+    nodes: int
+):
+    """
+    Calls the POST /analysis/run_player_job endpoint.
+    This triggers a background task on the server.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Triggering PLAYER job for '{player_name}' on GPU {gpu_index}...")
+    
+    url = f"{API_BASE_URL}/analysis/run_player_job"
+    
+    payload = {
+        "player_name": player_name,
+        "gpu_index": gpu_index,
+        "total_fens_to_process": total_fens,
+        "batch_size": batch_size,
+        "nodes_limit": nodes
+    }
+    
+    try:
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.post(url, json=payload, timeout=30) 
+        
+        response.raise_for_status()
+        
+        print("\n--- SUCCESS (Player Job Started) ---")
+        print(f"Status Code: {response.status_code}") # Should be 202
+        pprint(response.json())
+        print("\nCheck your docker-compose logs to see the job progress.")
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+async def test_api_get_top_fens_unscored(limit: int = 20):
+    """
+    Calls the GET /fens/top_unscored endpoint with a query parameter.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching top {limit} UNSCORED FENs...")
+    
+    url = f"{API_BASE_URL}/fens/top_unscored?limit={limit}"
+    
+    try:
+        # --- FIX: Disable HTTP/2, force HTTP/1.1 ---
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=30) 
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        print("\n--- SUCCESS (Top Unscored FENs) ---")
         if 'results' in data:
             print(data['results'])
         else:
