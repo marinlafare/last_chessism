@@ -5,44 +5,71 @@ services:
     ports:
       - "8000:8000"
     environment:
+      # This URL tells the API to connect to the 'db' service
+      # on the internal Docker network.
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
     networks:
       - chessism_net
+    # --- MODIFIED: Added depends_on for Leela services ---
     depends_on:
       db:
         condition: service_healthy
+      # --- THIS IS THE FIX ---
+      # The API will now wait for both Leela services to
+      # start before it starts itself.
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
     volumes:
+      # This maps the local host directory ./api_logs to the container
+      # This is where 'illegall_fen.txt' is written.
       - ./api_logs:/app/logs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
 
-  # --- SERVICE FOR GPU 0 (RTX 4060) ---
   leela-service-gpu0:
     build: ./leela-service
-    image: leela-service:latest
-    runtime: nvidia # <-- USE THIS INSTEAD OF 'DEPLOY'
+    image: leela-service-gpu0
     ports:
-      - "9999:9999" # Host port 9999
+      - "9999:9999"
     environment:
-      - NVIDIA_VISIBLE_DEVICES=0 # <-- USE THIS TO SELECT HOST GPU 0
       - LC0_TARGET_GPU=0
       - LC0_BACKEND=cuda-fp16
+      - CUDA_VISIBLE_DEVICES=0
     networks:
       - chessism_net
-    # 'deploy' key removed
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
 
-  # --- SERVICE FOR GPU 1 (GTX 1070) ---
   leela-service-gpu1:
     build: ./leela-service
-    image: leela-service:latest
-    runtime: nvidia # <-- USE THIS INSTEAD OF 'DEPLOY'
+    image: leela-service-gpu1
     ports:
-      - "9998:9999" # Host port 9998
+      - "9998:9999"
     environment:
-      - NVIDIA_VISIBLE_DEVICES=1 # <-- USE THIS TO SELECT HOST GPU 1
       - LC0_TARGET_GPU=0
       - LC0_BACKEND=cuda
+      - CUDA_VISIBLE_DEVICES=1
     networks:
       - chessism_net
-    # 'deploy' key removed
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              capabilities: [gpu]
+              count: all
 
   db:
     image: postgres:15

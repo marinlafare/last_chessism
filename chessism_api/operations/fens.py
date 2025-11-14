@@ -203,8 +203,9 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
     - MODIFIED: Each batch is now its own atomic transaction.
     """
     
-    print(f"--- [START] FEN Generation Job ---")
-    print(f"Targeting {total_games_to_process} games, in batches of {batch_size}.")
+    # --- MODIFIED: Added flush=True ---
+    print(f"--- [START] FEN Generation Job ---", flush=True)
+    print(f"Targeting {total_games_to_process} games, in batches of {batch_size}.", flush=True)
     
     fen_interface = DBInterface(Fen)
     total_processed_so_far = 0
@@ -216,6 +217,10 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
     # --- MODIFIED: Session is now created *inside* the loop ---
     while total_processed_so_far < total_games_to_process:
         
+        # --- MODIFIED: Added flush=True ---
+        print(f"[FEN JOB] Processing batch { (total_processed_so_far // batch_size) + 1 }...", flush=True)
+        batch_start_time = time.time()
+        
         # Each loop is a new session and a new atomic transaction
         async with AsyncDBSession() as session:
             try:
@@ -226,8 +231,12 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
                 # 1. Fetch Games (uses this batch's session)
                 game_links = await _get_games_needing_fens(session, current_batch_size)
                 if not game_links:
+                    print("[FEN JOB] No more games found to process. Stopping job.", flush=True)
                     break # No more games left
                 
+                # --- MODIFIED: Added flush=True ---
+                print(f"[FEN JOB] Fetched {len(game_links)} games for this batch.", flush=True)
+
                 # 2. Fetch Moves (uses this batch's session)
                 moves_by_link = await _get_moves_for_games(session, game_links)
                 
@@ -267,6 +276,9 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
                         aggregated_fens[fen_str]['moves_counter'] += fen_data['moves_counter']
                 all_fens_to_insert = list(aggregated_fens.values())
 
+                # --- MODIFIED: Added flush=True ---
+                print(f"[FEN JOB] Aggregated {len(all_fens_to_insert)} unique FENs from {len(tasks_data)} successful games.", flush=True)
+
                 # 5. Bulk-Upsert FENs (uses this batch's session)
                 if all_fens_to_insert:
                     # --- MODIFIED: Pass the session to create_all ---
@@ -280,6 +292,11 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
                 await session.commit()
                 
                 total_processed_so_far += len(game_links)
+                
+                # --- MODIFIED: Added flush=True ---
+                batch_end_time = time.time()
+                print(f"[FEN JOB] Batch complete. Total games: {total_processed_so_far}. Batch Time: {(batch_end_time - batch_start_time):.2f}s", flush=True)
+
 
             except Exception as e:
                 # If anything in this batch failed, roll back the transaction

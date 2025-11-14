@@ -408,3 +408,39 @@ async def test_api_run_player_analysis_job(
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
+async def test_api_get_top_fens_unscored(limit: int = 20):
+    """
+    Calls the GET /fens/top_unscored endpoint with a query parameter.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching top {limit} UNSCORED FENs...")
+    
+    url = f"{API_BASE_URL}/fens/top_unscored?limit={limit}"
+    
+    try:
+        # --- FIX: Disable HTTP/2, force HTTP/1.1 ---
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=30) 
+        
+        response.raise_for_status()
+        
+        data = response.json()
+        
+        print("\n--- SUCCESS (Top Unscored FENs) ---")
+        if 'results' in data:
+            print(data['results'])
+        else:
+            pprint(data)
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))

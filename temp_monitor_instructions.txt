@@ -1,0 +1,23 @@
+**2. Start the monitor:**
+Run the script from your host terminal (the same one you use for Docker):
+```bash
+./start_temp_monitor.sh
+
+**3. Let your jobs run:**
+You can now close that terminal. The monitor will keep running.
+
+**4. Check the logs (in the morning):**
+Open the `gpu_temp_log.csv` file, or run this command to see the last 20 entries:
+```bash
+tail -n 20 gpu_temp_log.csv
+The output will look like this:
+2025/11/13 14:00:00.000, 0, NVIDIA GeForce RTX 4060, 75, 100 %, 2490 MHz
+2025/11/13 14:00:00.000, 1, NVIDIA GeForce GTX 1070, 82, 100 %, 1771 MHz
+2025/11/13 14:01:00.000, 0, NVIDIA GeForce RTX 4060, 76, 100 %, 2490 MHz
+2025/11/13 14:01:00.000, 1, NVIDIA GeForce GTX 1070, 83, 100 %, 1771 MHz
+...
+
+**5. Stop the monitor:**
+When you are finished, stop the background process using this command:
+```bash
+pkill -f "nvidia-smi --loop"

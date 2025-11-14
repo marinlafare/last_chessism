@@ -86,7 +86,7 @@ def clean_engine_result(result: Dict[Any, Any], original_fen: str, is_valid: boo
     return output
 
 
-# --- Engine Initialization Functions (MODIFIED) ---
+# --- Engine Initialization Functions (No changes needed here) ---
 
 async def initialize_lc0_engine() -> chess.engine.UciProtocol:
     """
@@ -95,16 +95,15 @@ async def initialize_lc0_engine() -> chess.engine.UciProtocol:
     """
     # 1. Determine GPU Index and Backend
     try:
+        # --- MODIFIED: Read target GPU from env ---
         gpu_id = int(os.environ.get("LC0_TARGET_GPU", 0))
     except ValueError:
         gpu_id = 0 
 
-    # --- *** THE FIX IS HERE *** ---
-    # Read the backend from the environment variable set in docker-compose.yml
-    # Default to 'cuda-fp16' if not set.
+    # --- MODIFIED: Read backend from env, default to 'cuda-fp16' ---
     BACKEND = os.environ.get("LC0_BACKEND", "cuda-fp16")
-    print(f"--- Using Leela Backend: {BACKEND} ---")
-    # --- *** END FIX *** ---
+    
+    print(f"--- Using Leela Backend: {BACKEND} ---", flush=True)
     
     # Lc0 command line arguments
     command = [
@@ -113,15 +112,16 @@ async def initialize_lc0_engine() -> chess.engine.UciProtocol:
         f"--backend-opts=gpu={gpu_id}",
         f"--weights={WEIGHTS_PATH}",
         f"--threads={THREADS}",
-        f"--nncache={NNCACHE}"
+        f"--nncache={NNCACHE}",
+        "--no-multi-gpu" # <-- THIS IS THE FIX
     ]
     
     engine_uci = None
     try:
-        # Code to start engine...
+        # Code to start engine... (details omitted for brevity)
         transport, engine_uci = await chess.engine.popen_uci(command)
         engine_id_info = engine_uci.id
-        print(f"Engine ID loaded: {engine_id_info.get('name', 'Unknown Engine')}")
+        print(f"Engine ID loaded: {engine_id_info.get('name', 'Unknown Engine')}", flush=True)
 
         # Configure the engine 
         await engine_uci.configure({
@@ -131,8 +131,8 @@ async def initialize_lc0_engine() -> chess.engine.UciProtocol:
             "Threads": THREADS,
             "MinibatchSize": 1024
         })
-        print("Engine configuration sent.")
-        print("--- Leela engine ready ---")
+        print("Engine configuration sent.", flush=True)
+        print("--- Leela engine ready ---", flush=True)
         return engine_uci
     
     except Exception as e:
@@ -155,7 +155,7 @@ async def startup_event():
 async def shutdown_event():
     global LC0_ENGINE
     if LC0_ENGINE:
-        print("--- Shutting down Lc0 engine ---")
+        print("--- Shutting down Lc0 engine ---", flush=True)
         await LC0_ENGINE.quit()
 
 
@@ -203,7 +203,7 @@ async def analyze_fens_endpoint(request: AnalysisRequest) -> List[Dict[str, Any]
 
         except Exception as e:
             # Handle analysis-specific errors
-            print(f"Error during analysis of FEN {original_fen}: {e}")
+            print(f"Error during analysis of FEN {original_fen}: {e}", flush=True)
             # Ensure the structure remains valid even on error
             final_results.append(clean_engine_result(result={"error": str(e)}, original_fen=original_fen, is_valid=True))
 

@@ -5,8 +5,12 @@ from fastapi.responses import JSONResponse
 
 # --- FIXED IMPORTS ---
 from chessism_api.operations.fens import run_fen_generation_job
-# --- UPDATED IMPORT ---
-from chessism_api.database.ask_db import get_top_fens, get_sum_n_games
+# --- MODIFIED: Import new function ---
+from chessism_api.database.ask_db import (
+    get_top_fens, 
+    get_sum_n_games, 
+    get_top_fens_unscored
+)
 # ---
 from typing import Dict, Any 
 
@@ -65,24 +69,47 @@ async def api_get_top_fens(limit: int = 20) -> JSONResponse:
         
     return JSONResponse(content={"results": output_string})
 
+# --- NEW ENDPOINT ---
+@router.get("/top_unscored")
+async def api_get_top_fens_unscored(limit: int = 20) -> JSONResponse:
+    """
+    Retrieves the top N FENs with the highest n_games count
+    that have NOT yet been analyzed (score IS NULL).
+    """
+    if limit <= 0 or limit > 100:
+        raise HTTPException(status_code=400, detail="Limit must be between 1 and 100.")
+        
+    top_fens = await get_top_fens_unscored(limit)
+    
+    if not top_fens:
+        return JSONResponse(content={"message": "No unscored FEN data available in the database."}, status_code=200)
+
+    # Format the data into the requested string format
+    output_string = ""
+    for index, fen_data in enumerate(top_fens):
+        line = f"{index + 1}.- n_games: {fen_data['n_games']} (FEN: {fen_data['fen']})"
+        if index < len(top_fens) - 1:
+            line += "\n"
+        output_string += line
+        
+    return JSONResponse(content={"results": output_string})
 
 # --- NEW ENDPOINT ---
 @router.get("/sum_n_games")
 async def api_get_sum_n_games(threshold: int = 10) -> JSONResponse:
     """
-    Calculates the sum of all n_games in the Fen table
-    where n_games > threshold.
+    Calculates the sum of all n_games in the fen table
+    where n_games is greater than the specified threshold.
     """
     if threshold < 0:
-        raise HTTPException(status_code=400, detail="Threshold must be a non-negative integer.")
+        raise HTTPException(status_code=400, detail="Threshold must be non-negative.")
         
-    try:
-        total_sum = await get_sum_n_games(threshold)
+    total_sum = await get_sum_n_games(threshold)
+    
+    if total_sum is None:
+        total_sum = 0
         
-        return JSONResponse(content={
-            "threshold": threshold,
-            "total_n_games_sum": total_sum
-        })
-    except Exception as e:
-        print(f"Error in /sum_n_games endpoint: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error while calculating sum.")
+    return JSONResponse(content={
+        "threshold": threshold,
+        "total_sum_n_games": total_sum
+    })

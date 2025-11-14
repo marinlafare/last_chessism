@@ -1,17 +1,17 @@
 # chessism_api/database/ask_db.py
+# chessism_api/database/ask_db.py
 import os
 import asyncio
 import time # <-- Added for internal timing in helpers
-from typing import List, Dict, Any, Tuple, Set
+from typing import List, Dict, Any, Tuple, Set, Optional
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy import text, select, update, func
-# --- NEW IMPORT ---
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
-from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats
+from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, game_fen_association
 from chessism_api.database.db_interface import DBInterface
 # ---
 
@@ -47,8 +47,8 @@ async def get_all_database_names():
         return []
 
 async def open_async_request(sql_question: str,
-                             params: dict = None,
-                             fetch_as_dict: bool = False):
+                                 params: dict = None,
+                                 fetch_as_dict: bool = False):
     """
     Executes an asynchronous SQL query, optionally with parameters, and fetches results.
     Uses AsyncDBSession for connection management.
@@ -262,10 +262,38 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     return result
 
 # --- NEW FUNCTION ---
-async def get_sum_n_games(threshold: int = 10) -> int:
+async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     """
-    Calculates the sum of all n_games in the Fen table where
-    n_games is greater than the specified threshold.
+    Retrieves the top N FENs based on the highest count of n_games,
+    where the score has NOT been calculated yet.
+    """
+    sql_query = """
+        SELECT 
+            fen,
+            n_games,
+            score
+        FROM 
+            fen
+        WHERE
+            score IS NULL
+        ORDER BY 
+            n_games DESC
+        LIMIT :limit;
+    """
+    params = {"limit": limit}
+    
+    # Use open_async_request to execute the query
+    result = await open_async_request(
+        sql_query,
+        params=params,
+        fetch_as_dict=True
+    )
+    return result
+
+# --- NEW FUNCTION ---
+async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
+    """
+    Calculates the sum of all n_games where n_games > threshold.
     """
     async with AsyncDBSession() as session:
         try:
@@ -275,77 +303,95 @@ async def get_sum_n_games(threshold: int = 10) -> int:
             )
             result = await session.execute(stmt)
             total_sum = result.scalar()
-            
-            if total_sum is None:
-                return 0
-            # The sum might be a float or decimal, so cast to int.
-            return int(total_sum)
-            
+            return total_sum
         except Exception as e:
             print(f"Error calculating sum of n_games: {e}")
-            return 0 # Return 0 on error
+            return None
 
-# --- NEW FUNCTION (Req 2 & 6) ---
-async def get_fens_for_analysis(session: AsyncSession, limit: int) -> List[str]:
+# --- MODIFIED FUNCTION (FOR ANALYSIS JOB) ---
+async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
-    Fetches a batch of FENs that have not been analyzed (score IS NULL).
-    It prioritizes by n_games (Req 2) and uses FOR UPDATE SKIP LOCKED
-    to prevent race conditions between parallel workers (Solution 2).
+    Fetches the next batch of FENs that need analysis.
+    Starts a new transaction and applies a row-level lock.
+    
+    Returns the session (which holds the lock) and the list of FENs.
+    The CALLER is responsible for committing or rolling back the session.
     """
+    # Create a new session for this atomic operation
+    session = AsyncDBSession()
     try:
-        # Use raw SQL for FOR UPDATE SKIP LOCKED
-        sql_query = text("""
-            SELECT fen
-            FROM fen
-            WHERE score IS NULL
-            ORDER BY n_games DESC
-            LIMIT :limit
-            FOR UPDATE SKIP LOCKED
-        """)
+        # Start the transaction
+        await session.begin()
         
-        result = await session.execute(sql_query, {"limit": limit})
-        fens = result.scalars().all()
-        return fens
-        
-    except Exception as e:
-        print(f"Error fetching FENs for analysis: {e}")
-        # We must re-raise to trigger the rollback in the calling function
-        raise
-
-# --- NEW FUNCTION (Req 5) ---
-async def get_player_fens_for_analysis(
-    session: AsyncSession, 
-    player_name: str, 
-    limit: int
-) -> List[str]:
-    """
-    Fetches a batch of FENs associated with a specific player
-    that have not been analyzed (score IS NULL).
-    Uses FOR UPDATE SKIP LOCKED to prevent race conditions.
-    """
-    try:
-        # Use raw SQL for the JOIN and FOR UPDATE SKIP LOCKED
-        sql_query = text("""
-            SELECT f.fen
-            FROM fen AS f
-            JOIN game_fen_association AS gfa ON f.fen = gfa.fen_fen
-            JOIN game AS g ON gfa.game_link = g.link
-            WHERE 
-                (g.white = :player_name OR g.black = :player_name)
-                AND f.score IS NULL
-            ORDER BY f.n_games DESC
-            LIMIT :limit
-            FOR UPDATE SKIP LOCKED
-        """)
-        
-        result = await session.execute(
-            sql_query, 
-            {"player_name": player_name, "limit": limit}
+        stmt = (
+            select(Fen.fen)
+            .where(Fen.score.is_(None))
+            .order_by(Fen.n_games.desc())
+            .limit(limit)
+            .with_for_update(skip_locked=True) # <-- The "Worker Queue" magic
         )
-        fens = result.scalars().all()
-        return fens
         
+        result = await session.execute(stmt)
+        fens = result.scalars().all()
+        
+        if not fens:
+            # If no FENs, roll back and close the session immediately
+            await session.rollback()
+            await session.close()
+            return None, None
+            
+        # Return the session *and* the fens. The session is still open and holds the lock.
+        return session, fens
+
     except Exception as e:
-        print(f"Error fetching player FENs for analysis: {e}")
-        # Re-raise to trigger rollback
-        raise
+        print(f"Error in get_fens_for_analysis: {repr(e)}", flush=True)
+        # Rollback and close on error
+        await session.rollback()
+        await session.close()
+        return None, None
+
+# --- MODIFIED FUNCTION (FOR PLAYER ANALYSIS JOB) ---
+async def get_player_fens_for_analysis(
+    player_name: str,
+    limit: int
+) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
+    """
+    Fetches the next batch of FENs for a specific player.
+    Starts a new transaction and applies a row-level lock.
+    
+    Returns the session (which holds the lock) and the list of FENs.
+    """
+    # Create a new session for this atomic operation
+    session = AsyncDBSession()
+    try:
+        await session.begin()
+        
+        # This is a complex join to find FENs -> from games -> where player matches
+        stmt = (
+            select(Fen.fen)
+            .join(game_fen_association, Fen.fen == game_fen_association.c.fen_fen)
+            .join(Game, game_fen_association.c.game_link == Game.link)
+            .where(
+                (Game.white == player_name) | (Game.black == player_name)
+            )
+            .where(Fen.score.is_(None))
+            .order_by(Fen.n_games.desc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        
+        result = await session.execute(stmt)
+        fens = result.scalars().all()
+        
+        if not fens:
+            await session.rollback()
+            await session.close()
+            return None, None
+            
+        return session, fens
+
+    except Exception as e:
+        print(f"Error in get_player_fens_for_analysis: {repr(e)}", flush=True)
+        await session.rollback()
+        await session.close()
+        return None, None
