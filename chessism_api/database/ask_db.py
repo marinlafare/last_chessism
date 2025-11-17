@@ -1,17 +1,20 @@
 # chessism_api/database/ask_db.py
-# chessism_api/database/ask_db.py
 import os
 import asyncio
-import time # <-- Added for internal timing in helpers
+import time 
 from typing import List, Dict, Any, Tuple, Set, Optional
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
-from sqlalchemy import text, select, update, func
+# --- MODIFIED: Import distinct ---
+from sqlalchemy import text, select, update, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
-from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, game_fen_association
+# --- THIS IS THE FIX: Import the CamelCase class name ---
+from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, GameFenAssociation
+# ---
+
 from chessism_api.database.db_interface import DBInterface
 # ---
 
@@ -47,8 +50,8 @@ async def get_all_database_names():
         return []
 
 async def open_async_request(sql_question: str,
-                                 params: dict = None,
-                                 fetch_as_dict: bool = False):
+                                    params: dict = None,
+                                    fetch_as_dict: bool = False):
     """
     Executes an asynchronous SQL query, optionally with parameters, and fetches results.
     Uses AsyncDBSession for connection management.
@@ -62,9 +65,9 @@ async def open_async_request(sql_question: str,
 
             sql_upper = sql_question.strip().upper()
             if sql_upper.startswith("DROP") or \
-               sql_upper.startswith("CREATE") or \
-               sql_upper.startswith("ALTER") or \
-               sql_upper.startswith("TRUNCATE"):
+                sql_upper.startswith("CREATE") or \
+                sql_upper.startswith("ALTER") or \
+                sql_upper.startswith("TRUNCATE"):
                 
                 print(f"DDL operation '{sql_question}' executed successfully.")
                 await session.commit() # Explicitly commit DDL
@@ -234,7 +237,6 @@ async def drop_player_stats_table():
     except Exception as e:
         print(f"Error dropping 'player_stats' table: {e}")
 
-# --- NEW FUNCTION ---
 async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games.
@@ -253,7 +255,6 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     """
     params = {"limit": limit}
     
-    # Use open_async_request to execute the query
     result = await open_async_request(
         sql_query,
         params=params,
@@ -261,7 +262,6 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-# --- NEW FUNCTION ---
 async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games,
@@ -282,7 +282,6 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     """
     params = {"limit": limit}
     
-    # Use open_async_request to execute the query
     result = await open_async_request(
         sql_query,
         params=params,
@@ -290,7 +289,6 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-# --- NEW FUNCTION ---
 async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
     """
     Calculates the sum of all n_games where n_games > threshold.
@@ -308,19 +306,13 @@ async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
             print(f"Error calculating sum of n_games: {e}")
             return None
 
-# --- MODIFIED FUNCTION (FOR ANALYSIS JOB) ---
 async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of FENs that need analysis.
     Starts a new transaction and applies a row-level lock.
-    
-    Returns the session (which holds the lock) and the list of FENs.
-    The CALLER is responsible for committing or rolling back the session.
     """
-    # Create a new session for this atomic operation
     session = AsyncDBSession()
     try:
-        # Start the transaction
         await session.begin()
         
         stmt = (
@@ -328,55 +320,62 @@ async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Opt
             .where(Fen.score.is_(None))
             .order_by(Fen.n_games.desc())
             .limit(limit)
-            .with_for_update(skip_locked=True) # <-- The "Worker Queue" magic
+            .with_for_update(skip_locked=True) 
         )
         
         result = await session.execute(stmt)
         fens = result.scalars().all()
         
         if not fens:
-            # If no FENs, roll back and close the session immediately
             await session.rollback()
             await session.close()
             return None, None
             
-        # Return the session *and* the fens. The session is still open and holds the lock.
         return session, fens
 
     except Exception as e:
         print(f"Error in get_fens_for_analysis: {repr(e)}", flush=True)
-        # Rollback and close on error
         await session.rollback()
         await session.close()
         return None, None
 
-# --- MODIFIED FUNCTION (FOR PLAYER ANALYSIS JOB) ---
 async def get_player_fens_for_analysis(
     player_name: str,
     limit: int
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
-    Fetches the next batch of FENs for a specific player.
+    Fetches the next batch of DISTINCT FENs for a specific player.
     Starts a new transaction and applies a row-level lock.
     
     Returns the session (which holds the lock) and the list of FENs.
     """
-    # Create a new session for this atomic operation
     session = AsyncDBSession()
     try:
         await session.begin()
         
-        # This is a complex join to find FENs -> from games -> where player matches
-        stmt = (
+        # --- FIX: Use a Subquery with WHERE IN ---
+        
+        # 1. Create a subquery to find the TOP N *distinct* FENs for the player.
+        # This subquery is NOT locked.
+        player_fens_subquery = (
+            # --- THIS IS THE FIX: Removed distinct() ---
             select(Fen.fen)
-            .join(game_fen_association, Fen.fen == game_fen_association.c.fen_fen)
-            .join(Game, game_fen_association.c.game_link == Game.link)
+            .join(GameFenAssociation, Fen.fen == GameFenAssociation.fen_fen)
+            .join(Game, GameFenAssociation.game_link == Game.link)
             .where(
                 (Game.white == player_name) | (Game.black == player_name)
             )
             .where(Fen.score.is_(None))
-            .order_by(Fen.n_games.desc())
+            .group_by(Fen.fen, Fen.n_games) # <-- Use GROUP BY
+            .order_by(Fen.n_games.desc()) # <-- This is now valid
             .limit(limit)
+        ).scalar_subquery() # Makes it a subquery returning a list of scalars
+
+        # 2. Now, select from the Fen table WHERE fen is in our subquery list,
+        # and apply the lock HERE.
+        stmt = (
+            select(Fen.fen)
+            .where(Fen.fen.in_(player_fens_subquery))
             .with_for_update(skip_locked=True)
         )
         
@@ -395,3 +394,140 @@ async def get_player_fens_for_analysis(
         await session.rollback()
         await session.close()
         return None, None
+# --- END CORRECTION ---
+
+async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
+    """
+    Counts FENs for a specific player based on their score status.
+    """
+    # --- FIX: Added DISTINCT to the counts ---
+    sql_query = """
+        SELECT
+            COUNT(DISTINCT CASE WHEN f.score = 0 THEN f.fen END) as score_zero,
+            COUNT(DISTINCT CASE WHEN f.score != 0 THEN f.fen END) as score_not_zero,
+            COUNT(DISTINCT CASE WHEN f.score IS NULL THEN f.fen END) as score_null
+        FROM fen f
+        JOIN game_fen_association gfa ON f.fen = gfa.fen_fen
+        JOIN game g ON gfa.game_link = g.link
+        WHERE g.white = :player OR g.black = :player;
+    """
+    
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else {"score_zero": 0, "score_not_zero": 0, "score_null": 0}
+
+
+# --- NEW: STATISTICAL ANALYSIS QUERIES ---
+
+async def get_player_performance_summary(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates aggregate W/L/D stats for a player as White, Black, and Combined.
+    """
+    sql_query = """
+        SELECT
+            COUNT(*) as total_games,
+            
+            SUM(CASE WHEN white = :player THEN 1 ELSE 0 END) as white_games,
+            SUM(CASE WHEN white = :player AND white_result = 1.0 THEN 1 ELSE 0 END) as white_wins,
+            SUM(CASE WHEN white = :player AND white_result = 0.0 THEN 1 ELSE 0 END) as white_losses,
+            SUM(CASE WHEN white = :player AND white_result = 0.5 THEN 1 ELSE 0 END) as white_draws,
+            
+            SUM(CASE WHEN black = :player THEN 1 ELSE 0 END) as black_games,
+            SUM(CASE WHEN black = :player AND black_result = 1.0 THEN 1 ELSE 0 END) as black_wins,
+            SUM(CASE WHEN black = :player AND black_result = 0.0 THEN 1 ELSE 0 END) as black_losses,
+            SUM(CASE WHEN black = :player AND black_result = 0.5 THEN 1 ELSE 0 END) as black_draws
+            
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_game_averages(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates average opponent ELO and average game length for a player.
+    """
+    sql_query = """
+        SELECT
+            AVG(n_moves) as avg_game_length,
+            AVG(CASE 
+                WHEN white = :player THEN black_elo
+                ELSE white_elo 
+            END) as avg_opponent_rating
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_termination_stats(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates a player's result counts grouped by termination type.
+    """
+    sql_query = """
+        SELECT
+            SUM(CASE WHEN (white = :player AND white_str_result = 'checkmated') OR (black = :player AND black_str_result = 'checkmated') THEN 1 ELSE 0 END) as checkmated,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'resigned') OR (black = :player AND black_str_result = 'resigned') THEN 1 ELSE 0 END) as resigned,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'timeout') OR (black = :player AND black_str_result = 'timeout') THEN 1 ELSE 0 END) as timeout,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'abandoned') OR (black = :player AND black_str_result = 'abandoned') THEN 1 ELSE 0 END) as abandoned
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_top_openings(player_name: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Gets the player's most played openings by ECO, with W/L/D stats.
+    """
+    sql_query = """
+        SELECT
+            eco,
+            COUNT(*) as total_games,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 1.0 THEN 1
+                WHEN black = :player AND black_result = 1.0 THEN 1
+                ELSE 0 
+            END) as wins,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 0.0 THEN 1
+                WHEN black = :player AND black_result = 0.0 THEN 1
+                ELSE 0 
+            END) as losses,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 0.5 THEN 1
+                WHEN black = :player AND black_result = 0.5 THEN 1
+                ELSE 0 
+            END) as draws
+        FROM game
+        WHERE (white = :player OR black = :player) AND eco != 'no_eco'
+        GROUP BY eco
+        ORDER BY total_games DESC
+        LIMIT :limit;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name, "limit": limit})
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
+# --- TODO: Add Global Stats functions (similar to above, but without the WHERE clause) ---
+
+# --- THIS IS THE FIX ---
+# --- Re-adding the missing function for the FEN pipeline ---
+async def _get_remaining_fens_count_committed() -> int:
+    """
+    Counts how many games still have fens_done = False using a NEW session.
+    This reads the last COMMITTED state of the database.
+    """
+    async with AsyncDBSession() as session:
+        stmt = select(func.count(Game.link)).where(Game.fens_done == False)
+        result = await session.execute(stmt)
+        count = result.scalar()
+        return count or 0

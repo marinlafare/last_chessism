@@ -2,14 +2,15 @@
 
 import os
 from typing import Any, List, Dict, TypeVar
-# --- MODIFIED: Import 'text' for raw SQL in the update ---
-from sqlalchemy import select, insert, Integer, func, update, bindparam, text
+# --- THIS IS THE FIX: Import 'case' ---
+from sqlalchemy import select, insert, Integer, func, update, bindparam, text, case
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, Game, game_fen_association
+# --- MODIFIED: Import new association model ---
+from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation
 # ---
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -19,6 +20,9 @@ _ModelType = TypeVar("_ModelType", bound=Base)
 
 DataObject = Dict[str, Any]
 ListOfDataObjects = List[DataObject]
+
+INSERT_BATCH_SIZE = 5000
+
 
 class DBInterface:
     def __init__(self, db_class: TypeVar('_ModelType', bound=Base)):
@@ -117,18 +121,7 @@ class DBInterface:
         if not data:
             return True
 
-        if self.db_class == Fen:
-            params_per_row = 5 # 'fen', 'n_games', 'moves_counter', 'score', 'next_moves'
-        else:
-            params_per_row = len(self.db_class.__table__.columns) if hasattr(self.db_class, '__table__') else 3
-
-        INSERT_BATCH_SIZE = 5000
-        if params_per_row > 0:
-            effective_batch_size = min(INSERT_BATCH_SIZE, 32000 // params_per_row)
-            if effective_batch_size == 0:
-                effective_batch_size = 1
-        else:
-            effective_batch_size = INSERT_BATCH_SIZE
+        effective_batch_size = INSERT_BATCH_SIZE
 
         chunks = [data[i:i + effective_batch_size] for i in range(0, len(data), effective_batch_size)]
         
@@ -151,18 +144,37 @@ class DBInterface:
                 continue 
             
             if self.db_class == Fen:
-                stmt = pg_insert(self.db_class).values(clean_chunk).on_conflict_do_update(
+                # We define the statement *without* .values()
+                stmt = pg_insert(self.db_class).on_conflict_do_update(
                     index_elements=[self.db_class.fen],
                     set_={
                         'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
-                        'moves_counter': text(
-                            "CASE WHEN position(excluded.moves_counter in fen.moves_counter) > 0 "
-                            "THEN fen.moves_counter "
-                            "ELSE (fen.moves_counter || excluded.moves_counter) END"
+                        
+                        # --- THIS IS THE SYNTAX FIX ---
+                        'moves_counter': func.concat(
+                            self.db_class.moves_counter,
+                            case(
+                                # (WHEN condition, THEN value)
+                                (func.strpos(self.db_class.moves_counter, pg_insert(self.db_class).excluded.moves_counter) == 0,
+                                 pg_insert(self.db_class).excluded.moves_counter),
+                                # ELSE value
+                                else_=''
+                            )
                         )
+                        # --- END SYNTAX FIX ---
                     }
                 )
-                await session.execute(stmt)
+                # We pass the data as the *second argument*
+                await session.execute(stmt, clean_chunk)
+            
+            elif self.db_class == GameFenAssociation:
+                # We define the statement *without* .values()
+                stmt = pg_insert(self.db_class).on_conflict_do_nothing(
+                        index_elements=['game_link', 'fen_fen', 'n_move', 'move_color']
+                )
+                # We pass the data as the *second argument*
+                await session.execute(stmt, clean_chunk)
+            
             else:
                 await session.run_sync(
                     lambda sync_session, c=clean_chunk: sync_session.bulk_insert_mappings(self.db_class, c)
@@ -172,8 +184,8 @@ class DBInterface:
 
 
     async def upsert_main_fens(self,
-                                   objects_to_insert: ListOfDataObjects,
-                                   objects_to_update: ListOfDataObjects) -> bool:
+                                        objects_to_insert: ListOfDataObjects,
+                                        objects_to_update: ListOfDataObjects) -> bool:
         """
         PERFORMANCE WARNING: The update logic (for item in objects_to_update)
         runs session.get() inside a loop. This is an N+1 query problem
@@ -187,10 +199,11 @@ class DBInterface:
             try:
                 # --- Process Inserts ---
                 if objects_to_insert:
-                    insert_stmt = pg_insert(Fen).values(objects_to_insert).on_conflict_do_nothing(
+                    # --- FIX: Pass data as second argument ---
+                    insert_stmt = pg_insert(Fen).on_conflict_do_nothing(
                         index_elements=[Fen.fen]
                     )
-                    await session.execute(insert_stmt)
+                    await session.execute(insert_stmt, objects_to_insert)
 
                 # --- Process Updates (N+1 Query Problem) ---
                 if objects_to_update:
@@ -219,50 +232,7 @@ class DBInterface:
                 await session.rollback()
                 raise
 
-    async def associate_fen_with_games(self, associations_to_insert_raw: List[Dict[str, Any]]) -> bool:
-        """
-        Associates multiple FENs with their respective lists of games in a bulk operation
-        by directly inserting into the association table.
-
-        Args:
-            associations_to_insert_raw: A list of dictionaries, e.g.:
-                [{"game_link": 123, "fen_fen": "r1bqk..."},
-                 {"game_link": 124, "fen_fen": "r1b1k..."}]
-        """
-        if not associations_to_insert_raw:
-            print("No valid associations to insert after processing input data.")
-            return True
-
-        params_per_row = 2
-        INSERT_BATCH_SIZE = 5000
-        effective_batch_size = min(INSERT_BATCH_SIZE, 32000 // params_per_row)
-        if effective_batch_size == 0:
-            effective_batch_size = 1
-
-        chunks = [associations_to_insert_raw[i:i + effective_batch_size]
-                  for i in range(0, len(associations_to_insert_raw), effective_batch_size)]
-
-        async with AsyncDBSession() as session:
-            try:
-                total_inserted_rows = 0
-                for i, chunk in enumerate(chunks):
-                    if not chunk:
-                        continue
-
-                    insert_stmt = pg_insert(game_fen_association).values(chunk).on_conflict_do_nothing(
-                        index_elements=[game_fen_association.c.game_link, game_fen_association.c.fen_fen]
-                    )
-                    result = await session.execute(insert_stmt)
-                    total_inserted_rows += result.rowcount
-
-                await session.commit()
-                print(f"Successfully committed a total of {total_inserted_rows} new associations.")
-                return True
-
-            except Exception as e:
-                await session.rollback()
-                print(f"An error occurred during bulk FEN-Game association: {e}")
-                raise
+    # --- REMOVED: Old association functions ---
 
     async def update_all(self, data: ListOfDataObjects) -> bool:
         """
@@ -307,8 +277,8 @@ class DBInterface:
                 raise
                 
     async def update_fen_analysis_data(self,
-                                           session: AsyncSession, # <-- MODIFIED: Use existing session
-                                           analysis_data: ListOfDataObjects) -> int:
+                                            session: AsyncSession, # <-- MODIFIED: Use existing session
+                                            analysis_data: ListOfDataObjects) -> int:
         """
         Updates 'score' and 'next_moves' for existing Fen records in a bulk operation
         using an EXISTING session (for transactional safety with FOR UPDATE).
@@ -338,8 +308,8 @@ class DBInterface:
             # Use self.db_class.__table__ (Core) instead of self.db_class (ORM)
             # to ensure compatibility with bulk parameter binding.
             stmt = (
-                update(self.db_class.__table__) 
-                .where(self.db_class.fen == bindparam('p_fen'))
+                update(Fen.__table__) # <-- Use Fen table
+                .where(Fen.fen == bindparam('p_fen'))
                 .values(
                     score=bindparam('p_score'),
                     next_moves=bindparam('p_next_moves')

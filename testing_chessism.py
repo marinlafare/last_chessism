@@ -444,3 +444,76 @@ async def test_api_get_top_fens_unscored(limit: int = 20):
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
+async def test_api_get_fen_score_counts(player_name: str):
+    """
+    Calls the GET /players/{player_name}/fen_counts endpoint.
+    Returns the number of FENs where score is 0 vs not 0.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching FEN score counts for: {player_name}")
+    
+    url = f"{API_BASE_URL}/players/{player_name}/fen_counts"
+    
+    try:
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=30)
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        score_zero = data.get('score_zero', 0)
+        # "score is not 0" technically includes existing scores != 0. 
+        # Depending on your definition, you might want to include or exclude NULLs.
+        # The DB query separates NULLs, so 'score_not_zero' implies analyzed positions that aren't draws.
+        score_not_zero = data.get('score_not_zero', 0)
+        score_null = data.get('score_null', 0)
+
+        print("\n--- SUCCESS (FEN Score Counts) ---")
+        print(f"Player: {player_name}")
+        print(f"├── Score == 0 (Draw/Equal):  {score_zero:,}")
+        print(f"├── Score != 0 (Decisive):    {score_not_zero:,}")
+        print(f"└── Score is NULL (Unscored): {score_null:,}")
+        print(f"Total FENs associated: {score_zero + score_not_zero + score_null:,}")
+        
+        return score_zero, score_not_zero
+
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        print(e.response.text)
+        return 0, 0
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+        return 0, 0
+async def test_api_get_player_game_count(player_name: str):
+    """
+    Calls the GET /players/{player_name}/game_count endpoint
+    to find the total number of games for a player in the DB.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching game count for: {player_name}")
+    
+    url = f"{API_BASE_URL}/players/{player_name}/game_count"
+    
+    try:
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=30)
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        print("\n--- SUCCESS (Game Count) ---")
+        pprint(data)
+        
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        try:
+            pprint(e.response.json())
+        except:
+            print(e.response.text)
+    except httpx.RequestError as e:
+        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
+        print(repr(e))
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))

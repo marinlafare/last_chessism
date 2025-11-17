@@ -5,25 +5,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # This URL tells the API to connect to the 'db' service
-      # on the internal Docker network.
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
     networks:
       - chessism_net
-    # --- MODIFIED: Added depends_on for Leela services ---
     depends_on:
       db:
         condition: service_healthy
-      # --- THIS IS THE FIX ---
-      # The API will now wait for both Leela services to
-      # start before it starts itself.
       leela-service-gpu0:
         condition: service_started
       leela-service-gpu1:
         condition: service_started
+      redis:
+        condition: service_healthy
     volumes:
-      # This maps the local host directory ./api_logs to the container
-      # This is where 'illegall_fen.txt' is written.
       - ./api_logs:/app/logs
     deploy:
       resources:
@@ -89,6 +84,142 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - chessism_net
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker-gpu0:
+    build: .
+    image: chessism-api:latest 
+    container_name: worker-gpu0
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=gpu_0_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  worker-gpu1:
+    build: .
+    image: chessism-api:latest 
+    container_name: worker-gpu1
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=gpu_1_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  fen-worker-1:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-1
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  fen-worker-2:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-2
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  fen-worker-3:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-3
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  # --- NEW: THE "BOSS" WORKER ---
+  pipeline-worker:
+    build: .
+    image: chessism-api:latest
+    container_name: pipeline-worker
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
 networks:
   chessism_net:
     driver: bridge
+
+volumes:
+  redis_data:
+  db_data:

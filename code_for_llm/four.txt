@@ -5,7 +5,7 @@
             
 
 
-### inner_api/operations/months.py 
+### chessism_api/operations/months.py 
 # chessism_api/operations/months.py
 
 import datetime
@@ -179,7 +179,7 @@ def generate_months_from_date_to_now(start_date_dict: dict) -> List[str]:
 
 
 
-### inner_api/operations/games.py 
+### chessism_api/operations/games.py 
 # chessism_api/operations/games.py
 
 # chessism_api/operations/games.py
@@ -415,7 +415,7 @@ async def update_player_games(data: dict) -> str:
 
 
 
-### inner_api/operations/format_games.py 
+### chessism_api/operations/format_games.py 
 # chessism_api/operations/format_games.py
 
 from typing import Union,Dict,Any, List, Set, Tuple
@@ -1054,24 +1054,36 @@ async def get_just_new_games(games: Dict[str, Dict[str, List[Dict[str, Any]]]]) 
 
 
 
-### inner_api/operations/fens.py 
+### chessism_api/operations/fens.py 
 # chessism_api/operations/fens.py
 
 import asyncio
 import chess
 import time
 from typing import List, Dict, Any, Tuple
-from sqlalchemy import select, update, func
+from sqlalchemy import select, update, func, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import os
+import math # Import math
+
+# --- NEW: arq imports for the "boss" job ---
+from arq import create_pool
+from arq.connections import ArqRedis
+from arq.jobs import Job
+from chessism_api.redis_client import redis_settings
+# ---
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Game, Move, Fen
+from chessism_api.database.models import GameFenAssociation
 from chessism_api.database.db_interface import DBInterface
+# --- THIS IS THE FIX: Import the missing function ---
+from chessism_api.database.ask_db import _get_remaining_fens_count_committed
+
 
 # ---
-# 1. YOUR HELPER FUNCTIONS
+# 1. HELPER FUNCTIONS (PGN PARSING)
 # ---
 
 def process_single_game_sync(game_data: Tuple[int, List[Dict[str, Any]]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
@@ -1079,37 +1091,28 @@ def process_single_game_sync(game_data: Tuple[int, List[Dict[str, Any]]]) -> Tup
     Takes a game's moves, reconstructs the game, and generates a simplified FEN 
     for every half-move.
     
-    This function is CPU-bound and is intended to run in a thread executor.
-    
-    Args:
-        game_data: A tuple (game_link: int, moves: List[Dict])
-        
     Returns:
-        A tuple: (List[Successful FENs], List[Failure Details])
+        A tuple: (associations_to_insert, failures)
     """
     link, one_game_moves = game_data
-    fens_to_insert = []
-    failures = [] # <-- NEW: To store failure info
+    associations_to_insert = []
+    failures = []
     board = chess.Board()
     
-    # Sort moves by move number (n_move)
     try:
         data = sorted(one_game_moves, key=lambda x: x['n_move'])
     except KeyError:
-        # print(f"KeyError sorting moves for game {link}. Skipping game.") # <-- SILENCED
         failures.append({'link': link, 'move_num': -1, 'san': 'N/A', 'error': 'KeyError on move sort'})
-        return ([], failures) # Return failure
+        return ([], failures)
 
     try:
         for ind, move_data in enumerate(data):
-            # Check for data integrity: moves should be sequential
             expected_move_num = ind + 1
             current_move_num = move_data.get('n_move')
 
             if not expected_move_num == current_move_num:
-                # print(f"Move sequence mismatch in game {link}. Skipping game.") # <-- SILENCED
                 failures.append({'link': link, 'move_num': current_move_num, 'san': 'N/A', 'error': 'Move sequence mismatch'})
-                break # Stop processing this game
+                break 
 
             white_move_san = move_data.get('white_move')
             black_move_san = move_data.get('black_move')
@@ -1120,19 +1123,14 @@ def process_single_game_sync(game_data: Tuple[int, List[Dict[str, Any]]]) -> Tup
                     move_obj_white = board.parse_san(white_move_san)
                     board.push(move_obj_white)
                     current_fen_white = board.fen()
-                    # Use float 'ind' for half-move counter
-                    to_insert_white = simplify_fen(current_fen_white, float(ind) + 0.0, link)
-                    fens_to_insert.append(to_insert_white)
+                    assoc_data = create_association_data(current_fen_white, current_move_num, "white", link)
+                    associations_to_insert.append(assoc_data)
                 except ValueError as e:
-                    # --- MODIFIED: Log error details instead of printing ---
                     failures.append({
-                        'link': link, 
-                        'move_num': current_move_num, 
-                        'color': 'white', 
-                        'san': white_move_san, 
-                        'error': str(e)
+                        'link': link, 'move_num': current_move_num, 'color': 'white', 
+                        'san': white_move_san, 'error': str(e)
                     })
-                    break # Stop processing this game
+                    break 
 
             # --- Process Black's Move ---
             if black_move_san and black_move_san != "--":
@@ -1140,64 +1138,54 @@ def process_single_game_sync(game_data: Tuple[int, List[Dict[str, Any]]]) -> Tup
                     move_obj_black = board.parse_san(black_move_san)
                     board.push(move_obj_black)
                     current_fen_black = board.fen()
-                    # Use float 'ind + 0.5' for half-move counter
-                    to_insert_black = simplify_fen(current_fen_black, float(ind) + 0.5, link)
-                    fens_to_insert.append(to_insert_black)
+                    assoc_data = create_association_data(current_fen_black, current_move_num, "black", link)
+                    associations_to_insert.append(assoc_data)
                 except ValueError as e:
-                    # --- MODIFIED: Log error details instead of printing ---
                     failures.append({
-                        'link': link, 
-                        'move_num': current_move_num, 
-                        'color': 'black', 
-                        'san': black_move_san, 
-                        'error': str(e)
+                        'link': link, 'move_num': current_move_num, 'color': 'black', 
+                        'san': black_move_san, 'error': str(e)
                     })
-                    break # Stop processing this game
+                    break 
 
     except Exception as e:
-        # print(f"Unexpected error processing game {link}: {e}") # <-- SILENCED
         failures.append({'link': link, 'move_num': -1, 'san': 'N/A', 'error': f"Unexpected processing error: {e}"})
 
-    return (fens_to_insert, failures) # <-- NEW: Return tuple
+    return (associations_to_insert, failures)
 
 
-def simplify_fen(raw_fen: str, n_move: float, link:int) -> Dict[str, Any]:
+def create_association_data(raw_fen: str, n_move: int, move_color: str, link:int) -> Dict[str, Any]:
     """
-    Simplifies the FEN to the first 4 components (board, side, castling, en passant target).
-    Adds metadata for insertion into the Fen table.
+    Creates data for the GameFenAssociation table.
     """
     parts = raw_fen.split(' ')
-    
     simplified_fen = ' '.join(parts[:4])
     
-    # moves_counter stores the halfmove clock and fullmove number for tracking purposes
-    moves_counter = f"#{parts[4]}#{parts[5]}_" 
+    association_data = {
+        'game_link': link,
+        'fen_fen': simplified_fen,
+        'n_move': n_move,
+        'move_color': move_color
+    }
     
-    return {'link':link, # This will be filtered out by DBInterface
-            'fen':simplified_fen,
-            'n_games':1, # Initial count is 1 for the game being processed
-            'moves_counter': moves_counter,
-            'n_move' : n_move, # This will be filtered out by DBInterface
-            'next_moves' : None,
-            'score' : None}
+    return association_data
 
 # ---
-# 2. NEW DATABASE HELPER FUNCTIONS
+# 2. DATABASE HELPER FUNCTIONS
 # ---
 
 async def _get_games_needing_fens(session: AsyncSession, batch_size: int) -> List[int]:
     """
     Queries the database for game links where FENs have not been generated yet.
+    Applies a row-level lock to support concurrent workers.
     """
-    # print(f"Fetching new batch of {batch_size} games...", flush=True) # <-- SILENCED
     stmt = (
         select(Game.link)
         .where(Game.fens_done == False)
         .limit(batch_size)
+        .with_for_update(skip_locked=True) 
     )
     result = await session.execute(stmt)
     game_links = result.scalars().all()
-    # print(f"Found {len(game_links)} games to process.", flush=True) # <-- SILENCED
     return game_links
 
 async def _get_moves_for_games(session: AsyncSession, game_links: List[int]) -> Dict[int, List[Dict[str, Any]]]:
@@ -1206,95 +1194,85 @@ async def _get_moves_for_games(session: AsyncSession, game_links: List[int]) -> 
     """
     if not game_links:
         return {}
-        
-    # print(f"Fetching moves for {len(game_links)} games...", flush=True) # <-- SILENCED
     stmt = (
         select(Move.link, Move.n_move, Move.white_move, Move.black_move)
         .where(Move.link.in_(game_links))
         .order_by(Move.link, Move.n_move)
     )
     result = await session.execute(stmt)
-    
-    # Group moves by game link
     moves_by_link: Dict[int, List[Dict[str, Any]]] = {}
-    for row in result.mappings(): # .mappings() returns dictionaries
+    for row in result.mappings():
         link = row['link']
         if link not in moves_by_link:
             moves_by_link[link] = []
         moves_by_link[link].append(row)
-        
-    # print(f"Found moves for {len(moves_by_link)} games.", flush=True) # <-- SILENCED
     return moves_by_link
 
-async def _get_remaining_fens_count(session: AsyncSession) -> int:
+async def _mark_games_as_done_in_session(session: AsyncSession, game_links: List[int]):
     """
-    Counts how many games still have fens_done = False.
-    Uses the provided session to read the current transaction state.
+    Bulk updates the Game table to set fens_done=True using the provided session.
     """
-    stmt = select(func.count(Game.link)).where(Game.fens_done == False)
-    result = await session.execute(stmt)
-    count = result.scalar()
-    return count or 0
+    if not game_links:
+        return
+    
+    stmt = (
+        update(Game)
+        .where(Game.link.in_(game_links))
+        .values(fens_done=True)
+    )
+    await session.execute(stmt)
 
-async def _get_remaining_fens_count_committed() -> int:
-    """
-    Counts how many games still have fens_done = False using a NEW session.
-    This reads the last COMMITTED state of the database.
-    """
-    async with AsyncDBSession() as session:
-        stmt = select(func.count(Game.link)).where(Game.fens_done == False)
-        result = await session.execute(stmt)
-        count = result.scalar()
-        return count or 0
+# --- (REMOVED _get_remaining_fens_count_committed, now imported) ---
 
 # ---
-# 3. ORCHESTRATOR / BACKGROUND JOB (MODIFIED)
+# 3. BACKGROUND JOBS (MODIFIED)
 # ---
 
-async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_size: int = 1000):
+# --- STAGE 1: The "Child" Job (Run by fen-worker-1, 2, 3) ---
+async def run_fen_generation_job(
+    ctx: dict, 
+    total_games_to_process: int, # This is the "quota" for this worker
+    batch_size: int, 
+    **kwargs
+) -> List[Dict[str, Any]]: # <-- Returns the list of associations
     """
-    The main background task.
-    - Loops until 'total_games_to_process' is met or no games are left.
-    - Pre-aggregates FENs in Python to avoid CardinalityViolationError.
-    - Logs total job time and failures at the end.
-    - MODIFIED: Each batch is now its own atomic transaction.
+    STAGE 1: (CHILD JOB)
+    - Fetches its own batches of games using SKIP LOCKED.
+    - Runs CPU-bound PGN parsing.
+    - Returns a list of all associations it found.
+    - DOES NOT touch the database, except to read moves and mark games done.
     """
+    worker_id = ctx.get('job_id', 'unknown')[:6]
+    job_log_prefix = f"[FEN JOB {worker_id}]"
+    print(f"--- [START] {job_log_prefix} ---", flush=True)
+    print(f"{job_log_prefix} Quota: {total_games_to_process} games, in batches of {batch_size}.", flush=True)
     
-    # --- MODIFIED: Added flush=True ---
-    print(f"--- [START] FEN Generation Job ---", flush=True)
-    print(f"Targeting {total_games_to_process} games, in batches of {batch_size}.", flush=True)
-    
-    fen_interface = DBInterface(Fen)
+    all_associations_for_job = []
+    all_failures_for_job = []
     total_processed_so_far = 0
-    total_games_failed = 0 
-    total_job_failures_list = [] 
     
     job_start_time = time.time()
     
-    # --- MODIFIED: Session is now created *inside* the loop ---
     while total_processed_so_far < total_games_to_process:
         
-        # --- MODIFIED: Added flush=True ---
-        print(f"[FEN JOB] Processing batch { (total_processed_so_far // batch_size) + 1 }...", flush=True)
-        batch_start_time = time.time()
+        print(f"{job_log_prefix} Processing batch { (total_processed_so_far // batch_size) + 1 }...", flush=True)
         
-        # Each loop is a new session and a new atomic transaction
         async with AsyncDBSession() as session:
             try:
-                # Calculate how many games to fetch in this batch
+                # 1. Fetch Games (Fixed to use small, safe batches)
                 games_left_to_reach_target = total_games_to_process - total_processed_so_far
                 current_batch_size = min(batch_size, games_left_to_reach_target)
                 
-                # 1. Fetch Games (uses this batch's session)
+                # This query is now safe and fast
                 game_links = await _get_games_needing_fens(session, current_batch_size)
-                if not game_links:
-                    print("[FEN JOB] No more games found to process. Stopping job.", flush=True)
-                    break # No more games left
                 
-                # --- MODIFIED: Added flush=True ---
-                print(f"[FEN JOB] Fetched {len(game_links)} games for this batch.", flush=True)
+                if not game_links:
+                    print(f"{job_log_prefix} No more games found to process. Stopping job.", flush=True)
+                    break 
+                
+                print(f"{job_log_prefix} Fetched {len(game_links)} games for this batch.", flush=True)
 
-                # 2. Fetch Moves (uses this batch's session)
+                # 2. Fetch Moves
                 moves_by_link = await _get_moves_for_games(session, game_links)
                 
                 # 3. Process in Parallel (CPU-bound)
@@ -1307,110 +1285,186 @@ async def run_fen_generation_job(total_games_to_process: int = 1000000, batch_si
                 ]
                 results_tuples = await asyncio.gather(*tasks) 
                 
-                batch_fens_to_aggregate = []
+                batch_associations = []
+                batch_failures = []
                 
-                for fens_list, failures_list in results_tuples:
+                for associations_list, failures_list in results_tuples:
                     if failures_list:
-                        total_games_failed += 1
-                        total_job_failures_list.extend(failures_list)
+                        batch_failures.extend(failures_list)
                     else:
-                        batch_fens_to_aggregate.extend(fens_list)
+                        batch_associations.extend(associations_list) 
                 
-                # 4. Pre-aggregate FENs
-                aggregated_fens: Dict[str, Dict[str, Any]] = {}
-                for fen_data in batch_fens_to_aggregate: 
-                    fen_str = fen_data['fen']
-                    if fen_str not in aggregated_fens:
-                        aggregated_fens[fen_str] = {
-                            'fen': fen_str,
-                            'n_games': 1,
-                            'moves_counter': fen_data['moves_counter'],
-                            'next_moves': None,
-                            'score': None
-                        }
-                    else:
-                        aggregated_fens[fen_str]['n_games'] += 1
-                        aggregated_fens[fen_str]['moves_counter'] += fen_data['moves_counter']
-                all_fens_to_insert = list(aggregated_fens.values())
+                all_associations_for_job.extend(batch_associations)
+                all_failures_for_job.extend(batch_failures)
 
-                # --- MODIFIED: Added flush=True ---
-                print(f"[FEN JOB] Aggregated {len(all_fens_to_insert)} unique FENs from {len(tasks_data)} successful games.", flush=True)
-
-                # 5. Bulk-Upsert FENs (uses this batch's session)
-                if all_fens_to_insert:
-                    # --- MODIFIED: Pass the session to create_all ---
-                    await fen_interface.create_all_with_session(session, all_fens_to_insert)
-
-                # 6. Mark Games as Done (uses this batch's session)
+                # 4. Mark Games as Done
                 await _mark_games_as_done_in_session(session, game_links)
                 
-                # 7. Commit Transaction
-                # If all steps above succeeded, commit the transaction
+                # 5. Commit Transaction (to release locks)
                 await session.commit()
                 
                 total_processed_so_far += len(game_links)
-                
-                # --- MODIFIED: Added flush=True ---
-                batch_end_time = time.time()
-                print(f"[FEN JOB] Batch complete. Total games: {total_processed_so_far}. Batch Time: {(batch_end_time - batch_start_time):.2f}s", flush=True)
-
 
             except Exception as e:
-                # If anything in this batch failed, roll back the transaction
-                print(f"CRITICAL: Error during batch processing: {e}. Rolling back batch.", flush=True)
+                print(f"CRITICAL: Error in {job_log_prefix} batch: {e}. Rolling back batch.", flush=True)
                 if hasattr(e, 'orig'):
                     print(f"DBAPI Error: {e.orig}", flush=True)
                 await session.rollback()
-                break # Stop the job
+                # Stop this worker if a DB error occurs
+                break 
             
-        # --- END OF WHILE LOOP ---
+    # --- END OF WHILE LOOP ---
     
-    # 7. Write failures (if any)
-    if total_job_failures_list:
+    # 6. Log failures (if any)
+    if all_failures_for_job:
         log_file_path = "logs/illegall_fen.txt" 
-        print(f"Encountered {total_games_failed} game failures (illegal SAN). Writing details to '{log_file_path}'...", flush=True)
+        print(f"{job_log_prefix} Encountered {len(all_failures_for_job)} game failures. Writing details to '{log_file_path}'...", flush=True)
         try:
             os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
             with open(log_file_path, "a", encoding="utf-8") as f:
-                f.write(f"\n--- FEN Generation Job Run: {datetime.now().isoformat()} ---\n")
-                for fail in total_job_failures_list:
+                f.write(f"\n--- FEN Job {worker_id} Run: {datetime.now().isoformat()} ---\n")
+                for fail in all_failures_for_job:
                     f.write(f"{fail}\n")
                 f.write(f"--- End of Job Run ---\n")
         except Exception as e:
             print(f"CRITICAL: Failed to write to '{log_file_path}': {e}", flush=True)
     
-    
-    # 8. Log final summary (using a new session for a committed read)
     total_job_time = time.time() - job_start_time
-    remaining_games_count = await _get_remaining_fens_count_committed()
+    print(f"--- [END] {job_log_prefix} ---", flush=True)
+    print(f"--- {job_log_prefix} Total job time: {total_job_time:.2f} seconds ---", flush=True)
     
-    print(f"--- [END] FEN Generation Job ---", flush=True)
-    print(f"--- Total job time: {total_job_time:.2f} seconds ---", flush=True)
-    print(f"--- Total games processed in this run: {total_processed_so_far} ---", flush=True)
-    print(f"--- Games failed (illegal SAN): {total_games_failed} ---", flush=True)
-    print(f"--- Games still needing FENs in DB: {remaining_games_count} ---", flush=True)
+    # 7. Return the results to the "boss"
+    return all_associations_for_job
 
 
-async def _mark_games_as_done_in_session(session: AsyncSession, game_links: List[int]):
+# --- STAGE 2 Aggregation Function (as per your plan) ---
+def _aggregate_fen_data_in_memory(all_associations: List[Dict[str, Any]]) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    (Helper for run_fen_generation_job)
-    Bulk updates the Game table to set fens_done=True using the provided session.
+    Reads the complete list of associations from all workers and aggregates
+    them in memory (as requested) to create the FEN table data.
     """
-    if not game_links:
+    print(f"[FEN AGGREGATOR] Aggregating {len(all_associations)} associations in memory...")
+    
+    fen_map: Dict[str, Dict[str, Any]] = {}
+    
+    for assoc in all_associations:
+        fen_str = assoc['fen_fen']
+        
+        if fen_str not in fen_map:
+            fen_map[fen_str] = {
+                'fen': fen_str,
+                'n_games': 1,
+                'moves_counter': f"#{assoc['n_move']}_", # Start counter
+                'score': None,
+                'next_moves': None
+            }
+        else:
+            fen_map[fen_str]['n_games'] += 1
+            # Append unique move counters
+            move_str = f"#{assoc['n_move']}_"
+            if move_str not in fen_map[fen_str]['moves_counter']:
+                 fen_map[fen_str]['moves_counter'] += move_str
+
+    # Deduplicate the associations list
+    unique_associations = list({tuple(d.items()): d for d in all_associations}.values())
+
+    print(f"[FEN AGGREGATOR] Found {len(fen_map)} unique FENs.")
+    print(f"[FEN AGGREGATOR] Found {len(unique_associations)} unique associations.")
+    
+    return list(fen_map.values()), unique_associations
+
+
+# --- STAGE 0 "Boss" Job ---
+async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: int, num_workers: int, **kwargs):
+    """
+    STAGE 0: (BOSS JOB)
+    Orchestrates the entire FEN generation pipeline.
+    1. Fetches all game links that need processing.
+    2. Enqueues 3 parallel child jobs with these links.
+    3. Waits for them to finish and collects their results.
+    4. Runs the in-memory aggregation (your plan).
+    5. Inserts the aggregated data into the DB.
+    """
+    job_id = ctx.get('job_id', 'unknown')[:6]
+    job_log_prefix = f"[FEN PIPELINE {job_id}]"
+    print(f"--- [START] {job_log_prefix} ---", flush=True)
+    
+    redis: ArqRedis = ctx['redis']
+    fen_interface = DBInterface(Fen)
+    assoc_interface = DBInterface(GameFenAssociation)
+    
+    # --- 1. Check how many games are left to process ---
+    games_remaining = await _get_remaining_fens_count_committed()
+    if games_remaining == 0:
+        print(f"{job_log_prefix} No games found to process. Aborting.", flush=True)
         return
+        
+    # We will process *all* remaining games, divided by our workers
+    total_games_to_process = games_remaining
+    print(f"{job_log_prefix} Found {total_games_to_process} total games. Distributing to {num_workers} workers.", flush=True)
+
+    # 2. Enqueue child jobs
+    games_per_worker = math.ceil(total_games_to_process / num_workers)
     
-    stmt = (
-        update(Game)
-        .where(Game.link.in_(game_links))
-        .values(fens_done=True)
-    )
-    await session.execute(stmt)
-    # The commit is now handled by the main job loop
-    # print(f"Successfully marked {len(game_links)} games as fens_done=True (pending commit).", flush=True) # <-- SILENCED
+    child_jobs: List[Job] = []
+    print(f"{job_log_prefix} Enqueuing {num_workers} association jobs...", flush=True)
+    for i in range(num_workers):
+        job = await redis.enqueue_job(
+            'run_fen_generation_job',
+            total_games_to_process=games_per_worker, # Give each worker its quota
+            batch_size=batch_size, # The small, safe batch size
+            _queue_name='fen_queue'
+        )
+        child_jobs.append(job)
+        
+    # 3. Wait for child jobs to complete and collect results
+    all_associations_from_workers: List[Dict[str, Any]] = []
+    for i, job in enumerate(child_jobs):
+        try:
+            # Wait forever and get the list of associations
+            result_list = await job.result(timeout=None) 
+            all_associations_from_workers.extend(result_list)
+            print(f"{job_log_prefix} Child job {i+1}/{num_workers} (ID: {job.job_id}) finished. Got {len(result_list)} associations.", flush=True)
+        except Exception as e:
+            print(f"CRITICAL: {job_log_prefix} Child job {i+1} (ID: {job.job_id}) FAILED: {repr(e)}", flush=True)
+    
+    print(f"{job_log_prefix} All {num_workers} child jobs complete.", flush=True)
+
+    if not all_associations_from_workers:
+        print(f"{job_log_prefix} No associations were generated. Aborting.", flush=True)
+        return
+
+    # 4. Run in-memory aggregation (Your Plan)
+    fens_to_insert, associations_to_insert = _aggregate_fen_data_in_memory(all_associations_from_workers)
+
+    # 5. Insert aggregated data into DB (as a single transaction)
+    print(f"{job_log_prefix} Starting database insertion...", flush=True)
+    async with AsyncDBSession() as session:
+        try:
+            # 5a. Insert FENs (Now with ON CONFLICT DO UPDATE, as it's safe)
+            await fen_interface.create_all_with_session(session, fens_to_insert)
+            
+            # 5b. Insert Associations (This will now succeed)
+            await assoc_interface.create_all_with_session(session, associations_to_insert)
+            
+            # 5c. Mark games as done (This was handled by the child jobs)
+            
+            # 5d. Commit
+            await session.commit()
+            print(f"{job_log_prefix} Database insertion complete.", flush=True)
+            
+        except Exception as e:
+            print(f"CRITICAL: Error during aggregation insert: {e}. Rolling back.", flush=True)
+            if hasattr(e, 'orig'):
+                print(f"DBAPI Error: {e.orig}", flush=True)
+            await session.rollback()
+            raise
+
+    print(f"--- [END] {job_log_prefix} ---", flush=True)
 
 
 
-### inner_api/operations/players.py 
+### chessism_api/operations/players.py 
 #chessism_api/operations/players.py
 
 import asyncio # <-- NEW
@@ -1690,8 +1744,8 @@ async def update_stats_for_all_primary_players(api_delay: float = 1.0) -> Dict[s
 
 
 
-### inner_api/operations/models.py 
-from typing import Optional, List, Any, Dict # <-- Import Dict
+### chessism_api/operations/models.py 
+from typing import Optional, List, Any, Dict 
 from pydantic import BaseModel, Field
 
 # --- Pydantic model for creating a Player (used in operations/players.py) ---
@@ -1787,12 +1841,8 @@ class AnalysisTimesCreateData(BaseModel):
     analyse_time_limit:float
     nodes_limit:int
 
-#
-# --- THIS LINE WAS THE ERROR AND HAS BEEN REMOVED ---
-# from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData # <-- NEW
-#
     
-# --- NEW: Pydantic model for creating PlayerStats ---
+# --- Pydantic model for creating PlayerStats ---
 # This defines the data we expect to parse from the API
 # and save to the database.
 
@@ -1847,8 +1897,101 @@ class PlayerStatsCreateData(BaseModel):
         from_attributes = True # Allow reading from the DB model
 
 
+# --- NEW: Pydantic Models for Statistical Reports ---
 
-### inner_api/operations/chess_com_api.py 
+# --- Sub-Models (for organization) ---
+
+class WinLossDrawModel(BaseModel):
+    wins: int
+    losses: int
+    draws: int
+    total: int
+    win_rate: float # (wins + (draws / 2)) / total
+
+class PerformanceByColorModel(BaseModel):
+    as_white: WinLossDrawModel
+    as_black: WinLossDrawModel
+    combined: WinLossDrawModel
+
+class OpeningStatModel(BaseModel):
+    eco: str
+    name: str # e.g., "Ruy-Lopez" (we will need a simple ECO lookup)
+    stats: WinLossDrawModel
+
+class PerformanceByTerminationModel(BaseModel):
+    checkmated: int
+    resigned: int
+    timeout: int
+    abandoned: int
+    # ... other result types
+
+# --- Models for Leela (Advanced) Stats ---
+
+class AccuracyModel(BaseModel):
+    average_centipawn_loss: float
+    blunder_count: int  # (e.g., score drop > 100)
+    mistake_count: int  # (e.g., score drop > 50)
+    inaccuracy_count: int # (e.g., score drop > 25)
+    
+class AdvantageConversionModel(BaseModel):
+    # When score > +2.0
+    opportunities: int
+    wins: int
+    draws: int
+    losses: int
+    conversion_rate: float # wins / opportunities
+
+class DisadvantageTenacityModel(BaseModel):
+    # When score < -2.0
+    threats: int
+    wins: int
+    draws: int
+    losses: int
+    save_rate: float # (wins + draws) / threats
+
+class TimeVsAccuracyModel(BaseModel):
+    avg_reaction_time_on_blunders_sec: float
+    avg_reaction_time_on_best_moves_sec: float
+    acpl_under_30_seconds: float # Avg Centipawn Loss when clock is low
+
+# --- Main Report Model ---
+
+class PlayerStatsReport(BaseModel):
+    """
+    The complete statistical report for a single player.
+    """
+    player_name: str
+    total_games_in_db: int
+    
+    # --- Standard Stats ---
+    performance: PerformanceByColorModel
+    performance_by_termination: PerformanceByTerminationModel
+    top_openings: List[OpeningStatModel] # A list of the top 5
+    average_opponent_rating: float
+    average_game_length_moves: float
+    
+    # --- Leela (Advanced) Stats ---
+    accuracy: AccuracyModel
+    advantage_conversion: AdvantageConversionModel
+    tenacity_in_disadvantage: DisadvantageTenacityModel
+    time_vs_accuracy: TimeVsAccuracyModel
+
+# --- TODO: Define GlobalStatsReport (will be similar) ---
+
+
+
+### chessism_api/operations/stats_analysis.py 
+# chessism_api/operations/stats_analysis.py
+
+# This file will contain the business logic to aggregate
+# database results into statistical reports.
+
+# --- TODO: Add stats logic here (e.g., get_global_stats_report) ---
+# (Leaving empty as per our plan)
+
+
+
+### chessism_api/operations/chess_com_api.py 
 #chessism_api/operations/chess_com_api.py
 
 import asyncio
@@ -2106,9 +2249,7 @@ async def download_months(
 
 
 
-### inner_api/operations/analysis.py 
-# chessism_api/operations/analysis.py
-
+### chessism_api/operations/analysis.py 
 # chessism_api/operations/analysis.py
 
 import asyncio
@@ -2196,13 +2337,16 @@ def _format_leela_results(
     return formatted_results
 
 async def run_analysis_job(
+    ctx: dict, 
     gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
-    nodes_limit: int
+    nodes_limit: int,
+    **kwargs # <-- THIS IS THE FIX
 ):
     """
     The main background task for a general analysis job.
+    '**kwargs' is added to accept extra arq arguments.
     """
     job_id = f"GPU-{gpu_index}"
     # This will now correctly select the URL
@@ -2230,7 +2374,6 @@ async def run_analysis_job(
             
             try:
                 # 1. Start a transaction and get FENs (with lock)
-                # --- THIS IS THE FIX for the TypeError ---
                 session, fens_to_process = await get_fens_for_analysis(current_batch_size)
                 
                 if not fens_to_process or session is None:
@@ -2302,14 +2445,17 @@ async def run_analysis_job(
     print(f"Total failed batches: {total_failed_batches}", flush=True)
 
 async def run_player_analysis_job(
+    ctx: dict, 
     player_name: str,
     gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
-    nodes_limit: int
+    nodes_limit: int,
+    **kwargs # <-- THIS IS THE FIX
 ):
     """
     The main background task for a player-specific analysis job.
+    '**kwargs' is added to accept extra arq arguments.
     """
     job_id = f"GPU-{gpu_index} (Player: {player_name})"
     leela_url = LEELA_URLS[gpu_index]
@@ -2360,7 +2506,7 @@ async def run_player_analysis_job(
                 batch_duration = batch_end_time - batch_start_time
                 
                 if not leela_results:
-                    print(f"[{job_id}] Failed to get results from Leela. Skipping batch.", flush=True)
+                    print(f"[{job_id}] Failed to get results from Leela service. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     await session.rollback()
                     continue
@@ -2406,7 +2552,7 @@ async def run_player_analysis_job(
 
 
 
-### inner_api/operations/check_player_in_db.py 
+### chessism_api/operations/check_player_in_db.py 
 # chessism_api/operations/check_player_in_db.py
 
 import time

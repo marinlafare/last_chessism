@@ -1,4 +1,4 @@
-from typing import Optional, List, Any, Dict # <-- Import Dict
+from typing import Optional, List, Any, Dict 
 from pydantic import BaseModel, Field
 
 # --- Pydantic model for creating a Player (used in operations/players.py) ---
@@ -94,12 +94,8 @@ class AnalysisTimesCreateData(BaseModel):
     analyse_time_limit:float
     nodes_limit:int
 
-#
-# --- THIS LINE WAS THE ERROR AND HAS BEEN REMOVED ---
-# from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData # <-- NEW
-#
     
-# --- NEW: Pydantic model for creating PlayerStats ---
+# --- Pydantic model for creating PlayerStats ---
 # This defines the data we expect to parse from the API
 # and save to the database.
 
@@ -152,3 +148,85 @@ class PlayerStatsCreateData(BaseModel):
     
     class Config:
         from_attributes = True # Allow reading from the DB model
+
+
+# --- NEW: Pydantic Models for Statistical Reports ---
+
+# --- Sub-Models (for organization) ---
+
+class WinLossDrawModel(BaseModel):
+    wins: int
+    losses: int
+    draws: int
+    total: int
+    win_rate: float # (wins + (draws / 2)) / total
+
+class PerformanceByColorModel(BaseModel):
+    as_white: WinLossDrawModel
+    as_black: WinLossDrawModel
+    combined: WinLossDrawModel
+
+class OpeningStatModel(BaseModel):
+    eco: str
+    name: str # e.g., "Ruy-Lopez" (we will need a simple ECO lookup)
+    stats: WinLossDrawModel
+
+class PerformanceByTerminationModel(BaseModel):
+    checkmated: int
+    resigned: int
+    timeout: int
+    abandoned: int
+    # ... other result types
+
+# --- Models for Leela (Advanced) Stats ---
+
+class AccuracyModel(BaseModel):
+    average_centipawn_loss: float
+    blunder_count: int  # (e.g., score drop > 100)
+    mistake_count: int  # (e.g., score drop > 50)
+    inaccuracy_count: int # (e.g., score drop > 25)
+    
+class AdvantageConversionModel(BaseModel):
+    # When score > +2.0
+    opportunities: int
+    wins: int
+    draws: int
+    losses: int
+    conversion_rate: float # wins / opportunities
+
+class DisadvantageTenacityModel(BaseModel):
+    # When score < -2.0
+    threats: int
+    wins: int
+    draws: int
+    losses: int
+    save_rate: float # (wins + draws) / threats
+
+class TimeVsAccuracyModel(BaseModel):
+    avg_reaction_time_on_blunders_sec: float
+    avg_reaction_time_on_best_moves_sec: float
+    acpl_under_30_seconds: float # Avg Centipawn Loss when clock is low
+
+# --- Main Report Model ---
+
+class PlayerStatsReport(BaseModel):
+    """
+    The complete statistical report for a single player.
+    """
+    player_name: str
+    total_games_in_db: int
+    
+    # --- Standard Stats ---
+    performance: PerformanceByColorModel
+    performance_by_termination: PerformanceByTerminationModel
+    top_openings: List[OpeningStatModel] # A list of the top 5
+    average_opponent_rating: float
+    average_game_length_moves: float
+    
+    # --- Leela (Advanced) Stats ---
+    accuracy: AccuracyModel
+    advantage_conversion: AdvantageConversionModel
+    tenacity_in_disadvantage: DisadvantageTenacityModel
+    time_vs_accuracy: TimeVsAccuracyModel
+
+# --- TODO: Define GlobalStatsReport (will be similar) ---

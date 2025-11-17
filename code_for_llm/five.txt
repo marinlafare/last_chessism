@@ -5,9 +5,7 @@
             
 
 
-### inner_api/database/models.py 
-#chessism_api/database/models.py
-
+### chessism_api/database/models.py 
 from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger, Table,
@@ -24,10 +22,6 @@ def to_dict(obj: Base) -> Dict[str, Any]:
     Serializes a SQLAlchemy ORM object into a dictionary.
     """
     return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-# --- REMOVED: Base.to_dict = to_dict ---
-# This "monkey-patching" can interfere with SQLAlchemy's
-# mapper configuration and relationship loading.
 
 
 class Player(Base):
@@ -83,11 +77,19 @@ class Game(Base):
     
     white_player = relationship(Player, foreign_keys=[white])
     black_player = relationship(Player, foreign_keys=[black])
+    
+    # --- MODIFIED: Point to the new association class ---
     fens = relationship(
         'Fen',
         secondary='game_fen_association',
-        back_populates='games'
+        back_populates='games',
+        # --- FIX: Tell SQLAlchemy this overlaps with the 'fen_associations' relationship ---
+        overlaps="fen_associations" 
     )
+    
+    # --- NEW: Add direct relationship to the association object ---
+    fen_associations = relationship("GameFenAssociation", back_populates="game", overlaps="games,fens")
+
 
 class Month(Base):
     __tablename__ = "months"
@@ -114,7 +116,7 @@ class Move(Base):
     __tablename__ = "moves"
     id = Column(Integer, primary_key=True, autoincrement=True)
     link = Column("link",BigInteger,ForeignKey("game.link"),
-                  nullable=False,unique=False)
+                 nullable=False,unique=False)
     n_move = Column("n_move", Integer, nullable=False)
     white_move = Column("white_move", String, nullable=False)
     black_move = Column("black_move", String, nullable=False)
@@ -138,17 +140,37 @@ class Fen(Base):
     next_moves = Column('next_moves',String, nullable = True)
     score = Column('score', Float, nullable = True)
     
+    # --- MODIFIED: Point to the new association class ---
     games = relationship(
         'Game',
         secondary='game_fen_association',
-        back_populates='fens'
+        back_populates='fens',
+        # --- FIX: Tell SQLAlchemy this overlaps with the 'game_associations' relationship ---
+        overlaps="game_associations"
+    )
+    
+    # --- NEW: Add direct relationship to the association object ---
+    game_associations = relationship("GameFenAssociation", back_populates="fen", overlaps="games,fens")
+
+
+# --- NEW: The GameFenAssociation class ---
+class GameFenAssociation(Base):
+    __tablename__ = 'game_fen_association'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    game_link = Column(BigInteger, ForeignKey('game.link'), nullable=False, index=True)
+    fen_fen = Column(String, ForeignKey('fen.fen'), nullable=False, index=True)
+    n_move = Column(Integer, nullable=False)
+    move_color = Column(String(5), nullable=False) # 'white' or 'black'
+
+    # --- FIX: Add overlaps parameter to both relationships ---
+    game = relationship("Game", back_populates="fen_associations", overlaps="games,fens")
+    fen = relationship("Fen", back_populates="game_associations", overlaps="games,fens")
+
+    __table_args__ = (
+        UniqueConstraint('game_link', 'fen_fen', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
     )
 
-game_fen_association = Table(
-    'game_fen_association', Base.metadata,
-    Column('game_link', BigInteger, ForeignKey('game.link'), primary_key=True),
-    Column('fen_fen', String, ForeignKey('fen.fen'), primary_key=True)
-)
 
 class AnalysisTimes(Base):
     __tablename__ = "analysis_times"
@@ -215,7 +237,7 @@ class PlayerStats(Base):
 
 
 
-### inner_api/database/db_interface.py 
+### chessism_api/database/db_interface.py 
 #chessism_api/database/db_interface.py
 
 import os
@@ -227,7 +249,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, Game, game_fen_association
+# --- MODIFIED: Import new association model ---
+from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation
 # ---
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -337,6 +360,9 @@ class DBInterface:
 
         if self.db_class == Fen:
             params_per_row = 5 # 'fen', 'n_games', 'moves_counter', 'score', 'next_moves'
+        # --- NEW: Check for new association class ---
+        elif self.db_class == GameFenAssociation:
+            params_per_row = 4 # 'game_link', 'fen_fen', 'n_move', 'move_color'
         else:
             params_per_row = len(self.db_class.__table__.columns) if hasattr(self.db_class, '__table__') else 3
 
@@ -369,18 +395,25 @@ class DBInterface:
                 continue 
             
             if self.db_class == Fen:
+                # --- THIS IS THE FIX ---
+                # Revert to ON CONFLICT DO UPDATE, as this is now
+                # run by a single, safe "boss" worker.
                 stmt = pg_insert(self.db_class).values(clean_chunk).on_conflict_do_update(
                     index_elements=[self.db_class.fen],
                     set_={
                         'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
-                        'moves_counter': text(
-                            "CASE WHEN position(excluded.moves_counter in fen.moves_counter) > 0 "
-                            "THEN fen.moves_counter "
-                            "ELSE (fen.moves_counter || excluded.moves_counter) END"
-                        )
+                        'moves_counter': self.db_class.moves_counter + pg_insert(self.db_class).excluded.moves_counter
                     }
                 )
                 await session.execute(stmt)
+            
+            elif self.db_class == GameFenAssociation:
+                # Use ON CONFLICT DO NOTHING
+                stmt = pg_insert(self.db_class).values(clean_chunk).on_conflict_do_nothing(
+                     index_elements=['game_link', 'fen_fen', 'n_move', 'move_color']
+                )
+                await session.execute(stmt)
+            
             else:
                 await session.run_sync(
                     lambda sync_session, c=clean_chunk: sync_session.bulk_insert_mappings(self.db_class, c)
@@ -390,8 +423,8 @@ class DBInterface:
 
 
     async def upsert_main_fens(self,
-                                   objects_to_insert: ListOfDataObjects,
-                                   objects_to_update: ListOfDataObjects) -> bool:
+                                    objects_to_insert: ListOfDataObjects,
+                                    objects_to_update: ListOfDataObjects) -> bool:
         """
         PERFORMANCE WARNING: The update logic (for item in objects_to_update)
         runs session.get() inside a loop. This is an N+1 query problem
@@ -437,50 +470,7 @@ class DBInterface:
                 await session.rollback()
                 raise
 
-    async def associate_fen_with_games(self, associations_to_insert_raw: List[Dict[str, Any]]) -> bool:
-        """
-        Associates multiple FENs with their respective lists of games in a bulk operation
-        by directly inserting into the association table.
-
-        Args:
-            associations_to_insert_raw: A list of dictionaries, e.g.:
-                [{"game_link": 123, "fen_fen": "r1bqk..."},
-                 {"game_link": 124, "fen_fen": "r1b1k..."}]
-        """
-        if not associations_to_insert_raw:
-            print("No valid associations to insert after processing input data.")
-            return True
-
-        params_per_row = 2
-        INSERT_BATCH_SIZE = 5000
-        effective_batch_size = min(INSERT_BATCH_SIZE, 32000 // params_per_row)
-        if effective_batch_size == 0:
-            effective_batch_size = 1
-
-        chunks = [associations_to_insert_raw[i:i + effective_batch_size]
-                  for i in range(0, len(associations_to_insert_raw), effective_batch_size)]
-
-        async with AsyncDBSession() as session:
-            try:
-                total_inserted_rows = 0
-                for i, chunk in enumerate(chunks):
-                    if not chunk:
-                        continue
-
-                    insert_stmt = pg_insert(game_fen_association).values(chunk).on_conflict_do_nothing(
-                        index_elements=[game_fen_association.c.game_link, game_fen_association.c.fen_fen]
-                    )
-                    result = await session.execute(insert_stmt)
-                    total_inserted_rows += result.rowcount
-
-                await session.commit()
-                print(f"Successfully committed a total of {total_inserted_rows} new associations.")
-                return True
-
-            except Exception as e:
-                await session.rollback()
-                print(f"An error occurred during bulk FEN-Game association: {e}")
-                raise
+    # --- REMOVED: Old association functions ---
 
     async def update_all(self, data: ListOfDataObjects) -> bool:
         """
@@ -556,8 +546,8 @@ class DBInterface:
             # Use self.db_class.__table__ (Core) instead of self.db_class (ORM)
             # to ensure compatibility with bulk parameter binding.
             stmt = (
-                update(self.db_class.__table__) 
-                .where(self.db_class.fen == bindparam('p_fen'))
+                update(Fen.__table__) # <-- Use Fen table
+                .where(Fen.fen == bindparam('p_fen'))
                 .values(
                     score=bindparam('p_score'),
                     next_moves=bindparam('p_next_moves')
@@ -604,7 +594,7 @@ async def reset_all_game_fens_done_to_false() -> int:
 
 
 
-### inner_api/database/engine.py 
+### chessism_api/database/engine.py 
 # chessism_api/database/engine.py
 
 import asyncio
@@ -690,21 +680,24 @@ async def init_db(connection_string: str):
 
 
 
-### inner_api/database/ask_db.py 
-# chessism_api/database/ask_db.py
+### chessism_api/database/ask_db.py 
 # chessism_api/database/ask_db.py
 import os
 import asyncio
-import time # <-- Added for internal timing in helpers
+import time 
 from typing import List, Dict, Any, Tuple, Set, Optional
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
-from sqlalchemy import text, select, update, func
+# --- MODIFIED: Import distinct ---
+from sqlalchemy import text, select, update, func, distinct
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
-from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, game_fen_association
+# --- THIS IS THE FIX: Import the CamelCase class name ---
+from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, GameFenAssociation
+# ---
+
 from chessism_api.database.db_interface import DBInterface
 # ---
 
@@ -927,7 +920,6 @@ async def drop_player_stats_table():
     except Exception as e:
         print(f"Error dropping 'player_stats' table: {e}")
 
-# --- NEW FUNCTION ---
 async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games.
@@ -946,7 +938,6 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     """
     params = {"limit": limit}
     
-    # Use open_async_request to execute the query
     result = await open_async_request(
         sql_query,
         params=params,
@@ -954,7 +945,6 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-# --- NEW FUNCTION ---
 async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games,
@@ -975,7 +965,6 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     """
     params = {"limit": limit}
     
-    # Use open_async_request to execute the query
     result = await open_async_request(
         sql_query,
         params=params,
@@ -983,7 +972,6 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-# --- NEW FUNCTION ---
 async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
     """
     Calculates the sum of all n_games where n_games > threshold.
@@ -1001,19 +989,13 @@ async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
             print(f"Error calculating sum of n_games: {e}")
             return None
 
-# --- MODIFIED FUNCTION (FOR ANALYSIS JOB) ---
 async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of FENs that need analysis.
     Starts a new transaction and applies a row-level lock.
-    
-    Returns the session (which holds the lock) and the list of FENs.
-    The CALLER is responsible for committing or rolling back the session.
     """
-    # Create a new session for this atomic operation
     session = AsyncDBSession()
     try:
-        # Start the transaction
         await session.begin()
         
         stmt = (
@@ -1021,55 +1003,61 @@ async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Opt
             .where(Fen.score.is_(None))
             .order_by(Fen.n_games.desc())
             .limit(limit)
-            .with_for_update(skip_locked=True) # <-- The "Worker Queue" magic
+            .with_for_update(skip_locked=True) 
         )
         
         result = await session.execute(stmt)
         fens = result.scalars().all()
         
         if not fens:
-            # If no FENs, roll back and close the session immediately
             await session.rollback()
             await session.close()
             return None, None
             
-        # Return the session *and* the fens. The session is still open and holds the lock.
         return session, fens
 
     except Exception as e:
         print(f"Error in get_fens_for_analysis: {repr(e)}", flush=True)
-        # Rollback and close on error
         await session.rollback()
         await session.close()
         return None, None
 
-# --- MODIFIED FUNCTION (FOR PLAYER ANALYSIS JOB) ---
 async def get_player_fens_for_analysis(
     player_name: str,
     limit: int
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
-    Fetches the next batch of FENs for a specific player.
+    Fetches the next batch of DISTINCT FENs for a specific player.
     Starts a new transaction and applies a row-level lock.
     
     Returns the session (which holds the lock) and the list of FENs.
     """
-    # Create a new session for this atomic operation
     session = AsyncDBSession()
     try:
         await session.begin()
         
-        # This is a complex join to find FENs -> from games -> where player matches
-        stmt = (
-            select(Fen.fen)
-            .join(game_fen_association, Fen.fen == game_fen_association.c.fen_fen)
-            .join(Game, game_fen_association.c.game_link == Game.link)
+        # --- FIX: Use a Subquery with WHERE IN ---
+        
+        # 1. Create a subquery to find the TOP N *distinct* FENs for the player.
+        # This subquery is NOT locked.
+        player_fens_subquery = (
+            select(distinct(Fen.fen))
+            .join(GameFenAssociation, Fen.fen == GameFenAssociation.fen_fen)
+            .join(Game, GameFenAssociation.game_link == Game.link)
             .where(
                 (Game.white == player_name) | (Game.black == player_name)
             )
             .where(Fen.score.is_(None))
-            .order_by(Fen.n_games.desc())
+            .group_by(Fen.fen, Fen.n_games) # <-- Use GROUP BY
+            .order_by(Fen.n_games.desc()) # <-- This is now valid
             .limit(limit)
+        ).scalar_subquery() # Makes it a subquery returning a list of scalars
+
+        # 2. Now, select from the Fen table WHERE fen is in our subquery list,
+        # and apply the lock HERE.
+        stmt = (
+            select(Fen.fen)
+            .where(Fen.fen.in_(player_fens_subquery))
             .with_for_update(skip_locked=True)
         )
         
@@ -1088,4 +1076,141 @@ async def get_player_fens_for_analysis(
         await session.rollback()
         await session.close()
         return None, None
+# --- END CORRECTION ---
+
+async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
+    """
+    Counts FENs for a specific player based on their score status.
+    """
+    # --- FIX: Added DISTINCT to the counts ---
+    sql_query = """
+        SELECT
+            COUNT(DISTINCT CASE WHEN f.score = 0 THEN f.fen END) as score_zero,
+            COUNT(DISTINCT CASE WHEN f.score != 0 THEN f.fen END) as score_not_zero,
+            COUNT(DISTINCT CASE WHEN f.score IS NULL THEN f.fen END) as score_null
+        FROM fen f
+        JOIN game_fen_association gfa ON f.fen = gfa.fen_fen
+        JOIN game g ON gfa.game_link = g.link
+        WHERE g.white = :player OR g.black = :player;
+    """
+    
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else {"score_zero": 0, "score_not_zero": 0, "score_null": 0}
+
+
+# --- NEW: STATISTICAL ANALYSIS QUERIES ---
+
+async def get_player_performance_summary(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates aggregate W/L/D stats for a player as White, Black, and Combined.
+    """
+    sql_query = """
+        SELECT
+            COUNT(*) as total_games,
+            
+            SUM(CASE WHEN white = :player THEN 1 ELSE 0 END) as white_games,
+            SUM(CASE WHEN white = :player AND white_result = 1.0 THEN 1 ELSE 0 END) as white_wins,
+            SUM(CASE WHEN white = :player AND white_result = 0.0 THEN 1 ELSE 0 END) as white_losses,
+            SUM(CASE WHEN white = :player AND white_result = 0.5 THEN 1 ELSE 0 END) as white_draws,
+            
+            SUM(CASE WHEN black = :player THEN 1 ELSE 0 END) as black_games,
+            SUM(CASE WHEN black = :player AND black_result = 1.0 THEN 1 ELSE 0 END) as black_wins,
+            SUM(CASE WHEN black = :player AND black_result = 0.0 THEN 1 ELSE 0 END) as black_losses,
+            SUM(CASE WHEN black = :player AND black_result = 0.5 THEN 1 ELSE 0 END) as black_draws
+            
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_game_averages(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates average opponent ELO and average game length for a player.
+    """
+    sql_query = """
+        SELECT
+            AVG(n_moves) as avg_game_length,
+            AVG(CASE 
+                WHEN white = :player THEN black_elo
+                ELSE white_elo 
+            END) as avg_opponent_rating
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_termination_stats(player_name: str) -> Optional[Dict[str, Any]]:
+    """
+    Calculates a player's result counts grouped by termination type.
+    """
+    sql_query = """
+        SELECT
+            SUM(CASE WHEN (white = :player AND white_str_result = 'checkmated') OR (black = :player AND black_str_result = 'checkmated') THEN 1 ELSE 0 END) as checkmated,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'resigned') OR (black = :player AND black_str_result = 'resigned') THEN 1 ELSE 0 END) as resigned,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'timeout') OR (black = :player AND black_str_result = 'timeout') THEN 1 ELSE 0 END) as timeout,
+            SUM(CASE WHEN (white = :player AND white_str_result = 'abandoned') OR (black = :player AND black_str_result = 'abandoned') THEN 1 ELSE 0 END) as abandoned
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name})
+        row = result.mappings().first()
+        return dict(row) if row else None
+
+async def get_player_top_openings(player_name: str, limit: int = 5) -> List[Dict[str, Any]]:
+    """
+    Gets the player's most played openings by ECO, with W/L/D stats.
+    """
+    sql_query = """
+        SELECT
+            eco,
+            COUNT(*) as total_games,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 1.0 THEN 1
+                WHEN black = :player AND black_result = 1.0 THEN 1
+                ELSE 0 
+            END) as wins,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 0.0 THEN 1
+                WHEN black = :player AND black_result = 0.0 THEN 1
+                ELSE 0 
+            END) as losses,
+            SUM(CASE 
+                WHEN white = :player AND white_result = 0.5 THEN 1
+                WHEN black = :player AND black_result = 0.5 THEN 1
+                ELSE 0 
+            END) as draws
+        FROM game
+        WHERE (white = :player OR black = :player) AND eco != 'no_eco'
+        GROUP BY eco
+        ORDER BY total_games DESC
+        LIMIT :limit;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(sql_query), {"player": player_name, "limit": limit})
+        rows = result.mappings().all()
+        return [dict(row) for row in rows]
+
+# --- TODO: Add Global Stats functions (similar to above, but without the WHERE clause) ---
+
+# --- THIS IS THE FIX ---
+# --- Re-adding the missing function for the FEN pipeline ---
+async def _get_remaining_fens_count_committed() -> int:
+    """
+    Counts how many games still have fens_done = False using a NEW session.
+    This reads the last COMMITTED state of the database.
+    """
+    async with AsyncDBSession() as session:
+        stmt = select(func.count(Game.link)).where(Game.fens_done == False)
+        result = await session.execute(stmt)
+        count = result.scalar()
+        return count or 0
 

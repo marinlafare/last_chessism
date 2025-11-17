@@ -18,20 +18,28 @@ from chessism_api.routers import players, games, fens, analysis
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
-# from database.database.db_interface import DBInterface
+# --- NEW: Import Redis functions ---
+from chessism_api.redis_client import get_redis_pool, close_redis_pool
 
 CONN_STRING = constants.CONN_STRING
 
 # lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- NEW: Call the init_db function on startup ---
+    # --- Database Setup ---
     if not CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set.")
     await init_db(CONN_STRING)
-    # DBInterface.initialize_engine_and_session(CONN_STRING)
+    
+    # --- NEW: Redis Setup ---
+    # Initialize the pool on startup
+    await get_redis_pool()
+    
     print(f"BASAL CHESSISM Server ON YO!... (DB: {CONN_STRING.split('@')[-1]})")
     yield
+    
+    # --- NEW: Redis Shutdown ---
+    await close_redis_pool()
     print('BASAL CHESSISM Server DOWN YO!...')
 
 app = FastAPI(lifespan=lifespan)
@@ -71,13 +79,18 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY main.py .
 COPY constants.py .
 
+# --- THIS IS THE FIX ---
+# We must also copy the worker.py file into the image
+# so the worker containers can find it.
+COPY worker.py .
+
 # --- NEW: Copy the new API directory ---
 COPY chessism_api/ ./chessism_api
 
 # Expose the port the app runs on
 EXPOSE 8000
 
-# Run the Uvicorn server
+# Run the Uvicorn server (This is the default CMD, which the workers override)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 
@@ -90,25 +103,20 @@ services:
     ports:
       - "8000:8000"
     environment:
-      # This URL tells the API to connect to the 'db' service
-      # on the internal Docker network.
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
     networks:
       - chessism_net
-    # --- MODIFIED: Added depends_on for Leela services ---
     depends_on:
       db:
         condition: service_healthy
-      # --- THIS IS THE FIX ---
-      # The API will now wait for both Leela services to
-      # start before it starts itself.
       leela-service-gpu0:
         condition: service_started
       leela-service-gpu1:
         condition: service_started
+      redis:
+        condition: service_healthy
     volumes:
-      # This maps the local host directory ./api_logs to the container
-      # This is where 'illegall_fen.txt' is written.
       - ./api_logs:/app/logs
     deploy:
       resources:
@@ -174,9 +182,145 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    networks:
+      - chessism_net
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  worker-gpu0:
+    build: .
+    image: chessism-api:latest 
+    container_name: worker-gpu0
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=gpu_0_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  worker-gpu1:
+    build: .
+    image: chessism-api:latest 
+    container_name: worker-gpu1
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=gpu_1_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      leela-service-gpu0:
+        condition: service_started
+      leela-service-gpu1:
+        condition: service_started
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  fen-worker-1:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-1
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  fen-worker-2:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-2
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  fen-worker-3:
+    build: .
+    image: chessism-api:latest
+    container_name: fen-worker-3
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=fen_queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  # --- NEW: THE "BOSS" WORKER ---
+  pipeline-worker:
+    build: .
+    image: chessism-api:latest
+    container_name: pipeline-worker
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
+      - REDIS_HOST=redis
+      - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
 networks:
   chessism_net:
     driver: bridge
+
+volumes:
+  redis_data:
+  db_data:
 
 
 
@@ -216,6 +360,7 @@ pydantic
 httpx
 requests
 python-chess
+arq[redis]
 
 
 
@@ -666,4 +811,138 @@ async def test_api_get_top_fens_unscored(limit: int = 20):
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
+async def test_api_get_fen_score_counts(player_name: str):
+    """
+    Calls the GET /players/{player_name}/fen_counts endpoint.
+    Returns the number of FENs where score is 0 vs not 0.
+    """
+    print(f"\n--- [API TEST] ---")
+    print(f"Fetching FEN score counts for: {player_name}")
+    
+    url = f"{API_BASE_URL}/players/{player_name}/fen_counts"
+    
+    try:
+        async with httpx.AsyncClient(http2=False) as client:
+            response = await client.get(url, timeout=30)
+        
+        response.raise_for_status()
+        data = response.json()
+        
+        score_zero = data.get('score_zero', 0)
+        # "score is not 0" technically includes existing scores != 0. 
+        # Depending on your definition, you might want to include or exclude NULLs.
+        # The DB query separates NULLs, so 'score_not_zero' implies analyzed positions that aren't draws.
+        score_not_zero = data.get('score_not_zero', 0)
+        score_null = data.get('score_null', 0)
+
+        print("\n--- SUCCESS (FEN Score Counts) ---")
+        print(f"Player: {player_name}")
+        print(f"├── Score == 0 (Draw/Equal):  {score_zero:,}")
+        print(f"├── Score != 0 (Decisive):    {score_not_zero:,}")
+        print(f"└── Score is NULL (Unscored): {score_null:,}")
+        print(f"Total FENs associated: {score_zero + score_not_zero + score_null:,}")
+        
+        return score_zero, score_not_zero
+
+    except httpx.HTTPStatusError as e:
+        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
+        print(e.response.text)
+        return 0, 0
+    except Exception as e:
+        print(f"\n--- UNEXPECTED ERROR ---")
+        print(repr(e))
+        return 0, 0
+
+
+
+### worker.py 
+# worker.py
+import os
+import constants
+from arq.connections import RedisSettings
+from arq import create_pool 
+
+# --- Import the actual job functions from your operations ---
+# These are the tasks the worker is allowed to run.
+from chessism_api.operations.analysis import (
+    run_analysis_job, 
+    run_player_analysis_job
+)
+# --- MODIFIED: Import BOTH FEN jobs ---
+from chessism_api.operations.fens import (
+    run_fen_generation_job,
+    run_fen_pipeline
+)
+
+# --- NEW: Import the database initializer ---
+from chessism_api.database.engine import init_db
+# --- NEW: Import Redis client for the boss job ---
+from chessism_api.redis_client import redis_settings
+
+
+# --- NEW: Read queue name from environment ---
+# This allows docker-compose to assign different queues to different workers
+WORKER_QUEUE = os.environ.get("QUEUE_NAME", "default")
+print(f"--- [WORKER] Starting up, listening on queue: {WORKER_QUEUE} ---", flush=True)
+
+
+# --- NEW: Worker startup function ---
+async def startup(ctx):
+    """
+    This function is run by arq when the worker starts.
+    It initializes the database connection for this process.
+    """
+    print(f"--- [WORKER] Initializing database connection... ---", flush=True)
+    if not constants.CONN_STRING:
+        raise ValueError("DATABASE_URL environment variable is not set for worker.")
+    await init_db(constants.CONN_STRING)
+    print(f"--- [WORKER] Database connection initialized. ---", flush=True)
+    
+    # --- NEW: Add a redis pool to the 'boss' worker's context ---
+    # This allows run_fen_pipeline to enqueue jobs
+    ctx['redis'] = await create_pool(redis_settings)
+
+
+# --- NEW: Worker shutdown function ---
+async def shutdown(ctx):
+    """
+    Closes the redis pool on shutdown.
+    """
+    print(f"--- [WORKER] Shutting down... ---", flush=True)
+    redis = ctx.get('redis')
+    if redis:
+        await redis.close()
+    print(f"--- [WORKER] Shutdown complete. ---", flush=True)
+
+
+# --- This is the main configuration class for ARQ ---
+class WorkerSettings:
+    """
+    Defines the worker's settings.
+    ARQ reads this class to know what functions to listen for
+    and where to connect.
+    """
+    
+    # --- MODIFIED: Added the "boss" pipeline job ---
+    functions = [
+        run_analysis_job, 
+        run_player_analysis_job,
+        run_fen_generation_job,
+        run_fen_pipeline
+    ]
+    
+    redis_settings = redis_settings
+    
+    # --- MODIFIED: Use the dynamic queue name ---
+    queue_name = WORKER_QUEUE
+
+    # --- NEW: Tell arq to run the startup/shutdown functions ---
+    on_startup = startup
+    on_shutdown = shutdown
+
+    # --- Force the worker to run only one job at a time ---
+    max_jobs = 1
+
+    # --- Set the worker's global timeout to 24 hours ---
+    job_timeout = 86400
 

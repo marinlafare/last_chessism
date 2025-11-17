@@ -1,5 +1,3 @@
-#chessism_api/database/models.py
-
 from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger, Table,
@@ -16,10 +14,6 @@ def to_dict(obj: Base) -> Dict[str, Any]:
     Serializes a SQLAlchemy ORM object into a dictionary.
     """
     return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-# --- REMOVED: Base.to_dict = to_dict ---
-# This "monkey-patching" can interfere with SQLAlchemy's
-# mapper configuration and relationship loading.
 
 
 class Player(Base):
@@ -75,11 +69,19 @@ class Game(Base):
     
     white_player = relationship(Player, foreign_keys=[white])
     black_player = relationship(Player, foreign_keys=[black])
+    
+    # --- MODIFIED: Point to the new association class ---
     fens = relationship(
         'Fen',
         secondary='game_fen_association',
-        back_populates='games'
+        back_populates='games',
+        # --- FIX: Tell SQLAlchemy this overlaps with the 'fen_associations' relationship ---
+        overlaps="fen_associations" 
     )
+    
+    # --- NEW: Add direct relationship to the association object ---
+    fen_associations = relationship("GameFenAssociation", back_populates="game", overlaps="games,fens")
+
 
 class Month(Base):
     __tablename__ = "months"
@@ -106,7 +108,7 @@ class Move(Base):
     __tablename__ = "moves"
     id = Column(Integer, primary_key=True, autoincrement=True)
     link = Column("link",BigInteger,ForeignKey("game.link"),
-                  nullable=False,unique=False)
+                 nullable=False,unique=False)
     n_move = Column("n_move", Integer, nullable=False)
     white_move = Column("white_move", String, nullable=False)
     black_move = Column("black_move", String, nullable=False)
@@ -130,17 +132,37 @@ class Fen(Base):
     next_moves = Column('next_moves',String, nullable = True)
     score = Column('score', Float, nullable = True)
     
+    # --- MODIFIED: Point to the new association class ---
     games = relationship(
         'Game',
         secondary='game_fen_association',
-        back_populates='fens'
+        back_populates='fens',
+        # --- FIX: Tell SQLAlchemy this overlaps with the 'game_associations' relationship ---
+        overlaps="game_associations"
+    )
+    
+    # --- NEW: Add direct relationship to the association object ---
+    game_associations = relationship("GameFenAssociation", back_populates="fen", overlaps="games,fens")
+
+
+# --- NEW: The GameFenAssociation class ---
+class GameFenAssociation(Base):
+    __tablename__ = 'game_fen_association'
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    
+    game_link = Column(BigInteger, ForeignKey('game.link'), nullable=False, index=True)
+    fen_fen = Column(String, ForeignKey('fen.fen'), nullable=False, index=True)
+    n_move = Column(Integer, nullable=False)
+    move_color = Column(String(5), nullable=False) # 'white' or 'black'
+
+    # --- FIX: Add overlaps parameter to both relationships ---
+    game = relationship("Game", back_populates="fen_associations", overlaps="games,fens")
+    fen = relationship("Fen", back_populates="game_associations", overlaps="games,fens")
+
+    __table_args__ = (
+        UniqueConstraint('game_link', 'fen_fen', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
     )
 
-game_fen_association = Table(
-    'game_fen_association', Base.metadata,
-    Column('game_link', BigInteger, ForeignKey('game.link'), primary_key=True),
-    Column('fen_fen', String, ForeignKey('fen.fen'), primary_key=True)
-)
 
 class AnalysisTimes(Base):
     __tablename__ = "analysis_times"

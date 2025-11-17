@@ -1,7 +1,5 @@
 # chessism_api/operations/analysis.py
 
-# chessism_api/operations/analysis.py
-
 import asyncio
 import httpx
 import time
@@ -87,13 +85,16 @@ def _format_leela_results(
     return formatted_results
 
 async def run_analysis_job(
+    ctx: dict, 
     gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
-    nodes_limit: int
+    nodes_limit: int,
+    **kwargs # <-- THIS IS THE FIX
 ):
     """
     The main background task for a general analysis job.
+    '**kwargs' is added to accept extra arq arguments.
     """
     job_id = f"GPU-{gpu_index}"
     # This will now correctly select the URL
@@ -121,7 +122,6 @@ async def run_analysis_job(
             
             try:
                 # 1. Start a transaction and get FENs (with lock)
-                # --- THIS IS THE FIX for the TypeError ---
                 session, fens_to_process = await get_fens_for_analysis(current_batch_size)
                 
                 if not fens_to_process or session is None:
@@ -193,14 +193,17 @@ async def run_analysis_job(
     print(f"Total failed batches: {total_failed_batches}", flush=True)
 
 async def run_player_analysis_job(
+    ctx: dict, 
     player_name: str,
     gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
-    nodes_limit: int
+    nodes_limit: int,
+    **kwargs # <-- THIS IS THE FIX
 ):
     """
     The main background task for a player-specific analysis job.
+    '**kwargs' is added to accept extra arq arguments.
     """
     job_id = f"GPU-{gpu_index} (Player: {player_name})"
     leela_url = LEELA_URLS[gpu_index]
@@ -251,7 +254,7 @@ async def run_player_analysis_job(
                 batch_duration = batch_end_time - batch_start_time
                 
                 if not leela_results:
-                    print(f"[{job_id}] Failed to get results from Leela. Skipping batch.", flush=True)
+                    print(f"[{job_id}] Failed to get results from Leela service. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     await session.rollback()
                     continue

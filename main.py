@@ -9,20 +9,28 @@ from chessism_api.routers import players, games, fens, analysis
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
-# from database.database.db_interface import DBInterface
+# --- NEW: Import Redis functions ---
+from chessism_api.redis_client import get_redis_pool, close_redis_pool
 
 CONN_STRING = constants.CONN_STRING
 
 # lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- NEW: Call the init_db function on startup ---
+    # --- Database Setup ---
     if not CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set.")
     await init_db(CONN_STRING)
-    # DBInterface.initialize_engine_and_session(CONN_STRING)
+    
+    # --- NEW: Redis Setup ---
+    # Initialize the pool on startup
+    await get_redis_pool()
+    
     print(f"BASAL CHESSISM Server ON YO!... (DB: {CONN_STRING.split('@')[-1]})")
     yield
+    
+    # --- NEW: Redis Shutdown ---
+    await close_redis_pool()
     print('BASAL CHESSISM Server DOWN YO!...')
 
 app = FastAPI(lifespan=lifespan)

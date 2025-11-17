@@ -2,8 +2,13 @@
 
 from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
 from fastapi.responses import JSONResponse
-from typing import Dict, Any
-
+from typing import Dict, Any, List # <-- Import List
+# --- MODIFIED: Import the new ask_db function ---
+from chessism_api.database.ask_db import (
+    get_player_fen_score_counts,
+    get_player_performance_summary 
+)
+# ---
 # --- UPDATED IMPORTS ---
 from chessism_api.operations.players import (
     get_current_players_with_games_in_db, 
@@ -17,13 +22,50 @@ from chessism_api.operations.players import (
 
 router = APIRouter()
 
+# --- NEW ENDPOINT ---
+@router.get("/{player_name}/game_count")
+async def api_get_player_game_count(player_name: str) -> JSONResponse:
+    """
+    Returns the total number of games a player has in the database.
+    """
+    player_name_lower = player_name.lower()
+    summary = await get_player_performance_summary(player_name_lower)
+    
+    if not summary or summary.get('total_games') is None:
+        return JSONResponse(content={
+            "player_name": player_name_lower,
+            "total_games": 0,
+            "message": "No games found for this player."
+        })
+        
+    return JSONResponse(content={
+        "player_name": player_name_lower,
+        "total_games": summary['total_games']
+    })
+# --- END NEW ENDPOINT ---
+
+@router.get("/{player_name}/fen_counts")
+async def api_get_player_fen_counts(player_name: str) -> JSONResponse:
+    """
+    Returns the count of FENs with score 0, score != 0, and unscored (NULL) for a player.
+    """
+    player_name_lower = player_name.lower()
+    counts = await get_player_fen_score_counts(player_name_lower)
+    return JSONResponse(content=counts)
+
 @router.get("/current_players")
 async def api_get_current_players_with_games():
     """
     Fetches all players that have a full profile (joined != 0).
     """
     result = await get_current_players_with_games_in_db()
-    return JSONResponse(content=result)
+    
+    # --- THIS IS THE FIX ---
+    # The 'result' is a list of RowMapping objects, which are not
+    # directly JSON serializable. We must convert them to plain dicts.
+    content = [dict(row) for row in result]
+    return JSONResponse(content=content)
+    # --- END FIX ---
 
 # --- RE-ORDERED: Specific routes first ---
 

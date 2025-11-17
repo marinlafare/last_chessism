@@ -1,7 +1,7 @@
 import os
 
 root = '/home/jon/workshop/real_chessism/last_chessism/'
-root_files = ['main.py', 'Dockerfile','docker-compose.yml', 'constants.py','requirements.txt', 'testing_chessism.py']
+root_files = ['main.py', 'Dockerfile','docker-compose.yml', 'constants.py','requirements.txt', 'testing_chessism.py', 'worker.py']
 service_folders = ['leela-service']
 butler_folder = 'chessism_api'
 utility_script = ["backup.sh","restore_db_from_backup.sh","start_temp_monitor.sh"]
@@ -97,12 +97,12 @@ def create_routers_file_for_llm():
     result += "\n"
     for file in outside_routers_files:
         result += "\n\n"
-        result += f"### inner_api/{file} \n"
+        result += f"### chessism_api/{file} \n"
         result+= read_file_to_string(folder = "chessism_api", filename = file)
         result += "\n\n"
     for file in router_files:
         result += "\n\n"
-        result += f"### inner_api/routers/{file} \n"
+        result += f"### chessism_api/routers/{file} \n"
         result+= read_file_to_string(folder = "chessism_api/routers", filename = file)
         result += "\n\n"
     write_txt_file(name= "three.txt", content = result)
@@ -115,7 +115,7 @@ def create_operations_file_for_llm():
     result += "\n"
     for file in oprations_files:
         result += "\n\n"
-        result += f"### inner_api/operations/{file} \n"
+        result += f"### chessism_api/operations/{file} \n"
         result+= read_file_to_string(folder = "chessism_api/operations", filename = file)
         result += "\n\n"
     write_txt_file(name= "four.txt", content = result)
@@ -127,7 +127,7 @@ def create_database_file_for_llm():
     result += "\n"
     for file in database_files:
         result += "\n\n"
-        result += f"### inner_api/database/{file} \n"
+        result += f"### chessism_api/database/{file} \n"
         result+= read_file_to_string(folder = "chessism_api/database", filename = file)
         result += "\n\n"
     write_txt_file(name= "five.txt", content = result)
