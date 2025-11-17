@@ -1,105 +1,57 @@
-# Chessism: Advanced Chess Analysis Suite
+# Chessism API
 
-**Chessism** is a high-performance, dual-GPU capable chess analysis suite. It automates the extraction of player data from Chess.com, transforms raw PGNs into structural data (Moves, Reaction Times, FENs), and performs large-scale chess engine analysis using Leela Chess Zero (Lc0).
+**Chessism API** is a high-performance, asynchronous Python suite for downloading, processing, and analyzing chess data from Chess.com.
 
-## 🏗 Architecture
+It is built on a scalable, containerized architecture that leverages a FastAPI frontend, an ARQ task queue, and a dedicated, GPU-accelerated microservice for chess analysis with Leela Chess Zero (LC0).
 
-The system is containerized using Docker and composed of three primary service types:
+## Core Architecture
 
-1.  **`chessism-api` (FastAPI):** The central orchestrator. It handles:
-    * ETL from Chess.com (respecting rate limits).
-    * PGN parsing and "Reaction Time" calculation.
-    * Database management (PostgreSQL).
-    * Job dispatching for FEN generation and Analysis.
-2.  **`leela-service` (GPU Workers):** Two distinct services (`gpu0` and `gpu1`) running a custom-compiled Lc0 engine with the **T1-256x10-distilled** network.
-3.  **`db` (PostgreSQL):** Stores relational data (Players, Games, Moves, FENs) and analysis results.
+This project is not a single application, but a collection of services managed by `docker-compose.yml`:
 
-## 🚀 Prerequisites
+* **`chessism-api`**: The main FastAPI service that provides all REST API endpoints. It handles user requests and enqueues background jobs.
+* **`db`**: A PostgreSQL database that stores all data (players, games, FENs, etc.).
+* **`redis`**: A Redis instance that acts as the message broker for the task queue.
+* **`pipeline-worker`**: The "boss" worker. It listens for high-level API calls (like "generate FENs") and orchestrates the multi-stage pipeline.
+* **`fen-worker-1, 2, 3`**: "Child" workers that perform the heavy CPU (generation) and I/O (insertion) tasks in parallel.
+* **`worker-gpu0`, `worker-gpu1`**: Dedicated analysis workers that listen on GPU-specific queues and process FENs.
+* **`leela-service-gpu0`, `leela-service-gpu1`**: Separate, dedicated FastAPI services that wrap the LC0 engine, accepting FENs and returning analysis from a specific GPU.
 
-* **Docker** & **Docker Compose**
-* **NVIDIA GPU(s)** (The system is configured for a dual-GPU setup, but can run on one with modification).
-* **NVIDIA Container Toolkit** (Required for Docker to access the GPUs).
+## Key Features
 
-## 🛠 Installation & Setup
+* **Data Ingestion**: Download player profiles, stats, and complete game histories from Chess.com.
+* **Incremental Updates**: The API can update a player's games, only downloading archives from the last recorded month.
+* **Parallel FEN Pipeline**: A robust, multi-stage MapReduce pipeline for FEN extraction:
+  1. **(Map)**: 3 `fen-worker`s run in parallel to parse PGNs and generate raw FEN data (CPU-bound).
+  2. **(Reduce)**: The `pipeline-worker` (boss) collects and aggregates millions of data points into a unique set of FENs and associations (Memory-bound).
+  3. **(Write)**: The boss splits the aggregated data and enqueues 3 parallel insertion jobs, which the `fen-worker`s execute to write the data to the database (I/O-bound).
+* **GPU-Accelerated Analysis**: Enqueue analysis jobs to specific GPUs. The `worker-gpu` container handles the database logic and calls the `leela-service` for the actual engine analysis.
+* **Database Utilities**: Includes shell scripts for easy database backup (`backup.sh`) and restore (`restore_db_from_backup.sh`).
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd chessism
-    ```
+## API Endpoints (Core)
 
-2.  **Configuration:**
-    The `docker-compose.yml` comes pre-configured with internal networking and environment variables.
-    * **Database:** `chessism_db` (User: `chessism_user`)
-    * **Ports:**
-        * API: `8000`
-        * DB: `5433` (Host) -> `5432` (Container)
-        * Leela GPU0: `9999`
-        * Leela GPU1: `9998`
+* `POST /games`: Downloads all game archives for a player.
+* `POST /games/update`: Downloads only the newest game archives for a player.
+* `GET /players/{player_name}`: Gets a player's profile (from DB or Chess.com).
+* `GET /players/{player_name}/stats`: Gets fresh player stats from Chess.com.
+* `GET /players/{player_name}/game_count`: Returns the total number of games for a player in the DB.
+* `POST /fens/generate`: Triggers the high-speed FEN extraction pipeline.
+* `POST /analysis/run_job`: Enqueues a general analysis job to a specific GPU.
+* `POST /analysis/run_player_job`: Enqueues an analysis job for a specific player's FENs to a specific GPU.
 
-3.  **Build and Run:**
-    ```bash
-    docker-compose up --build -d
-    ```
-    *Note: The initial build of `leela-service` compiles Lc0 from source and may take several minutes.*
+## Project Analysis
 
-## 🔌 API Endpoints
+### Strong Parts
 
-The API is accessible at `http://localhost:8000`. Interactive documentation is available at `/docs`.
+1. **Scalable, Asynchronous Architecture**: The use of FastAPI, ARQ, and Redis is a modern, high-performance design. It allows the API to be non-blocking, instantly accepting jobs and offloading all heavy work to background workers.
+2. **Robust FEN Pipeline (MapReduce)**: The final pipeline architecture (Map -> Reduce -> Parallel FEN Write -> Parallel Assoc Write) is excellent. It correctly parallelizes both CPU-bound and I/O-bound tasks and, by waiting for FEN insertion to finish, guarantees data integrity by preventing `ForeignKeyViolationError`.
+3. **Decoupled Analysis Service**: Isolating the LC0 engine in its own `leela-service` microservice is a very strong design choice. It keeps the main API and workers lightweight and allows the GPU-intensive service to be managed and scaled independently.
+4. **Multi-GPU Support**: The `docker-compose.yml` and ARQ configuration are correctly set up to support multiple GPUs, with dedicated workers and queues (`gpu_0_queue`, `gpu_1_queue`) for routing jobs.
+5. **Database Resiliency**: The database startup logic in `chessism_api/database/engine.py` includes a retry-loop, which makes the worker services resilient to database startup delays, preventing "connection refused" race conditions.
 
-### 1. Player & Game Ingestion (ETL)
-* **`POST /games`**: Triggers a full download history for a specific player.
-    * *Logic:* Checks joined date -> Generates months range -> Downloads archives -> Parses PGNs -> Inserts Games & Moves.
-    * *Optimization:* Uses temporary tables to filter duplicates efficiently.
-* **`POST /games/update`**: Updates a player's history from the last recorded month in the DB to the present.
-* **`GET /players/{player_name}/stats`**: Fetches and upserts fresh stats (Rapid, Blitz, Bullet, Puzzle Rush) from Chess.com.
+### Possible Areas of Upgrade
 
-### 2. FEN Generation
-* **`POST /fens/generate`**: Background job to deconstruct games into unique FEN strings.
-    * *Logic:* Deconstructs moves into board states -> Canonicalizes FENs -> Bulk upserts to DB.
-    * *Concurrency:* Uses atomic batch transactions to manage huge datasets without locking the DB.
-
-### 3. Analysis (Leela)
-* **`POST /analysis/run_job`**: Dispatches a general analysis job to a specific GPU.
-    * *Payload:* `{"gpu_index": 0, "total_fens_to_process": 1000, "nodes_limit": 50000}`.
-    * *Concurrency:* Uses `FOR UPDATE SKIP LOCKED` to allow `gpu0` and `gpu1` to fetch unique work batches simultaneously.
-* **`POST /analysis/run_player_job`**: Same as above, but prioritizes FENs belonging to a specific player's games.
-
-### 4. Data Retrieval
-* **`GET /fens/top`**: Returns the most frequent positions (FENs) stored in the database.
-* **`GET /fens/top_unscored`**: Returns the most frequent positions that have not yet been analyzed by Leela.
-
-## 🔧 Utilities
-
-Located in the root directory, these scripts assist with maintenance and monitoring.
-
-* **`backup.sh`**
-    * Creates a compressed (`.dump`) backup of the PostgreSQL database.
-    * *Behavior:* Deletes the previous backup in `./backups` before creating a new one to save space.
-    * *Usage:* `./backup.sh`
-
-* **`restore_db_from_backup.sh`**
-    * Restores the database from the most recent file in `./backups`.
-    * *Warning:* This runs with `--clean`, meaning it **drops** existing tables before restoring.
-    * *Usage:* `./restore_db_from_backup.sh`
-
-* **`start_temp_monitor.sh`**
-    * Starts a background process logging GPU temperatures, utilization, and clock speeds to `gpu_temp_log.csv`.
-    * *Usage:* `./start_temp_monitor.sh`
-
-## 📂 Project Structure
-
-```text
-.
-├── chessism_api/           # Core API Application
-│   ├── database/           # DB Models and Interface (SQLAlchemy/AsyncPG)
-│   ├── operations/         # ETL Logic, PGN Parsing, API Clients
-│   └── routers/            # FastAPI Route Definitions
-├── leela-service/          # GPU Worker Service
-│   ├── Dockerfile          # Multi-stage build for Lc0
-│   └── main.py             # API Wrapper for Lc0 Engine
-├── main.py                 # API Entry Point
-├── docker-compose.yml      # Container Orchestration
-├── backup.sh               # DB Backup Utility
-├── restore_db_from_backup.sh # DB Restore Utility
-└── start_temp_monitor.sh   # GPU Monitoring Utility
+1. **Endgame Tablebase Integration**: This is the single most valuable performance upgrade. Integrating Syzygy tablebases (as planned in `tablebase_integration_plan.md`) will make endgame analysis instantaneous, dramatically reducing GPU load and job time.
+2. **Statistical Analysis**: The `stats_analysis.py` file is currently a stub. Building out the endpoints and SQL queries to consume the `PlayerStats` and `Fen` data to generate the `PlayerStatsReport` is the main "next feature" to implement.
+3. **API Security**: The API is currently open. Adding a simple API key check (e.g., as a FastAPI dependency checking `x-api-key` in the request header) would prevent unauthorized access.
+4. **Configuration Management**: Centralize all configuration (like `CONN_STRING`, `REDIS_HOST`, etc.) into environment variables, perhaps using Pydantic's `BaseSettings` for validation and loading.
+5. **Failed Job Management**: The FEN generation job writes failures to `logs/illegall_fen.txt`. This is good, but a more robust solution would be to write these failures to a `failed_games` table in the database. This would make it possible to build an API endpoint to retry failed jobs.
