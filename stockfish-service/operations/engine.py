@@ -111,7 +111,6 @@ async def _start_engine() -> tuple[Any, chess.engine.UciProtocol]:
         print(error_msg, flush=True)
         raise HTTPException(status_code=500, detail=error_msg)
 
-
 class EngineManager:
     def __init__(self) -> None:
         self._lock = asyncio.Lock()

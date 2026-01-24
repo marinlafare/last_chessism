@@ -22,8 +22,6 @@ services:
   stockfish-service:
     build: ./stockfish-service
     image: stockfish-service:latest
-    ports:
-      - "9999:9999"
     environment:
       - STOCKFISH_THREADS=1
       - STOCKFISH_HASH_MB=256
@@ -68,31 +66,11 @@ services:
   worker-analysis:
     build: .
     image: chessism-api:latest
-    container_name: worker-analysis
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
       - REDIS_HOST=redis
       - QUEUE_NAME=analysis_queue
-    networks:
-      - chessism_net
-    depends_on:
-      redis:
-        condition: service_healthy
-      db:
-        condition: service_healthy
-      stockfish-service:
-        condition: service_started
-
-  worker-analysis-night:
-    build: .
-    image: chessism-api:latest
-    container_name: worker-analysis-night
-    command: arq worker.WorkerSettings
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
-      - QUEUE_NAME=analysis_night_queue
     networks:
       - chessism_net
     depends_on:

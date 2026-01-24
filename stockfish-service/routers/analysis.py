@@ -47,64 +47,67 @@ async def analyze_fens_endpoint(request: AnalysisRequest) -> List[Dict[str, Any]
         except Exception as e:
             raise HTTPException(status_code=503, detail=f"Engine failed to start: {e}")
 
-        for original_fen, board in zip(request.fens, validated_boards):
-            if board is None:
-                final_results.append(clean_engine_result(result={}, original_fen=original_fen, is_valid=False))
-                continue
+        try:
+            for original_fen, board in zip(request.fens, validated_boards):
+                if board is None:
+                    final_results.append(clean_engine_result(result={}, original_fen=original_fen, is_valid=False))
+                    continue
 
-            if board.is_game_over():
-                synthetic_result = {"pv": []}
-                if board.is_checkmate():
-                    score = chess.engine.PovScore(chess.engine.Mate(0), board.turn)
+                if board.is_game_over():
+                    synthetic_result = {"pv": []}
+                    if board.is_checkmate():
+                        score = chess.engine.PovScore(chess.engine.Mate(0), board.turn)
+                    else:
+                        score = chess.engine.PovScore(chess.engine.Cp(0), board.turn)
+                    synthetic_result["score"] = score
+                    final_results.append(clean_engine_result(result=synthetic_result, original_fen=original_fen, is_valid=True))
+                    continue
+
+                await uci_newgame(engine)
+                limit = chess.engine.Limit(nodes=request.nodes_limit)
+
+                result = None
+                last_error = None
+                for _ in range(2):
+                    try:
+                        result = await asyncio.wait_for(
+                            engine.analyse(
+                                board,
+                                limit=limit,
+                                info=chess.engine.Info.ALL,
+                                multipv=request.multipv
+                            ),
+                            timeout=ANALYSE_TIMEOUT_SEC
+                        )
+                        last_error = None
+                        break
+                    except asyncio.TimeoutError as e:
+                        last_error = e
+                        await engine_manager.restart("timeout")
+                        engine = await engine_manager.get_engine()
+                    except Exception as e:
+                        last_error = e
+                        await engine_manager.restart("error")
+                        engine = await engine_manager.get_engine()
+
+                if result is None:
+                    print(f"Error during analysis of FEN {original_fen}: {last_error}", flush=True)
+                    final_results.append(clean_engine_result(result={"error": str(last_error)}, original_fen=original_fen, is_valid=True))
+                    continue
+
+                if isinstance(result, list):
+                    analysis_list = [
+                        clean_engine_result(result=item, original_fen=original_fen, is_valid=True)["analysis"]
+                        for item in result
+                    ]
+                    final_results.append({
+                        "fen": original_fen,
+                        "is_valid": True,
+                        "analysis": analysis_list
+                    })
                 else:
-                    score = chess.engine.PovScore(chess.engine.Cp(0), board.turn)
-                synthetic_result["score"] = score
-                final_results.append(clean_engine_result(result=synthetic_result, original_fen=original_fen, is_valid=True))
-                continue
-
-            await uci_newgame(engine)
-            limit = chess.engine.Limit(nodes=request.nodes_limit)
-
-            result = None
-            last_error = None
-            for attempt in range(2):
-                try:
-                    result = await asyncio.wait_for(
-                        engine.analyse(
-                            board,
-                            limit=limit,
-                            info=chess.engine.Info.ALL,
-                            multipv=request.multipv
-                        ),
-                        timeout=ANALYSE_TIMEOUT_SEC
-                    )
-                    last_error = None
-                    break
-                except asyncio.TimeoutError as e:
-                    last_error = e
-                    await engine_manager.restart("timeout")
-                    engine = await engine_manager.get_engine()
-                except Exception as e:
-                    last_error = e
-                    await engine_manager.restart("error")
-                    engine = await engine_manager.get_engine()
-
-            if result is None:
-                print(f"Error during analysis of FEN {original_fen}: {last_error}", flush=True)
-                final_results.append(clean_engine_result(result={"error": str(last_error)}, original_fen=original_fen, is_valid=True))
-                continue
-
-            if isinstance(result, list):
-                analysis_list = [
-                    clean_engine_result(result=item, original_fen=original_fen, is_valid=True)["analysis"]
-                    for item in result
-                ]
-                final_results.append({
-                    "fen": original_fen,
-                    "is_valid": True,
-                    "analysis": analysis_list
-                })
-            else:
-                final_results.append(clean_engine_result(result=result, original_fen=original_fen, is_valid=True))
+                    final_results.append(clean_engine_result(result=result, original_fen=original_fen, is_valid=True))
+        finally:
+            pass
 
     return final_results

@@ -1,7 +1,10 @@
 import httpx
 import asyncio
 import os
+import time
 from pprint import pprint
+from arq import create_pool
+from chessism_api.redis_client import redis_settings
 
 # All API calls go to the chessism-api service
 API_BASE_URL = "http://localhost:8003"
@@ -317,7 +320,7 @@ async def test_api_get_sum_n_games(threshold: int = 10):
         
 async def test_api_run_analysis_job(
     total_fens: int,
-    batch_size: int = 1000,
+    batch_size: int = 500,
     nodes: int = 1000000
 ):
     """
@@ -337,15 +340,17 @@ async def test_api_run_analysis_job(
     
     try:
         async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
+            response = await client.post(url, json=payload, timeout=30)
         
         response.raise_for_status()
         
         print("\n--- SUCCESS (Job Started) ---")
         print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
+        result = response.json()
+        pprint(result)
         print("\nCheck your docker-compose logs to see the job progress.")
         
+        return result
     except httpx.HTTPStatusError as e:
         print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
         try:
@@ -362,7 +367,7 @@ async def test_api_run_analysis_job(
 async def test_api_run_player_analysis_job(
     player_name: str,
     total_fens: int,
-    batch_size: int = 1000,
+    batch_size: int = 500,
     nodes: int = 1000000
 ):
     """
@@ -383,15 +388,17 @@ async def test_api_run_player_analysis_job(
     
     try:
         async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
+            response = await client.post(url, json=payload, timeout=30)
         
         response.raise_for_status()
         
         print("\n--- SUCCESS (Player Job Started) ---")
         print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
+        result = response.json()
+        pprint(result)
         print("\nCheck your docker-compose logs to see the job progress.")
         
+        return result
     except httpx.HTTPStatusError as e:
         print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
         try:
@@ -406,98 +413,6 @@ async def test_api_run_player_analysis_job(
         print(repr(e))
 
 
-async def test_api_run_analysis_job_night(
-    total_fens: int,
-    batch_size: int = 1000,
-    nodes: int = 1000000,
-    workers_count: int = 6
-):
-    """
-    Calls the POST /analysis/run_job_night endpoint.
-    """
-    print(f"\n--- [API TEST] ---")
-    print(f"Triggering NIGHT analysis job for {total_fens} FENs with {workers_count} workers...")
-    
-    url = f"{API_BASE_URL}/analysis/run_job_night"
-    
-    payload = {
-        "total_fens_to_process": total_fens,
-        "batch_size": batch_size,
-        "nodes_limit": nodes,
-        "workers_count": workers_count
-    }
-    
-    try:
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
-        print("\nCheck your docker-compose logs to see the job progress.")
-        
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
-    except Exception as e:
-        print(f"\n--- UNEXPECTED ERROR ---")
-        print(repr(e))
-
-
-async def test_api_run_player_analysis_job_night(
-    player_name: str,
-    total_fens: int,
-    batch_size: int = 1000,
-    nodes: int = 1000000,
-    workers_count: int = 6
-):
-    """
-    Calls the POST /analysis/run_player_job_night endpoint.
-    """
-    print(f"\n--- [API TEST] ---")
-    print(f"Triggering NIGHT PLAYER job for '{player_name}' with {workers_count} workers...")
-    
-    url = f"{API_BASE_URL}/analysis/run_player_job_night"
-    
-    payload = {
-        "player_name": player_name,
-        "total_fens_to_process": total_fens,
-        "batch_size": batch_size,
-        "nodes_limit": nodes,
-        "workers_count": workers_count
-    }
-    
-    try:
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
-        print("\nCheck your docker-compose logs to see the job progress.")
-        
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
-    except Exception as e:
-        print(f"\n--- UNEXPECTED ERROR ---")
-        print(repr(e))
 async def test_api_get_top_fens_unscored(limit: int = 20):
     """
     Calls the GET /fens/top_unscored endpoint with a query parameter.
@@ -663,7 +578,7 @@ async def test_pipeline_generate_fens(total_games: int, batch_size: int = 1000):
 
 async def test_pipeline_analyze_fens(
     total_fens: int,
-    batch_size: int = 1000,
+    batch_size: int = 500,
     nodes: int = 1000000
 ):
     """
@@ -672,13 +587,74 @@ async def test_pipeline_analyze_fens(
     return await test_api_run_analysis_job(total_fens, batch_size, nodes)
 
 
-async def test_pipeline_analyze_fens_night(
+
+async def _count_keys(redis, pattern: str) -> int:
+    count = 0
+    cursor = b"0"
+    while cursor:
+        cursor, keys = await redis.scan(cursor=cursor, match=pattern, count=1000)
+        count += len(keys)
+        if cursor == b"0":
+            break
+    return count
+
+
+async def _get_queue_metrics(redis, queue_name: str) -> tuple[int, int]:
+    queue_key = f"arq:queue:{queue_name}"
+    queued = await redis.llen(queue_key)
+    # ARQ stores in-progress jobs as per-job keys (arq:in-progress:<job_id>).
+    in_progress = await _count_keys(redis, "arq:in-progress:*")
+    return int(queued or 0), int(in_progress or 0)
+
+
+async def _job_done(redis, job_id: str) -> bool:
+    job_key = f"arq:job:{job_id}"
+    in_progress_key = f"arq:in-progress:{job_id}"
+    retry_key = f"arq:retry:{job_id}"
+    if await redis.exists(job_key) or await redis.exists(in_progress_key) or await redis.exists(retry_key):
+        return False
+    return True
+
+
+async def wait_for_jobs_done(
+    job_ids: list[str],
+    poll_seconds: int = 5,
+    timeout_seconds: int | None = None
+) -> float:
+    """
+    Waits until all job_ids have result keys.
+    Returns elapsed seconds.
+    """
+    start = time.perf_counter()
+    redis = await create_pool(redis_settings)
+    try:
+        while True:
+            done = 0
+            for job_id in job_ids:
+                if await _job_done(redis, job_id):
+                    done += 1
+            if done == len(job_ids):
+                return time.perf_counter() - start
+            if timeout_seconds is not None and (time.perf_counter() - start) > timeout_seconds:
+                return time.perf_counter() - start
+            await asyncio.sleep(poll_seconds)
+    finally:
+        await redis.close()
+
+
+async def test_pipeline_analyze_fens_timed(
     total_fens: int,
-    batch_size: int = 1000,
+    batch_size: int = 500,
     nodes: int = 1000000,
-    workers_count: int = 6
-):
+    poll_seconds: int = 5
+) -> float:
     """
-    End-to-end test: run night analysis pipeline.
+    Enqueues analysis and waits for the normal queue to drain.
+    Returns elapsed seconds.
     """
-    return await test_api_run_analysis_job_night(total_fens, batch_size, nodes, workers_count)
+    result = await test_api_run_analysis_job(total_fens, batch_size, nodes)
+    job_id = result.get("job_id") if isinstance(result, dict) else None
+    if not job_id:
+        return 0.0
+    return await wait_for_jobs_done([job_id], poll_seconds=poll_seconds)
+
