@@ -3,12 +3,13 @@
 import asyncio
 import httpx
 import time
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import delete, insert
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen
+from chessism_api.database.models import Fen, FenContinuation
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.ask_db import (
     get_fens_for_analysis,
@@ -16,23 +17,20 @@ from chessism_api.database.ask_db import (
 )
 # ---
 
-# --- RESTORED DUAL-GPU URLS ---
-LEELA_URLS = {
-    0: "http://leela-service-gpu0:9999/analyze", # Port 9999
-    1: "http://leela-service-gpu1:9999/analyze"  # Mapped to host 9998
-}
+# --- Engine service URL ---
+ENGINE_URL = "http://stockfish-service:9999/analyze"
 
 # Initialize the DBInterface for Fen
 fen_interface = DBInterface(Fen)
 
-async def _call_leela_service(
+async def _call_engine_service(
     client: httpx.AsyncClient,
     url: str,
     fens: List[str],
     nodes: int
 ) -> Optional[List[Dict[str, Any]]]:
     """
-    Sends a batch of FENs to the specified Leela service.
+    Sends a batch of FENs to the specified analysis engine service.
     """
     payload = {
         "fens": fens,
@@ -43,66 +41,90 @@ async def _call_leela_service(
         response.raise_for_status()
         return response.json()
     except httpx.HTTPStatusError as e:
-        print(f"HTTP error calling Leela service: {e.response.status_code} - {e.response.text}", flush=True)
+        print(f"HTTP error calling engine service: {e.response.status_code} - {e.response.text}", flush=True)
         return None
     except httpx.RequestError as e:
-        print(f"Request error calling Leela service: {repr(e)}", flush=True)
+        print(f"Request error calling engine service: {repr(e)}", flush=True)
         return None
     except Exception as e:
-        print(f"Unexpected error in _call_leela_service: {repr(e)}", flush=True)
+        print(f"Unexpected error in _call_engine_service: {repr(e)}", flush=True)
         return None
 
-def _format_leela_results(
-    leela_output: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+def _format_engine_results(
+    engine_output: List[Dict[str, Any]]
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
-    Parses the raw JSON output from Leela into the DB format.
+    Parses the raw JSON output from the engine into the DB format.
     """
     formatted_results = []
-    for item in leela_output:
+    continuations = []
+    for item in engine_output:
         if not item or not item.get("is_valid"):
             continue
 
         fen_str = item.get("fen")
         analysis = item.get("analysis", {})
+        if isinstance(analysis, list):
+            best_analysis = analysis[0] if analysis else {}
+            other_lines = analysis[1:4]
+        else:
+            best_analysis = analysis
+            other_lines = []
         
         # Extract score (in centipawns)
         # We use .get('score') which is the simplified PovScore
-        score_cp = analysis.get("score")
+        score_cp = best_analysis.get("score")
 
         # Extract next_moves (the principal variation)
-        pv = analysis.get("pv", [])
+        pv = best_analysis.get("pv", [])
         
         # Convert PV list of moves to a single string
         next_moves_str = " ".join(pv) if pv else None
+
+        wdl = best_analysis.get("wdl")
+        wdl_win = wdl_draw = wdl_loss = None
+        if isinstance(wdl, list) and len(wdl) >= 3:
+            wdl_win, wdl_draw, wdl_loss = wdl[0], wdl[1], wdl[2]
 
         if fen_str and score_cp is not None:
             formatted_results.append({
                 "fen": fen_str,
                 "score": float(score_cp),
-                "next_moves": next_moves_str
+                "next_moves": next_moves_str,
+                "wdl_win": wdl_win,
+                "wdl_draw": wdl_draw,
+                "wdl_loss": wdl_loss
             })
-    return formatted_results
+            for rank, line in enumerate(other_lines, start=2):
+                pv_line = line.get("pv", [])
+                first_move = pv_line[0] if pv_line else None
+                line_score = line.get("score")
+                if first_move and line_score is not None:
+                    continuations.append({
+                        "fen_fen": fen_str,
+                        "rank": rank,
+                        "move": first_move,
+                        "score": float(line_score)
+                    })
+    return formatted_results, continuations
 
 async def run_analysis_job(
     ctx: dict, 
-    gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
     nodes_limit: int,
-    **kwargs # <-- THIS IS THE FIX
+    **kwargs
 ):
     """
     The main background task for a general analysis job.
     '**kwargs' is added to accept extra arq arguments.
     """
-    job_id = f"GPU-{gpu_index}"
-    # This will now correctly select the URL
-    leela_url = LEELA_URLS[gpu_index] 
+    job_id = "ANALYSIS"
+    engine_url = ENGINE_URL
     
     print(f"--- [START JOB {job_id}] ---", flush=True)
     print(f"Targeting {total_fens_to_process} FENs, Batch Size: {batch_size}, Nodes: {nodes_limit}", flush=True)
-    print(f"[{job_id}] Routing to: {leela_url}", flush=True) # <-- Test log
+    print(f"[{job_id}] Routing to: {engine_url}", flush=True) # <-- Test log
 
     total_processed = 0
     total_failed_batches = 0
@@ -131,10 +153,10 @@ async def run_analysis_job(
                 # --- MODIFIED: Start timing ---
                 batch_start_time = time.time()
 
-                # 2. Call Leela service
-                leela_results = await _call_leela_service(
+                # 2. Call engine service
+                engine_results = await _call_engine_service(
                     client,
-                    leela_url,
+                    engine_url,
                     fens_to_process,
                     nodes_limit
                 )
@@ -143,18 +165,18 @@ async def run_analysis_job(
                 batch_end_time = time.time()
                 batch_duration = batch_end_time - batch_start_time
                 
-                if not leela_results:
-                    print(f"[{job_id}] Failed to get results from Leela service. Skipping batch.", flush=True)
+                if not engine_results:
+                    print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     # Rollback to release the locks
                     await session.rollback()
                     continue
 
                 # 3. Format results
-                db_ready_data = _format_leela_results(leela_results)
+                db_ready_data, continuation_rows = _format_engine_results(engine_results)
                 
                 if not db_ready_data:
-                    print(f"[{job_id}] No valid analysis data returned from Leela. Skipping batch.", flush=True)
+                    print(f"[{job_id}] No valid analysis data returned from engine. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     # Rollback to release the locks
                     await session.rollback()
@@ -162,6 +184,12 @@ async def run_analysis_job(
 
                 # 4. Save results (using the same session)
                 await fen_interface.update_fen_analysis_data(session, db_ready_data)
+                if continuation_rows:
+                    fen_list = [item["fen"] for item in db_ready_data]
+                    await session.execute(
+                        delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                    )
+                    await session.execute(insert(FenContinuation.__table__), continuation_rows)
                 
                 # 5. Commit the transaction
                 # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
@@ -195,7 +223,6 @@ async def run_analysis_job(
 async def run_player_analysis_job(
     ctx: dict, 
     player_name: str,
-    gpu_index: int,
     total_fens_to_process: int,
     batch_size: int,
     nodes_limit: int,
@@ -205,12 +232,12 @@ async def run_player_analysis_job(
     The main background task for a player-specific analysis job.
     '**kwargs' is added to accept extra arq arguments.
     """
-    job_id = f"GPU-{gpu_index} (Player: {player_name})"
-    leela_url = LEELA_URLS[gpu_index]
+    job_id = f"ANALYSIS (Player: {player_name})"
+    engine_url = ENGINE_URL
     
     print(f"--- [START JOB {job_id}] ---", flush=True)
     print(f"Targeting {total_fens_to_process} FENs, Batch Size: {batch_size}, Nodes: {nodes_limit}", flush=True)
-    print(f"[{job_id}] Routing to: {leela_url}", flush=True) # <-- Test log
+    print(f"[{job_id}] Routing to: {engine_url}", flush=True) # <-- Test log
 
     total_processed = 0
     total_failed_batches = 0
@@ -241,10 +268,10 @@ async def run_player_analysis_job(
                 # --- MODIFIED: Start timing ---
                 batch_start_time = time.time()
 
-                # 2. Call Leela service
-                leela_results = await _call_leela_service(
+                # 2. Call engine service
+                engine_results = await _call_engine_service(
                     client,
-                    leela_url,
+                    engine_url,
                     fens_to_process,
                     nodes_limit
                 )
@@ -253,23 +280,29 @@ async def run_player_analysis_job(
                 batch_end_time = time.time()
                 batch_duration = batch_end_time - batch_start_time
                 
-                if not leela_results:
-                    print(f"[{job_id}] Failed to get results from Leela service. Skipping batch.", flush=True)
+                if not engine_results:
+                    print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     await session.rollback()
                     continue
 
                 # 3. Format results
-                db_ready_data = _format_leela_results(leela_results)
+                db_ready_data, continuation_rows = _format_engine_results(engine_results)
                 
                 if not db_ready_data:
-                    print(f"[{job_id}] No valid analysis data from Leela. Skipping batch.", flush=True)
+                    print(f"[{job_id}] No valid analysis data from engine. Skipping batch.", flush=True)
                     total_failed_batches += 1
                     await session.rollback()
                     continue
 
                 # 4. Save results (using the same session)
                 await fen_interface.update_fen_analysis_data(session, db_ready_data)
+                if continuation_rows:
+                    fen_list = [item["fen"] for item in db_ready_data]
+                    await session.execute(
+                        delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                    )
+                    await session.execute(insert(FenContinuation.__table__), continuation_rows)
                 
                 # 5. Commit the transaction
                 await session.commit()

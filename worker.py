@@ -26,7 +26,7 @@ from chessism_api.redis_client import redis_settings
 
 # --- NEW: Read queue name from environment ---
 # This allows docker-compose to assign different queues to different workers
-WORKER_QUEUE = os.environ.get("QUEUE_NAME", "default")
+WORKER_QUEUE = os.environ.get("QUEUE_NAME", "analysis_queue")
 print(f"--- [WORKER] Starting up, listening on queue: {WORKER_QUEUE} ---", flush=True)
 
 

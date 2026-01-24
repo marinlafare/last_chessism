@@ -17,12 +17,6 @@ from chessism_api.redis_client import get_redis_pool
 
 router = APIRouter()
 
-# --- Define queue names ---
-QUEUE_NAMES = {
-    0: "gpu_0_queue",
-    1: "gpu_1_queue"
-}
-
 @router.post("/run_job")
 async def api_run_analysis_job(
     data: Dict[str, Any] = Body(...),
@@ -33,24 +27,19 @@ async def api_run_analysis_job(
     
     Payload:
     {
-        "gpu_index": 0,
         "total_fens_to_process": 100000,
         "batch_size": 100,
-        "nodes_limit": 50000
+        "nodes_limit": 1000000
     }
     """
     try:
-        gpu_index = int(data["gpu_index"])
         total_fens = int(data.get("total_fens_to_process", 1000000))
-        batch_size = int(data.get("batch_size", 100))
-        nodes_limit = int(data.get("nodes_limit", 50000))
+        batch_size = int(data.get("batch_size", 1000))
+        nodes_limit = int(data.get("nodes_limit", 1000000))
     except (KeyError, ValueError, TypeError):
-        raise HTTPException(status_code=400, detail="Invalid payload. Required: 'gpu_index' (int).")
+        raise HTTPException(status_code=400, detail="Invalid payload.")
 
-    if gpu_index not in [0, 1]:
-        raise HTTPException(status_code=400, detail="'gpu_index' must be 0 or 1.")
-
-    queue_name = QUEUE_NAMES[gpu_index]
+    queue_name = "analysis_queue"
 
     # --- NEW: Calculate dynamic timeout based on your formula ---
     # (total_fens * 2.1)
@@ -62,7 +51,6 @@ async def api_run_analysis_job(
     # --- NEW: Enqueue the job instead of running it ---
     await redis.enqueue_job(
         'run_analysis_job', # This must match the function name in worker.py
-        gpu_index=gpu_index,
         total_fens_to_process=total_fens,
         batch_size=batch_size,
         nodes_limit=nodes_limit,
@@ -74,8 +62,59 @@ async def api_run_analysis_job(
         status_code=202, # Accepted
         content={
             "message": f"Batch analysis job enqueued on {queue_name}.",
-            "gpu_index": gpu_index,
             "total_fens_to_process": total_fens,
+        }
+    )
+
+
+@router.post("/run_job_night")
+async def api_run_analysis_job_night(
+    data: Dict[str, Any] = Body(...),
+    redis: ArqRedis = Depends(get_redis_pool)
+):
+    """
+    Enqueues multiple analysis jobs on the night queue.
+    
+    Payload:
+    {
+        "total_fens_to_process": 100000,
+        "batch_size": 1000,
+        "nodes_limit": 1000000,
+        "workers_count": 6
+    }
+    """
+    try:
+        total_fens = int(data.get("total_fens_to_process", 1000000))
+        batch_size = int(data.get("batch_size", 1000))
+        nodes_limit = int(data.get("nodes_limit", 1000000))
+        workers_count = int(data.get("workers_count", 6))
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid payload.")
+
+    if workers_count not in [6, 7, 8]:
+        raise HTTPException(status_code=400, detail="'workers_count' must be 6, 7, or 8.")
+
+    queue_name = "analysis_night_queue"
+    per_worker = math.ceil(total_fens / workers_count) if total_fens > 0 else 0
+    actual_workers = min(workers_count, total_fens) if total_fens > 0 else 0
+
+    for _ in range(actual_workers):
+        calculated_timeout = math.ceil(per_worker * 2.1) + 600
+        await redis.enqueue_job(
+            'run_analysis_job',
+            total_fens_to_process=per_worker,
+            batch_size=batch_size,
+            nodes_limit=nodes_limit,
+            _queue_name=queue_name,
+            _job_timeout=calculated_timeout
+        )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "message": f"Night analysis jobs enqueued on {queue_name}.",
+            "total_fens_to_process": total_fens,
+            "workers_count": actual_workers
         }
     )
 
@@ -90,25 +129,20 @@ async def api_run_player_analysis_job(
     Payload:
     {
         "player_name": "hikaru",
-        "gpu_index": 0,
         "total_fens_to_process": 1000,
         "batch_size": 50,
-        "nodes_limit": 50000
+        "nodes_limit": 1000000
     }
     """
     try:
         player_name = str(data["player_name"]).lower()
-        gpu_index = int(data["gpu_index"])
         total_fens = int(data.get("total_fens_to_process", 100000))
-        batch_size = int(data.get("batch_size", 50))
-        nodes_limit = int(data.get("nodes_limit", 50000))
+        batch_size = int(data.get("batch_size", 1000))
+        nodes_limit = int(data.get("nodes_limit", 1000000))
     except (KeyError, ValueError, TypeError):
-        raise HTTPException(status_code=400, detail="Invalid payload. Required: 'player_name' (str) and 'gpu_index' (int).")
+        raise HTTPException(status_code=400, detail="Invalid payload. Required: 'player_name' (str).")
 
-    if gpu_index not in [0, 1]:
-        raise HTTPException(status_code=400, detail="'gpu_index' must be 0 or 1.")
-
-    queue_name = QUEUE_NAMES[gpu_index]
+    queue_name = "analysis_queue"
 
     # --- NEW: Calculate dynamic timeout based on your formula ---
     # (total_fens * 2.1)
@@ -121,7 +155,6 @@ async def api_run_player_analysis_job(
     await redis.enqueue_job(
         'run_player_analysis_job', # Function name
         player_name=player_name,
-        gpu_index=gpu_index,
         total_fens_to_process=total_fens,
         batch_size=batch_size,
         nodes_limit=nodes_limit,
@@ -134,6 +167,60 @@ async def api_run_player_analysis_job(
         content={
             "message": f"Batch player analysis job for '{player_name}' enqueued on {queue_name}.",
             "player_name": player_name,
-            "gpu_index": gpu_index,
+        }
+    )
+
+
+@router.post("/run_player_job_night")
+async def api_run_player_analysis_job_night(
+    data: Dict[str, Any] = Body(...),
+    redis: ArqRedis = Depends(get_redis_pool)
+):
+    """
+    Enqueues multiple player analysis jobs on the night queue.
+    
+    Payload:
+    {
+        "player_name": "hikaru",
+        "total_fens_to_process": 100000,
+        "batch_size": 1000,
+        "nodes_limit": 1000000,
+        "workers_count": 6
+    }
+    """
+    try:
+        player_name = str(data["player_name"]).lower()
+        total_fens = int(data.get("total_fens_to_process", 100000))
+        batch_size = int(data.get("batch_size", 1000))
+        nodes_limit = int(data.get("nodes_limit", 1000000))
+        workers_count = int(data.get("workers_count", 6))
+    except (KeyError, ValueError, TypeError):
+        raise HTTPException(status_code=400, detail="Invalid payload. Required: 'player_name' (str).")
+
+    if workers_count not in [6, 7, 8]:
+        raise HTTPException(status_code=400, detail="'workers_count' must be 6, 7, or 8.")
+
+    queue_name = "analysis_night_queue"
+    per_worker = math.ceil(total_fens / workers_count) if total_fens > 0 else 0
+    actual_workers = min(workers_count, total_fens) if total_fens > 0 else 0
+
+    for _ in range(actual_workers):
+        calculated_timeout = math.ceil(per_worker * 2.1) + 600
+        await redis.enqueue_job(
+            'run_player_analysis_job',
+            player_name=player_name,
+            total_fens_to_process=per_worker,
+            batch_size=batch_size,
+            nodes_limit=nodes_limit,
+            _queue_name=queue_name,
+            _job_timeout=calculated_timeout
+        )
+
+    return JSONResponse(
+        status_code=202,
+        content={
+            "message": f"Night player analysis jobs for '{player_name}' enqueued on {queue_name}.",
+            "player_name": player_name,
+            "workers_count": actual_workers
         }
     )

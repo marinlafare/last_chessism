@@ -1,3 +1,4 @@
+# chessism_api/database/models.py
 from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger, Table,
@@ -131,6 +132,9 @@ class Fen(Base):
     moves_counter = Column('moves_counter',String, nullable = False)
     next_moves = Column('next_moves',String, nullable = True)
     score = Column('score', Float, nullable = True)
+    wdl_win = Column('wdl_win', Float, nullable=True)
+    wdl_draw = Column('wdl_draw', Float, nullable=True)
+    wdl_loss = Column('wdl_loss', Float, nullable=True)
     
     # --- MODIFIED: Point to the new association class ---
     games = relationship(
@@ -143,6 +147,12 @@ class Fen(Base):
     
     # --- NEW: Add direct relationship to the association object ---
     game_associations = relationship("GameFenAssociation", back_populates="fen", overlaps="games,fens")
+
+    continuations = relationship(
+        "FenContinuation",
+        back_populates="fen",
+        cascade="all, delete-orphan"
+    )
 
 
 # --- NEW: The GameFenAssociation class ---
@@ -161,6 +171,21 @@ class GameFenAssociation(Base):
 
     __table_args__ = (
         UniqueConstraint('game_link', 'fen_fen', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
+    )
+
+
+class FenContinuation(Base):
+    __tablename__ = "fen_continuation"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    fen_fen = Column(String, ForeignKey('fen.fen'), nullable=False, index=True)
+    rank = Column(Integer, nullable=False) # PV rank: 2..4
+    move = Column(String, nullable=False) # First move of the continuation
+    score = Column(Float, nullable=False)
+
+    fen = relationship("Fen", back_populates="continuations")
+
+    __table_args__ = (
+        UniqueConstraint('fen_fen', 'rank', name='_fen_rank_uc'),
     )
 
 

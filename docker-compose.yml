@@ -3,7 +3,7 @@ services:
     build: .
     image: chessism-api:latest
     ports:
-      - "8000:8000"
+      - "8003:8000"
     environment:
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
       - REDIS_HOST=redis
@@ -12,59 +12,24 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      leela-service-gpu0:
-        condition: service_started
-      leela-service-gpu1:
+      stockfish-service:
         condition: service_started
       redis:
         condition: service_healthy
     volumes:
       - ./api_logs:/app/logs
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
-  leela-service-gpu0:
-    build: ./leela-service
-    image: leela-service-gpu0
+  stockfish-service:
+    build: ./stockfish-service
+    image: stockfish-service:latest
     ports:
       - "9999:9999"
     environment:
-      - LC0_TARGET_GPU=0
-      - LC0_BACKEND=cuda-fp16
-      - CUDA_VISIBLE_DEVICES=0
+      - STOCKFISH_THREADS=1
+      - STOCKFISH_HASH_MB=256
+      - STOCKFISH_ANALYSE_TIMEOUT_SEC=30
     networks:
       - chessism_net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
-              count: all
-
-  leela-service-gpu1:
-    build: ./leela-service
-    image: leela-service-gpu1
-    ports:
-      - "9998:9999"
-    environment:
-      - LC0_TARGET_GPU=0
-      - LC0_BACKEND=cuda
-      - CUDA_VISIBLE_DEVICES=1
-    networks:
-      - chessism_net
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              capabilities: [gpu]
-              count: all
 
   db:
     image: postgres:15
@@ -87,6 +52,7 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
       - "6379:6379"
     networks:
@@ -99,15 +65,15 @@ services:
       timeout: 5s
       retries: 5
 
-  worker-gpu0:
+  worker-analysis:
     build: .
-    image: chessism-api:latest 
-    container_name: worker-gpu0
+    image: chessism-api:latest
+    container_name: worker-analysis
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
       - REDIS_HOST=redis
-      - QUEUE_NAME=gpu_0_queue
+      - QUEUE_NAME=analysis_queue
     networks:
       - chessism_net
     depends_on:
@@ -115,27 +81,18 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
-      leela-service-gpu0:
+      stockfish-service:
         condition: service_started
-      leela-service-gpu1:
-        condition: service_started
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
-  worker-gpu1:
+  worker-analysis-night:
     build: .
-    image: chessism-api:latest 
-    container_name: worker-gpu1
+    image: chessism-api:latest
+    container_name: worker-analysis-night
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
       - REDIS_HOST=redis
-      - QUEUE_NAME=gpu_1_queue
+      - QUEUE_NAME=analysis_night_queue
     networks:
       - chessism_net
     depends_on:
@@ -143,17 +100,8 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
-      leela-service-gpu0:
+      stockfish-service:
         condition: service_started
-      leela-service-gpu1:
-        condition: service_started
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
 
   fen-worker-1:
     build: .

@@ -14,7 +14,7 @@ from chessism_api.redis_client import get_redis_pool
 
 # --- REMOVED: Admin Task Imports ---
 # from chessism_api.database.db_interface import reset_all_game_fens_done_to_false
-# from chessism_api.database.ask_db import delete_all_leela_tables
+# from chessism_api.database.ask_db import delete_analysis_tables
 # ---
 
 from chessism_api.database.ask_db import (

@@ -2,7 +2,7 @@
 
 **Chessism API** is a high-performance, asynchronous Python suite for downloading, processing, and analyzing chess data from Chess.com.
 
-It is built on a scalable, containerized architecture that leverages a FastAPI frontend, an ARQ task queue, and a dedicated, GPU-accelerated microservice for chess analysis with Leela Chess Zero (LC0).
+It is built on a scalable, containerized architecture that leverages a FastAPI frontend, an ARQ task queue, and a dedicated analysis microservice for chess engine evaluation.
 
 ## Core Architecture
 
@@ -13,8 +13,8 @@ This project is not a single application, but a collection of services managed b
 * **`redis`**: A Redis instance that acts as the message broker for the task queue.
 * **`pipeline-worker`**: The "boss" worker. It listens for high-level API calls (like "generate FENs") and orchestrates the multi-stage pipeline.
 * **`fen-worker-1, 2, 3`**: "Child" workers that perform the heavy CPU (generation) and I/O (insertion) tasks in parallel.
-* **`worker-gpu0`, `worker-gpu1`**: Dedicated analysis workers that listen on GPU-specific queues and process FENs.
-* **`leela-service-gpu0`, `leela-service-gpu1`**: Separate, dedicated FastAPI services that wrap the LC0 engine, accepting FENs and returning analysis from a specific GPU.
+* **`worker-analysis`**: Dedicated analysis worker that listens on the analysis queue and processes FENs.
+* **`stockfish-service`**: Dedicated FastAPI service that wraps Stockfish, accepting FENs and returning analysis.
 
 ## Key Features
 
@@ -24,7 +24,7 @@ This project is not a single application, but a collection of services managed b
   1. **(Map)**: 3 `fen-worker`s run in parallel to parse PGNs and generate raw FEN data (CPU-bound).
   2. **(Reduce)**: The `pipeline-worker` (boss) collects and aggregates millions of data points into a unique set of FENs and associations (Memory-bound).
   3. **(Write)**: The boss splits the aggregated data and enqueues 3 parallel insertion jobs, which the `fen-worker`s execute to write the data to the database (I/O-bound).
-* **GPU-Accelerated Analysis**: Enqueue analysis jobs to specific GPUs. The `worker-gpu` container handles the database logic and calls the `leela-service` for the actual engine analysis.
+* **CPU Analysis**: Enqueue analysis jobs to the analysis queue. The analysis worker handles the database logic and calls Stockfish for engine evaluation.
 * **Database Utilities**: Includes shell scripts for easy database backup (`backup.sh`) and restore (`restore_db_from_backup.sh`).
 
 ## API Endpoints (Core)
@@ -35,8 +35,8 @@ This project is not a single application, but a collection of services managed b
 * `GET /players/{player_name}/stats`: Gets fresh player stats from Chess.com.
 * `GET /players/{player_name}/game_count`: Returns the total number of games for a player in the DB.
 * `POST /fens/generate`: Triggers the high-speed FEN extraction pipeline.
-* `POST /analysis/run_job`: Enqueues a general analysis job to a specific GPU.
-* `POST /analysis/run_player_job`: Enqueues an analysis job for a specific player's FENs to a specific GPU.
+* `POST /analysis/run_job`: Enqueues a general analysis job.
+* `POST /analysis/run_player_job`: Enqueues an analysis job for a specific player's FENs.
 
 ## Project Analysis
 
@@ -44,13 +44,13 @@ This project is not a single application, but a collection of services managed b
 
 1. **Scalable, Asynchronous Architecture**: The use of FastAPI, ARQ, and Redis is a modern, high-performance design. It allows the API to be non-blocking, instantly accepting jobs and offloading all heavy work to background workers.
 2. **Robust FEN Pipeline (MapReduce)**: The final pipeline architecture (Map -> Reduce -> Parallel FEN Write -> Parallel Assoc Write) is excellent. It correctly parallelizes both CPU-bound and I/O-bound tasks and, by waiting for FEN insertion to finish, guarantees data integrity by preventing `ForeignKeyViolationError`.
-3. **Decoupled Analysis Service**: Isolating the LC0 engine in its own `leela-service` microservice is a very strong design choice. It keeps the main API and workers lightweight and allows the GPU-intensive service to be managed and scaled independently.
-4. **Multi-GPU Support**: The `docker-compose.yml` and ARQ configuration are correctly set up to support multiple GPUs, with dedicated workers and queues (`gpu_0_queue`, `gpu_1_queue`) for routing jobs.
+3. **Decoupled Analysis Service**: Isolating the engine in its own `stockfish-service` microservice is a very strong design choice. It keeps the main API and workers lightweight and allows the analysis service to be managed and scaled independently.
+4. **Analysis Worker Separation**: The `docker-compose.yml` and ARQ configuration isolate analysis work in a dedicated worker and queue, keeping the API responsive.
 5. **Database Resiliency**: The database startup logic in `chessism_api/database/engine.py` includes a retry-loop, which makes the worker services resilient to database startup delays, preventing "connection refused" race conditions.
 
 ### Possible Areas of Upgrade
 
-1. **Endgame Tablebase Integration**: This is the single most valuable performance upgrade. Integrating Syzygy tablebases (work in progress) will make endgame analysis instantaneous, dramatically reducing GPU load and job time.
+1. **Endgame Tablebase Integration**: This is the single most valuable performance upgrade. Integrating Syzygy tablebases (work in progress) will make endgame analysis instantaneous, dramatically reducing engine load and job time.
 2. **Statistical Analysis**: The `stats_analysis.py` file is currently a stub. Building out the endpoints and SQL queries to consume the `PlayerStats` and `Fen` data to generate the `PlayerStatsReport` is the main "next feature" to implement.
 3. **API Security**: The API is currently open. Adding a simple API key check (e.g., as a FastAPI dependency checking `x-api-key` in the request header) would prevent unauthorized access.
 4. **Configuration Management**: Centralize all configuration (like `CONN_STRING`, `REDIS_HOST`, etc.) into environment variables, perhaps using Pydantic's `BaseSettings` for validation and loading.

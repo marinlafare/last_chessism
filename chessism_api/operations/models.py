@@ -77,6 +77,9 @@ class FenCreateData(BaseModel):
     moves_counter: str
     next_moves: Optional[str] = None
     score: Optional[float] = None
+    wdl_win: Optional[float] = None
+    wdl_draw: Optional[float] = None
+    wdl_loss: Optional[float] = None
 
 class FenGameAssociateData(BaseModel):
     fen_fen: str  # The FEN string to associate
@@ -178,7 +181,7 @@ class PerformanceByTerminationModel(BaseModel):
     abandoned: int
     # ... other result types
 
-# --- Models for Leela (Advanced) Stats ---
+# --- Models for Engine (Advanced) Stats ---
 
 class AccuracyModel(BaseModel):
     average_centipawn_loss: float
@@ -223,7 +226,7 @@ class PlayerStatsReport(BaseModel):
     average_opponent_rating: float
     average_game_length_moves: float
     
-    # --- Leela (Advanced) Stats ---
+    # --- Engine (Advanced) Stats ---
     accuracy: AccuracyModel
     advantage_conversion: AdvantageConversionModel
     tenacity_in_disadvantage: DisadvantageTenacityModel

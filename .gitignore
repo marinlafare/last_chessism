@@ -1,4 +1,5 @@
 # local
+.virtual_documents/
 backups/
 db_data/
 api_logs/

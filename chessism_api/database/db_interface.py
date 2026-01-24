@@ -301,7 +301,10 @@ class DBInterface:
                 prepared_data.append({
                     'p_fen': item['fen'],
                     'p_score': item['score'],
-                    'p_next_moves': item['next_moves']
+                    'p_next_moves': item['next_moves'],
+                    'p_wdl_win': item.get('wdl_win'),
+                    'p_wdl_draw': item.get('wdl_draw'),
+                    'p_wdl_loss': item.get('wdl_loss')
                 })
 
             # --- THE CORE FIX ---
@@ -312,7 +315,10 @@ class DBInterface:
                 .where(Fen.fen == bindparam('p_fen'))
                 .values(
                     score=bindparam('p_score'),
-                    next_moves=bindparam('p_next_moves')
+                    next_moves=bindparam('p_next_moves'),
+                    wdl_win=bindparam('p_wdl_win'),
+                    wdl_draw=bindparam('p_wdl_draw'),
+                    wdl_loss=bindparam('p_wdl_loss')
                 )
             )
             

@@ -92,9 +92,9 @@ async def open_async_request(sql_question: str,
             print(f"Error in open_async_request: {e}")
             raise
 
-async def delete_all_leela_tables():
+async def delete_analysis_tables():
     """
-    Deletes specified Leela-related tables asynchronously.
+    Deletes specified analysis-related tables asynchronously.
     """
     async with AsyncDBSession() as session:
         for table_name_to_delete in ['fen','game_fen_association']:
@@ -106,7 +106,7 @@ async def delete_all_leela_tables():
             except Exception as e:
                 await session.rollback()
                 print(f"An unexpected error occurred during deletion of {table_name_to_delete}: {e}")
-    print("All specified Leela tables deletion attempt complete.")
+    print("All specified analysis tables deletion attempt complete.")
 
 
 async def get_players_with_names() -> List[Dict[str, Any]]:
