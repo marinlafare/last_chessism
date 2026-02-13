@@ -1,12 +1,14 @@
 # chessism_api/routers/players.py
 
-from fastapi import APIRouter, HTTPException, Body, BackgroundTasks
+from fastapi import APIRouter, HTTPException, Body, BackgroundTasks, Query
 from fastapi.responses import JSONResponse
 from typing import Dict, Any, List # <-- Import List
 # --- MODIFIED: Import the new ask_db function ---
 from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
-    get_player_performance_summary 
+    get_player_performance_summary,
+    get_player_modes_stats,
+    get_player_mode_chart
 )
 # ---
 # --- UPDATED IMPORTS ---
@@ -110,6 +112,36 @@ async def api_get_player_stats(player_name: str) -> JSONResponse:
     except Exception as e:
         print(f"Error during stats fetch for {player_name_lower}: {repr(e)}")
         raise HTTPException(status_code=500, detail="An internal error occurred while fetching stats.")
+
+
+@router.get("/{player_name}/modes_stats")
+async def api_get_modes_stats(player_name: str) -> JSONResponse:
+    """
+    Returns normalized mode statistics for the player.
+    """
+    player_name_lower = player_name.lower()
+    data = await get_player_modes_stats(player_name_lower)
+    return JSONResponse(content=data)
+
+
+@router.get("/{player_name}/mode_chart")
+async def api_get_mode_chart(
+    player_name: str,
+    mode: str = Query(..., min_length=1),
+    range_type: str = Query("all"),
+    years: int | None = Query(None, ge=1, le=20)
+) -> JSONResponse:
+    """
+    Returns chart payload for one normalized mode of the player.
+    """
+    player_name_lower = player_name.lower()
+    payload = await get_player_mode_chart(
+        player_name_lower,
+        mode,
+        range_type=range_type,
+        years=years
+    )
+    return JSONResponse(content=payload)
 
 
 # --- RE-ORDERED: General route last ---

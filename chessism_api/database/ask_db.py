@@ -1,8 +1,10 @@
 # chessism_api/database/ask_db.py
 import os
 import asyncio
-import time 
+import time
+import math
 from typing import List, Dict, Any, Tuple, Set, Optional
+from datetime import datetime, timedelta
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
 # --- MODIFIED: Import distinct ---
@@ -510,3 +512,383 @@ async def _get_remaining_fens_count_committed() -> int:
         result = await session.execute(stmt)
         count = result.scalar()
         return count or 0
+
+
+async def get_player_games_page(player_name: str, page: int = 1, page_size: int = 10) -> Dict[str, Any]:
+    """
+    Returns a paginated list of games for a player with date/time, color, and result.
+    """
+    safe_page = max(1, page)
+    safe_page_size = max(1, min(100, page_size))
+    offset = (safe_page - 1) * safe_page_size
+
+    count_query = """
+        SELECT COUNT(*) AS total
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+
+    games_query = """
+        SELECT
+            link,
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second,
+            CASE
+                WHEN white = :player THEN 'white'
+                ELSE 'black'
+            END AS color,
+            CASE
+                WHEN white = :player THEN white_result
+                ELSE black_result
+            END AS player_score
+        FROM game
+        WHERE white = :player OR black = :player
+        ORDER BY year DESC, month DESC, day DESC, hour DESC, minute DESC, second DESC
+        LIMIT :limit OFFSET :offset;
+    """
+
+    async with AsyncDBSession() as session:
+        count_result = await session.execute(text(count_query), {"player": player_name})
+        total = count_result.scalar() or 0
+
+        rows_result = await session.execute(
+            text(games_query),
+            {"player": player_name, "limit": safe_page_size, "offset": offset}
+        )
+        rows = rows_result.mappings().all()
+
+    games = []
+    for row in rows:
+        score = row.get("player_score")
+        if score == 1.0:
+            result_label = "win"
+        elif score == 0.5:
+            result_label = "draw"
+        elif score == 0.0:
+            result_label = "loss"
+        else:
+            result_label = "unknown"
+
+        played_at = (
+            f"{int(row['year']):04d}-{int(row['month']):02d}-{int(row['day']):02d} "
+            f"{int(row['hour']):02d}:{int(row['minute']):02d}:{int(row['second']):02d}"
+        )
+
+        games.append({
+            "link": row["link"],
+            "played_at": played_at,
+            "color": row["color"],
+            "result": result_label
+        })
+
+    total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+
+    return {
+        "player_name": player_name,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "games": games
+    }
+
+
+async def get_player_game_summary(player_name: str) -> Dict[str, Any]:
+    """
+    Returns win/loss/draw counts, date range, and counts per time_control for a player.
+    """
+    summary_query = """
+        SELECT
+            SUM(CASE WHEN white = :player THEN white_result WHEN black = :player THEN black_result ELSE NULL END) as win_points,
+            SUM(
+                CASE
+                    WHEN (white = :player AND white_result = 1.0) OR (black = :player AND black_result = 1.0) THEN 1
+                    ELSE 0
+                END
+            ) as wins,
+            SUM(
+                CASE
+                    WHEN (white = :player AND white_result = 0.0) OR (black = :player AND black_result = 0.0) THEN 1
+                    ELSE 0
+                END
+            ) as losses,
+            SUM(
+                CASE
+                    WHEN (white = :player AND white_result = 0.5) OR (black = :player AND black_result = 0.5) THEN 1
+                    ELSE 0
+                END
+            ) as draws,
+            MIN(make_timestamp(year, month, day, hour, minute, second)) as first_game,
+            MAX(make_timestamp(year, month, day, hour, minute, second)) as last_game,
+            COUNT(*) as total_games
+        FROM game
+        WHERE white = :player OR black = :player;
+    """
+
+    time_control_query = """
+        SELECT time_control, COUNT(*) as total
+        FROM game
+        WHERE white = :player OR black = :player
+        GROUP BY time_control
+        ORDER BY total DESC;
+    """
+
+    async with AsyncDBSession() as session:
+        summary_result = await session.execute(text(summary_query), {"player": player_name})
+        summary_row = summary_result.mappings().first()
+
+        tc_result = await session.execute(text(time_control_query), {"player": player_name})
+        tc_rows = tc_result.mappings().all()
+
+    def format_ts(ts):
+        return ts.isoformat() if ts else None
+
+    return {
+        "player_name": player_name,
+        "wins": summary_row["wins"] if summary_row else 0,
+        "losses": summary_row["losses"] if summary_row else 0,
+        "draws": summary_row["draws"] if summary_row else 0,
+        "total_games": summary_row["total_games"] if summary_row else 0,
+        "date_from": format_ts(summary_row["first_game"]) if summary_row else None,
+        "date_to": format_ts(summary_row["last_game"]) if summary_row else None,
+        "time_controls": [{"time_control": row["time_control"], "total": row["total"]} for row in tc_rows]
+    }
+
+
+def _normalize_time_control_mode(time_control: Optional[str]) -> str:
+    """
+    Normalizes raw time_control strings into mode buckets.
+    Examples: 60 and 60+1 -> bullet.
+    """
+    if not time_control:
+        return "unknown"
+
+    tc = str(time_control).strip()
+    if not tc:
+        return "unknown"
+
+    if "/" in tc:
+        return "daily"
+
+    primary = tc.split("+", 1)[0]
+    try:
+        seconds = int(primary)
+    except (TypeError, ValueError):
+        return "unknown"
+
+    # Chess.com-style buckets requested by user:
+    # - bullet: < 3 minutes
+    # - blitz:  < 10 minutes
+    # - rapid:  10 to 30 minutes
+    if seconds < 180:
+        return "bullet"
+    if seconds < 600:
+        return "blitz"
+    if seconds <= 1800:
+        return "rapid"
+    return "classical"
+
+
+async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
+    """
+    Returns per-mode stats for a player keyed by normalized mode.
+    """
+    query = """
+        SELECT
+            white,
+            black,
+            white_elo,
+            black_elo,
+            time_control,
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second
+        FROM game
+        WHERE white = :player OR black = :player
+        ORDER BY year ASC, month ASC, day ASC, hour ASC, minute ASC, second ASC;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"player": player_name})
+        rows = result.mappings().all()
+
+    by_mode: Dict[str, Dict[str, int]] = {}
+    for row in rows:
+        mode = _normalize_time_control_mode(row.get("time_control"))
+        as_white = row.get("white") == player_name
+        rating = int(row.get("white_elo") if as_white else row.get("black_elo"))
+
+        if mode not in by_mode:
+            by_mode[mode] = {
+                "n_games": 0,
+                "as_white": 0,
+                "as_black": 0,
+                "oldest_rating": rating,
+                "newest_rating": rating
+            }
+
+        by_mode[mode]["n_games"] += 1
+        if as_white:
+            by_mode[mode]["as_white"] += 1
+        else:
+            by_mode[mode]["as_black"] += 1
+        by_mode[mode]["newest_rating"] = rating
+
+    sorted_modes = sorted(by_mode.items(), key=lambda item: item[1]["n_games"], reverse=True)
+    return {mode: stats for mode, stats in sorted_modes}
+
+
+def _build_y_ticks(min_rating: int, max_rating: int, count: int = 5) -> List[int]:
+    if min_rating == max_rating:
+        center = min_rating
+        return [center - 20, center - 10, center, center + 10, center + 20]
+
+    step = (max_rating - min_rating) / max(1, count - 1)
+    ticks = [round(min_rating + i * step) for i in range(count)]
+    return sorted(set(ticks))
+
+
+def _resolve_chart_cutoff(range_type: str, years: Optional[int], latest_dt: datetime) -> Tuple[Optional[datetime], str, Optional[int]]:
+    rt = (range_type or "all").strip().lower()
+    if rt == "six_months":
+        return latest_dt - timedelta(days=183), "six_months", None
+    if rt == "one_year":
+        return latest_dt - timedelta(days=365), "one_year", None
+    if rt == "years":
+        safe_years = max(1, years or 1)
+        return latest_dt - timedelta(days=365 * safe_years), "years", safe_years
+    return None, "all", None
+
+
+async def get_player_mode_chart(
+    player_name: str,
+    mode: str,
+    range_type: str = "all",
+    years: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Returns chart data for a single normalized mode (oldest to newest),
+    including backend-computed color buckets from mean/std.
+    """
+    target_mode = mode.strip().lower()
+    query = """
+        SELECT
+            white,
+            black,
+            white_elo,
+            black_elo,
+            time_control,
+            year,
+            month,
+            day,
+            hour,
+            minute,
+            second
+        FROM game
+        WHERE white = :player OR black = :player
+        ORDER BY year ASC, month ASC, day ASC, hour ASC, minute ASC, second ASC;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"player": player_name})
+        rows = result.mappings().all()
+
+    mode_points: List[Tuple[datetime, str, int]] = []
+    for row in rows:
+        row_mode = _normalize_time_control_mode(row.get("time_control"))
+        if row_mode != target_mode:
+            continue
+
+        is_white = row.get("white") == player_name
+        rating = int(row.get("white_elo") if is_white else row.get("black_elo"))
+        dt = datetime(
+            int(row["year"]),
+            int(row["month"]),
+            int(row["day"]),
+            int(row["hour"]),
+            int(row["minute"]),
+            int(row["second"])
+        )
+        date_value = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
+        mode_points.append((dt, date_value, rating))
+
+    if not mode_points:
+        return {
+            "points": [],
+            "chart_title": f"rating of {target_mode}",
+            "mode": target_mode,
+            "range": {"type": "all", "years": None},
+            "stats": {"mean": None, "std": None, "lower": None, "upper": None, "count": 0},
+            "y_axis": {"min": None, "max": None, "ticks": []}
+        }
+
+    latest_dt = mode_points[-1][0]
+    cutoff, resolved_range, resolved_years = _resolve_chart_cutoff(range_type, years, latest_dt)
+
+    filtered = [
+        point for point in mode_points
+        if cutoff is None or point[0] >= cutoff
+    ]
+
+    if not filtered:
+        return {
+            "points": [],
+            "chart_title": f"rating of {target_mode}",
+            "mode": target_mode,
+            "range": {"type": resolved_range, "years": resolved_years},
+            "stats": {"mean": None, "std": None, "lower": None, "upper": None, "count": 0},
+            "y_axis": {"min": None, "max": None, "ticks": []}
+        }
+
+    y_values = [point[2] for point in filtered]
+
+    mean_value = sum(y_values) / len(y_values)
+    variance = sum((value - mean_value) ** 2 for value in y_values) / len(y_values)
+    std_value = math.sqrt(variance)
+    lower = mean_value - std_value
+    upper = mean_value + std_value
+
+    points = []
+    for _, date_value, rating in filtered:
+        if rating <= lower:
+            bucket = "std_behind"
+            color = "#f07167"
+        elif rating >= upper:
+            bucket = "std_ahead"
+            color = "#3fd089"
+        else:
+            bucket = "mean_band"
+            color = "#8be9fd"
+
+        points.append({
+            "x": date_value,
+            "y": rating,
+            "bucket": bucket,
+            "color": color
+        })
+
+    y_min = min(y_values)
+    y_max = max(y_values)
+    y_ticks = _build_y_ticks(y_min, y_max, count=5)
+
+    return {
+        "points": points,
+        "chart_title": f"rating of {target_mode}",
+        "mode": target_mode,
+        "range": {"type": resolved_range, "years": resolved_years},
+        "stats": {
+            "mean": round(mean_value, 2),
+            "std": round(std_value, 2),
+            "lower": round(lower, 2),
+            "upper": round(upper, 2),
+            "count": len(y_values)
+        },
+        "y_axis": {"min": y_min, "max": y_max, "ticks": y_ticks}
+    }

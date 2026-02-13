@@ -3,11 +3,12 @@
 # chessism_api/routers/games.py
 
 from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Body, HTTPException # <-- Added HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query # <-- Added HTTPException
 from typing import Dict, Any # <-- Added typing
 
 # --- FIXED IMPORTS ---
 from chessism_api.operations.games import create_games, read_game, update_player_games
+from chessism_api.database.ask_db import get_player_performance_summary, get_player_games_page, get_player_game_summary
 from chessism_api.database.ask_db import open_async_request # <-- Fixed import
 # ---
 
@@ -35,7 +36,7 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <
     """
     data = {"player_name": "some_player_name"}
     
-    Fetches every available game for the player_name
+    Fetches every available game for the player_name,
     formats them and inserts them into DB.
     """
     try:
@@ -62,3 +63,48 @@ async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONRespo
         
     message = await update_player_games(data)
     return JSONResponse(content={"message": message})
+
+
+@router.get("/{player_name}/count")
+async def api_get_player_game_count(player_name: str) -> JSONResponse:
+    """
+    Returns the total number of games a player has in the database.
+    """
+    player_name_lower = player_name.lower()
+    summary = await get_player_performance_summary(player_name_lower)
+
+    if not summary or summary.get('total_games') is None:
+        return JSONResponse(content={
+            "player_name": player_name_lower,
+            "total_games": 0,
+            "message": "No games found for this player."
+        })
+
+    return JSONResponse(content={
+        "player_name": player_name_lower,
+        "total_games": summary['total_games']
+    })
+
+
+@router.get("/{player_name}/recent")
+async def api_get_recent_player_games(
+    player_name: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=100)
+) -> JSONResponse:
+    """
+    Returns paginated recent games with date/time, player color, and result.
+    """
+    player_name_lower = player_name.lower()
+    result = await get_player_games_page(player_name_lower, page=page, page_size=page_size)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/summary")
+async def api_get_player_game_summary(player_name: str) -> JSONResponse:
+    """
+    Returns aggregate stats (wins/losses/draws), date range, and time control counts for a player.
+    """
+    player_name_lower = player_name.lower()
+    result = await get_player_game_summary(player_name_lower)
+    return JSONResponse(content=result)

@@ -19,6 +19,23 @@ services:
     volumes:
       - ./api_logs:/app/logs
 
+  chessism-web:
+    build: ./chessism_web
+    image: chessism-web:latest
+    ports:
+      - "6789:6789"
+    environment:
+      - VITE_API_BASE_URL=/api
+      - VITE_DEV_PROXY_TARGET=http://chessism-api:8000
+    volumes:
+      - ./chessism_web:/app
+      - /app/node_modules
+    networks:
+      - chessism_net
+    depends_on:
+      chessism-api:
+        condition: service_started
+
   stockfish-service:
     build: ./stockfish-service
     image: stockfish-service:latest
