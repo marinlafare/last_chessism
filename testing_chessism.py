@@ -205,8 +205,7 @@ async def test_api_update_all_stats():
         print(repr(e))
 async def test_api_generate_fens(total_games: int, batch_size: int = 10):
     """
-    Calls the POST /fens/generate endpoint.
-    This triggers a background task on the server.
+    Enqueues the FEN pipeline job via Redis and waits for completion.
     
     Args:
         total_games (int): The max number of games to process.
@@ -214,25 +213,22 @@ async def test_api_generate_fens(total_games: int, batch_size: int = 10):
     """
     print(f"\n--- [API TEST] ---")
     print(f"Triggering batch job to generate FENs for {total_games} games...")
-    
-    url = f"{API_BASE_URL}/fens/generate"
-    
-    payload = {
-        "total_games_to_process": total_games,
-        "batch_size": batch_size
-    }
-    
+
     try:
-        # --- FIX: Disable HTTP/2, force HTTP/1.1 ---
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30) 
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        pprint(response.json())
-        print("\nCheck your docker-compose logs to see the job progress.")
+        redis = await create_pool(redis_settings)
+        job = await redis.enqueue_job(
+            'run_fen_pipeline',
+            total_games_to_process=total_games,
+            batch_size=batch_size,
+            num_workers=3,
+            _queue_name='pipeline_queue'
+        )
+        print("\n--- SUCCESS (Job Enqueued) ---")
+        print(f"Job ID: {job.job_id}")
+        print("Waiting for completion...")
+        result = await job.result(timeout=None)
+        print("\n--- SUCCESS (Job Completed) ---")
+        pprint(result)
         
     except httpx.HTTPStatusError as e:
         print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
@@ -240,12 +236,15 @@ async def test_api_generate_fens(total_games: int, batch_size: int = 10):
             pprint(e.response.json())
         except:
             print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
+    finally:
+        try:
+            await redis.close()
+            await redis.wait_closed()
+        except Exception:
+            pass
 async def test_api_get_top_fens(limit: int = 20):
     """
     Calls the GET /fens/top endpoint with a query parameter.
@@ -324,45 +323,111 @@ async def test_api_run_analysis_job(
     nodes: int = 1000000
 ):
     """
-    Calls the POST /analysis/run_job endpoint.
-    This triggers a background task on the server.
+    Enqueues the analysis job via Redis and waits for completion.
     """
     print(f"\n--- [API TEST] ---")
     print(f"Triggering analysis job for {total_fens} FENs...")
-    
-    url = f"{API_BASE_URL}/analysis/run_job"
-    
-    payload = {
-        "total_fens_to_process": total_fens,
-        "batch_size": batch_size,
-        "nodes_limit": nodes
-    }
-    
+
     try:
-        async with httpx.AsyncClient(http2=False) as client:
-            response = await client.post(url, json=payload, timeout=30)
-        
-        response.raise_for_status()
-        
-        print("\n--- SUCCESS (Job Started) ---")
-        print(f"Status Code: {response.status_code}") # Should be 202
-        result = response.json()
+        start_time = time.time()
+        redis = await create_pool(redis_settings)
+        job = await redis.enqueue_job(
+            'run_analysis_job',
+            total_fens_to_process=total_fens,
+            batch_size=batch_size,
+            nodes_limit=nodes,
+            _queue_name='analysis_queue'
+        )
+        print("\n--- SUCCESS (Job Enqueued) ---")
+        print(f"Job ID: {job.job_id}")
+        print("Waiting for completion...")
+        result = await job.result(timeout=None)
+        elapsed = time.time() - start_time
+        print("\n--- SUCCESS (Job Completed) ---")
         pprint(result)
-        print("\nCheck your docker-compose logs to see the job progress.")
-        
+        print(f"Time elapsed: {elapsed:.2f}s ({elapsed/60:.2f} min)")
         return result
-    except httpx.HTTPStatusError as e:
-        print(f"\n--- ERROR (HTTP {e.response.status_code}) ---")
-        try:
-            pprint(e.response.json())
-        except:
-            print(e.response.text)
-    except httpx.RequestError as e:
-        print(f"\n--- REQUEST ERROR (Connection Failed) ---")
-        print(repr(e))
     except Exception as e:
         print(f"\n--- UNEXPECTED ERROR ---")
         print(repr(e))
+    finally:
+        try:
+            await redis.close()
+            await redis.wait_closed()
+        except Exception:
+            pass
+
+
+async def test_api_run_analysis_job_with_perf(
+    total_fens: int,
+    batch_size: int = 500,
+    nodes: int = 1000000,
+    log_path: str = "perf_log.txt",
+    interval_sec: int = 2,
+):
+    """
+    Runs analysis job and captures CPU/RAM/disk stats to a log file until completion.
+    """
+    # Record stockfish replica count and analysis concurrency at the top of the log.
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            "docker compose ps -q stockfish-service | wc -l",
+            shell=True,
+            text=True,
+        ).strip()
+        stockfish_replicas = int(out) if out else 0
+    except Exception:
+        stockfish_replicas = -1
+    try:
+        import subprocess
+        out = subprocess.check_output(
+            "docker compose exec -T worker-analysis printenv ANALYSIS_CONCURRENCY",
+            shell=True,
+            text=True,
+        ).strip()
+        analysis_concurrency = int(out) if out else 0
+    except Exception:
+        analysis_concurrency = -1
+
+    with open(log_path, "w", encoding="utf-8") as f:
+        f.write(f"stockfish_replicas={stockfish_replicas}\n")
+        f.write(f"analysis_concurrency={analysis_concurrency}\n")
+
+    # Container-level stats (low noise)
+    docker_stats_cmd = (
+        "docker stats --no-stream --format '"
+        "{{.Name}} cpu={{.CPUPerc}} mem={{.MemUsage}} mem%={{.MemPerc}} "
+        "net={{.NetIO}} block={{.BlockIO}} pids={{.PIDs}}' "
+        "$(docker compose ps -q worker-analysis stockfish-service db) | sort"
+    )
+    perf_cmd = (
+        "while true; do "
+        "date '+%H:%M:%S'; "
+        f"{docker_stats_cmd}; "
+        "echo '----'; "
+        f"sleep {interval_sec}; "
+        "done"
+    )
+
+    proc = await asyncio.create_subprocess_shell(
+        f"bash -lc \"{perf_cmd}\" >> {log_path}",
+        stdout=asyncio.subprocess.DEVNULL,
+        stderr=asyncio.subprocess.DEVNULL,
+    )
+
+    try:
+        return await test_api_run_analysis_job(
+            total_fens=total_fens,
+            batch_size=batch_size,
+            nodes=nodes,
+        )
+    finally:
+        try:
+            proc.terminate()
+            await proc.wait()
+        except Exception:
+            pass
 
 async def test_api_run_player_analysis_job(
     player_name: str,
@@ -657,4 +722,3 @@ async def test_pipeline_analyze_fens_timed(
     if not job_id:
         return 0.0
     return await wait_for_jobs_done([job_id], poll_seconds=poll_seconds)
-

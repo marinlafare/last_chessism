@@ -3,6 +3,7 @@
 import asyncio
 import httpx
 import time
+import os
 from typing import List, Dict, Any, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, insert
@@ -22,6 +23,9 @@ ENGINE_URL = "http://stockfish-service:9999/analyze"
 
 # Initialize the DBInterface for Fen
 fen_interface = DBInterface(Fen)
+
+# Concurrency for analysis batches (number of parallel workers per job)
+ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "1")))
 
 async def _call_engine_service(
     client: httpx.AsyncClient,
@@ -129,90 +133,100 @@ async def run_analysis_job(
     total_processed = 0
     total_failed_batches = 0
     job_start_time = time.time()
-    
-    # Use one httpx client for the life of the job
-    async with httpx.AsyncClient() as client:
-        while total_processed < total_fens_to_process:
-            current_batch_size = min(batch_size, total_fens_to_process - total_processed)
-            if current_batch_size <= 0:
-                break
-                
-            print(f"[{job_id}] Processing batch { (total_processed // batch_size) + 1 }...", flush=True)
-            
-            fens_to_process = None
-            session: Optional[AsyncSession] = None
-            
-            try:
-                # 1. Start a transaction and get FENs (with lock)
-                session, fens_to_process = await get_fens_for_analysis(current_batch_size)
-                
-                if not fens_to_process or session is None:
-                    print(f"[{job_id}] No more FENs found to analyze. Stopping job.", flush=True)
-                    break
-                
-                # --- MODIFIED: Start timing ---
-                batch_start_time = time.time()
+    counter_lock = asyncio.Lock()
 
-                # 2. Call engine service
-                engine_results = await _call_engine_service(
-                    client,
-                    engine_url,
-                    fens_to_process,
-                    nodes_limit
-                )
-                
-                # --- MODIFIED: End timing ---
-                batch_end_time = time.time()
-                batch_duration = batch_end_time - batch_start_time
-                
-                if not engine_results:
-                    print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
-                    total_failed_batches += 1
-                    # Rollback to release the locks
-                    await session.rollback()
-                    continue
+    async def _worker(worker_id: int):
+        nonlocal total_processed, total_failed_batches
+        async with httpx.AsyncClient() as client:
+            while True:
+                async with counter_lock:
+                    remaining = total_fens_to_process - total_processed
+                if remaining <= 0:
+                    return
 
-                # 3. Format results
-                db_ready_data, continuation_rows = _format_engine_results(engine_results)
-                
-                if not db_ready_data:
-                    print(f"[{job_id}] No valid analysis data returned from engine. Skipping batch.", flush=True)
-                    total_failed_batches += 1
-                    # Rollback to release the locks
-                    await session.rollback()
-                    continue
+                current_batch_size = min(batch_size, remaining)
+                print(f"[{job_id}] Worker {worker_id} processing batch...", flush=True)
 
-                # 4. Save results (using the same session)
-                await fen_interface.update_fen_analysis_data(session, db_ready_data)
-                if continuation_rows:
-                    fen_list = [item["fen"] for item in db_ready_data]
-                    await session.execute(
-                        delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                fens_to_process = None
+                session: Optional[AsyncSession] = None
+
+                try:
+                    # 1. Start a transaction and get FENs (with lock)
+                    session, fens_to_process = await get_fens_for_analysis(current_batch_size)
+
+                    if not fens_to_process or session is None:
+                        print(f"[{job_id}] No more FENs found to analyze. Stopping job.", flush=True)
+                        return
+
+                    # --- MODIFIED: Start timing ---
+                    batch_start_time = time.time()
+
+                    # 2. Call engine service
+                    engine_results = await _call_engine_service(
+                        client,
+                        engine_url,
+                        fens_to_process,
+                        nodes_limit
                     )
-                    await session.execute(insert(FenContinuation.__table__), continuation_rows)
-                
-                # 5. Commit the transaction
-                # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
-                await session.commit()
-                
-                # --- MODIFIED: Calculate time per FEN ---
-                fens_in_batch = len(fens_to_process)
-                time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
-                total_processed += fens_in_batch
-                
-                print(f"[{job_id}] Batch complete. Total FENs: {total_processed}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
 
-            except Exception as e:
-                print(f"CRITICAL: Unhandled error in {job_id} analysis loop: {repr(e)}", flush=True)
-                total_failed_batches += 1
-                if session:
-                    await session.rollback() # Ensure locks are released on failure
-            finally:
-                if session:
-                    await session.close()
-            
-            # Small delay to prevent spamming
-            await asyncio.sleep(1) 
+                    # --- MODIFIED: End timing ---
+                    batch_end_time = time.time()
+                    batch_duration = batch_end_time - batch_start_time
+
+                    if not engine_results:
+                        print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
+                        total_failed_batches += 1
+                        # Rollback to release the locks
+                        await session.rollback()
+                        continue
+
+                    # 3. Format results
+                    db_ready_data, continuation_rows = _format_engine_results(engine_results)
+
+                    if not db_ready_data:
+                        print(f"[{job_id}] No valid analysis data returned from engine. Skipping batch.", flush=True)
+                        total_failed_batches += 1
+                        # Rollback to release the locks
+                        await session.rollback()
+                        continue
+
+                    # 4. Save results (using the same session)
+                    await fen_interface.update_fen_analysis_data(session, db_ready_data)
+                    if continuation_rows:
+                        fen_list = [item["fen"] for item in db_ready_data]
+                        await session.execute(
+                            delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                        )
+                        await session.execute(insert(FenContinuation.__table__), continuation_rows)
+
+                    # 5. Commit the transaction
+                    # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
+                    await session.commit()
+
+                    # --- MODIFIED: Calculate time per FEN ---
+                    fens_in_batch = len(fens_to_process)
+                    time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
+                    async with counter_lock:
+                        total_processed += fens_in_batch
+                        total_so_far = total_processed
+
+                    print(f"[{job_id}] Batch complete. Total FENs: {total_so_far}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
+
+                except Exception as e:
+                    print(f"CRITICAL: Unhandled error in {job_id} analysis loop: {repr(e)}", flush=True)
+                    total_failed_batches += 1
+                    if session:
+                        await session.rollback() # Ensure locks are released on failure
+                finally:
+                    if session:
+                        await session.close()
+
+                # Small delay to prevent spamming
+                await asyncio.sleep(1)
+
+    worker_count = ANALYSIS_CONCURRENCY
+    print(f"[{job_id}] Concurrency: {worker_count}", flush=True)
+    await asyncio.gather(*[_worker(i + 1) for i in range(worker_count)])
 
     job_end_time = time.time()
     print(f"--- [END JOB {job_id}] ---", flush=True)
@@ -242,88 +256,99 @@ async def run_player_analysis_job(
     total_processed = 0
     total_failed_batches = 0
     job_start_time = time.time()
+    counter_lock = asyncio.Lock()
 
-    async with httpx.AsyncClient() as client:
-        while total_processed < total_fens_to_process:
-            current_batch_size = min(batch_size, total_fens_to_process - total_processed)
-            if current_batch_size <= 0:
-                break
-                
-            print(f"[{job_id}] Processing batch { (total_processed // batch_size) + 1 }...", flush=True)
-            
-            fens_to_process = None
-            session: Optional[AsyncSession] = None
-            
-            try:
-                # 1. Start a transaction and get player-specific FENs (with lock)
-                session, fens_to_process = await get_player_fens_for_analysis(
-                    player_name,
-                    current_batch_size
-                )
-                
-                if not fens_to_process or session is None:
-                    print(f"[{job_id}] No more FENs found for player {player_name}. Stopping job.", flush=True)
-                    break
-                
-                # --- MODIFIED: Start timing ---
-                batch_start_time = time.time()
+    async def _worker(worker_id: int):
+        nonlocal total_processed, total_failed_batches
+        async with httpx.AsyncClient() as client:
+            while True:
+                async with counter_lock:
+                    remaining = total_fens_to_process - total_processed
+                if remaining <= 0:
+                    return
 
-                # 2. Call engine service
-                engine_results = await _call_engine_service(
-                    client,
-                    engine_url,
-                    fens_to_process,
-                    nodes_limit
-                )
-                
-                # --- MODIFIED: End timing ---
-                batch_end_time = time.time()
-                batch_duration = batch_end_time - batch_start_time
-                
-                if not engine_results:
-                    print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
-                    total_failed_batches += 1
-                    await session.rollback()
-                    continue
+                current_batch_size = min(batch_size, remaining)
+                print(f"[{job_id}] Worker {worker_id} processing batch...", flush=True)
 
-                # 3. Format results
-                db_ready_data, continuation_rows = _format_engine_results(engine_results)
-                
-                if not db_ready_data:
-                    print(f"[{job_id}] No valid analysis data from engine. Skipping batch.", flush=True)
-                    total_failed_batches += 1
-                    await session.rollback()
-                    continue
+                fens_to_process = None
+                session: Optional[AsyncSession] = None
 
-                # 4. Save results (using the same session)
-                await fen_interface.update_fen_analysis_data(session, db_ready_data)
-                if continuation_rows:
-                    fen_list = [item["fen"] for item in db_ready_data]
-                    await session.execute(
-                        delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                try:
+                    # 1. Start a transaction and get player-specific FENs (with lock)
+                    session, fens_to_process = await get_player_fens_for_analysis(
+                        player_name,
+                        current_batch_size
                     )
-                    await session.execute(insert(FenContinuation.__table__), continuation_rows)
-                
-                # 5. Commit the transaction
-                await session.commit()
-                
-                # --- MODIFIED: Calculate time per FEN ---
-                fens_in_batch = len(fens_to_process)
-                time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
-                total_processed += fens_in_batch
 
-                print(f"[{job_id}] Batch complete. Total FENs: {total_processed}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
+                    if not fens_to_process or session is None:
+                        print(f"[{job_id}] No more FENs found for player {player_name}. Stopping job.", flush=True)
+                        return
 
-            except Exception as e:
-                print(f"CRITICAL: Unhandled error in {job_id} loop: {repr(e)}", flush=True)
-                total_failed_batches += 1
-                if session:
-                    await session.rollback()
-            finally:
-                if session:
-                    await session.close()
-            
-            await asyncio.sleep(1)
+                    # --- MODIFIED: Start timing ---
+                    batch_start_time = time.time()
+
+                    # 2. Call engine service
+                    engine_results = await _call_engine_service(
+                        client,
+                        engine_url,
+                        fens_to_process,
+                        nodes_limit
+                    )
+
+                    # --- MODIFIED: End timing ---
+                    batch_end_time = time.time()
+                    batch_duration = batch_end_time - batch_start_time
+
+                    if not engine_results:
+                        print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
+                        total_failed_batches += 1
+                        await session.rollback()
+                        continue
+
+                    # 3. Format results
+                    db_ready_data, continuation_rows = _format_engine_results(engine_results)
+
+                    if not db_ready_data:
+                        print(f"[{job_id}] No valid analysis data from engine. Skipping batch.", flush=True)
+                        total_failed_batches += 1
+                        await session.rollback()
+                        continue
+
+                    # 4. Save results (using the same session)
+                    await fen_interface.update_fen_analysis_data(session, db_ready_data)
+                    if continuation_rows:
+                        fen_list = [item["fen"] for item in db_ready_data]
+                        await session.execute(
+                            delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
+                        )
+                        await session.execute(insert(FenContinuation.__table__), continuation_rows)
+
+                    # 5. Commit the transaction
+                    await session.commit()
+
+                    # --- MODIFIED: Calculate time per FEN ---
+                    fens_in_batch = len(fens_to_process)
+                    time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
+                    async with counter_lock:
+                        total_processed += fens_in_batch
+                        total_so_far = total_processed
+
+                    print(f"[{job_id}] Batch complete. Total FENs: {total_so_far}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
+
+                except Exception as e:
+                    print(f"CRITICAL: Unhandled error in {job_id} loop: {repr(e)}", flush=True)
+                    total_failed_batches += 1
+                    if session:
+                        await session.rollback()
+                finally:
+                    if session:
+                        await session.close()
+
+                await asyncio.sleep(1)
+
+    worker_count = ANALYSIS_CONCURRENCY
+    print(f"[{job_id}] Concurrency: {worker_count}", flush=True)
+    await asyncio.gather(*[_worker(i + 1) for i in range(worker_count)])
 
     job_end_time = time.time()
     print(f"--- [END JOB {job_id}] ---", flush=True)

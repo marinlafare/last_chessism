@@ -85,19 +85,6 @@ class FenGameAssociateData(BaseModel):
     fen_fen: str  # The FEN string to associate
     game_link: int
 
-# --- Pydantic model for creating AnalysisTimes (used in ask_db.py) ---
-class AnalysisTimesCreateData(BaseModel):
-    batch_index: int
-    n_batches:int
-    card: int
-    model: str
-    n_fens: int
-    time_elapsed: float
-    fens_per_second:float
-    analyse_time_limit:float
-    nodes_limit:int
-
-    
 # --- Pydantic model for creating PlayerStats ---
 # This defines the data we expect to parse from the API
 # and save to the database.

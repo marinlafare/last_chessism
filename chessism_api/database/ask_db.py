@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
 # --- THIS IS THE FIX: Import the CamelCase class name ---
-from chessism_api.database.models import Fen, Game, AnalysisTimes, PlayerStats, GameFenAssociation
+from chessism_api.database.models import Fen, Game, PlayerStats, GameFenAssociation
 # ---
 
 from chessism_api.database.db_interface import DBInterface
@@ -155,27 +155,6 @@ async def reset_player_game_fens_done_to_false(player_name: str) -> int:
             print(f"An error occurred while resetting 'fens_done' status for player '{player_name}': {e}")
             raise
 
-
-async def delete_analysis_times():
-    """
-    Deletes the analysis_times table asynchronously.
-    """
-    async with AsyncDBSession() as session:
-        print(f"Deleting table: analysis_times ...")
-        try:
-            await session.execute(text(f"DROP TABLE IF EXISTS analysis_times CASCADE;"))
-            await session.commit()
-            print(f"Successfully deleted table: analysis_times")
-        except Exception as e:
-            await session.rollback()
-            print(f"An unexpected error occurred during deletion of analysis_times: {e}")
-    print("analysis_times table deletion attempt complete.")
-
-async def save_analysis_times(batch_data):
-    print('________')
-    analysis_times_interface = DBInterface(AnalysisTimes)
-    await analysis_times_interface.create(batch_data)
-    print('_________')
 
 async def get_games_already_in_db(links_to_check: Tuple[int, ...]) -> Set[int]:
     """

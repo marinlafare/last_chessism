@@ -355,7 +355,7 @@ async def run_fen_generation_job(
     
     # 6. Log failures (if any)
     if all_failures_for_job:
-        log_file_path = "logs/illegall_fen.txt" 
+        log_file_path = "/app/illegal_fen.txt"
         print(f"{job_log_prefix} Encountered {len(all_failures_for_job)} game failures. Writing details to '{log_file_path}'...", flush=True)
         try:
             os.makedirs(os.path.dirname(log_file_path), exist_ok=True)
