@@ -29,12 +29,55 @@ body {
   font-family: 'Chivo', 'Segoe UI', sans-serif;
   color: var(--text);
   background-color: var(--bg);
-  background-image:
-    linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-    radial-gradient(circle at 20% -15%, rgba(93, 210, 231, 0.22), transparent 45%),
-    radial-gradient(circle at 90% 5%, rgba(240, 113, 103, 0.15), transparent 40%);
-  background-size: 32px 32px, 32px 32px, auto, auto;
+  background-image: url('/monkey_chess.png');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: center center;
+}
+
+@font-face {
+  font-family: "Bitcount Grid Double";
+  src: local("Bitcount Grid Double"),
+       local("Bitcount Grid Double Regular"),
+       url("/font/static/BitcountGridDouble-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Monsieur La Doulaise";
+  src: url("/font/Monsieur_La_Doulaise/Monsieur_La_Doulaise/MonsieurLaDoulaise-Regular.ttf")
+    format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bitcount Grid Double";
+  src: local("Bitcount Grid Double"),
+       local("Bitcount Grid Double Bold"),
+       url("/font/static/BitcountGridDouble-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: block;
+}
+
+@font-face {
+  font-family: "Bitcount Custom";
+  src: url("/font/static/BitcountGridDouble-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Bitcount Custom";
+  src: url("/font/static/BitcountGridDouble-Bold.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 
 .home-shell {
@@ -48,7 +91,7 @@ body {
   top: 0;
   z-index: 20;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
   gap: 16px;
   padding: 16px 0;
@@ -101,11 +144,79 @@ main {
   gap: 30px;
 }
 
-.hero {
-  padding: 54px 28px;
-  border: 1px solid var(--panel-border);
-  border-radius: calc(var(--radius) + 6px);
-  background: linear-gradient(150deg, rgba(18, 30, 40, 0.95), rgba(19, 26, 35, 0.85));
+.hero-plain {
+  background: transparent;
+  border: none;
+  padding: 40px 30px 20px 0;
+  text-align: center;
+}
+
+.hero-title-old {
+  margin: 0;
+  font-family: "Monsieur La Doulaise", "Bitcount Grid Double", "Bitcount Custom", 'Bitter', serif !important;
+  font-optical-sizing: auto;
+  font-weight: 700;
+  font-size: 8rem !important;
+  line-height: 1.05;
+  padding-top: 10px;
+  transform: translateY(10%);
+  background: linear-gradient(180deg, rgb(202, 113, 29) 0%, rgb(83, 37, 11) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+  text-shadow: 2px 3px 0 rgba(11, 13, 18, 0.25);
+}
+
+.page-frame {
+  display: grid;
+  grid-template-columns: 8% 1fr;
+  min-height: 100vh;
+}
+
+.page-frame .left-rail {
+  background: rgba(0, 0, 0, 0.6);
+  min-height: 100vh;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.left-rail-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  padding: 20px 10px;
+}
+
+.left-rail-icon {
+  width: 46px;
+  height: 46px;
+  object-fit: cover;
+  border-radius: 10px;
+  margin: 0 auto 4rem;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+}
+
+.rail-btn {
+  display: block;
+  text-align: center;
+  text-decoration: none;
+  color: #000;
+  font-weight: 700;
+  padding: 12px 10px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgb(202, 113, 29) 0%, rgb(83, 37, 11) 100%);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.35);
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+
+.rail-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 14px rgba(0, 0, 0, 0.45), 0 5px 10px rgba(218, 125, 34, 0.95);
+  color: #fff;
 }
 
 .hero-kicker {
