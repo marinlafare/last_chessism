@@ -130,6 +130,421 @@ async def get_players_with_names() -> List[Dict[str, Any]]:
     )
     return result
 
+async def get_games_database_generalities() -> Dict[str, int]:
+    """
+    Returns core database generalities for the games dashboard:
+    - total games in DB
+    - players with joined set (main characters)
+    - players with joined missing/zero (secondary characters)
+    - total positions (fens)
+    - scored fens (score != 0)
+    """
+    sql_query = """
+        SELECT
+            (SELECT COUNT(*) FROM game) AS n_games_in_db,
+            (SELECT COUNT(*) FROM player WHERE joined IS NOT NULL AND joined <> 0) AS main_characters,
+            (SELECT COUNT(*) FROM player WHERE joined IS NULL OR joined = 0) AS secondary_characters,
+            (SELECT COUNT(*) FROM fen) AS n_positions,
+            (SELECT COUNT(*) FROM fen WHERE score IS NOT NULL AND score <> 0) AS scored_fens;
+    """
+    rows = await open_async_request(sql_query, fetch_as_dict=True)
+    if not rows:
+        return {
+            "n_games_in_db": 0,
+            "main_characters": 0,
+            "secondary_characters": 0,
+            "n_positions": 0,
+            "scored_fens": 0
+        }
+
+    row = rows[0]
+    return {
+        "n_games_in_db": int(row.get("n_games_in_db") or 0),
+        "main_characters": int(row.get("main_characters") or 0),
+        "secondary_characters": int(row.get("secondary_characters") or 0),
+        "n_positions": int(row.get("n_positions") or 0),
+        "scored_fens": int(row.get("scored_fens") or 0)
+    }
+
+
+async def get_time_control_mode_counts() -> Dict[str, int]:
+    """
+    Returns normalized game counts for bullet, blitz and rapid.
+    """
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+    query = f"""
+        SELECT mode, COUNT(*)::int AS total
+        FROM (
+            SELECT {mode_sql} AS mode
+            FROM game g
+        ) categorized
+        WHERE mode IN ('bullet', 'blitz', 'rapid')
+        GROUP BY mode;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        rows = result.mappings().all()
+
+    counts = {"bullet": 0, "blitz": 0, "rapid": 0}
+    for row in rows:
+        mode = str(row.get("mode") or "")
+        if mode in counts:
+            counts[mode] = int(row.get("total") or 0)
+
+    return counts
+
+
+async def get_time_control_top_moves(
+    mode: str,
+    move_color: str = "white",
+    page: int = 1,
+    page_size: int = 5,
+    max_move: int = 10
+) -> Dict[str, Any]:
+    """
+    Returns paginated most played moves by move number for a mode.
+    The backend computes one top move per move number and paginates those rows.
+    """
+    target_mode = (mode or "").strip().lower()
+    target_color = (move_color or "white").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "mode": target_mode,
+            "move_color": target_color,
+            "page": 1,
+            "page_size": 0,
+            "total": 0,
+            "total_pages": 0,
+            "rows": []
+        }
+    if target_color not in {"white", "black"}:
+        target_color = "white"
+
+    safe_max_move = max(1, min(int(max_move), 30))
+    safe_page_size = max(1, min(int(page_size), 10))
+    safe_page = max(1, int(page))
+    total_rows = safe_max_move
+    total_pages = (total_rows + safe_page_size - 1) // safe_page_size if total_rows else 0
+    if total_pages > 0 and safe_page > total_pages:
+        safe_page = total_pages
+    offset = (safe_page - 1) * safe_page_size
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH filtered_moves AS (
+            SELECT
+                m.n_move,
+                CASE
+                    WHEN :move_color = 'black' THEN m.black_move
+                    ELSE m.white_move
+                END AS move
+            FROM moves m
+            JOIN game g ON g.link = m.link
+            WHERE {mode_sql} = :mode
+              AND m.n_move BETWEEN 1 AND :max_move
+        ),
+        all_moves AS (
+            SELECT n_move AS move_number, move
+            FROM filtered_moves
+        ),
+        clean_moves AS (
+            SELECT move_number, move
+            FROM all_moves
+            WHERE move IS NOT NULL
+              AND move <> ''
+              AND move <> '--'
+        ),
+        ranked AS (
+            SELECT
+                move_number,
+                move,
+                COUNT(*)::int AS times_played,
+                ROW_NUMBER() OVER (
+                    PARTITION BY move_number
+                    ORDER BY COUNT(*) DESC, move ASC
+                ) AS rank_in_move
+            FROM clean_moves
+            GROUP BY move_number, move
+        ),
+        top_by_move AS (
+            SELECT move_number, move, times_played
+            FROM ranked
+            WHERE rank_in_move = 1
+        ),
+        filled AS (
+            SELECT
+                gs AS move_number,
+                COALESCE(t.move, '-') AS move,
+                COALESCE(t.times_played, 0)::int AS times_played
+            FROM generate_series(1, :max_move) AS gs
+            LEFT JOIN top_by_move t ON t.move_number = gs
+            ORDER BY gs
+        )
+        SELECT move_number, move, times_played
+        FROM filled
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {
+            "mode": target_mode,
+            "move_color": target_color,
+            "max_move": safe_max_move,
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = result.mappings().all()
+
+    output_rows = [
+        {
+            "move_number": int(row.get("move_number") or 0),
+            "move": str(row.get("move") or "-"),
+            "times_played": int(row.get("times_played") or 0)
+        }
+        for row in rows
+    ]
+
+    return {
+        "mode": target_mode,
+        "move_color": target_color,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total_rows,
+        "total_pages": total_pages,
+        "rows": output_rows
+    }
+
+
+async def get_time_control_top_openings(
+    mode: str,
+    page: int = 1,
+    page_size: int = 5,
+    opening_depth_moves: int = 10
+) -> Dict[str, Any]:
+    """
+    Returns paginated top openings for a normalized mode using move sequences.
+    Opening sequence is built from the first N full moves in each game.
+    """
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "mode": target_mode,
+            "page": 1,
+            "page_size": 0,
+            "total": 0,
+            "total_pages": 0,
+            "rows": []
+        }
+
+    safe_page_size = max(1, min(int(page_size), 25))
+    safe_page = max(1, int(page))
+    safe_depth = max(1, min(int(opening_depth_moves), 20))
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    count_query = f"""
+        WITH filtered_games AS (
+            SELECT g.link
+            FROM game g
+            WHERE {mode_sql} = :mode
+        ),
+        opening_moves AS (
+            SELECT m.link, m.n_move, m.white_move, m.black_move
+            FROM moves m
+            JOIN filtered_games fg ON fg.link = m.link
+            WHERE m.n_move BETWEEN 1 AND :depth
+        ),
+        ply_moves AS (
+            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
+            UNION ALL
+            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
+        ),
+        clean_ply AS (
+            SELECT link, ply, san
+            FROM ply_moves
+            WHERE san IS NOT NULL
+              AND san <> ''
+              AND san <> '--'
+        ),
+        openings AS (
+            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
+            FROM clean_ply
+            GROUP BY link
+        ),
+        aggregated AS (
+            SELECT opening
+            FROM openings
+            WHERE opening IS NOT NULL
+              AND opening <> ''
+              AND cardinality(string_to_array(opening, ' ')) >= 2
+            GROUP BY opening
+        )
+        SELECT COUNT(*)::int AS total
+        FROM aggregated;
+    """
+
+    data_query = f"""
+        WITH filtered_games AS (
+            SELECT g.link
+            FROM game g
+            WHERE {mode_sql} = :mode
+        ),
+        opening_moves AS (
+            SELECT m.link, m.n_move, m.white_move, m.black_move
+            FROM moves m
+            JOIN filtered_games fg ON fg.link = m.link
+            WHERE m.n_move BETWEEN 1 AND :depth
+        ),
+        ply_moves AS (
+            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
+            UNION ALL
+            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
+        ),
+        clean_ply AS (
+            SELECT link, ply, san
+            FROM ply_moves
+            WHERE san IS NOT NULL
+              AND san <> ''
+              AND san <> '--'
+        ),
+        openings AS (
+            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
+            FROM clean_ply
+            GROUP BY link
+        )
+        SELECT
+            opening,
+            COUNT(*)::int AS times_played
+        FROM openings
+        WHERE opening IS NOT NULL
+          AND opening <> ''
+          AND cardinality(string_to_array(opening, ' ')) >= 2
+        GROUP BY opening
+        ORDER BY times_played DESC, opening ASC
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        count_result = await session.execute(text(count_query), {"mode": target_mode, "depth": safe_depth})
+        count_row = count_result.mappings().first()
+        total = int((count_row or {}).get("total") or 0)
+
+        total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+        if total_pages > 0 and safe_page > total_pages:
+            safe_page = total_pages
+        offset = (safe_page - 1) * safe_page_size
+
+        result = await session.execute(text(data_query), {
+            "mode": target_mode,
+            "depth": safe_depth,
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = result.mappings().all()
+
+    total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+
+    move_words = {
+        1: "one",
+        2: "two",
+        3: "three",
+        4: "four",
+        5: "five",
+        6: "six",
+        7: "seven",
+        8: "eight",
+        9: "nine",
+        10: "ten",
+        11: "eleven",
+        12: "twelve",
+        13: "thirteen",
+        14: "fourteen",
+        15: "fifteen",
+        16: "sixteen",
+        17: "seventeen",
+        18: "eighteen",
+        19: "nineteen",
+        20: "twenty"
+    }
+
+    openings_map: Dict[str, Dict[str, str]] = {}
+    output_rows = []
+
+    for idx, row in enumerate(rows, start=1):
+        opening_text = str(row.get("opening") or "").strip()
+        half_moves = [token for token in opening_text.split() if token]
+        total_full_moves = math.ceil(len(half_moves) / 2)
+        moves_payload: Dict[str, str] = {}
+
+        for move_number in range(1, total_full_moves + 1):
+            key_suffix = move_words.get(move_number, str(move_number))
+            move_key = f"move_{key_suffix}"
+            white_idx = (move_number - 1) * 2
+            black_idx = white_idx + 1
+            white_move = half_moves[white_idx] if white_idx < len(half_moves) else "--"
+            black_move = half_moves[black_idx] if black_idx < len(half_moves) else "--"
+            moves_payload[move_key] = f"{white_move},{black_move}"
+
+        opening_key = f"most_common_opening_for_this_time_control_{idx}"
+        openings_map[opening_key] = moves_payload
+        output_rows.append({
+            "top": idx,
+            "key": opening_key,
+            "moves": moves_payload,
+            "half_moves": half_moves,
+            "times_played": int(row.get("times_played") or 0)
+        })
+
+    return {
+        "mode": target_mode,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "openings": openings_map,
+        "rows": output_rows
+    }
+
 async def reset_player_game_fens_done_to_false(player_name: str) -> int:
     """
     Resets the 'fens_done' column to False for all Game records associated with a specific player.

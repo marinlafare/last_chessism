@@ -8,11 +8,89 @@ from typing import Dict, Any # <-- Added typing
 
 # --- FIXED IMPORTS ---
 from chessism_api.operations.games import create_games, read_game, update_player_games
-from chessism_api.database.ask_db import get_player_performance_summary, get_player_games_page, get_player_game_summary
+from chessism_api.database.ask_db import (
+    get_player_performance_summary,
+    get_player_games_page,
+    get_player_game_summary,
+    get_games_database_generalities,
+    get_time_control_mode_counts,
+    get_time_control_top_moves,
+    get_time_control_top_openings
+)
 from chessism_api.database.ask_db import open_async_request # <-- Fixed import
 # ---
 
 router = APIRouter()
+
+@router.get("/database/generalities")
+async def api_get_games_database_generalities() -> JSONResponse:
+    """
+    Returns overall games/player summary values for the games dashboard.
+    """
+    result = await get_games_database_generalities()
+    return JSONResponse(content=result)
+
+@router.get("/generalities")
+async def api_get_games_generalities_alias() -> JSONResponse:
+    """
+    Backward-compatible alias for games database generalities.
+    """
+    result = await get_games_database_generalities()
+    return JSONResponse(content=result)
+
+@router.get("/_database_generalities")
+async def api_get_games_database_generalities_safe_alias() -> JSONResponse:
+    """
+    Safe alias that avoids collisions with dynamic routes.
+    """
+    result = await get_games_database_generalities()
+    return JSONResponse(content=result)
+
+@router.get("/time_controls")
+async def api_get_time_control_mode_counts() -> JSONResponse:
+    """
+    Returns normalized game counts for bullet, blitz and rapid.
+    """
+    result = await get_time_control_mode_counts()
+    return JSONResponse(content=result)
+
+@router.get("/time_controls/{mode}/top_moves")
+async def api_get_time_control_top_moves(
+    mode: str,
+    move_color: str = Query("white", regex="^(white|black)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(5, ge=1, le=10),
+    max_move: int = Query(10, ge=1, le=30)
+) -> JSONResponse:
+    """
+    Returns the most played move by move number for a normalized mode.
+    """
+    result = await get_time_control_top_moves(
+        mode=mode,
+        move_color=move_color,
+        page=page,
+        page_size=page_size,
+        max_move=max_move
+    )
+    return JSONResponse(content=result)
+
+@router.get("/time_controls/{mode}/top_openings")
+async def api_get_time_control_top_openings(
+    mode: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(5, ge=1, le=25),
+    opening_depth_moves: int = Query(10, ge=1, le=20)
+) -> JSONResponse:
+    """
+    Returns top openings for a normalized mode using move sequences.
+    """
+    result = await get_time_control_top_openings(
+        mode=mode,
+        page=page,
+        page_size=page_size,
+        opening_depth_moves=opening_depth_moves
+    )
+    return JSONResponse(content=result)
 
 
 @router.get("/{link}") # --- FIX: Removed '/games' prefix ---

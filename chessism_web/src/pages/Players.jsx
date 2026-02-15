@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
+import SideRail from '../components/layout/SideRail'
 import { API_BASE_URL } from '../config'
 
 async function fetchPlayerProfile(playerName) {
@@ -287,30 +288,32 @@ function Players() {
     : []
 
   return (
-    <div className="home-shell">
-      <Header />
-      <main>
-        <section className="players-hero">
-          <div>
-            <h1>Player Explorer</h1>
-            <p>Search a player to load their profile, stats, and recent games.</p>
-          </div>
-          <div className="players-input">
-            <label htmlFor="player-name">Player name</label>
-            <input
-              id="player-name"
-              className="text-input"
-              type="text"
-              value={playerName}
-              onChange={(event) => setPlayerName(event.target.value)}
-              onKeyDown={(event) => event.key === 'Enter' && handleExplore()}
-              placeholder="e.g. hikaru"
-            />
-            <button className="btn btn-primary" type="button" onClick={handleExplore} disabled={loading}>
-              {loading ? 'Loading...' : 'Explore'}
-            </button>
-          </div>
-        </section>
+    <div className="page-frame">
+      <SideRail />
+      <div className="home-shell">
+        <Header />
+        <main>
+          <section className="players-hero">
+            <div>
+              <h1>Player Explorer</h1>
+              <p>Search a player to load their profile, stats, and recent games.</p>
+            </div>
+            <div className="players-input">
+              <label htmlFor="player-name">Player name</label>
+              <input
+                id="player-name"
+                className="text-input"
+                type="text"
+                value={playerName}
+                onChange={(event) => setPlayerName(event.target.value)}
+                onKeyDown={(event) => event.key === 'Enter' && handleExplore()}
+                placeholder="e.g. hikaru"
+              />
+              <button className="btn btn-primary" type="button" onClick={handleExplore} disabled={loading}>
+                {loading ? 'Loading...' : 'Explore'}
+              </button>
+            </div>
+          </section>
 
         {message ? <p className="result-line">{message}</p> : null}
         {error ? <p className="result-line">{error}</p> : null}
@@ -482,8 +485,9 @@ function Players() {
             )}
           </div>
         </section>
-      </main>
-      <Footer />
+        </main>
+        <Footer />
+      </div>
     </div>
   )
 }

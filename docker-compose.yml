@@ -27,9 +27,10 @@ services:
     environment:
       - VITE_API_BASE_URL=/api
       - VITE_DEV_PROXY_TARGET=http://chessism-api:8000
+    command: sh -lc "npm install && npm run dev"
     volumes:
       - ./chessism_web:/app
-      - /app/node_modules
+      - chessism_web_node_modules:/app/node_modules
     networks:
       - chessism_net
     depends_on:
@@ -174,3 +175,4 @@ networks:
 volumes:
   redis_data:
   db_data:
+  chessism_web_node_modules:

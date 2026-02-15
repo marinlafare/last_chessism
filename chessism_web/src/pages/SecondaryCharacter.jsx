@@ -1,16 +1,18 @@
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import Hero from '../components/home/Hero'
 
-function Home() {
+function SecondaryCharacter() {
   return (
     <div className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main>
-          <Hero />
+          <section className="games-hero">
+            <h1>Secondary Character</h1>
+            <p>Placeholder page.</p>
+          </section>
         </main>
         <Footer />
       </div>
@@ -18,4 +20,4 @@ function Home() {
   )
 }
 
-export default Home
+export default SecondaryCharacter
