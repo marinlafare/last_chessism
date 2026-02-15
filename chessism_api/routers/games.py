@@ -14,6 +14,7 @@ from chessism_api.database.ask_db import (
     get_player_game_summary,
     get_games_database_generalities,
     get_time_control_mode_counts,
+    get_rating_time_control_chart,
     get_time_control_top_moves,
     get_time_control_top_openings
 )
@@ -57,7 +58,9 @@ async def api_get_time_control_mode_counts() -> JSONResponse:
 @router.get("/time_controls/{mode}/top_moves")
 async def api_get_time_control_top_moves(
     mode: str,
-    move_color: str = Query("white", regex="^(white|black)$"),
+    move_color: str = Query("white", pattern="^(white|black)$", alias="player_color"),
+    min_rating: int = Query(None),
+    max_rating: int = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(5, ge=1, le=10),
     max_move: int = Query(10, ge=1, le=30)
@@ -68,6 +71,8 @@ async def api_get_time_control_top_moves(
     result = await get_time_control_top_moves(
         mode=mode,
         move_color=move_color,
+        min_rating=min_rating,
+        max_rating=max_rating,
         page=page,
         page_size=page_size,
         max_move=max_move
@@ -77,19 +82,33 @@ async def api_get_time_control_top_moves(
 @router.get("/time_controls/{mode}/top_openings")
 async def api_get_time_control_top_openings(
     mode: str,
+    min_rating: int = Query(None),
+    max_rating: int = Query(None),
     page: int = Query(1, ge=1),
     page_size: int = Query(5, ge=1, le=25),
-    opening_depth_moves: int = Query(10, ge=1, le=20)
+    n_moves: int = Query(3, ge=3, le=10)
 ) -> JSONResponse:
     """
-    Returns top openings for a normalized mode using move sequences.
+    Returns top openings for a normalized mode using the first n_moves full moves.
     """
     result = await get_time_control_top_openings(
         mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating,
         page=page,
         page_size=page_size,
-        opening_depth_moves=opening_depth_moves
+        n_moves=n_moves
     )
+    return JSONResponse(content=result)
+
+@router.get("/rating_time_control_chart")
+async def api_get_rating_time_control_chart(
+    time_control: str = Query(..., pattern="^(bullet|blitz|rapid)$")
+) -> JSONResponse:
+    """
+    Returns histogram-ready ratings for a given normalized time control.
+    """
+    result = await get_rating_time_control_chart(time_control=time_control)
     return JSONResponse(content=result)
 
 

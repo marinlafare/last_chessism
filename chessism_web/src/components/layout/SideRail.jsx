@@ -11,6 +11,9 @@ function SideRail() {
         <a className="rail-btn" href="/players">
           Players
         </a>
+        <a className="rail-btn" href="http://localhost:6789/download_new_games">
+          + games
+        </a>
       </div>
     </aside>
   )

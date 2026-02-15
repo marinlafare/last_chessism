@@ -207,9 +207,175 @@ async def get_time_control_mode_counts() -> Dict[str, int]:
     return counts
 
 
+def _weighted_sse(
+    prefix_w: List[float],
+    prefix_wx: List[float],
+    prefix_wx2: List[float],
+    start_idx: int,
+    end_idx: int
+) -> float:
+    """
+    Weighted sum of squared errors for 1-based inclusive range [start_idx, end_idx].
+    """
+    total_w = prefix_w[end_idx] - prefix_w[start_idx - 1]
+    if total_w <= 0:
+        return 0.0
+    total_wx = prefix_wx[end_idx] - prefix_wx[start_idx - 1]
+    total_wx2 = prefix_wx2[end_idx] - prefix_wx2[start_idx - 1]
+    return float(total_wx2 - ((total_wx * total_wx) / total_w))
+
+
+def _weighted_jenks_breaks(values: List[int], weights: List[int], n_classes: int = 3) -> List[Tuple[int, int]]:
+    """
+    Weighted Jenks natural breaks for histogram data (unique sorted values + counts).
+    Returns contiguous class ranges as [(min, max), ...] with n_classes entries.
+    """
+    if not values or not weights or len(values) != len(weights):
+        return []
+
+    n = len(values)
+    k = max(1, int(n_classes))
+    if n == 1:
+        return [(values[0], values[0]) for _ in range(k)]
+
+    if n < k:
+        out = [(values[idx], values[idx]) for idx in range(n)]
+        last = out[-1]
+        while len(out) < k:
+            out.append(last)
+        return out
+
+    prefix_w = [0.0] * (n + 1)
+    prefix_wx = [0.0] * (n + 1)
+    prefix_wx2 = [0.0] * (n + 1)
+
+    for idx in range(1, n + 1):
+        w = float(weights[idx - 1])
+        v = float(values[idx - 1])
+        prefix_w[idx] = prefix_w[idx - 1] + w
+        prefix_wx[idx] = prefix_wx[idx - 1] + (w * v)
+        prefix_wx2[idx] = prefix_wx2[idx - 1] + (w * v * v)
+
+    inf = float("inf")
+    dp = [[inf] * (n + 1) for _ in range(k + 1)]
+    back = [[0] * (n + 1) for _ in range(k + 1)]
+
+    for i in range(1, n + 1):
+        dp[1][i] = _weighted_sse(prefix_w, prefix_wx, prefix_wx2, 1, i)
+
+    for cls in range(2, k + 1):
+        for i in range(cls, n + 1):
+            best_cost = inf
+            best_start = cls
+            for start in range(cls, i + 1):
+                cost = dp[cls - 1][start - 1] + _weighted_sse(prefix_w, prefix_wx, prefix_wx2, start, i)
+                if cost < best_cost:
+                    best_cost = cost
+                    best_start = start
+            dp[cls][i] = best_cost
+            back[cls][i] = best_start
+
+    ranges: List[Tuple[int, int]] = []
+    end = n
+    for cls in range(k, 0, -1):
+        if cls == 1:
+            start = 1
+        else:
+            start = back[cls][end]
+            if start <= 0:
+                start = cls
+        ranges.append((values[start - 1], values[end - 1]))
+        end = start - 1
+
+    ranges.reverse()
+    if len(ranges) < k:
+        last = ranges[-1]
+        while len(ranges) < k:
+            ranges.append(last)
+    return ranges
+
+
+async def get_rating_time_control_chart(time_control: str) -> Dict[str, Any]:
+    """
+    Returns histogram-ready rating data for a normalized time control mode.
+    x: sorted ratings, y: frequency per rating.
+    """
+    target_mode = (time_control or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"x": [], "y": [], "time_control": target_mode}
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH filtered_games AS (
+            SELECT
+                g.white_elo,
+                g.black_elo,
+                {mode_sql} AS mode
+            FROM game g
+            WHERE g.white_elo IS NOT NULL
+              AND g.black_elo IS NOT NULL
+        ),
+        rating_rows AS (
+            SELECT white_elo::int AS rating, mode
+            FROM filtered_games
+            UNION ALL
+            SELECT black_elo::int AS rating, mode
+            FROM filtered_games
+        )
+        SELECT
+            rating,
+            COUNT(*)::int AS appearances
+        FROM rating_rows
+        WHERE mode = :mode
+        GROUP BY rating
+        ORDER BY rating ASC;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"mode": target_mode})
+        rows = result.mappings().all()
+
+    x_values = [int(row.get("rating") or 0) for row in rows]
+    y_values = [int(row.get("appearances") or 0) for row in rows]
+    jenks_ranges = _weighted_jenks_breaks(x_values, y_values, n_classes=3)
+
+    bins = {
+        "jenks_1": {"min_rating": 0, "max_rating": 0},
+        "jenks_2": {"min_rating": 0, "max_rating": 0},
+        "jenks_3": {"min_rating": 0, "max_rating": 0}
+    }
+    for idx, rating_range in enumerate(jenks_ranges[:3], start=1):
+        bins[f"jenks_{idx}"] = {
+            "min_rating": int(rating_range[0]),
+            "max_rating": int(rating_range[1])
+        }
+
+    return {
+        "x": x_values,
+        "y": y_values,
+        "time_control": target_mode,
+        "bins": bins
+    }
+
+
 async def get_time_control_top_moves(
     mode: str,
     move_color: str = "white",
+    min_rating: Optional[int] = None,
+    max_rating: Optional[int] = None,
     page: int = 1,
     page_size: int = 5,
     max_move: int = 10
@@ -232,6 +398,10 @@ async def get_time_control_top_moves(
         }
     if target_color not in {"white", "black"}:
         target_color = "white"
+    safe_min_rating = int(min_rating) if min_rating is not None else None
+    safe_max_rating = int(max_rating) if max_rating is not None else None
+    if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
+        safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
     safe_max_move = max(1, min(int(max_move), 30))
     safe_page_size = max(1, min(int(page_size), 10))
@@ -268,6 +438,16 @@ async def get_time_control_top_moves(
             JOIN game g ON g.link = m.link
             WHERE {mode_sql} = :mode
               AND m.n_move BETWEEN 1 AND :max_move
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        CASE
+                            WHEN :move_color = 'black' THEN g.black_elo
+                            ELSE g.white_elo
+                        END
+                    ) BETWEEN CAST(:min_rating AS INTEGER) AND CAST(:max_rating AS INTEGER)
+              )
         ),
         all_moves AS (
             SELECT n_move AS move_number, move
@@ -316,6 +496,8 @@ async def get_time_control_top_moves(
         result = await session.execute(text(query), {
             "mode": target_mode,
             "move_color": target_color,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating,
             "max_move": safe_max_move,
             "offset": offset,
             "limit": safe_page_size
@@ -334,6 +516,8 @@ async def get_time_control_top_moves(
     return {
         "mode": target_mode,
         "move_color": target_color,
+        "min_rating": safe_min_rating,
+        "max_rating": safe_max_rating,
         "page": safe_page,
         "page_size": safe_page_size,
         "total": total_rows,
@@ -344,13 +528,15 @@ async def get_time_control_top_moves(
 
 async def get_time_control_top_openings(
     mode: str,
+    min_rating: Optional[int] = None,
+    max_rating: Optional[int] = None,
     page: int = 1,
     page_size: int = 5,
-    opening_depth_moves: int = 10
+    n_moves: int = 3
 ) -> Dict[str, Any]:
     """
     Returns paginated top openings for a normalized mode using move sequences.
-    Opening sequence is built from the first N full moves in each game.
+    Opening sequence is built from exactly the first n_moves full moves in each game.
     """
     target_mode = (mode or "").strip().lower()
     if target_mode not in {"bullet", "blitz", "rapid"}:
@@ -365,7 +551,12 @@ async def get_time_control_top_openings(
 
     safe_page_size = max(1, min(int(page_size), 25))
     safe_page = max(1, int(page))
-    safe_depth = max(1, min(int(opening_depth_moves), 20))
+    safe_n_moves = max(3, min(int(n_moves), 10))
+    required_half_moves = safe_n_moves * 2
+    safe_min_rating = int(min_rating) if min_rating is not None else None
+    safe_max_rating = int(max_rating) if max_rating is not None else None
+    if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
+        safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
     mode_sql = """
         CASE
@@ -386,12 +577,27 @@ async def get_time_control_top_openings(
             SELECT g.link
             FROM game g
             WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
         ),
         opening_moves AS (
             SELECT m.link, m.n_move, m.white_move, m.black_move
             FROM moves m
             JOIN filtered_games fg ON fg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :depth
+            WHERE m.n_move BETWEEN 1 AND :n_moves
+        ),
+        complete_games AS (
+            SELECT link
+            FROM opening_moves
+            GROUP BY link
+            HAVING COUNT(DISTINCT n_move) = :n_moves
         ),
         ply_moves AS (
             SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
@@ -408,14 +614,15 @@ async def get_time_control_top_openings(
         openings AS (
             SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
             FROM clean_ply
+            WHERE link IN (SELECT link FROM complete_games)
             GROUP BY link
+            HAVING COUNT(*) = :required_half_moves
         ),
         aggregated AS (
             SELECT opening
             FROM openings
             WHERE opening IS NOT NULL
               AND opening <> ''
-              AND cardinality(string_to_array(opening, ' ')) >= 2
             GROUP BY opening
         )
         SELECT COUNT(*)::int AS total
@@ -427,12 +634,27 @@ async def get_time_control_top_openings(
             SELECT g.link
             FROM game g
             WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
         ),
         opening_moves AS (
             SELECT m.link, m.n_move, m.white_move, m.black_move
             FROM moves m
             JOIN filtered_games fg ON fg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :depth
+            WHERE m.n_move BETWEEN 1 AND :n_moves
+        ),
+        complete_games AS (
+            SELECT link
+            FROM opening_moves
+            GROUP BY link
+            HAVING COUNT(DISTINCT n_move) = :n_moves
         ),
         ply_moves AS (
             SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
@@ -449,7 +671,9 @@ async def get_time_control_top_openings(
         openings AS (
             SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
             FROM clean_ply
+            WHERE link IN (SELECT link FROM complete_games)
             GROUP BY link
+            HAVING COUNT(*) = :required_half_moves
         )
         SELECT
             opening,
@@ -459,7 +683,6 @@ async def get_time_control_top_openings(
         JOIN game g ON g.link = o.link
         WHERE opening IS NOT NULL
           AND opening <> ''
-          AND cardinality(string_to_array(opening, ' ')) >= 2
         GROUP BY opening
         ORDER BY times_played DESC, opening ASC
         OFFSET :offset
@@ -467,7 +690,13 @@ async def get_time_control_top_openings(
     """
 
     async with AsyncDBSession() as session:
-        count_result = await session.execute(text(count_query), {"mode": target_mode, "depth": safe_depth})
+        count_result = await session.execute(text(count_query), {
+            "mode": target_mode,
+            "n_moves": safe_n_moves,
+            "required_half_moves": required_half_moves,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        })
         count_row = count_result.mappings().first()
         total = int((count_row or {}).get("total") or 0)
 
@@ -478,7 +707,10 @@ async def get_time_control_top_openings(
 
         result = await session.execute(text(data_query), {
             "mode": target_mode,
-            "depth": safe_depth,
+            "n_moves": safe_n_moves,
+            "required_half_moves": required_half_moves,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating,
             "offset": offset,
             "limit": safe_page_size
         })
@@ -515,7 +747,8 @@ async def get_time_control_top_openings(
     for idx, row in enumerate(rows, start=1):
         opening_text = str(row.get("opening") or "").strip()
         half_moves = [token for token in opening_text.split() if token]
-        total_full_moves = math.ceil(len(half_moves) / 2)
+        half_moves = half_moves[:required_half_moves]
+        total_full_moves = safe_n_moves
         moves_payload: Dict[str, str] = {}
         mean_rating_for_this_opening = int(row.get("mean_rating_for_this_opening") or 0)
 
@@ -547,6 +780,9 @@ async def get_time_control_top_openings(
 
     return {
         "mode": target_mode,
+        "min_rating": safe_min_rating,
+        "max_rating": safe_max_rating,
+        "n_moves": safe_n_moves,
         "page": safe_page,
         "page_size": safe_page_size,
         "total": total,

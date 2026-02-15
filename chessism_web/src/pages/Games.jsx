@@ -9,9 +9,23 @@ import { API_BASE_URL } from '../config'
 const MOVES_PAGE_SIZE = 5
 const OPENINGS_PAGE_SIZE = 5
 const TOP_MOVE_LIMIT = 10
-const OPENING_DEPTH_MOVES = 10
+const OPENING_N_MOVES_MIN = 3
+const OPENING_N_MOVES_MAX = 10
+const OPENING_N_MOVES_DEFAULT = 3
+const CLUSTER_KEYS = ['cluster_1', 'cluster_2', 'cluster_3']
+const DEFAULT_CLUSTER_KEY = 'cluster_2'
+const CLUSTER_TO_JENKS_KEY = {
+  cluster_1: 'jenks_1',
+  cluster_2: 'jenks_2',
+  cluster_3: 'jenks_3'
+}
+const CLUSTER_COLORS = {
+  cluster_1: '#f07167',
+  cluster_2: '#f4c057',
+  cluster_3: '#3fd089'
+}
 const OPENINGS_BOARD_WIDTH = 286
-const TIME_CONTROLS_CACHE_VERSION = 'v7'
+const TIME_CONTROLS_CACHE_VERSION = 'v11'
 const MOVE_WORDS = [
   'one',
   'two',
@@ -131,12 +145,24 @@ async function fetchTimeControlCounts() {
 async function fetchTimeControlTopMoves(
   mode,
   moveColor = 'white',
+  minRating = null,
+  maxRating = null,
   page = 1,
   pageSize = MOVES_PAGE_SIZE,
   maxMove = TOP_MOVE_LIMIT
 ) {
+  const params = new URLSearchParams({
+    player_color: moveColor,
+    page: String(page),
+    page_size: String(pageSize),
+    max_move: String(maxMove)
+  })
+  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+    params.set('min_rating', String(minRating))
+    params.set('max_rating', String(maxRating))
+  }
   const response = await fetch(
-    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_moves?move_color=${encodeURIComponent(moveColor)}&page=${page}&page_size=${pageSize}&max_move=${maxMove}`
+    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_moves?${params.toString()}`
   )
   const payload = await response.json().catch(() => ({}))
 
@@ -147,9 +173,42 @@ async function fetchTimeControlTopMoves(
   return payload
 }
 
-async function fetchTimeControlTopOpenings(mode, page = 1, pageSize = OPENINGS_PAGE_SIZE) {
+async function fetchTimeControlTopOpenings(
+  mode,
+  minRating = null,
+  maxRating = null,
+  nMoves = OPENING_N_MOVES_DEFAULT,
+  page = 1,
+  pageSize = OPENINGS_PAGE_SIZE
+) {
+  const safeNMoves = Math.max(
+    OPENING_N_MOVES_MIN,
+    Math.min(OPENING_N_MOVES_MAX, Number.parseInt(nMoves, 10) || OPENING_N_MOVES_DEFAULT)
+  )
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+    n_moves: String(safeNMoves)
+  })
+  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+    params.set('min_rating', String(minRating))
+    params.set('max_rating', String(maxRating))
+  }
   const response = await fetch(
-    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_openings?page=${page}&page_size=${pageSize}&opening_depth_moves=${OPENING_DEPTH_MOVES}`
+    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_openings?${params.toString()}`
+  )
+  const payload = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+  }
+
+  return payload
+}
+
+async function fetchTimeControlRatingChart(mode) {
+  const response = await fetch(
+    `${API_BASE_URL}/games/rating_time_control_chart?time_control=${encodeURIComponent(mode)}`
   )
   const payload = await response.json().catch(() => ({}))
 
@@ -274,6 +333,131 @@ const fenAfterHalfMoves = (halfMoves, targetPly) => {
   return game.fen()
 }
 
+const getClusterRangeFromBins = (bins, clusterKey) => {
+  const jenksKey = CLUSTER_TO_JENKS_KEY[clusterKey]
+  const range = bins && jenksKey ? bins[jenksKey] : null
+  if (!range || typeof range !== 'object') return null
+  const minRating = Number(range.min_rating)
+  const maxRating = Number(range.max_rating)
+  if (!Number.isFinite(minRating) || !Number.isFinite(maxRating)) return null
+  if (minRating <= 0 && maxRating <= 0) return null
+  return { minRating, maxRating }
+}
+
+const hasAnyValidJenksBin = (bins) => {
+  if (!bins || typeof bins !== 'object') return false
+  return ['jenks_1', 'jenks_2', 'jenks_3'].some((jenksKey) => {
+    const range = bins[jenksKey]
+    if (!range || typeof range !== 'object') return false
+    const minRating = Number(range.min_rating)
+    const maxRating = Number(range.max_rating)
+    return Number.isFinite(minRating) && Number.isFinite(maxRating) && !(minRating <= 0 && maxRating <= 0)
+  })
+}
+
+const getPointCluster = (rating, bins) => {
+  const value = Number(rating)
+  if (!Number.isFinite(value) || !bins) return DEFAULT_CLUSTER_KEY
+  for (const clusterKey of CLUSTER_KEYS) {
+    const range = getClusterRangeFromBins(bins, clusterKey)
+    if (!range) continue
+    if (value >= range.minRating && value <= range.maxRating) {
+      return clusterKey
+    }
+  }
+  return DEFAULT_CLUSTER_KEY
+}
+
+function TimeControlRatingsScatterChart({ mode, chart }) {
+  const xValues = Array.isArray(chart?.x) ? chart.x.map((value) => Number(value || 0)) : []
+  const yValues = Array.isArray(chart?.y) ? chart.y.map((value) => Number(value || 0)) : []
+  const bins = chart?.bins && typeof chart.bins === 'object' ? chart.bins : {}
+
+  if (!xValues.length || xValues.length !== yValues.length) {
+    return <p className="result-line">No ratings data for this time control.</p>
+  }
+
+  const width = 820
+  const height = 280
+  const padLeft = 44
+  const padRight = 18
+  const padTop = 16
+  const padBottom = 30
+  const minX = Math.min(...xValues)
+  const maxX = Math.max(...xValues)
+  const minY = 0
+  const maxY = Math.max(...yValues, 1)
+  const xRange = Math.max(1, maxX - minX)
+  const yRange = Math.max(1, maxY - minY)
+  const plotWidth = width - padLeft - padRight
+  const plotHeight = height - padTop - padBottom
+
+  const points = xValues.map((xValue, idx) => {
+    const yValue = yValues[idx]
+    const x = padLeft + ((xValue - minX) / xRange) * plotWidth
+    const y = padTop + ((maxY - yValue) / yRange) * plotHeight
+    const clusterKey = getPointCluster(xValue, bins)
+    return { x, y, xValue, yValue, clusterKey }
+  })
+
+  const xTicks = Array.from({ length: 5 }, (_, idx) => Math.round(minX + (idx * (xRange / 4))))
+  const yTicks = Array.from({ length: 5 }, (_, idx) => Math.round(minY + (idx * (yRange / 4))))
+
+  return (
+    <div className="rating-chart-shell">
+      <h3>raitings for: {mode}</h3>
+      <div className="rating-cluster-legend">
+        {CLUSTER_KEYS.map((clusterKey) => (
+          <span key={`legend-${clusterKey}`} className="rating-cluster-item">
+            <span
+              className="rating-cluster-dot"
+              style={{ background: CLUSTER_COLORS[clusterKey] || '#f4c057' }}
+              aria-hidden="true"
+            />
+            {clusterKey}
+          </span>
+        ))}
+      </div>
+      <svg viewBox={`0 0 ${width} ${height}`} className="rating-chart" role="img" aria-label={`ratings for ${mode}`}>
+        <line x1={padLeft} y1={padTop} x2={padLeft} y2={height - padBottom} className="axis-line" />
+        <line x1={padLeft} y1={height - padBottom} x2={width - padRight} y2={height - padBottom} className="axis-line" />
+        {yTicks.map((tick, index) => {
+          const y = padTop + ((maxY - tick) / yRange) * plotHeight
+          return (
+            <g key={`tc-y-tick-${tick}-${index}`}>
+              <line x1={padLeft - 5} y1={y} x2={padLeft} y2={y} className="axis-line" />
+              <text x={padLeft - 9} y={y + 4} className="axis-tick-label" textAnchor="end">
+                {tick}
+              </text>
+            </g>
+          )
+        })}
+        {xTicks.map((tick, index) => {
+          const x = padLeft + ((tick - minX) / xRange) * plotWidth
+          return (
+            <g key={`tc-x-tick-${tick}-${index}`}>
+              <line x1={x} y1={height - padBottom} x2={x} y2={height - padBottom + 5} className="axis-line" />
+              <text x={x} y={height - padBottom + 18} className="axis-tick-label" textAnchor="middle">
+                {tick}
+              </text>
+            </g>
+          )
+        })}
+        {points.map((point, index) => (
+          <circle
+            key={`tc-point-${point.xValue}-${point.yValue}-${index}`}
+            cx={point.x}
+            cy={point.y}
+            r="3.2"
+            className="scatter-point"
+            style={{ fill: CLUSTER_COLORS[point.clusterKey] || '#f4c057' }}
+          />
+        ))}
+      </svg>
+    </div>
+  )
+}
+
 function Games() {
   const [countPlayer, setCountPlayer] = useState('')
   const [countResult, setCountResult] = useState('')
@@ -295,14 +479,22 @@ function Games() {
   const [timeControlsError, setTimeControlsError] = useState('')
   const [selectedMode, setSelectedMode] = useState('')
   const [selectedMoveColor, setSelectedMoveColor] = useState('white')
+  const [selectedMovesCluster, setSelectedMovesCluster] = useState(DEFAULT_CLUSTER_KEY)
+  const [selectedOpeningsCluster, setSelectedOpeningsCluster] = useState(DEFAULT_CLUSTER_KEY)
   const [modeRows, setModeRows] = useState([])
   const [modePage, setModePage] = useState(1)
   const [modeTotalPages, setModeTotalPages] = useState(0)
   const [modeLoading, setModeLoading] = useState(false)
   const [modeError, setModeError] = useState('')
+  const [ratingChart, setRatingChart] = useState(null)
+  const [ratingLoading, setRatingLoading] = useState(false)
+  const [ratingError, setRatingError] = useState('')
   const [openingRows, setOpeningRows] = useState([])
   const [openingLoading, setOpeningLoading] = useState(false)
   const [openingError, setOpeningError] = useState('')
+  const [openingNMovesInput, setOpeningNMovesInput] = useState('')
+  const [openingRequested, setOpeningRequested] = useState(false)
+  const [openingNMoves, setOpeningNMoves] = useState(OPENING_N_MOVES_DEFAULT)
   const [boardFen, setBoardFen] = useState('start')
   const [openingPlyByTop, setOpeningPlyByTop] = useState({})
   const [openingMoveAnimByTop, setOpeningMoveAnimByTop] = useState({})
@@ -352,8 +544,10 @@ function Games() {
     }
   }, [])
 
-  const loadModeMoves = async (mode, page, moveColor = 'white') => {
-    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:moves:${mode}:color:${moveColor}:page:${page}:size:${MOVES_PAGE_SIZE}:max:${TOP_MOVE_LIMIT}`
+  const loadModeMoves = async (mode, page, moveColor = 'white', ratingRange = null) => {
+    const minRating = Number.isFinite(ratingRange?.minRating) ? Number(ratingRange.minRating) : ''
+    const maxRating = Number.isFinite(ratingRange?.maxRating) ? Number(ratingRange.maxRating) : ''
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:moves:${mode}:color:${moveColor}:page:${page}:size:${MOVES_PAGE_SIZE}:max:${TOP_MOVE_LIMIT}:min:${minRating}:max:${maxRating}`
     const cached = readCached(cacheKey)
     if (cached) {
       setModeLoading(false)
@@ -367,10 +561,20 @@ function Games() {
     setModeLoading(true)
     setModeError('')
     try {
-      const payload = await fetchTimeControlTopMoves(mode, moveColor, page, MOVES_PAGE_SIZE, TOP_MOVE_LIMIT)
+      const payload = await fetchTimeControlTopMoves(
+        mode,
+        moveColor,
+        Number.isFinite(ratingRange?.minRating) ? ratingRange.minRating : null,
+        Number.isFinite(ratingRange?.maxRating) ? ratingRange.maxRating : null,
+        page,
+        MOVES_PAGE_SIZE,
+        TOP_MOVE_LIMIT
+      )
       const normalized = {
         mode,
         move_color: moveColor,
+        min_rating: payload?.min_rating ?? null,
+        max_rating: payload?.max_rating ?? null,
         page: Number(payload?.page || page),
         total_pages: Number(payload?.total_pages || 0),
         rows: Array.isArray(payload?.rows) ? payload.rows : []
@@ -388,8 +592,60 @@ function Games() {
     }
   }
 
-  const loadModeOpenings = async (mode) => {
-    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:openings:${mode}:page:1:size:${OPENINGS_PAGE_SIZE}:depth:${OPENING_DEPTH_MOVES}`
+  const loadModeRatings = async (mode) => {
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:ratings:${mode}`
+    const cached = readCached(cacheKey)
+    if (cached && hasAnyValidJenksBin(cached?.bins)) {
+      setRatingLoading(false)
+      setRatingError('')
+      setRatingChart(cached)
+      return cached
+    }
+
+    setRatingLoading(true)
+    setRatingError('')
+    try {
+      const payload = await fetchTimeControlRatingChart(mode)
+      const normalizedBins = {}
+      for (const jenksKey of ['jenks_1', 'jenks_2', 'jenks_3']) {
+        const rawRange = payload?.bins?.[jenksKey]
+        const minRating = Number(rawRange?.min_rating)
+        const maxRating = Number(rawRange?.max_rating)
+        if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+          normalizedBins[jenksKey] = {
+            min_rating: Math.min(minRating, maxRating),
+            max_rating: Math.max(minRating, maxRating)
+          }
+        }
+      }
+      const normalized = {
+        x: Array.isArray(payload?.x) ? payload.x : [],
+        y: Array.isArray(payload?.y) ? payload.y : [],
+        time_control: String(payload?.time_control || mode),
+        bins: normalizedBins
+      }
+      writeCached(cacheKey, normalized)
+      setRatingChart(normalized)
+      return normalized
+    } catch (error) {
+      setRatingChart(null)
+      setRatingError(error instanceof Error ? error.message : 'Request failed.')
+      return null
+    } finally {
+      setRatingLoading(false)
+    }
+  }
+
+  const loadModeOpenings = async (mode, nMoves, ratingRange = null) => {
+    const safeNMoves = Math.max(
+      OPENING_N_MOVES_MIN,
+      Math.min(OPENING_N_MOVES_MAX, Number.parseInt(nMoves, 10) || OPENING_N_MOVES_DEFAULT)
+    )
+    const minRating = Number.isFinite(ratingRange?.minRating) ? Number(ratingRange.minRating) : ''
+    const maxRating = Number.isFinite(ratingRange?.maxRating) ? Number(ratingRange.maxRating) : ''
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:openings:${mode}:page:1:size:${OPENINGS_PAGE_SIZE}:n_moves:${safeNMoves}:min:${minRating}:max:${maxRating}`
+    setOpeningRequested(true)
+    setOpeningNMoves(safeNMoves)
     const cached = readCached(cacheKey)
     if (cached) {
       const normalizedRows = normalizeOpeningRows(cached)
@@ -409,10 +665,20 @@ function Games() {
     setOpeningLoading(true)
     setOpeningError('')
     try {
-      const payload = await fetchTimeControlTopOpenings(mode, 1, OPENINGS_PAGE_SIZE)
+      const payload = await fetchTimeControlTopOpenings(
+        mode,
+        Number.isFinite(ratingRange?.minRating) ? ratingRange.minRating : null,
+        Number.isFinite(ratingRange?.maxRating) ? ratingRange.maxRating : null,
+        safeNMoves,
+        1,
+        OPENINGS_PAGE_SIZE
+      )
       const normalizedRows = normalizeOpeningRows(payload)
       const normalized = {
         mode,
+        min_rating: payload?.min_rating ?? null,
+        max_rating: payload?.max_rating ?? null,
+        n_moves: safeNMoves,
         rows: normalizedRows
       }
       writeCached(cacheKey, normalized)
@@ -435,8 +701,11 @@ function Games() {
   }
 
   const handleSelectMode = async (mode) => {
+    const defaultCluster = DEFAULT_CLUSTER_KEY
     setSelectedMode(mode)
     setSelectedMoveColor('white')
+    setSelectedMovesCluster(defaultCluster)
+    setSelectedOpeningsCluster(defaultCluster)
     setModeRows([])
     setModePage(1)
     setModeTotalPages(0)
@@ -444,11 +713,58 @@ function Games() {
     setOpeningPlyByTop({})
     setOpeningMoveAnimByTop({})
     setActiveOpeningTop(null)
+    setOpeningRequested(false)
+    setOpeningError('')
+    setOpeningLoading(false)
+    setOpeningNMovesInput('')
+    setOpeningNMoves(OPENING_N_MOVES_DEFAULT)
+    setRatingChart(null)
+    setRatingError('')
+    setRatingLoading(false)
     setBoardFen('start')
-    await Promise.all([
-      loadModeMoves(mode, 1, 'white'),
-      loadModeOpenings(mode)
-    ])
+    const chartPayload = await loadModeRatings(mode)
+    const defaultRange = getClusterRangeFromBins(chartPayload?.bins, defaultCluster)
+    await loadModeMoves(mode, 1, 'white', defaultRange)
+  }
+
+  const handleLoadOpenings = async (clusterKeyOverride = null) => {
+    if (!selectedMode) return
+    const requestedCluster =
+      typeof clusterKeyOverride === 'string' && CLUSTER_KEYS.includes(clusterKeyOverride)
+        ? clusterKeyOverride
+        : selectedOpeningsCluster
+    const parsed = Number.parseInt(openingNMovesInput, 10)
+    if (!Number.isFinite(parsed) || parsed < OPENING_N_MOVES_MIN || parsed > OPENING_N_MOVES_MAX) {
+      setOpeningError(`n_moves must be between ${OPENING_N_MOVES_MIN} and ${OPENING_N_MOVES_MAX}.`)
+      return
+    }
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, requestedCluster)
+    if (!selectedRange) {
+      setOpeningError('Cluster range is not ready yet. Wait for ratings chart to load, then try again.')
+      return
+    }
+    setOpeningRows([])
+    setOpeningPlyByTop({})
+    setOpeningMoveAnimByTop({})
+    setActiveOpeningTop(null)
+    setBoardFen('start')
+    await loadModeOpenings(selectedMode, parsed, selectedRange)
+  }
+
+  const handleMovesClusterChange = async (clusterKey) => {
+    if (!selectedMode || clusterKey === selectedMovesCluster) return
+    setSelectedMovesCluster(clusterKey)
+    setModeRows([])
+    setModePage(1)
+    setModeTotalPages(0)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, clusterKey)
+    await loadModeMoves(selectedMode, 1, selectedMoveColor, selectedRange)
+  }
+
+  const handleOpeningsClusterChange = (clusterKey) => {
+    if (!selectedMode || clusterKey === selectedOpeningsCluster) return
+    setSelectedOpeningsCluster(clusterKey)
+    setOpeningError('')
   }
 
   const handleMoveColorChange = async (moveColor) => {
@@ -457,17 +773,20 @@ function Games() {
     setModeRows([])
     setModePage(1)
     setModeTotalPages(0)
-    await loadModeMoves(selectedMode, 1, moveColor)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, selectedMovesCluster)
+    await loadModeMoves(selectedMode, 1, moveColor, selectedRange)
   }
 
   const handleMovesPrevious = async () => {
     if (!selectedMode || modeLoading || modePage <= 1) return
-    await loadModeMoves(selectedMode, modePage - 1, selectedMoveColor)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, selectedMovesCluster)
+    await loadModeMoves(selectedMode, modePage - 1, selectedMoveColor, selectedRange)
   }
 
   const handleMovesNext = async () => {
     if (!selectedMode || modeLoading || modeTotalPages <= 0 || modePage >= modeTotalPages) return
-    await loadModeMoves(selectedMode, modePage + 1, selectedMoveColor)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, selectedMovesCluster)
+    await loadModeMoves(selectedMode, modePage + 1, selectedMoveColor, selectedRange)
   }
 
   const handleOpeningStep = (top, direction) => {
@@ -583,9 +902,10 @@ function Games() {
       <div className="home-shell">
         <Header />
         <main className="games-main">
-          <section className="games-hero">
-            <h1>Games</h1>
-            <div className="games-generalities-grid">
+          <div className="games-hero-wrap">
+            <h1 className="games-hero-badge">Games</h1>
+            <section className="games-hero">
+              <div className="games-generalities-grid">
               <article className="games-generality-card">
                 <h3>Number of games</h3>
                 <p>
@@ -656,24 +976,15 @@ function Games() {
               </a>
             </div>
             {generalitiesError ? <p className="result-line">{generalitiesError}</p> : null}
-          </section>
+            </section>
+          </div>
 
-          <section className="games-action-row" aria-label="Add or update games">
-            <div className="section-head">
-              <h2 className="games-action-title">add/update</h2>
-            </div>
-            <a className="btn btn-primary tooltip-btn" href="/download_new_games" data-note="download or update new games">
-              more games
-            </a>
-          </section>
-
-          <section className="games-time-controls" aria-label="Time controls">
-            <div className="section-head section-head-centered">
-              <h2 className="games-action-title">time controls</h2>
-            </div>
-            <div className="games-generalities-grid games-time-controls-grid">
+          <div className="games-time-wrap">
+            <h2 className="games-hero-badge time-control-badge">Time Control</h2>
+            <section className="games-time-controls" aria-label="Time controls">
+              <div className="games-generalities-grid games-time-controls-grid">
               <button
-                className="games-generality-card games-mode-button"
+                className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('bullet')}
               >
@@ -684,7 +995,7 @@ function Games() {
                 <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.bullet)}</p>
               </button>
               <button
-                className="games-generality-card games-mode-button"
+                className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('blitz')}
               >
@@ -693,7 +1004,7 @@ function Games() {
                 <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
               </button>
               <button
-                className="games-generality-card games-mode-button"
+                className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('rapid')}
               >
@@ -703,27 +1014,52 @@ function Games() {
               </button>
             </div>
             {timeControlsError ? <p className="result-line">{timeControlsError}</p> : null}
-          </section>
+            </section>
+          </div>
+
+          {selectedMode ? (
+            <section className="games-mode-detail" aria-label={`${selectedMode} ratings`}>
+              {ratingLoading ? <p className="result-line">Loading ratings chart...</p> : null}
+              {ratingError ? <p className="result-line">{ratingError}</p> : null}
+              {!ratingLoading && !ratingError ? (
+                <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
+              ) : null}
+            </section>
+          ) : null}
 
           {selectedMode ? (
             <section className="games-mode-detail" aria-label={`${selectedMode} top moves`}>
               <div className="section-head mode-detail-head">
                 <h2 className="games-action-title">{selectedMode}</h2>
-                <div className="mode-color-switch">
-                  <button
-                    className={`mode-color-btn mode-color-white ${selectedMoveColor === 'white' ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => handleMoveColorChange('white')}
-                  >
-                    white
-                  </button>
-                  <button
-                    className={`mode-color-btn mode-color-black ${selectedMoveColor === 'black' ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => handleMoveColorChange('black')}
-                  >
-                    black
-                  </button>
+                <div className="mode-detail-controls">
+                  <div className="mode-cluster-switch">
+                    {CLUSTER_KEYS.map((clusterKey) => (
+                      <button
+                        key={`moves-cluster-${clusterKey}`}
+                        className={`mode-color-btn mode-cluster-btn ${selectedMovesCluster === clusterKey ? 'active' : ''}`}
+                        type="button"
+                        onClick={() => handleMovesClusterChange(clusterKey)}
+                      >
+                        {clusterKey}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mode-color-switch">
+                    <button
+                      className={`mode-color-btn mode-color-white ${selectedMoveColor === 'white' ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => handleMoveColorChange('white')}
+                    >
+                      white
+                    </button>
+                    <button
+                      className={`mode-color-btn mode-color-black ${selectedMoveColor === 'black' ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => handleMoveColorChange('black')}
+                    >
+                      black
+                    </button>
+                  </div>
                 </div>
               </div>
               <div className="mode-moves-table">
@@ -786,6 +1122,18 @@ function Games() {
               <div className="section-head section-head-centered">
                 <h2 className="games-action-title">{selectedMode} openings</h2>
               </div>
+              <div className="openings-cluster-row">
+                {CLUSTER_KEYS.map((clusterKey) => (
+                  <button
+                    key={`openings-cluster-${clusterKey}`}
+                    className={`mode-color-btn mode-cluster-btn ${selectedOpeningsCluster === clusterKey ? 'active' : ''}`}
+                    type="button"
+                    onClick={() => handleOpeningsClusterChange(clusterKey)}
+                  >
+                    {clusterKey}
+                  </button>
+                ))}
+              </div>
               <div className="openings-layout">
                 <div className="openings-board-row">
                   <div
@@ -800,6 +1148,35 @@ function Games() {
                     />
                   </div>
                 </div>
+                <div className="openings-query-row">
+                  <label htmlFor="openings-n-moves">moves</label>
+                  <select
+                    id="openings-n-moves"
+                    className="text-input openings-n-moves-select"
+                    value={openingNMovesInput}
+                    onChange={(event) => setOpeningNMovesInput(event.target.value)}
+                  >
+                    <option value="" disabled>
+                      min: {OPENING_N_MOVES_MIN} max: {OPENING_N_MOVES_MAX}
+                    </option>
+                    {Array.from({ length: OPENING_N_MOVES_MAX - OPENING_N_MOVES_MIN + 1 }, (_, idx) => {
+                      const val = OPENING_N_MOVES_MIN + idx
+                      return (
+                        <option key={`n-moves-${val}`} value={val}>
+                          {val}
+                        </option>
+                      )
+                    })}
+                  </select>
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => handleLoadOpenings()}
+                    disabled={openingLoading}
+                  >
+                    {openingLoading ? 'Loading...' : 'go'}
+                  </button>
+                </div>
                 <div className="opening-meta-row">
                   <span className="opening-meta-chip">
                     mean rating: {activeOpeningMeanRating !== null ? formatNumber(activeOpeningMeanRating) : '--'}
@@ -811,7 +1188,10 @@ function Games() {
                 <div className="mode-moves-table openings-list-table">
                   {openingLoading ? <p className="result-line">Loading openings...</p> : null}
                   {openingError ? <p className="result-line">{openingError}</p> : null}
-                  {!openingLoading && !openingError ? (
+                  {!openingRequested && !openingLoading ? (
+                    <p className="result-line">Select moves and click go.</p>
+                  ) : null}
+                  {openingRequested && !openingLoading && !openingError ? (
                     openingRows.length ? (
                       openingRows.map((row) => {
                         const totalHalfMoves = row.half_moves.length
