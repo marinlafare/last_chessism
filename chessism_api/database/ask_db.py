@@ -453,8 +453,10 @@ async def get_time_control_top_openings(
         )
         SELECT
             opening,
-            COUNT(*)::int AS times_played
-        FROM openings
+            COUNT(*)::int AS times_played,
+            ROUND(AVG((g.white_elo + g.black_elo) / 2.0))::int AS mean_rating_for_this_opening
+        FROM openings o
+        JOIN game g ON g.link = o.link
         WHERE opening IS NOT NULL
           AND opening <> ''
           AND cardinality(string_to_array(opening, ' ')) >= 2
@@ -515,6 +517,7 @@ async def get_time_control_top_openings(
         half_moves = [token for token in opening_text.split() if token]
         total_full_moves = math.ceil(len(half_moves) / 2)
         moves_payload: Dict[str, str] = {}
+        mean_rating_for_this_opening = int(row.get("mean_rating_for_this_opening") or 0)
 
         for move_number in range(1, total_full_moves + 1):
             key_suffix = move_words.get(move_number, str(move_number))
@@ -526,13 +529,20 @@ async def get_time_control_top_openings(
             moves_payload[move_key] = f"{white_move},{black_move}"
 
         opening_key = f"most_common_opening_for_this_time_control_{idx}"
-        openings_map[opening_key] = moves_payload
+        n_games_for_this_opening = int(row.get("times_played") or 0)
+        openings_map[opening_key] = {
+            "mean_rating_for_this_opening": mean_rating_for_this_opening,
+            "n_games_for_this_opening": n_games_for_this_opening,
+            **moves_payload
+        }
         output_rows.append({
             "top": idx,
             "key": opening_key,
             "moves": moves_payload,
             "half_moves": half_moves,
-            "times_played": int(row.get("times_played") or 0)
+            "times_played": n_games_for_this_opening,
+            "n_games_for_this_opening": n_games_for_this_opening,
+            "mean_rating_for_this_opening": mean_rating_for_this_opening
         })
 
     return {

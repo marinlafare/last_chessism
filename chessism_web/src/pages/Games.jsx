@@ -11,7 +11,7 @@ const OPENINGS_PAGE_SIZE = 5
 const TOP_MOVE_LIMIT = 10
 const OPENING_DEPTH_MOVES = 10
 const OPENINGS_BOARD_WIDTH = 286
-const TIME_CONTROLS_CACHE_VERSION = 'v6'
+const TIME_CONTROLS_CACHE_VERSION = 'v7'
 const MOVE_WORDS = [
   'one',
   'two',
@@ -230,7 +230,9 @@ const normalizeOpeningRows = (payload) => {
         key: String(row?.key || `most_common_opening_for_this_time_control_${top}`),
         moves: movesMap,
         half_moves: halfMoves,
-        times_played: Number(row?.times_played || 0)
+        times_played: Number(row?.times_played || 0),
+        n_games_for_this_opening: Number(row?.n_games_for_this_opening || row?.times_played || 0),
+        mean_rating_for_this_opening: Number(row?.mean_rating_for_this_opening || 0)
       }
     })
   }
@@ -238,13 +240,23 @@ const normalizeOpeningRows = (payload) => {
   if (payload?.openings && typeof payload.openings === 'object') {
     return Object.entries(payload.openings).map(([key, value], idx) => {
       const top = idx + 1
-      const movesMap = value && typeof value === 'object' ? value : {}
+      const raw = value && typeof value === 'object' ? value : {}
+      const meanRating = Number(raw.mean_rating_for_this_opening || 0)
+      const nGames = Number(raw.n_games_for_this_opening || 0)
+      const movesMap = Object.entries(raw).reduce((acc, [moveKey, moveValue]) => {
+        if (moveKey === 'mean_rating_for_this_opening') return acc
+        if (moveKey === 'n_games_for_this_opening') return acc
+        acc[moveKey] = moveValue
+        return acc
+      }, {})
       return {
         top,
         key,
         moves: movesMap,
         half_moves: halfMovesFromMovesMap(movesMap),
-        times_played: 0
+        times_played: 0,
+        n_games_for_this_opening: nGames,
+        mean_rating_for_this_opening: meanRating
       }
     })
   }
@@ -293,6 +305,7 @@ function Games() {
   const [openingError, setOpeningError] = useState('')
   const [boardFen, setBoardFen] = useState('start')
   const [openingPlyByTop, setOpeningPlyByTop] = useState({})
+  const [openingMoveAnimByTop, setOpeningMoveAnimByTop] = useState({})
   const [activeOpeningTop, setActiveOpeningTop] = useState(null)
 
   useEffect(() => {
@@ -388,6 +401,7 @@ function Games() {
           return acc
         }, {})
       )
+      setOpeningMoveAnimByTop({})
       setOpeningError('')
       return
     }
@@ -409,9 +423,11 @@ function Games() {
           return acc
         }, {})
       )
+      setOpeningMoveAnimByTop({})
     } catch (error) {
       setOpeningRows([])
       setOpeningPlyByTop({})
+      setOpeningMoveAnimByTop({})
       setOpeningError(error instanceof Error ? error.message : 'Request failed.')
     } finally {
       setOpeningLoading(false)
@@ -426,6 +442,7 @@ function Games() {
     setModeTotalPages(0)
     setOpeningRows([])
     setOpeningPlyByTop({})
+    setOpeningMoveAnimByTop({})
     setActiveOpeningTop(null)
     setBoardFen('start')
     await Promise.all([
@@ -466,6 +483,16 @@ function Games() {
         : Math.max(1, currentPly - 1)
 
     setOpeningPlyByTop((prev) => ({ ...prev, [top]: nextPly }))
+    setOpeningMoveAnimByTop((prev) => {
+      const nextSeq = Number(prev[top]?.seq || 0) + 1
+      return {
+        ...prev,
+        [top]: {
+          dir: direction === 'next' ? 'from-right' : 'from-left',
+          seq: nextSeq
+        }
+      }
+    })
     setActiveOpeningTop(top)
     setBoardFen(fenAfterHalfMoves(row.half_moves, nextPly))
   }
@@ -539,6 +566,16 @@ function Games() {
     if (recentPage >= totalPages) return
     await loadRecentGames(selectedPlayer, recentPage + 1)
   }
+
+  const activeOpeningRow = openingRows.find((row) => row.top === activeOpeningTop) || null
+  const activeOpeningMeanRating =
+    activeOpeningRow && Number.isFinite(Number(activeOpeningRow.mean_rating_for_this_opening))
+      ? Number(activeOpeningRow.mean_rating_for_this_opening)
+      : null
+  const activeOpeningGames =
+    activeOpeningRow && Number.isFinite(Number(activeOpeningRow.n_games_for_this_opening))
+      ? Number(activeOpeningRow.n_games_for_this_opening)
+      : null
 
   return (
     <div className="page-frame">
@@ -652,7 +689,7 @@ function Games() {
                 onClick={() => handleSelectMode('blitz')}
               >
                 <h3>blitz</h3>
-                <span className="time-control-icon" aria-hidden="true">⚡</span>
+                <span className="time-control-icon time-control-icon-blitz" aria-hidden="true">⚡</span>
                 <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
               </button>
               <button
@@ -661,7 +698,7 @@ function Games() {
                 onClick={() => handleSelectMode('rapid')}
               >
                 <h3>rapid</h3>
-                <span className="time-control-icon" aria-hidden="true">⏱</span>
+                <span className="time-control-icon time-control-icon-rapid" aria-hidden="true">⏱</span>
                 <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.rapid)}</p>
               </button>
             </div>
@@ -763,6 +800,14 @@ function Games() {
                     />
                   </div>
                 </div>
+                <div className="opening-meta-row">
+                  <span className="opening-meta-chip">
+                    mean rating: {activeOpeningMeanRating !== null ? formatNumber(activeOpeningMeanRating) : '--'}
+                  </span>
+                  <span className="opening-meta-chip">
+                    number of games: {activeOpeningGames !== null ? formatNumber(activeOpeningGames) : '--'}
+                  </span>
+                </div>
                 <div className="mode-moves-table openings-list-table">
                   {openingLoading ? <p className="result-line">Loading openings...</p> : null}
                   {openingError ? <p className="result-line">{openingError}</p> : null}
@@ -772,13 +817,20 @@ function Games() {
                         const totalHalfMoves = row.half_moves.length
                         const currentPly = Number(openingPlyByTop[row.top] || (totalHalfMoves > 0 ? 1 : 0))
                         const currentMove = currentPly > 0 ? row.half_moves[currentPly - 1] : '-'
+                        const moveAnimState = openingMoveAnimByTop[row.top] || null
+                        const moveAnimClass =
+                          moveAnimState?.dir === 'from-right'
+                            ? 'opening-move-enter-from-right'
+                            : moveAnimState?.dir === 'from-left'
+                              ? 'opening-move-enter-from-left'
+                              : ''
                         return (
                           <div
                             key={`opening-${selectedMode}-${row.top}`}
                             className={`mode-moves-row opening-step-row ${activeOpeningTop === row.top ? 'active' : ''}`}
                           >
                             <button
-                              className="opening-top-btn"
+                              className={`opening-top-btn ${activeOpeningTop === row.top ? 'active' : ''}`}
                               type="button"
                               onClick={() => handleSelectOpening(row.top)}
                             >
@@ -792,7 +844,12 @@ function Games() {
                             >
                               {'<'}
                             </button>
-                            <span className="opening-move-text">{currentMove}</span>
+                            <span
+                              key={`opening-move-${row.top}-${currentPly}-${moveAnimState?.seq || 0}`}
+                              className={`opening-move-text ${moveAnimClass}`}
+                            >
+                              {currentMove}
+                            </span>
                             <button
                               className="btn btn-secondary opening-arrow-btn"
                               type="button"
