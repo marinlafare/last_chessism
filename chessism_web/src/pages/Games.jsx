@@ -24,8 +24,31 @@ const CLUSTER_COLORS = {
   cluster_2: '#f4c057',
   cluster_3: '#3fd089'
 }
+
+const hexToRgb = (hexColor) => {
+  const normalized = String(hexColor || '').replace('#', '')
+  if (normalized.length !== 6) {
+    return { r: 244, g: 192, b: 87 }
+  }
+  const value = Number.parseInt(normalized, 16)
+  if (Number.isNaN(value)) {
+    return { r: 244, g: 192, b: 87 }
+  }
+  return {
+    r: (value >> 16) & 255,
+    g: (value >> 8) & 255,
+    b: value & 255
+  }
+}
+
+const CLUSTER_RGB = {
+  cluster_1: hexToRgb(CLUSTER_COLORS.cluster_1),
+  cluster_2: hexToRgb(CLUSTER_COLORS.cluster_2),
+  cluster_3: hexToRgb(CLUSTER_COLORS.cluster_3)
+}
+
 const OPENINGS_BOARD_WIDTH = 286
-const TIME_CONTROLS_CACHE_VERSION = 'v11'
+const TIME_CONTROLS_CACHE_VERSION = 'v12'
 const MOVE_WORDS = [
   'one',
   'two',
@@ -75,6 +98,21 @@ const writeCached = (key, value) => {
   }
 }
 
+const parseJsonSafely = async (response) => response.json().catch(() => ({}))
+
+const throwIfNotOk = (response, payload) => {
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+  }
+}
+
+const fetchJsonOrThrow = async (url) => {
+  const response = await fetch(url)
+  const payload = await parseJsonSafely(response)
+  throwIfNotOk(response, payload)
+  return payload
+}
+
 async function fetchDatabaseGeneralities() {
   const candidates = [
     `${API_BASE_URL}/games/_database_generalities`,
@@ -84,12 +122,12 @@ async function fetchDatabaseGeneralities() {
 
   for (const url of candidates) {
     const response = await fetch(url)
-    const payload = await response.json().catch(() => ({}))
+    const payload = await parseJsonSafely(response)
     if (response.ok) {
       return payload
     }
     if (response.status !== 404) {
-      throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+      throwIfNotOk(response, payload)
     }
   }
 
@@ -97,49 +135,21 @@ async function fetchDatabaseGeneralities() {
 }
 
 async function fetchPlayerGameCount(playerName) {
-  const response = await fetch(`${API_BASE_URL}/games/${encodeURIComponent(playerName)}/count`)
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
+  return fetchJsonOrThrow(`${API_BASE_URL}/games/${encodeURIComponent(playerName)}/count`)
 }
 
 async function fetchRecentGamesPage(playerName, page, pageSize = 10) {
-  const response = await fetch(
+  return fetchJsonOrThrow(
     `${API_BASE_URL}/games/${encodeURIComponent(playerName)}/recent?page=${page}&page_size=${pageSize}`
   )
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
 }
 
 async function fetchGameSummary(playerName) {
-  const response = await fetch(`${API_BASE_URL}/games/${encodeURIComponent(playerName)}/summary`)
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
+  return fetchJsonOrThrow(`${API_BASE_URL}/games/${encodeURIComponent(playerName)}/summary`)
 }
 
 async function fetchTimeControlCounts() {
-  const response = await fetch(`${API_BASE_URL}/games/time_controls`)
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
+  return fetchJsonOrThrow(`${API_BASE_URL}/games/time_controls`)
 }
 
 async function fetchTimeControlTopMoves(
@@ -161,16 +171,9 @@ async function fetchTimeControlTopMoves(
     params.set('min_rating', String(minRating))
     params.set('max_rating', String(maxRating))
   }
-  const response = await fetch(
+  return fetchJsonOrThrow(
     `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_moves?${params.toString()}`
   )
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
 }
 
 async function fetchTimeControlTopOpenings(
@@ -194,29 +197,48 @@ async function fetchTimeControlTopOpenings(
     params.set('min_rating', String(minRating))
     params.set('max_rating', String(maxRating))
   }
-  const response = await fetch(
+  return fetchJsonOrThrow(
     `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/top_openings?${params.toString()}`
   )
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
 }
 
 async function fetchTimeControlRatingChart(mode) {
-  const response = await fetch(
+  return fetchJsonOrThrow(
     `${API_BASE_URL}/games/rating_time_control_chart?time_control=${encodeURIComponent(mode)}`
   )
-  const payload = await response.json().catch(() => ({}))
+}
 
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+async function fetchTimeControlResultColorMatrix(mode, minRating = null, maxRating = null) {
+  const params = new URLSearchParams()
+  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+    params.set('min_rating', String(minRating))
+    params.set('max_rating', String(maxRating))
   }
+  return fetchJsonOrThrow(
+    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/result_color_matrix?${params.toString()}`
+  )
+}
 
-  return payload
+async function fetchTimeControlGameLengthAnalytics(mode, minRating = null, maxRating = null) {
+  const params = new URLSearchParams()
+  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+    params.set('min_rating', String(minRating))
+    params.set('max_rating', String(maxRating))
+  }
+  return fetchJsonOrThrow(
+    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/game_length_analytics?${params.toString()}`
+  )
+}
+
+async function fetchTimeControlActivityTrend(mode, minRating = null, maxRating = null) {
+  const params = new URLSearchParams()
+  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
+    params.set('min_rating', String(minRating))
+    params.set('max_rating', String(maxRating))
+  }
+  return fetchJsonOrThrow(
+    `${API_BASE_URL}/games/time_controls/${encodeURIComponent(mode)}/activity_trend?${params.toString()}`
+  )
 }
 
 const moveWordToNumber = (value) => {
@@ -378,11 +400,11 @@ function TimeControlRatingsScatterChart({ mode, chart }) {
   }
 
   const width = 820
-  const height = 280
+  const height = 250
   const padLeft = 44
-  const padRight = 18
+  const padRight = 24
   const padTop = 16
-  const padBottom = 30
+  const padBottom = 38
   const minX = Math.min(...xValues)
   const maxX = Math.max(...xValues)
   const minY = 0
@@ -421,6 +443,23 @@ function TimeControlRatingsScatterChart({ mode, chart }) {
       <svg viewBox={`0 0 ${width} ${height}`} className="rating-chart" role="img" aria-label={`ratings for ${mode}`}>
         <line x1={padLeft} y1={padTop} x2={padLeft} y2={height - padBottom} className="axis-line" />
         <line x1={padLeft} y1={height - padBottom} x2={width - padRight} y2={height - padBottom} className="axis-line" />
+        <text
+          x={padLeft - 40}
+          y={padTop + plotHeight / 2}
+          className="axis-tick-label axis-title axis-title-y"
+          textAnchor="middle"
+          transform={`rotate(-90 ${padLeft - 40} ${padTop + plotHeight / 2})`}
+        >
+          # of players
+        </text>
+        <text
+          x={padLeft + plotWidth / 2}
+          y={height - padBottom + 26}
+          className="axis-tick-label axis-title axis-title-x"
+          textAnchor="middle"
+        >
+          raitings
+        </text>
         {yTicks.map((tick, index) => {
           const y = padTop + ((maxY - tick) / yRange) * plotHeight
           return (
@@ -458,6 +497,126 @@ function TimeControlRatingsScatterChart({ mode, chart }) {
   )
 }
 
+const formatPercent = (value) => `${(Number(value || 0) * 100).toFixed(1)}%`
+const formatSeconds = (value) => (Number.isFinite(Number(value)) ? `${Number(value).toFixed(1)}s` : '--')
+const getClusterSelectStyle = (clusterKey) => {
+  const color = CLUSTER_COLORS[clusterKey] || CLUSTER_COLORS.cluster_2
+  return { backgroundColor: color, borderColor: color, color: '#000' }
+}
+
+const getHeatCellStyle = (value, maxValue) => {
+  const safeValue = Number(value || 0)
+  const safeMax = Math.max(1, Number(maxValue || 1))
+  const ratio = Math.max(0, Math.min(1, safeValue / safeMax))
+  const useLowHalf = ratio <= 0.5
+  const start = useLowHalf ? CLUSTER_RGB.cluster_1 : CLUSTER_RGB.cluster_2
+  const end = useLowHalf ? CLUSTER_RGB.cluster_2 : CLUSTER_RGB.cluster_3
+  const t = useLowHalf ? ratio * 2 : (ratio - 0.5) * 2
+  const r = Math.round(start.r + (end.r - start.r) * t)
+  const g = Math.round(start.g + (end.g - start.g) * t)
+  const b = Math.round(start.b + (end.b - start.b) * t)
+  const alpha = (0.58 + ratio * 0.32).toFixed(2)
+  return {
+    backgroundColor: `rgba(${r}, ${g}, ${b}, ${alpha})`,
+    borderColor: `rgba(${r}, ${g}, ${b}, 0.75)`
+  }
+}
+
+function CompactBarChart({ title, labels, values }) {
+  const maxValue = Math.max(...(Array.isArray(values) ? values.map((v) => Number(v || 0)) : [0]), 1)
+  const safeLabels = Array.isArray(labels) ? labels : []
+  const safeValues = Array.isArray(values) ? values : []
+
+  if (!safeLabels.length || safeLabels.length !== safeValues.length) {
+    return <p className="result-line">No chart data.</p>
+  }
+
+  return (
+    <div className="analytics-bars-wrap">
+      <h3>{title}</h3>
+      <div className="analytics-bars-scroll">
+        <div className="analytics-bars">
+          {safeLabels.map((label, idx) => {
+            const value = Number(safeValues[idx] || 0)
+            const pct = Math.max(6, Math.round((value / maxValue) * 100))
+            return (
+              <div key={`${title}-${label}-${idx}`} className="analytics-bar-col">
+                <span className="analytics-bar-value">{formatNumber(value)}</span>
+                <div className="analytics-bar-track">
+                  <div className="analytics-bar-fill" style={{ height: `${pct}%` }} />
+                </div>
+                <span className="analytics-bar-label">{label}</span>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function HeatStrip({ title, labels, values, singleRow = false }) {
+  const safeLabels = Array.isArray(labels) ? labels : []
+  const safeValues = Array.isArray(values) ? values : []
+  const maxValue = Math.max(...safeValues.map((v) => Number(v || 0)), 1)
+
+  if (!safeLabels.length || safeLabels.length !== safeValues.length) {
+    return <p className="result-line">No heat data.</p>
+  }
+
+  return (
+    <div className="heat-strip-wrap">
+      <h3>{title}</h3>
+      <div
+        className={`heat-strip-grid${singleRow ? ' single-row' : ''}`}
+        style={singleRow ? { '--heat-cols': safeLabels.length } : undefined}
+      >
+        {safeLabels.map((label, idx) => {
+          const value = Number(safeValues[idx] || 0)
+          return (
+            <div key={`${title}-${label}-${idx}`} className="heat-cell-wrap">
+              <div className="heat-cell" style={getHeatCellStyle(value, maxValue)} title={`${label}: ${value}`}>
+                {label}
+              </div>
+              <div className="heat-cell-value">{formatNumber(value)}</div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function ClusterSelect({ value, onChange, idPrefix }) {
+  return (
+    <select
+      className="cluster-select"
+      style={getClusterSelectStyle(value)}
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {CLUSTER_KEYS.map((clusterKey) => (
+        <option key={`${idPrefix}-${clusterKey}`} value={clusterKey}>
+          {clusterKey}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+const handleBadgeHoverMove = (event) => {
+  const rect = event.currentTarget.getBoundingClientRect()
+  const x = ((event.clientX - rect.left) / rect.width) * 100
+  const y = ((event.clientY - rect.top) / rect.height) * 100
+  event.currentTarget.style.setProperty('--hover-x', `${x}%`)
+  event.currentTarget.style.setProperty('--hover-y', `${y}%`)
+}
+
+const handleBadgeHoverLeave = (event) => {
+  event.currentTarget.style.removeProperty('--hover-x')
+  event.currentTarget.style.removeProperty('--hover-y')
+}
+
 function Games() {
   const [countPlayer, setCountPlayer] = useState('')
   const [countResult, setCountResult] = useState('')
@@ -480,6 +639,9 @@ function Games() {
   const [selectedMode, setSelectedMode] = useState('')
   const [selectedMoveColor, setSelectedMoveColor] = useState('white')
   const [selectedMovesCluster, setSelectedMovesCluster] = useState(DEFAULT_CLUSTER_KEY)
+  const [selectedResultsCluster, setSelectedResultsCluster] = useState(DEFAULT_CLUSTER_KEY)
+  const [selectedLengthsCluster, setSelectedLengthsCluster] = useState(DEFAULT_CLUSTER_KEY)
+  const [selectedActivityCluster, setSelectedActivityCluster] = useState(DEFAULT_CLUSTER_KEY)
   const [selectedOpeningsCluster, setSelectedOpeningsCluster] = useState(DEFAULT_CLUSTER_KEY)
   const [modeRows, setModeRows] = useState([])
   const [modePage, setModePage] = useState(1)
@@ -489,6 +651,15 @@ function Games() {
   const [ratingChart, setRatingChart] = useState(null)
   const [ratingLoading, setRatingLoading] = useState(false)
   const [ratingError, setRatingError] = useState('')
+  const [resultMatrix, setResultMatrix] = useState(null)
+  const [resultMatrixLoading, setResultMatrixLoading] = useState(false)
+  const [resultMatrixError, setResultMatrixError] = useState('')
+  const [gameLengthData, setGameLengthData] = useState(null)
+  const [gameLengthLoading, setGameLengthLoading] = useState(false)
+  const [gameLengthError, setGameLengthError] = useState('')
+  const [activityTrendData, setActivityTrendData] = useState(null)
+  const [activityTrendLoading, setActivityTrendLoading] = useState(false)
+  const [activityTrendError, setActivityTrendError] = useState('')
   const [openingRows, setOpeningRows] = useState([])
   const [openingLoading, setOpeningLoading] = useState(false)
   const [openingError, setOpeningError] = useState('')
@@ -499,6 +670,7 @@ function Games() {
   const [openingPlyByTop, setOpeningPlyByTop] = useState({})
   const [openingMoveAnimByTop, setOpeningMoveAnimByTop] = useState({})
   const [activeOpeningTop, setActiveOpeningTop] = useState(null)
+  const [ratingModalOpen, setRatingModalOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -542,6 +714,16 @@ function Games() {
     return () => {
       cancelled = true
     }
+  }, [])
+
+  useEffect(() => {
+    const handleEsc = (event) => {
+      if (event.key === 'Escape') {
+        setRatingModalOpen(false)
+      }
+    }
+    window.addEventListener('keydown', handleEsc)
+    return () => window.removeEventListener('keydown', handleEsc)
   }, [])
 
   const loadModeMoves = async (mode, page, moveColor = 'white', ratingRange = null) => {
@@ -700,11 +882,104 @@ function Games() {
     }
   }
 
+  const loadResultColorMatrix = async (mode, ratingRange = null) => {
+    const minRating = Number.isFinite(ratingRange?.minRating) ? Number(ratingRange.minRating) : ''
+    const maxRating = Number.isFinite(ratingRange?.maxRating) ? Number(ratingRange.maxRating) : ''
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:result_matrix:${mode}:min:${minRating}:max:${maxRating}`
+    const cached = readCached(cacheKey)
+    if (cached) {
+      setResultMatrix(cached)
+      setResultMatrixError('')
+      setResultMatrixLoading(false)
+      return
+    }
+
+    setResultMatrixLoading(true)
+    setResultMatrixError('')
+    try {
+      const payload = await fetchTimeControlResultColorMatrix(
+        mode,
+        Number.isFinite(ratingRange?.minRating) ? ratingRange.minRating : null,
+        Number.isFinite(ratingRange?.maxRating) ? ratingRange.maxRating : null
+      )
+      writeCached(cacheKey, payload)
+      setResultMatrix(payload)
+    } catch (error) {
+      setResultMatrix(null)
+      setResultMatrixError(error instanceof Error ? error.message : 'Request failed.')
+    } finally {
+      setResultMatrixLoading(false)
+    }
+  }
+
+  const loadGameLengthAnalytics = async (mode, ratingRange = null) => {
+    const minRating = Number.isFinite(ratingRange?.minRating) ? Number(ratingRange.minRating) : ''
+    const maxRating = Number.isFinite(ratingRange?.maxRating) ? Number(ratingRange.maxRating) : ''
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:game_length:${mode}:min:${minRating}:max:${maxRating}`
+    const cached = readCached(cacheKey)
+    if (cached) {
+      setGameLengthData(cached)
+      setGameLengthError('')
+      setGameLengthLoading(false)
+      return
+    }
+
+    setGameLengthLoading(true)
+    setGameLengthError('')
+    try {
+      const payload = await fetchTimeControlGameLengthAnalytics(
+        mode,
+        Number.isFinite(ratingRange?.minRating) ? ratingRange.minRating : null,
+        Number.isFinite(ratingRange?.maxRating) ? ratingRange.maxRating : null
+      )
+      writeCached(cacheKey, payload)
+      setGameLengthData(payload)
+    } catch (error) {
+      setGameLengthData(null)
+      setGameLengthError(error instanceof Error ? error.message : 'Request failed.')
+    } finally {
+      setGameLengthLoading(false)
+    }
+  }
+
+  const loadActivityTrend = async (mode, ratingRange = null) => {
+    const minRating = Number.isFinite(ratingRange?.minRating) ? Number(ratingRange.minRating) : ''
+    const maxRating = Number.isFinite(ratingRange?.maxRating) ? Number(ratingRange.maxRating) : ''
+    const cacheKey = `games:time_controls:${TIME_CONTROLS_CACHE_VERSION}:activity:${mode}:min:${minRating}:max:${maxRating}`
+    const cached = readCached(cacheKey)
+    if (cached) {
+      setActivityTrendData(cached)
+      setActivityTrendError('')
+      setActivityTrendLoading(false)
+      return
+    }
+
+    setActivityTrendLoading(true)
+    setActivityTrendError('')
+    try {
+      const payload = await fetchTimeControlActivityTrend(
+        mode,
+        Number.isFinite(ratingRange?.minRating) ? ratingRange.minRating : null,
+        Number.isFinite(ratingRange?.maxRating) ? ratingRange.maxRating : null
+      )
+      writeCached(cacheKey, payload)
+      setActivityTrendData(payload)
+    } catch (error) {
+      setActivityTrendData(null)
+      setActivityTrendError(error instanceof Error ? error.message : 'Request failed.')
+    } finally {
+      setActivityTrendLoading(false)
+    }
+  }
+
   const handleSelectMode = async (mode) => {
     const defaultCluster = DEFAULT_CLUSTER_KEY
     setSelectedMode(mode)
     setSelectedMoveColor('white')
     setSelectedMovesCluster(defaultCluster)
+    setSelectedResultsCluster(defaultCluster)
+    setSelectedLengthsCluster(defaultCluster)
+    setSelectedActivityCluster(defaultCluster)
     setSelectedOpeningsCluster(defaultCluster)
     setModeRows([])
     setModePage(1)
@@ -721,10 +996,24 @@ function Games() {
     setRatingChart(null)
     setRatingError('')
     setRatingLoading(false)
+    setResultMatrix(null)
+    setResultMatrixError('')
+    setResultMatrixLoading(false)
+    setGameLengthData(null)
+    setGameLengthError('')
+    setGameLengthLoading(false)
+    setActivityTrendData(null)
+    setActivityTrendError('')
+    setActivityTrendLoading(false)
     setBoardFen('start')
     const chartPayload = await loadModeRatings(mode)
     const defaultRange = getClusterRangeFromBins(chartPayload?.bins, defaultCluster)
-    await loadModeMoves(mode, 1, 'white', defaultRange)
+    await Promise.all([
+      loadModeMoves(mode, 1, 'white', defaultRange),
+      loadResultColorMatrix(mode, defaultRange),
+      loadGameLengthAnalytics(mode, defaultRange),
+      loadActivityTrend(mode, defaultRange)
+    ])
   }
 
   const handleLoadOpenings = async (clusterKeyOverride = null) => {
@@ -759,6 +1048,27 @@ function Games() {
     setModeTotalPages(0)
     const selectedRange = getClusterRangeFromBins(ratingChart?.bins, clusterKey)
     await loadModeMoves(selectedMode, 1, selectedMoveColor, selectedRange)
+  }
+
+  const handleResultsClusterChange = async (clusterKey) => {
+    if (!selectedMode || clusterKey === selectedResultsCluster) return
+    setSelectedResultsCluster(clusterKey)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, clusterKey)
+    await loadResultColorMatrix(selectedMode, selectedRange)
+  }
+
+  const handleLengthsClusterChange = async (clusterKey) => {
+    if (!selectedMode || clusterKey === selectedLengthsCluster) return
+    setSelectedLengthsCluster(clusterKey)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, clusterKey)
+    await loadGameLengthAnalytics(selectedMode, selectedRange)
+  }
+
+  const handleActivityClusterChange = async (clusterKey) => {
+    if (!selectedMode || clusterKey === selectedActivityCluster) return
+    setSelectedActivityCluster(clusterKey)
+    const selectedRange = getClusterRangeFromBins(ratingChart?.bins, clusterKey)
+    await loadActivityTrend(selectedMode, selectedRange)
   }
 
   const handleOpeningsClusterChange = (clusterKey) => {
@@ -826,6 +1136,13 @@ function Games() {
     setActiveOpeningTop(top)
     setBoardFen(fenAfterHalfMoves(row.half_moves, safePly))
   }
+
+  const openRatingModal = () => {
+    if (!ratingChart || ratingLoading || ratingError) return
+    setRatingModalOpen(true)
+  }
+
+  const closeRatingModal = () => setRatingModalOpen(false)
 
   const loadRecentGames = async (player, page) => {
     setRecentLoading(true)
@@ -903,7 +1220,13 @@ function Games() {
         <Header />
         <main className="games-main">
           <div className="games-hero-wrap">
-            <h1 className="games-hero-badge">Games</h1>
+            <h1
+              className="games-hero-badge games-main-title badge-hover"
+              onMouseMove={handleBadgeHoverMove}
+              onMouseLeave={handleBadgeHoverLeave}
+            >
+              GameS
+            </h1>
             <section className="games-hero">
               <div className="games-generalities-grid">
               <article className="games-generality-card">
@@ -980,7 +1303,13 @@ function Games() {
           </div>
 
           <div className="games-time-wrap">
-            <h2 className="games-hero-badge time-control-badge">Time Control</h2>
+            <h2
+              className="games-hero-badge time-control-badge badge-hover"
+              onMouseMove={handleBadgeHoverMove}
+              onMouseLeave={handleBadgeHoverLeave}
+            >
+              Time Control
+            </h2>
             <section className="games-time-controls" aria-label="Time controls">
               <div className="games-generalities-grid games-time-controls-grid">
               <button
@@ -1018,13 +1347,23 @@ function Games() {
           </div>
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} ratings`}>
-              {ratingLoading ? <p className="result-line">Loading ratings chart...</p> : null}
-              {ratingError ? <p className="result-line">{ratingError}</p> : null}
-              {!ratingLoading && !ratingError ? (
-                <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
+            <>
+              <section className="games-mode-detail rating-clickable" aria-label={`${selectedMode} ratings`} onClick={openRatingModal}>
+                {ratingLoading ? <p className="result-line">Loading ratings chart...</p> : null}
+                {ratingError ? <p className="result-line">{ratingError}</p> : null}
+                {!ratingLoading && !ratingError ? (
+                  <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
+                ) : null}
+                <p className="result-line rating-hint">Click to expand</p>
+              </section>
+              {ratingModalOpen ? (
+                <div className="rating-modal-backdrop" onClick={closeRatingModal}>
+                  <div className="rating-modal" role="dialog" aria-label={`${selectedMode} ratings enlarged`} onClick={(e) => e.stopPropagation()}>
+                    <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
+                  </div>
+                </div>
               ) : null}
-            </section>
+            </>
           ) : null}
 
           {selectedMode ? (
@@ -1032,18 +1371,6 @@ function Games() {
               <div className="section-head mode-detail-head">
                 <h2 className="games-action-title">{selectedMode}</h2>
                 <div className="mode-detail-controls">
-                  <div className="mode-cluster-switch">
-                    {CLUSTER_KEYS.map((clusterKey) => (
-                      <button
-                        key={`moves-cluster-${clusterKey}`}
-                        className={`mode-color-btn mode-cluster-btn ${selectedMovesCluster === clusterKey ? 'active' : ''}`}
-                        type="button"
-                        onClick={() => handleMovesClusterChange(clusterKey)}
-                      >
-                        {clusterKey}
-                      </button>
-                    ))}
-                  </div>
                   <div className="mode-color-switch">
                     <button
                       className={`mode-color-btn mode-color-white ${selectedMoveColor === 'white' ? 'active' : ''}`}
@@ -1060,6 +1387,11 @@ function Games() {
                       black
                     </button>
                   </div>
+                  <ClusterSelect
+                    idPrefix="moves-cluster"
+                    value={selectedMovesCluster}
+                    onChange={handleMovesClusterChange}
+                  />
                 </div>
               </div>
               <div className="mode-moves-table">
@@ -1119,20 +1451,19 @@ function Games() {
 
           {selectedMode ? (
             <section className="games-openings-detail" aria-label={`${selectedMode} top openings`}>
-              <div className="section-head section-head-centered">
-                <h2 className="games-action-title">{selectedMode} openings</h2>
-              </div>
-              <div className="openings-cluster-row">
-                {CLUSTER_KEYS.map((clusterKey) => (
-                  <button
-                    key={`openings-cluster-${clusterKey}`}
-                    className={`mode-color-btn mode-cluster-btn ${selectedOpeningsCluster === clusterKey ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => handleOpeningsClusterChange(clusterKey)}
-                  >
-                    {clusterKey}
-                  </button>
-                ))}
+              <div className="section-head analytics-section-head">
+                <h2
+                  className="games-action-title badge-hover openings-title"
+                  onMouseMove={handleBadgeHoverMove}
+                  onMouseLeave={handleBadgeHoverLeave}
+                >
+                  {selectedMode} openings
+                </h2>
+                <ClusterSelect
+                  idPrefix="openings-cluster"
+                  value={selectedOpeningsCluster}
+                  onChange={handleOpeningsClusterChange}
+                />
               </div>
               <div className="openings-layout">
                 <div className="openings-board-row">
@@ -1246,6 +1577,186 @@ function Games() {
                     )
                   ) : null}
                 </div>
+              </div>
+            </section>
+          ) : null}
+
+          {selectedMode ? (
+            <section className="games-mode-detail" aria-label={`${selectedMode} result color matrix`}>
+              <div className="section-head analytics-section-head">
+                <h2 className="games-action-title">{selectedMode} results</h2>
+                <ClusterSelect
+                  idPrefix="results-cluster"
+                  value={selectedResultsCluster}
+                  onChange={handleResultsClusterChange}
+                />
+              </div>
+              <div className="mode-moves-table analytics-table-wrap">
+                {resultMatrixLoading ? <p className="result-line">Loading result matrix...</p> : null}
+                {resultMatrixError ? <p className="result-line">{resultMatrixError}</p> : null}
+                {!resultMatrixLoading && !resultMatrixError ? (
+                  <>
+                    <div className="matrix-color-grid">
+                      <div className="matrix-color-card">
+                        <div className="matrix-color-head">
+                          <span className="result-matrix-color white">white</span>
+                          <span className="matrix-color-meta">
+                            score: {formatPercent(resultMatrix?.white?.score_rate || 0)}
+                          </span>
+                        </div>
+                        <div className="wl-bar">
+                          <div className="wl-row">
+                            <span className="wl-label">Wins</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-win"
+                                style={{ width: `${((resultMatrix?.white?.wins || 0) / (resultMatrix?.white?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.white?.wins || 0)}</span>
+                          </div>
+                          <div className="wl-row">
+                            <span className="wl-label">Losses</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-loss"
+                                style={{ width: `${((resultMatrix?.white?.losses || 0) / (resultMatrix?.white?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.white?.losses || 0)}</span>
+                          </div>
+                          <div className="wl-row">
+                            <span className="wl-label">Draws</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-draw"
+                                style={{ width: `${((resultMatrix?.white?.draws || 0) / (resultMatrix?.white?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.white?.draws || 0)}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="matrix-color-card">
+                        <div className="matrix-color-head">
+                          <span className="result-matrix-color black">black</span>
+                          <span className="matrix-color-meta">
+                            score: {formatPercent(resultMatrix?.black?.score_rate || 0)}
+                          </span>
+                        </div>
+                        <div className="wl-bar">
+                          <div className="wl-row">
+                            <span className="wl-label">Wins</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-win"
+                                style={{ width: `${((resultMatrix?.black?.wins || 0) / (resultMatrix?.black?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.black?.wins || 0)}</span>
+                          </div>
+                          <div className="wl-row">
+                            <span className="wl-label">Losses</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-loss"
+                                style={{ width: `${((resultMatrix?.black?.losses || 0) / (resultMatrix?.black?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.black?.losses || 0)}</span>
+                          </div>
+                          <div className="wl-row">
+                            <span className="wl-label">Draws</span>
+                            <div className="wl-track">
+                              <div
+                                className="wl-fill wl-fill-draw"
+                                style={{ width: `${((resultMatrix?.black?.draws || 0) / (resultMatrix?.black?.total || 1)) * 100}%` }}
+                              />
+                            </div>
+                            <span className="wl-value">{formatNumber(resultMatrix?.black?.draws || 0)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="result-line">total games: {formatNumber(resultMatrix?.total_games || 0)}</p>
+                  </>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {selectedMode ? (
+            <section className="games-mode-detail" aria-label={`${selectedMode} game length analytics`}>
+              <div className="mode-moves-table analytics-table-wrap">
+                <div className="section-head analytics-section-head">
+                  <h2 className="games-action-title">{selectedMode} lengths</h2>
+                  <ClusterSelect
+                    idPrefix="lengths-cluster"
+                    value={selectedLengthsCluster}
+                    onChange={handleLengthsClusterChange}
+                  />
+                </div>
+                {gameLengthLoading ? <p className="result-line">Loading game length analytics...</p> : null}
+                {gameLengthError ? <p className="result-line">{gameLengthError}</p> : null}
+                {!gameLengthLoading && !gameLengthError ? (
+                  <>
+                    <div className="length-stats-grid">
+                      <span className="opening-meta-chip">games: {formatNumber(gameLengthData?.total_games || 0)}</span>
+                      <span className="opening-meta-chip length-meta-right">
+                        avg moves: {formatNumber(Math.round(Number(gameLengthData?.summary?.avg_n_moves ?? 0)))}
+                      </span>
+                    </div>
+                    <CompactBarChart
+                      title="moves per game"
+                      labels={gameLengthData?.n_moves_hist?.x || []}
+                      values={gameLengthData?.n_moves_hist?.y || []}
+                    />
+                    <CompactBarChart
+                      title="duration (minutes):"
+                      labels={gameLengthData?.time_elapsed_hist?.x || []}
+                      values={gameLengthData?.time_elapsed_hist?.y || []}
+                    />
+                    <p className="result-line">avg elapsed: {formatSeconds(gameLengthData?.summary?.avg_time_elapsed_sec)}</p>
+                  </>
+                ) : null}
+              </div>
+            </section>
+          ) : null}
+
+          {selectedMode ? (
+            <section className="games-mode-detail" aria-label={`${selectedMode} activity trend`}>
+              <div className="section-head analytics-section-head">
+                <h2 className="games-action-title">{selectedMode} activity trend</h2>
+                <ClusterSelect
+                  idPrefix="activity-cluster"
+                  value={selectedActivityCluster}
+                  onChange={handleActivityClusterChange}
+                />
+              </div>
+              <div className="mode-moves-table analytics-table-wrap">
+                {activityTrendLoading ? <p className="result-line">Loading activity trend...</p> : null}
+                {activityTrendError ? <p className="result-line">{activityTrendError}</p> : null}
+                {!activityTrendLoading && !activityTrendError ? (
+                  <div className="activity-heat-stack">
+                    <HeatStrip
+                      title="games by month"
+                      labels={activityTrendData?.month_heat?.labels || []}
+                      values={activityTrendData?.month_heat?.values || []}
+                    />
+                    <HeatStrip
+                      title="games by weekday"
+                      labels={activityTrendData?.weekday_heat?.labels || []}
+                      values={activityTrendData?.weekday_heat?.values || []}
+                    />
+                    <HeatStrip
+                      title="games by hour"
+                      labels={activityTrendData?.hour_heat?.labels || []}
+                      values={activityTrendData?.hour_heat?.values || []}
+                      singleRow
+                    />
+                  </div>
+                ) : null}
               </div>
             </section>
           ) : null}

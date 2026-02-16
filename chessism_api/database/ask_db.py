@@ -791,6 +791,447 @@ async def get_time_control_top_openings(
         "rows": output_rows
     }
 
+
+async def get_time_control_result_color_matrix(
+    mode: str,
+    min_rating: Optional[int] = None,
+    max_rating: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Returns global result matrix split by color (white/black) for a mode and rating range.
+    Rating filter uses game average rating.
+    """
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "mode": target_mode,
+            "min_rating": min_rating,
+            "max_rating": max_rating,
+            "total_games": 0,
+            "white": {"wins": 0, "draws": 0, "losses": 0, "total": 0, "score_rate": 0.0},
+            "black": {"wins": 0, "draws": 0, "losses": 0, "total": 0, "score_rate": 0.0}
+        }
+
+    safe_min_rating = int(min_rating) if min_rating is not None else None
+    safe_max_rating = int(max_rating) if max_rating is not None else None
+    if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
+        safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH filtered_games AS (
+            SELECT
+                g.white_result,
+                g.black_result
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
+        )
+        SELECT
+            COUNT(*)::int AS total_games,
+            SUM(CASE WHEN white_result = 1.0 THEN 1 ELSE 0 END)::int AS white_wins,
+            SUM(CASE WHEN white_result = 0.5 THEN 1 ELSE 0 END)::int AS white_draws,
+            SUM(CASE WHEN white_result = 0.0 THEN 1 ELSE 0 END)::int AS white_losses,
+            SUM(CASE WHEN black_result = 1.0 THEN 1 ELSE 0 END)::int AS black_wins,
+            SUM(CASE WHEN black_result = 0.5 THEN 1 ELSE 0 END)::int AS black_draws,
+            SUM(CASE WHEN black_result = 0.0 THEN 1 ELSE 0 END)::int AS black_losses
+        FROM filtered_games;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {
+            "mode": target_mode,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        })
+        row = result.mappings().first() or {}
+
+    total_games = int(row.get("total_games") or 0)
+    white_wins = int(row.get("white_wins") or 0)
+    white_draws = int(row.get("white_draws") or 0)
+    white_losses = int(row.get("white_losses") or 0)
+    black_wins = int(row.get("black_wins") or 0)
+    black_draws = int(row.get("black_draws") or 0)
+    black_losses = int(row.get("black_losses") or 0)
+
+    white_total = white_wins + white_draws + white_losses
+    black_total = black_wins + black_draws + black_losses
+    white_score_rate = round(((white_wins + 0.5 * white_draws) / white_total), 4) if white_total > 0 else 0.0
+    black_score_rate = round(((black_wins + 0.5 * black_draws) / black_total), 4) if black_total > 0 else 0.0
+
+    return {
+        "mode": target_mode,
+        "min_rating": safe_min_rating,
+        "max_rating": safe_max_rating,
+        "total_games": total_games,
+        "white": {
+            "wins": white_wins,
+            "draws": white_draws,
+            "losses": white_losses,
+            "total": white_total,
+            "score_rate": white_score_rate
+        },
+        "black": {
+            "wins": black_wins,
+            "draws": black_draws,
+            "losses": black_losses,
+            "total": black_total,
+            "score_rate": black_score_rate
+        }
+    }
+
+
+async def get_time_control_game_length_analytics(
+    mode: str,
+    min_rating: Optional[int] = None,
+    max_rating: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Returns game length analytics for a mode and rating range:
+    - summary stats for n_moves and time_elapsed
+    - histogram for moves and elapsed minutes
+    """
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "mode": target_mode,
+            "min_rating": min_rating,
+            "max_rating": max_rating,
+            "total_games": 0,
+            "summary": {
+                "avg_n_moves": None,
+                "median_n_moves": None,
+                "p90_n_moves": None,
+                "avg_time_elapsed_sec": None,
+                "median_time_elapsed_sec": None,
+                "p90_time_elapsed_sec": None
+            },
+            "n_moves_hist": {"x": [], "y": []},
+            "time_elapsed_hist": {"x": [], "y": [], "unit": "minutes"}
+        }
+
+    safe_min_rating = int(min_rating) if min_rating is not None else None
+    safe_max_rating = int(max_rating) if max_rating is not None else None
+    if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
+        safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    summary_query = f"""
+        WITH filtered_games AS (
+            SELECT g.n_moves, g.time_elapsed
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
+        )
+        SELECT
+            COUNT(*)::int AS total_games,
+            ROUND(AVG(n_moves)::numeric, 2) AS avg_n_moves,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY n_moves) AS median_n_moves,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY n_moves) AS p90_n_moves,
+            ROUND(AVG(time_elapsed)::numeric, 2) AS avg_time_elapsed_sec,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY time_elapsed) AS median_time_elapsed_sec,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY time_elapsed) AS p90_time_elapsed_sec
+        FROM filtered_games;
+    """
+
+    moves_hist_query = f"""
+        WITH filtered_games AS (
+            SELECT g.n_moves
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
+        )
+        SELECT
+            (FLOOR(n_moves / 10.0) * 10)::int AS bucket_start,
+            (FLOOR(n_moves / 10.0) * 10 + 9)::int AS bucket_end,
+            COUNT(*)::int AS total
+        FROM filtered_games
+        GROUP BY bucket_start, bucket_end
+        ORDER BY bucket_start;
+    """
+
+    elapsed_hist_query = f"""
+        WITH filtered_games AS (
+            SELECT g.time_elapsed
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR (
+                        g.white_elo IS NOT NULL
+                        AND g.black_elo IS NOT NULL
+                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                    )
+              )
+        ),
+        bucketed AS (
+            SELECT
+                CASE
+                    WHEN (time_elapsed / 60.0) < 1 THEN '0-1'
+                    WHEN (time_elapsed / 60.0) < 2 THEN '1-2'
+                    WHEN (time_elapsed / 60.0) < 3 THEN '2-3'
+                    WHEN (time_elapsed / 60.0) < 5 THEN '3-5'
+                    WHEN (time_elapsed / 60.0) < 10 THEN '5-10'
+                    WHEN (time_elapsed / 60.0) < 20 THEN '10-20'
+                    WHEN (time_elapsed / 60.0) < 40 THEN '20-40'
+                    ELSE '40+'
+                END AS bucket_label,
+                CASE
+                    WHEN (time_elapsed / 60.0) < 1 THEN 1
+                    WHEN (time_elapsed / 60.0) < 2 THEN 2
+                    WHEN (time_elapsed / 60.0) < 3 THEN 3
+                    WHEN (time_elapsed / 60.0) < 5 THEN 4
+                    WHEN (time_elapsed / 60.0) < 10 THEN 5
+                    WHEN (time_elapsed / 60.0) < 20 THEN 6
+                    WHEN (time_elapsed / 60.0) < 40 THEN 7
+                    ELSE 8
+                END AS bucket_order
+            FROM filtered_games
+        )
+        SELECT bucket_label, bucket_order, COUNT(*)::int AS total
+        FROM bucketed
+        GROUP BY bucket_label, bucket_order
+        ORDER BY bucket_order;
+    """
+
+    def _to_float(val: Any) -> Optional[float]:
+        return float(val) if val is not None else None
+
+    async with AsyncDBSession() as session:
+        summary_result = await session.execute(text(summary_query), {
+            "mode": target_mode,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        })
+        summary_row = summary_result.mappings().first() or {}
+
+        moves_result = await session.execute(text(moves_hist_query), {
+            "mode": target_mode,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        })
+        moves_rows = moves_result.mappings().all()
+
+        elapsed_result = await session.execute(text(elapsed_hist_query), {
+            "mode": target_mode,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        })
+        elapsed_rows = elapsed_result.mappings().all()
+
+    moves_x = [f"{int(row['bucket_start'])}-{int(row['bucket_end'])}" for row in moves_rows]
+    moves_y = [int(row.get("total") or 0) for row in moves_rows]
+    elapsed_x = [str(row.get("bucket_label") or "") for row in elapsed_rows]
+    elapsed_y = [int(row.get("total") or 0) for row in elapsed_rows]
+
+    return {
+        "mode": target_mode,
+        "min_rating": safe_min_rating,
+        "max_rating": safe_max_rating,
+        "total_games": int(summary_row.get("total_games") or 0),
+        "summary": {
+            "avg_n_moves": _to_float(summary_row.get("avg_n_moves")),
+            "median_n_moves": _to_float(summary_row.get("median_n_moves")),
+            "p90_n_moves": _to_float(summary_row.get("p90_n_moves")),
+            "avg_time_elapsed_sec": _to_float(summary_row.get("avg_time_elapsed_sec")),
+            "median_time_elapsed_sec": _to_float(summary_row.get("median_time_elapsed_sec")),
+            "p90_time_elapsed_sec": _to_float(summary_row.get("p90_time_elapsed_sec"))
+        },
+        "n_moves_hist": {"x": moves_x, "y": moves_y},
+        "time_elapsed_hist": {"x": elapsed_x, "y": elapsed_y, "unit": "minutes"}
+    }
+
+
+async def get_time_control_activity_trend(
+    mode: str,
+    min_rating: Optional[int] = None,
+    max_rating: Optional[int] = None
+) -> Dict[str, Any]:
+    """
+    Returns activity heat data for a mode and rating range:
+    - month of year (12 buckets)
+    - day of week (7 buckets)
+    - hour of day (24 buckets)
+    """
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "mode": target_mode,
+            "min_rating": min_rating,
+            "max_rating": max_rating,
+            "month_heat": {"labels": [], "values": []},
+            "weekday_heat": {"labels": [], "values": []},
+            "hour_heat": {"labels": [], "values": []}
+        }
+
+    safe_min_rating = int(min_rating) if min_rating is not None else None
+    safe_max_rating = int(max_rating) if max_rating is not None else None
+    if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
+        safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    month_query = f"""
+        SELECT g.month::int AS month_idx, COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (
+                CAST(:min_rating AS INTEGER) IS NULL
+                OR CAST(:max_rating AS INTEGER) IS NULL
+                OR (
+                    g.white_elo IS NOT NULL
+                    AND g.black_elo IS NOT NULL
+                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                )
+          )
+        GROUP BY month_idx
+        ORDER BY month_idx;
+    """
+
+    weekday_query = f"""
+        SELECT
+            EXTRACT(DOW FROM make_date(g.year, g.month, g.day))::int AS dow_idx,
+            COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (
+                CAST(:min_rating AS INTEGER) IS NULL
+                OR CAST(:max_rating AS INTEGER) IS NULL
+                OR (
+                    g.white_elo IS NOT NULL
+                    AND g.black_elo IS NOT NULL
+                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                )
+          )
+        GROUP BY dow_idx
+        ORDER BY dow_idx;
+    """
+
+    hour_query = f"""
+        SELECT g.hour::int AS hour_idx, COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (
+                CAST(:min_rating AS INTEGER) IS NULL
+                OR CAST(:max_rating AS INTEGER) IS NULL
+                OR (
+                    g.white_elo IS NOT NULL
+                    AND g.black_elo IS NOT NULL
+                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+                )
+          )
+        GROUP BY hour_idx
+        ORDER BY hour_idx;
+    """
+
+    async with AsyncDBSession() as session:
+        query_params = {
+            "mode": target_mode,
+            "min_rating": safe_min_rating,
+            "max_rating": safe_max_rating
+        }
+        month_result = await session.execute(text(month_query), query_params)
+        month_rows = month_result.mappings().all()
+
+        weekday_result = await session.execute(text(weekday_query), query_params)
+        weekday_rows = weekday_result.mappings().all()
+
+        hour_result = await session.execute(text(hour_query), query_params)
+        hour_rows = hour_result.mappings().all()
+
+    month_labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+    month_values = [0] * 12
+    for row in month_rows:
+        month_idx = int(row.get("month_idx") or 0)
+        if 1 <= month_idx <= 12:
+            month_values[month_idx - 1] = int(row.get("total") or 0)
+
+    weekday_labels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
+    weekday_values = [0] * 7
+    for row in weekday_rows:
+        dow_idx = int(row.get("dow_idx") or 0)
+        if 0 <= dow_idx <= 6:
+            weekday_values[dow_idx] = int(row.get("total") or 0)
+
+    hour_labels = [f"{hour:02d}" for hour in range(24)]
+    hour_values = [0] * 24
+    for row in hour_rows:
+        hour_idx = int(row.get("hour_idx") or 0)
+        if 0 <= hour_idx <= 23:
+            hour_values[hour_idx] = int(row.get("total") or 0)
+
+    return {
+        "mode": target_mode,
+        "min_rating": safe_min_rating,
+        "max_rating": safe_max_rating,
+        "month_heat": {"labels": month_labels, "values": month_values},
+        "weekday_heat": {"labels": weekday_labels, "values": weekday_values},
+        "hour_heat": {"labels": hour_labels, "values": hour_values}
+    }
+
 async def reset_player_game_fens_done_to_false(player_name: str) -> int:
     """
     Resets the 'fens_done' column to False for all Game records associated with a specific player.

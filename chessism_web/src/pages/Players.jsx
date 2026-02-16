@@ -421,7 +421,7 @@ function Players() {
                   <span>{mode}</span>
                   <span>{stats.n_games} games</span>
                   <span>W:{stats.as_white} B:{stats.as_black}</span>
-                  <span>{stats.oldest_rating} -> {stats.newest_rating}</span>
+                  <span>{`${stats.oldest_rating} -> ${stats.newest_rating}`}</span>
                 </button>
               ))}
             </div>

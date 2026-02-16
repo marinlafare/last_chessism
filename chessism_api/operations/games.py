@@ -13,7 +13,12 @@ from sqlalchemy import select # <-- Added select
 # --- FIXED IMPORTS ---
 from chessism_api.operations.format_games import format_games, insert_games_months_moves_and_players
 from chessism_api.operations.chess_com_api import download_months
-from chessism_api.database.ask_db import open_async_request
+from chessism_api.database.ask_db import (
+    open_async_request,
+    get_time_control_result_color_matrix,
+    get_time_control_game_length_analytics,
+    get_time_control_activity_trend
+)
 from chessism_api.database.models import Month # <-- Added Month
 from chessism_api.database.db_interface import DBInterface # <-- Added DBInterface
 
@@ -230,3 +235,48 @@ async def update_player_games(data: dict) -> str:
     end_update_games = time.time()
     print('Update done in: ',(end_update_games-start_update_games)/60)
     return f"DATA UPDATED FOR {player_name}"
+
+
+async def get_time_control_result_color_matrix_payload(
+    mode: str,
+    min_rating: int = None,
+    max_rating: int = None
+) -> Dict[str, Any]:
+    """
+    Operations-layer wrapper for result matrix analytics.
+    """
+    return await get_time_control_result_color_matrix(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )
+
+
+async def get_time_control_game_length_analytics_payload(
+    mode: str,
+    min_rating: int = None,
+    max_rating: int = None
+) -> Dict[str, Any]:
+    """
+    Operations-layer wrapper for game-length analytics.
+    """
+    return await get_time_control_game_length_analytics(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )
+
+
+async def get_time_control_activity_trend_payload(
+    mode: str,
+    min_rating: int = None,
+    max_rating: int = None
+) -> Dict[str, Any]:
+    """
+    Operations-layer wrapper for activity-trend analytics.
+    """
+    return await get_time_control_activity_trend(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )

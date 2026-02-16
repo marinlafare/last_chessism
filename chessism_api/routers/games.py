@@ -7,7 +7,14 @@ from fastapi import APIRouter, Body, HTTPException, Query # <-- Added HTTPExcept
 from typing import Dict, Any # <-- Added typing
 
 # --- FIXED IMPORTS ---
-from chessism_api.operations.games import create_games, read_game, update_player_games
+from chessism_api.operations.games import (
+    create_games,
+    read_game,
+    update_player_games,
+    get_time_control_result_color_matrix_payload,
+    get_time_control_game_length_analytics_payload,
+    get_time_control_activity_trend_payload
+)
 from chessism_api.database.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
@@ -109,6 +116,57 @@ async def api_get_rating_time_control_chart(
     Returns histogram-ready ratings for a given normalized time control.
     """
     result = await get_rating_time_control_chart(time_control=time_control)
+    return JSONResponse(content=result)
+
+
+@router.get("/time_controls/{mode}/result_color_matrix")
+async def api_get_time_control_result_color_matrix(
+    mode: str,
+    min_rating: int = Query(None),
+    max_rating: int = Query(None)
+) -> JSONResponse:
+    """
+    Returns white/black result matrix for mode and rating range.
+    """
+    result = await get_time_control_result_color_matrix_payload(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )
+    return JSONResponse(content=result)
+
+
+@router.get("/time_controls/{mode}/game_length_analytics")
+async def api_get_time_control_game_length_analytics(
+    mode: str,
+    min_rating: int = Query(None),
+    max_rating: int = Query(None)
+) -> JSONResponse:
+    """
+    Returns game-length summary and histograms for mode and rating range.
+    """
+    result = await get_time_control_game_length_analytics_payload(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )
+    return JSONResponse(content=result)
+
+
+@router.get("/time_controls/{mode}/activity_trend")
+async def api_get_time_control_activity_trend(
+    mode: str,
+    min_rating: int = Query(None),
+    max_rating: int = Query(None)
+) -> JSONResponse:
+    """
+    Returns activity heat data by month/day/hour for mode and rating range.
+    """
+    result = await get_time_control_activity_trend_payload(
+        mode=mode,
+        min_rating=min_rating,
+        max_rating=max_rating
+    )
     return JSONResponse(content=result)
 
 
