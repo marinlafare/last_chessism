@@ -207,6 +207,215 @@ async def get_time_control_mode_counts() -> Dict[str, int]:
     return counts
 
 
+async def get_main_character_time_control_counts() -> Dict[str, int]:
+    """
+    Returns normalized game counts for bullet/blitz/rapid where at least one
+    main character (joined != 0 and not NULL) is present.
+    """
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH main_players AS (
+            SELECT p.player_name
+            FROM player p
+            WHERE p.joined IS NOT NULL
+              AND p.joined <> 0
+        )
+        SELECT
+            mode,
+            COUNT(*)::int AS total
+        FROM (
+            SELECT
+                {mode_sql} AS mode,
+                g.white,
+                g.black
+            FROM game g
+        ) classified
+        WHERE mode IN ('bullet', 'blitz', 'rapid')
+          AND (
+                white IN (SELECT player_name FROM main_players)
+                OR black IN (SELECT player_name FROM main_players)
+          )
+        GROUP BY mode;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        rows = result.mappings().all()
+
+    counts = {"bullet": 0, "blitz": 0, "rapid": 0}
+    for row in rows:
+        mode = str(row.get("mode") or "")
+        if mode in counts:
+            counts[mode] = int(row.get("total") or 0)
+
+    return counts
+
+
+async def get_top_main_characters_by_time_control(
+    time_control: str,
+    limit: int = 5
+) -> Dict[str, Any]:
+    """
+    Returns top main characters for one normalized time control.
+    Ranking is based on number of participations in that time control.
+    """
+    target_mode = (time_control or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"time_control": target_mode, "players": [], "limit": 0}
+
+    safe_limit = max(1, min(int(limit), 200))
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH filtered_games AS (
+            SELECT
+                g.white,
+                g.black,
+                g.white_elo,
+                g.black_elo,
+                g.white_result,
+                g.black_result,
+                make_timestamp(
+                    g.year::int,
+                    g.month::int,
+                    g.day::int,
+                    g.hour::int,
+                    g.minute::int,
+                    g.second::double precision
+                ) AS played_at
+            FROM game g
+            WHERE {mode_sql} = :mode
+        ),
+        player_rows AS (
+            SELECT
+                fg.white AS player_name,
+                fg.white_elo::int AS rating,
+                fg.white_result AS result,
+                'white'::text AS color,
+                fg.played_at
+            FROM filtered_games fg
+            UNION ALL
+            SELECT
+                fg.black AS player_name,
+                fg.black_elo::int AS rating,
+                fg.black_result AS result,
+                'black'::text AS color,
+                fg.played_at
+            FROM filtered_games fg
+        ),
+        main_player_rows AS (
+            SELECT pr.*
+            FROM player_rows pr
+            JOIN player p ON p.player_name = pr.player_name
+            WHERE p.joined IS NOT NULL
+              AND p.joined <> 0
+        ),
+        aggregated AS (
+            SELECT
+                player_name,
+                COUNT(*)::int AS n_games,
+                ROUND(AVG(rating))::int AS avg_game_rating,
+                SUM(CASE WHEN result = 1.0 THEN 1 ELSE 0 END)::int AS wins,
+                SUM(CASE WHEN result = 0.5 THEN 1 ELSE 0 END)::int AS draws,
+                SUM(CASE WHEN result = 0.0 THEN 1 ELSE 0 END)::int AS losses,
+                SUM(CASE WHEN color = 'white' THEN 1 ELSE 0 END)::int AS as_white,
+                SUM(CASE WHEN color = 'black' THEN 1 ELSE 0 END)::int AS as_black
+            FROM main_player_rows
+            GROUP BY player_name
+        ),
+        latest_per_player AS (
+            SELECT DISTINCT ON (player_name)
+                player_name,
+                rating::int AS last_game_rating,
+                played_at AS last_game_at
+            FROM main_player_rows
+            ORDER BY player_name, played_at DESC
+        )
+        SELECT
+            a.player_name,
+            a.n_games,
+            COALESCE(lp.last_game_rating, a.avg_game_rating)::int AS rating,
+            a.avg_game_rating::int AS avg_game_rating,
+            lp.last_game_rating::int AS last_rating,
+            a.wins,
+            a.draws,
+            a.losses,
+            a.as_white,
+            a.as_black,
+            TO_CHAR(lp.last_game_at, 'YYYY-MON-DD') AS last_game_date,
+            p.name AS full_name,
+            p.avatar,
+            p.url AS profile_url
+        FROM aggregated a
+        LEFT JOIN latest_per_player lp ON lp.player_name = a.player_name
+        LEFT JOIN player p ON p.player_name = a.player_name
+        ORDER BY a.n_games DESC, rating DESC, a.player_name ASC
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"mode": target_mode, "limit": safe_limit})
+        rows = result.mappings().all()
+
+    players = []
+    for row in rows:
+        wins = int(row.get("wins") or 0)
+        draws = int(row.get("draws") or 0)
+        losses = int(row.get("losses") or 0)
+        total = wins + draws + losses
+        score_rate = ((wins + 0.5 * draws) / total) if total > 0 else 0.0
+
+        players.append({
+            "player_name": str(row.get("player_name") or ""),
+            "full_name": str(row.get("full_name") or ""),
+            "avatar": str(row.get("avatar") or ""),
+            "profile_url": str(row.get("profile_url") or ""),
+            "rating": int(row.get("rating") or 0),
+            "last_rating": int(row.get("last_rating") or 0),
+            "avg_game_rating": int(row.get("avg_game_rating") or 0),
+            "last_game_date": str(row.get("last_game_date") or ""),
+            "n_games": int(row.get("n_games") or 0),
+            "wins": wins,
+            "draws": draws,
+            "losses": losses,
+            "as_white": int(row.get("as_white") or 0),
+            "as_black": int(row.get("as_black") or 0),
+            "score_rate": round(score_rate, 4)
+        })
+
+    return {
+        "time_control": target_mode,
+        "limit": safe_limit,
+        "players": players
+    }
+
+
 def _weighted_sse(
     prefix_w: List[float],
     prefix_wx: List[float],

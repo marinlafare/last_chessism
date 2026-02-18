@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
@@ -200,8 +200,8 @@ function Players() {
     }
   }
 
-  const handleExplore = async () => {
-    const name = playerName.trim().toLowerCase()
+  const handleExplore = async (overrideName = null) => {
+    const name = String(overrideName ?? playerName).trim().toLowerCase()
     if (!name) {
       setError('Enter a player name.')
       return
@@ -254,6 +254,15 @@ function Players() {
       setLoading(false)
     }
   }
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const playerFromQuery = new URLSearchParams(window.location.search).get('player')
+    const normalized = String(playerFromQuery || '').trim().toLowerCase()
+    if (!normalized) return
+    setPlayerName(normalized)
+    handleExplore(normalized)
+  }, [])
 
   const handleModeSelect = async (mode) => {
     setSelectedMode(mode)

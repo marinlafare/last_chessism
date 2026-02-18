@@ -390,7 +390,7 @@ const getPointCluster = (rating, bins) => {
   return DEFAULT_CLUSTER_KEY
 }
 
-function TimeControlRatingsScatterChart({ mode, chart }) {
+function TimeControlRatingsScatterChart({ mode, chart, size = 'normal' }) {
   const xValues = Array.isArray(chart?.x) ? chart.x.map((value) => Number(value || 0)) : []
   const yValues = Array.isArray(chart?.y) ? chart.y.map((value) => Number(value || 0)) : []
   const bins = chart?.bins && typeof chart.bins === 'object' ? chart.bins : {}
@@ -399,12 +399,13 @@ function TimeControlRatingsScatterChart({ mode, chart }) {
     return <p className="result-line">No ratings data for this time control.</p>
   }
 
-  const width = 820
-  const height = 250
+  const isLarge = size === 'large'
+  const width = isLarge ? 1100 : 820
+  const height = isLarge ? 360 : 250
   const padLeft = 44
   const padRight = 24
-  const padTop = 16
-  const padBottom = 38
+  const padTop = isLarge ? 20 : 16
+  const padBottom = isLarge ? 48 : 38
   const minX = Math.min(...xValues)
   const maxX = Math.max(...xValues)
   const minY = 0
@@ -533,7 +534,7 @@ function CompactBarChart({ title, labels, values }) {
 
   return (
     <div className="analytics-bars-wrap">
-      <h3>{title}</h3>
+      {title ? <h3>{title}</h3> : null}
       <div className="analytics-bars-scroll">
         <div className="analytics-bars">
           {safeLabels.map((label, idx) => {
@@ -1352,7 +1353,7 @@ function Games() {
                 {ratingLoading ? <p className="result-line">Loading ratings chart...</p> : null}
                 {ratingError ? <p className="result-line">{ratingError}</p> : null}
                 {!ratingLoading && !ratingError ? (
-                  <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
+                  <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} size="large" />
                 ) : null}
                 <p className="result-line rating-hint">Click to expand</p>
               </section>
@@ -1707,17 +1708,23 @@ function Games() {
                         avg moves: {formatNumber(Math.round(Number(gameLengthData?.summary?.avg_n_moves ?? 0)))}
                       </span>
                     </div>
+                    <div className="length-chart-spacer">
+                      <CompactBarChart
+                        title=""
+                        labels={gameLengthData?.n_moves_hist?.x || []}
+                        values={gameLengthData?.n_moves_hist?.y || []}
+                      />
+                    </div>
+                    <p className="result-line duration-label">moves per game</p>
                     <CompactBarChart
-                      title="moves per game"
-                      labels={gameLengthData?.n_moves_hist?.x || []}
-                      values={gameLengthData?.n_moves_hist?.y || []}
-                    />
-                    <CompactBarChart
-                      title="duration (minutes):"
+                      title=""
                       labels={gameLengthData?.time_elapsed_hist?.x || []}
                       values={gameLengthData?.time_elapsed_hist?.y || []}
                     />
-                    <p className="result-line">avg elapsed: {formatSeconds(gameLengthData?.summary?.avg_time_elapsed_sec)}</p>
+                    <p className="result-line duration-label">Minutes</p>
+                    <span className="opening-meta-chip length-meta-right">
+                      avg elapsed: {formatSeconds(gameLengthData?.summary?.avg_time_elapsed_sec)}
+                    </span>
                   </>
                 ) : null}
               </div>

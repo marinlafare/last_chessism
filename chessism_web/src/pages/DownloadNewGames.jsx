@@ -27,8 +27,10 @@ function DownloadNewGames() {
   const [updateResult, setUpdateResult] = useState('')
   const [downloadLoading, setDownloadLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
+  const actionBusy = downloadLoading || updateLoading
 
   const handleDownload = async () => {
+    if (actionBusy) return
     const player = downloadPlayer.trim()
     if (!player) {
       setDownloadResult('Enter a player name first.')
@@ -48,6 +50,7 @@ function DownloadNewGames() {
   }
 
   const handleUpdate = async () => {
+    if (actionBusy) return
     const player = updatePlayer.trim()
     if (!player) {
       setUpdateResult('Enter a player name first.')
@@ -89,8 +92,8 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleDownload()}
                 placeholder="e.g. hikaru"
               />
-              <button className="btn btn-primary" type="button" onClick={handleDownload} disabled={downloadLoading}>
-                {downloadLoading ? 'Working...' : 'Download Games'}
+              <button className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
+                {downloadLoading ? 'Working...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
               <p className="result-line">{downloadResult || '-'}</p>
             </article>
@@ -107,8 +110,8 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleUpdate()}
                 placeholder="e.g. magnuscarlsen"
               />
-              <button className="btn btn-primary" type="button" onClick={handleUpdate} disabled={updateLoading}>
-                {updateLoading ? 'Working...' : 'Update Games'}
+              <button className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
+                {updateLoading ? 'Working...' : actionBusy ? 'Busy...' : 'Update Games'}
               </button>
               <p className="result-line">{updateResult || '-'}</p>
             </article>

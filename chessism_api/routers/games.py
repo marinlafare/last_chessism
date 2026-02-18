@@ -5,6 +5,7 @@
 from fastapi.responses import JSONResponse
 from fastapi import APIRouter, Body, HTTPException, Query # <-- Added HTTPException
 from typing import Dict, Any # <-- Added typing
+import asyncio
 
 # --- FIXED IMPORTS ---
 from chessism_api.operations.games import (
@@ -29,6 +30,7 @@ from chessism_api.database.ask_db import open_async_request # <-- Fixed import
 # ---
 
 router = APIRouter()
+GAME_PIPELINE_LOCK = asyncio.Lock()
 
 @router.get("/database/generalities")
 async def api_get_games_database_generalities() -> JSONResponse:
@@ -199,8 +201,15 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <
     except KeyError:
         raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
         
-    congratulation = await create_games(data)
-    return JSONResponse(content={"message": congratulation})
+    if GAME_PIPELINE_LOCK.locked():
+        return JSONResponse(
+            status_code=409,
+            content={"message": "Another download/update is running. Wait until it finishes."}
+        )
+
+    async with GAME_PIPELINE_LOCK:
+        congratulation = await create_games(data)
+        return JSONResponse(content={"message": congratulation})
 
 
 # --- NEW ENDPOINT ---
@@ -216,8 +225,15 @@ async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONRespo
     except KeyError:
         raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
         
-    message = await update_player_games(data)
-    return JSONResponse(content={"message": message})
+    if GAME_PIPELINE_LOCK.locked():
+        return JSONResponse(
+            status_code=409,
+            content={"message": "Another download/update is running. Wait until it finishes."}
+        )
+
+    async with GAME_PIPELINE_LOCK:
+        message = await update_player_games(data)
+        return JSONResponse(content={"message": message})
 
 
 @router.get("/{player_name}/count")
