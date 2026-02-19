@@ -11,6 +11,10 @@ from sqlalchemy import select, update
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.models import Player, PlayerStats, to_dict # <-- NEW (PlayerStats, to_dict)
 from chessism_api.database.ask_db import open_async_request
+from chessism_api.database.ask_db import (
+    get_main_character_time_control_counts,
+    get_top_main_characters_by_time_control
+)
 from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData # <-- NEW
 from chessism_api.operations.chess_com_api import get_profile, get_player_stats # <-- NEW
 # ---
@@ -38,7 +42,7 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
     """
     player_name_lower = data['player_name'].lower()
     player_interface = DBInterface(Player)
-
+    existing_player = await read_player(player_name_lower)
     fetched_profile: Optional[PlayerCreateData] = await get_profile(player_name_lower)
 
     if fetched_profile is None:
@@ -46,11 +50,10 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
         # We might still want to create a shell player if one doesn't exist
         # For now, we'll follow the logic of returning None if fetch fails
         print(f"Profile for {player_name_lower} came back as None from Chess.com.")
-        
-        # Check if a shell player exists, if not, create one.
-        existing_player = await read_player(player_name_lower)
+
+        # If the player already exists (full or shell), do not create again.
         if existing_player:
-            return PlayerCreateData(**existing_player) # Return existing shell data
+            return PlayerCreateData(**existing_player)
 
         # Create a shell player if fetch fails AND player doesn't exist
         print(f"Creating 'shell' player for {player_name_lower} as profile fetch failed.")
@@ -67,30 +70,32 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
             return None
 
 
-    # --- FIX: Convert Pydantic model to dict for DBInterface ---
     fetched_profile_dict = fetched_profile.model_dump()
+
+    # Existing row: update directly and avoid intentional duplicate insert attempts.
+    if existing_player:
+        try:
+            updated_player_dict = await player_interface.update(player_name_lower, fetched_profile_dict)
+            if updated_player_dict:
+                return PlayerCreateData(**updated_player_dict)
+            return PlayerCreateData(**existing_player)
+        except Exception as update_e:
+            print(f"Error updating existing player {player_name_lower}: {update_e}")
+            return None
 
     try:
         print(f"Attempting to insert new player profile for: {player_name_lower}")
         created_player_dict = await player_interface.create(fetched_profile_dict)
         print(f'NEW player {player_name_lower} inserted')
-        # --- FIX: Convert dict back to Pydantic model for return type ---
         return PlayerCreateData(**created_player_dict)
-        
-    except IntegrityError: 
-        # Player already exists (e.g., as a shell player). Update them.
-        print(f"Player {player_name_lower} already exists. Updating.")
+    except IntegrityError:
+        # Race-safe fallback if another request created it between read and create.
         try:
-            # --- FIX: Use correct .update() method ---
-            # We use player_name_lower as the primary key
             updated_player_dict = await player_interface.update(player_name_lower, fetched_profile_dict)
             if updated_player_dict:
-                 # --- FIX: Convert dict back to Pydantic model ---
                 return PlayerCreateData(**updated_player_dict)
-            else:
-                # This should not happen if IntegrityError was raised, but as a safeguard:
-                print(f"Update failed for {player_name_lower}, player not found by update method.")
-                return None
+            refreshed_existing = await read_player(player_name_lower)
+            return PlayerCreateData(**refreshed_existing) if refreshed_existing else None
         except Exception as update_e:
             print(f"Error updating player {player_name_lower} after failed insert: {update_e}")
             return None
@@ -274,3 +279,23 @@ async def update_stats_for_all_primary_players(api_delay: float = 1.0) -> Dict[s
         print(f"Failed players: {', '.join(failed_list)}")
         
     return {"success": success_list, "failed": failed_list}
+
+
+async def get_main_character_time_control_counts_payload() -> Dict[str, int]:
+    """
+    Operations-layer wrapper for main-character mode counts.
+    """
+    return await get_main_character_time_control_counts()
+
+
+async def get_top_main_characters_by_time_control_payload(
+    time_control: str,
+    limit: int = 5
+) -> Dict[str, Any]:
+    """
+    Operations-layer wrapper for top main characters by time control.
+    """
+    return await get_top_main_characters_by_time_control(
+        time_control=time_control,
+        limit=limit
+    )

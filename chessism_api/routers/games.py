@@ -20,6 +20,13 @@ from chessism_api.database.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
     get_player_game_summary,
+    get_player_mode_games,
+    get_player_hours_played,
+    get_player_time_control_top_moves,
+    get_player_time_control_top_openings,
+    get_player_time_control_results,
+    get_player_time_control_lengths,
+    get_player_time_control_activity_trend,
     get_games_database_generalities,
     get_time_control_mode_counts,
     get_rating_time_control_chart,
@@ -208,8 +215,15 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <
         )
 
     async with GAME_PIPELINE_LOCK:
-        congratulation = await create_games(data)
-        return JSONResponse(content={"message": congratulation})
+        try:
+            congratulation = await create_games(data)
+            return JSONResponse(content={"message": congratulation})
+        except Exception as error:
+            print(f"Error creating games for {player_name}: {error}")
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Failed to download games for {player_name}."}
+            )
 
 
 # --- NEW ENDPOINT ---
@@ -278,4 +292,90 @@ async def api_get_player_game_summary(player_name: str) -> JSONResponse:
     """
     player_name_lower = player_name.lower()
     result = await get_player_game_summary(player_name_lower)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/mode_games")
+async def api_get_player_mode_games(
+    player_name: str,
+    mode: str = Query(..., pattern="^(bullet|blitz|rapid)$")
+) -> JSONResponse:
+    """
+    Returns all games for a player in one normalized mode plus mode summary.
+    """
+    player_name_lower = player_name.lower()
+    result = await get_player_mode_games(player_name_lower, mode=mode)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/hours_played")
+async def api_get_player_hours_played(player_name: str) -> JSONResponse:
+    """
+    Returns total played hours and per-mode played hours for a player.
+    """
+    player_name_lower = player_name.lower()
+    result = await get_player_hours_played(player_name_lower)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/time_controls/{mode}/top_moves")
+async def api_get_player_time_control_top_moves(
+    player_name: str,
+    mode: str,
+    move_color: str = Query("white", pattern="^(white|black)$", alias="player_color"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(5, ge=1, le=10),
+    max_move: int = Query(10, ge=1, le=30)
+) -> JSONResponse:
+    player_name_lower = player_name.lower()
+    result = await get_player_time_control_top_moves(
+        player_name=player_name_lower,
+        mode=mode,
+        move_color=move_color,
+        page=page,
+        page_size=page_size,
+        max_move=max_move
+    )
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/time_controls/{mode}/top_openings")
+async def api_get_player_time_control_top_openings(
+    player_name: str,
+    mode: str,
+    result_filter: str = Query("win", pattern="^(win|loss|draw)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(5, ge=1, le=25),
+    n_moves: int = Query(3, ge=3, le=10)
+) -> JSONResponse:
+    player_name_lower = player_name.lower()
+    result = await get_player_time_control_top_openings(
+        player_name=player_name_lower,
+        mode=mode,
+        result_filter=result_filter,
+        page=page,
+        page_size=page_size,
+        n_moves=n_moves
+    )
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/time_controls/{mode}/results")
+async def api_get_player_time_control_results(player_name: str, mode: str) -> JSONResponse:
+    player_name_lower = player_name.lower()
+    result = await get_player_time_control_results(player_name=player_name_lower, mode=mode)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/time_controls/{mode}/lengths")
+async def api_get_player_time_control_lengths(player_name: str, mode: str) -> JSONResponse:
+    player_name_lower = player_name.lower()
+    result = await get_player_time_control_lengths(player_name=player_name_lower, mode=mode)
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/time_controls/{mode}/activity_trend")
+async def api_get_player_time_control_activity_trend(player_name: str, mode: str) -> JSONResponse:
+    player_name_lower = player_name.lower()
+    result = await get_player_time_control_activity_trend(player_name=player_name_lower, mode=mode)
     return JSONResponse(content=result)

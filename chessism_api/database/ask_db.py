@@ -276,7 +276,8 @@ async def get_top_main_characters_by_time_control(
     if target_mode not in {"bullet", "blitz", "rapid"}:
         return {"time_control": target_mode, "players": [], "limit": 0}
 
-    safe_limit = max(1, min(int(limit), 200))
+    # Keep a high cap so the bubble chart can include the full mode population.
+    safe_limit = max(1, min(int(limit), 5000))
 
     mode_sql = """
         CASE
@@ -1967,6 +1968,632 @@ async def get_player_game_summary(player_name: str) -> Dict[str, Any]:
         "date_from": format_ts(summary_row["first_game"]) if summary_row else None,
         "date_to": format_ts(summary_row["last_game"]) if summary_row else None,
         "time_controls": [{"time_control": row["time_control"], "total": row["total"]} for row in tc_rows]
+    }
+
+
+async def get_player_mode_games(player_name: str, mode: str) -> Dict[str, Any]:
+    """
+    Returns all games for a player filtered by normalized mode (bullet/blitz/rapid),
+    plus summary stats that can feed downstream containers.
+    """
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {
+            "player_name": player_name,
+            "mode": target_mode,
+            "total_games": 0,
+            "wins": 0,
+            "losses": 0,
+            "draws": 0,
+            "score_rate": 0.0,
+            "date_from": None,
+            "date_to": None,
+            "games": []
+        }
+
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        SELECT
+            g.link,
+            g.year,
+            g.month,
+            g.day,
+            g.hour,
+            g.minute,
+            g.second,
+            CASE
+                WHEN g.white = :player THEN 'white'
+                ELSE 'black'
+            END AS color,
+            CASE
+                WHEN g.white = :player THEN g.white_result
+                ELSE g.black_result
+            END AS player_score
+        FROM game g
+        WHERE (g.white = :player OR g.black = :player)
+          AND {mode_sql} = :mode
+        ORDER BY g.year DESC, g.month DESC, g.day DESC, g.hour DESC, g.minute DESC, g.second DESC;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"player": player_name, "mode": target_mode})
+        rows = result.mappings().all()
+
+    games: List[Dict[str, Any]] = []
+    wins = losses = draws = 0
+
+    for row in rows:
+        score = row.get("player_score")
+        if score == 1.0:
+            result_label = "win"
+            wins += 1
+        elif score == 0.5:
+            result_label = "draw"
+            draws += 1
+        elif score == 0.0:
+            result_label = "loss"
+            losses += 1
+        else:
+            result_label = "unknown"
+
+        played_at = (
+            f"{int(row['year']):04d}-{int(row['month']):02d}-{int(row['day']):02d} "
+            f"{int(row['hour']):02d}:{int(row['minute']):02d}:{int(row['second']):02d}"
+        )
+
+        games.append({
+            "link": row["link"],
+            "played_at": played_at,
+            "color": row["color"],
+            "result": result_label
+        })
+
+    total_games = len(games)
+    score_rate = round(((wins + 0.5 * draws) / total_games), 4) if total_games > 0 else 0.0
+    date_to = games[0]["played_at"] if games else None
+    date_from = games[-1]["played_at"] if games else None
+
+    return {
+        "player_name": player_name,
+        "mode": target_mode,
+        "total_games": total_games,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "score_rate": score_rate,
+        "date_from": date_from,
+        "date_to": date_to,
+        "games": games
+    }
+
+
+async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
+    """
+    Returns total played hours and played hours split by normalized time control mode.
+    Uses game.time_elapsed (seconds).
+    """
+    mode_sql = """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+    query = f"""
+        WITH player_games AS (
+            SELECT
+                {mode_sql} AS mode,
+                COALESCE(g.time_elapsed, 0) AS time_elapsed
+            FROM game g
+            WHERE g.white = :player OR g.black = :player
+        )
+        SELECT
+            ROUND(COALESCE(SUM(time_elapsed), 0) / 3600.0, 2) AS total_hours,
+            ROUND(COALESCE(SUM(CASE WHEN mode = 'bullet' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS bullet_hours,
+            ROUND(COALESCE(SUM(CASE WHEN mode = 'blitz' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS blitz_hours,
+            ROUND(COALESCE(SUM(CASE WHEN mode = 'rapid' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS rapid_hours
+        FROM player_games;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"player": player_name})
+        row = result.mappings().first() or {}
+
+    return {
+        "player_name": player_name,
+        "total_hours": float(row.get("total_hours") or 0.0),
+        "bullet_hours": float(row.get("bullet_hours") or 0.0),
+        "blitz_hours": float(row.get("blitz_hours") or 0.0),
+        "rapid_hours": float(row.get("rapid_hours") or 0.0)
+    }
+
+
+def _mode_case_sql() -> str:
+    return """
+        CASE
+            WHEN g.time_control LIKE '%/%' THEN 'daily'
+            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                CASE
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                    ELSE 'classical'
+                END
+            ELSE 'unknown'
+        END
+    """
+
+
+def _player_result_to_score(result_filter: str) -> Optional[float]:
+    normalized = (result_filter or "").strip().lower()
+    if normalized == "win":
+        return 1.0
+    if normalized == "loss":
+        return 0.0
+    if normalized == "draw":
+        return 0.5
+    return None
+
+
+def _to_float_safe(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+async def get_player_time_control_top_moves(
+    player_name: str,
+    mode: str,
+    move_color: str = "white",
+    page: int = 1,
+    page_size: int = 5,
+    max_move: int = 10
+) -> Dict[str, Any]:
+    target_mode = (mode or "").strip().lower()
+    target_color = (move_color or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"mode": target_mode, "move_color": target_color, "rows": [], "total": 0, "page": 1, "page_size": 0, "total_pages": 0}
+    if target_color not in {"white", "black"}:
+        target_color = "white"
+
+    safe_page_size = max(1, min(int(page_size), 10))
+    safe_page = max(1, int(page))
+    safe_max_move = max(1, min(int(max_move), 30))
+    total_rows = safe_max_move
+    total_pages = (total_rows + safe_page_size - 1) // safe_page_size if total_rows > 0 else 0
+    if total_pages > 0 and safe_page > total_pages:
+        safe_page = total_pages
+    offset = (safe_page - 1) * safe_page_size
+    mode_sql = _mode_case_sql()
+
+    query = f"""
+        WITH player_games AS (
+            SELECT g.link
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (
+                  (:move_color = 'white' AND g.white = :player)
+                  OR (:move_color = 'black' AND g.black = :player)
+              )
+        ),
+        filtered_moves AS (
+            SELECT
+                m.n_move,
+                CASE
+                    WHEN :move_color = 'black' THEN m.black_move
+                    ELSE m.white_move
+                END AS move
+            FROM moves m
+            JOIN player_games pg ON pg.link = m.link
+            WHERE m.n_move BETWEEN 1 AND :max_move
+        ),
+        clean_moves AS (
+            SELECT n_move AS move_number, move
+            FROM filtered_moves
+            WHERE move IS NOT NULL AND move <> '' AND move <> '--'
+        ),
+        ranked AS (
+            SELECT
+                move_number,
+                move,
+                COUNT(*)::int AS times_played,
+                ROW_NUMBER() OVER (PARTITION BY move_number ORDER BY COUNT(*) DESC, move ASC) AS rank_in_move
+            FROM clean_moves
+            GROUP BY move_number, move
+        ),
+        top_by_move AS (
+            SELECT move_number, move, times_played
+            FROM ranked
+            WHERE rank_in_move = 1
+        ),
+        filled AS (
+            SELECT
+                gs AS move_number,
+                COALESCE(t.move, '-') AS move,
+                COALESCE(t.times_played, 0)::int AS times_played
+            FROM generate_series(1, :max_move) AS gs
+            LEFT JOIN top_by_move t ON t.move_number = gs
+            ORDER BY gs
+        )
+        SELECT move_number, move, times_played
+        FROM filled
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {
+            "mode": target_mode,
+            "move_color": target_color,
+            "player": player_name,
+            "max_move": safe_max_move,
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = result.mappings().all()
+
+    return {
+        "mode": target_mode,
+        "move_color": target_color,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total_rows,
+        "total_pages": total_pages,
+        "rows": [
+            {
+                "move_number": int(row.get("move_number") or 0),
+                "move": str(row.get("move") or "-"),
+                "times_played": int(row.get("times_played") or 0)
+            }
+            for row in rows
+        ]
+    }
+
+
+async def get_player_time_control_top_openings(
+    player_name: str,
+    mode: str,
+    result_filter: str,
+    page: int = 1,
+    page_size: int = 5,
+    n_moves: int = 3
+) -> Dict[str, Any]:
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"mode": target_mode, "rows": [], "total": 0, "page": 1, "page_size": 0, "total_pages": 0}
+
+    target_result = (result_filter or "").strip().lower()
+    target_score = _player_result_to_score(target_result)
+    if target_score is None:
+        target_result = "win"
+        target_score = 1.0
+
+    safe_page_size = max(1, min(int(page_size), 25))
+    safe_page = max(1, int(page))
+    safe_n_moves = max(3, min(int(n_moves), 10))
+    required_half_moves = safe_n_moves * 2
+    mode_sql = _mode_case_sql()
+
+    count_query = f"""
+        WITH player_games AS (
+            SELECT
+                g.link
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (g.white = :player OR g.black = :player)
+              AND (
+                    CASE
+                        WHEN g.white = :player THEN g.white_result
+                        ELSE g.black_result
+                    END
+                  ) = :target_score
+        ),
+        opening_moves AS (
+            SELECT m.link, m.n_move, m.white_move, m.black_move
+            FROM moves m
+            JOIN player_games pg ON pg.link = m.link
+            WHERE m.n_move BETWEEN 1 AND :n_moves
+        ),
+        complete_games AS (
+            SELECT link
+            FROM opening_moves
+            GROUP BY link
+            HAVING COUNT(DISTINCT n_move) = :n_moves
+        ),
+        ply_moves AS (
+            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
+            UNION ALL
+            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
+        ),
+        clean_ply AS (
+            SELECT link, ply, san
+            FROM ply_moves
+            WHERE san IS NOT NULL AND san <> '' AND san <> '--'
+        ),
+        openings AS (
+            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
+            FROM clean_ply
+            WHERE link IN (SELECT link FROM complete_games)
+            GROUP BY link
+            HAVING COUNT(*) = :required_half_moves
+        ),
+        aggregated AS (
+            SELECT opening
+            FROM openings
+            WHERE opening IS NOT NULL AND opening <> ''
+            GROUP BY opening
+        )
+        SELECT COUNT(*)::int AS total FROM aggregated;
+    """
+
+    data_query = f"""
+        WITH player_games AS (
+            SELECT
+                g.link
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (g.white = :player OR g.black = :player)
+              AND (
+                    CASE
+                        WHEN g.white = :player THEN g.white_result
+                        ELSE g.black_result
+                    END
+                  ) = :target_score
+        ),
+        opening_moves AS (
+            SELECT m.link, m.n_move, m.white_move, m.black_move
+            FROM moves m
+            JOIN player_games pg ON pg.link = m.link
+            WHERE m.n_move BETWEEN 1 AND :n_moves
+        ),
+        complete_games AS (
+            SELECT link
+            FROM opening_moves
+            GROUP BY link
+            HAVING COUNT(DISTINCT n_move) = :n_moves
+        ),
+        ply_moves AS (
+            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
+            UNION ALL
+            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
+        ),
+        clean_ply AS (
+            SELECT link, ply, san
+            FROM ply_moves
+            WHERE san IS NOT NULL AND san <> '' AND san <> '--'
+        ),
+        openings AS (
+            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
+            FROM clean_ply
+            WHERE link IN (SELECT link FROM complete_games)
+            GROUP BY link
+            HAVING COUNT(*) = :required_half_moves
+        )
+        SELECT
+            opening,
+            COUNT(*)::int AS times_played
+        FROM openings
+        WHERE opening IS NOT NULL AND opening <> ''
+        GROUP BY opening
+        ORDER BY times_played DESC, opening ASC
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        count_result = await session.execute(text(count_query), {
+            "mode": target_mode,
+            "player": player_name,
+            "target_score": target_score,
+            "n_moves": safe_n_moves,
+            "required_half_moves": required_half_moves
+        })
+        count_row = count_result.mappings().first()
+        total = int((count_row or {}).get("total") or 0)
+
+        total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+        if total_pages > 0 and safe_page > total_pages:
+            safe_page = total_pages
+        offset = (safe_page - 1) * safe_page_size
+
+        result = await session.execute(text(data_query), {
+            "mode": target_mode,
+            "player": player_name,
+            "target_score": target_score,
+            "n_moves": safe_n_moves,
+            "required_half_moves": required_half_moves,
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = result.mappings().all()
+
+    output_rows = []
+    for idx, row in enumerate(rows, start=1):
+        opening_text = str(row.get("opening") or "").strip()
+        half_moves = [token for token in opening_text.split() if token][:required_half_moves]
+        output_rows.append({
+            "top": idx,
+            "key": f"player_opening_{target_result}_{idx}",
+            "opening": opening_text,
+            "half_moves": half_moves,
+            "times_played": int(row.get("times_played") or 0)
+        })
+
+    return {
+        "mode": target_mode,
+        "result_filter": target_result,
+        "n_moves": safe_n_moves,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
+        "total_pages": (total + safe_page_size - 1) // safe_page_size if total > 0 else 0,
+        "rows": output_rows
+    }
+
+
+async def get_player_time_control_results(player_name: str, mode: str) -> Dict[str, Any]:
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"mode": target_mode, "total_games": 0, "wins": 0, "losses": 0, "draws": 0, "score_rate": 0.0}
+    return await get_player_mode_games(player_name=player_name, mode=target_mode)
+
+
+async def get_player_time_control_lengths(player_name: str, mode: str) -> Dict[str, Any]:
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"mode": target_mode, "total_games": 0, "summary": {}, "n_moves_hist": {"x": [], "y": []}, "time_elapsed_hist": {"x": [], "y": [], "unit": "minutes"}}
+
+    mode_sql = _mode_case_sql()
+    summary_query = f"""
+        WITH filtered_games AS (
+            SELECT g.n_moves, g.time_elapsed
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (g.white = :player OR g.black = :player)
+        )
+        SELECT
+            COUNT(*)::int AS total_games,
+            ROUND(AVG(n_moves)::numeric, 2) AS avg_n_moves,
+            percentile_cont(0.5) WITHIN GROUP (ORDER BY n_moves) AS median_n_moves,
+            percentile_cont(0.9) WITHIN GROUP (ORDER BY n_moves) AS p90_n_moves,
+            ROUND(AVG(time_elapsed)::numeric, 2) AS avg_time_elapsed_sec
+        FROM filtered_games;
+    """
+    moves_hist_query = f"""
+        WITH filtered_games AS (
+            SELECT g.n_moves
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (g.white = :player OR g.black = :player)
+        )
+        SELECT
+            (FLOOR(n_moves / 10.0) * 10)::int AS bucket_start,
+            (FLOOR(n_moves / 10.0) * 10 + 9)::int AS bucket_end,
+            COUNT(*)::int AS total
+        FROM filtered_games
+        GROUP BY bucket_start, bucket_end
+        ORDER BY bucket_start;
+    """
+    elapsed_hist_query = f"""
+        WITH filtered_games AS (
+            SELECT g.time_elapsed
+            FROM game g
+            WHERE {mode_sql} = :mode
+              AND (g.white = :player OR g.black = :player)
+        )
+        SELECT
+            (FLOOR((time_elapsed / 60.0) / 1.0) * 1)::int AS bucket_start_min,
+            (FLOOR((time_elapsed / 60.0) / 1.0) * 1 + 1)::int AS bucket_end_min,
+            COUNT(*)::int AS total
+        FROM filtered_games
+        GROUP BY bucket_start_min, bucket_end_min
+        ORDER BY bucket_start_min;
+    """
+    async with AsyncDBSession() as session:
+        summary_result = await session.execute(text(summary_query), {"mode": target_mode, "player": player_name})
+        summary_row = summary_result.mappings().first() or {}
+        moves_hist_result = await session.execute(text(moves_hist_query), {"mode": target_mode, "player": player_name})
+        moves_hist_rows = moves_hist_result.mappings().all()
+        elapsed_hist_result = await session.execute(text(elapsed_hist_query), {"mode": target_mode, "player": player_name})
+        elapsed_hist_rows = elapsed_hist_result.mappings().all()
+
+    return {
+        "mode": target_mode,
+        "total_games": int(summary_row.get("total_games") or 0),
+        "summary": {
+            "avg_n_moves": _to_float_safe(summary_row.get("avg_n_moves")),
+            "median_n_moves": _to_float_safe(summary_row.get("median_n_moves")),
+            "p90_n_moves": _to_float_safe(summary_row.get("p90_n_moves")),
+            "avg_time_elapsed_sec": _to_float_safe(summary_row.get("avg_time_elapsed_sec"))
+        },
+        "n_moves_hist": {
+            "x": [f"{int(r.get('bucket_start') or 0)}-{int(r.get('bucket_end') or 0)}" for r in moves_hist_rows],
+            "y": [int(r.get("total") or 0) for r in moves_hist_rows]
+        },
+        "time_elapsed_hist": {
+            "x": [f"{int(r.get('bucket_start_min') or 0)}-{int(r.get('bucket_end_min') or 0)}" for r in elapsed_hist_rows],
+            "y": [int(r.get("total") or 0) for r in elapsed_hist_rows],
+            "unit": "minutes"
+        }
+    }
+
+
+async def get_player_time_control_activity_trend(player_name: str, mode: str) -> Dict[str, Any]:
+    target_mode = (mode or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"mode": target_mode, "month_heat": {"labels": [], "values": []}, "weekday_heat": {"labels": [], "values": []}, "hour_heat": {"labels": [], "values": []}}
+    mode_sql = _mode_case_sql()
+    month_query = f"""
+        SELECT month::int AS idx, COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (g.white = :player OR g.black = :player)
+        GROUP BY month
+        ORDER BY month;
+    """
+    weekday_query = f"""
+        SELECT EXTRACT(DOW FROM make_timestamp(year, month, day, hour, minute, second))::int AS idx, COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (g.white = :player OR g.black = :player)
+        GROUP BY idx
+        ORDER BY idx;
+    """
+    hour_query = f"""
+        SELECT hour::int AS idx, COUNT(*)::int AS total
+        FROM game g
+        WHERE {mode_sql} = :mode
+          AND (g.white = :player OR g.black = :player)
+        GROUP BY hour
+        ORDER BY hour;
+    """
+    async with AsyncDBSession() as session:
+        mres = await session.execute(text(month_query), {"mode": target_mode, "player": player_name})
+        wres = await session.execute(text(weekday_query), {"mode": target_mode, "player": player_name})
+        hres = await session.execute(text(hour_query), {"mode": target_mode, "player": player_name})
+        months = mres.mappings().all()
+        weekdays = wres.mappings().all()
+        hours = hres.mappings().all()
+
+    month_names = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    weekday_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    return {
+        "mode": target_mode,
+        "month_heat": {
+            "labels": [month_names[max(0, min(11, int(r.get('idx') or 1) - 1))] for r in months],
+            "values": [int(r.get("total") or 0) for r in months]
+        },
+        "weekday_heat": {
+            "labels": [weekday_names[max(0, min(6, int(r.get('idx') or 0)))] for r in weekdays],
+            "values": [int(r.get("total") or 0) for r in weekdays]
+        },
+        "hour_heat": {
+            "labels": [f"{int(r.get('idx') or 0):02d}" for r in hours],
+            "values": [int(r.get("total") or 0) for r in hours]
+        }
     }
 
 

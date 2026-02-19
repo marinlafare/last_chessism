@@ -38,13 +38,18 @@ async def get_joined_and_current_date(player_name: str) -> Dict[str, Any]:
     """
     Fetches player profile (inserting if new) and extracts the date they joined.
     """
-    profile = await players_ops.insert_player({"player_name": player_name})
+    existing_player = await players_ops.read_player(player_name)
+    if existing_player and existing_player.get("joined") not in (None, 0):
+        joined_ts = existing_player.get("joined")
+    else:
+        profile = await players_ops.insert_player({"player_name": player_name})
 
-    # Handle case where profile fetch failed
-    if not profile:
-        return {"error": f"Could not fetch or create profile for {player_name}."}
-        
-    joined_ts = profile.joined
+        # Handle case where profile fetch failed
+        if not profile:
+            return {"error": f"Could not fetch or create profile for {player_name}."}
+
+        joined_ts = getattr(profile, "joined", None)
+
     current_date = datetime.now()
 
     if joined_ts is None or joined_ts == 0:

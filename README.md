@@ -51,7 +51,7 @@ This project is not a single application, but a collection of services managed b
 ### Possible Areas of Upgrade
 
 1. **Endgame Tablebase Integration**: This is the single most valuable performance upgrade. Integrating Syzygy tablebases (work in progress) will make endgame analysis instantaneous, dramatically reducing engine load and job time.
-2. **Statistical Analysis**: The `stats_analysis.py` file is currently a stub. Building out the endpoints and SQL queries to consume the `PlayerStats` and `Fen` data to generate the `PlayerStatsReport` is the main "next feature" to implement.
+2. **Statistical Analysis**: Statistical endpoints are still minimal. Building out SQL/report payloads that consume `PlayerStats` and `Fen` data to generate a `PlayerStatsReport` is the main "next feature" to implement.
 3. **API Security**: The API is currently open. Adding a simple API key check (e.g., as a FastAPI dependency checking `x-api-key` in the request header) would prevent unauthorized access.
 4. **Configuration Management**: Centralize all configuration (like `CONN_STRING`, `REDIS_HOST`, etc.) into environment variables, perhaps using Pydantic's `BaseSettings` for validation and loading.
 5. **Failed Job Management**: The FEN generation job writes failures to `logs/illegall_fen.txt`. This is good, but a more robust solution would be to write these failures to a `failed_games` table in the database. This would make it possible to build an API endpoint to retry failed jobs.

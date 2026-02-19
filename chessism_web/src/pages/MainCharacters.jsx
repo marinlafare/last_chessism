@@ -4,7 +4,7 @@ import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { API_BASE_URL } from '../config'
 
-const MAIN_CHARACTER_LIMIT = 200
+const MAIN_CHARACTER_LIMIT = 5000
 const TOP_PLAYERS_PAGE_SIZE = 6
 const EMPTY_COUNTS = { bullet: 0, blitz: 0, rapid: 0 }
 const COUNTS_CACHE_KEY = 'main_characters_time_controls_v1'
@@ -26,15 +26,22 @@ const fetchJsonOrThrow = async (url, options = undefined) => {
 }
 
 const fetchMainCharacterTimeControls = async () =>
-  fetchJsonOrThrow(`${API_BASE_URL}/main_characters/time_controls`)
+  fetchJsonOrThrow(`${API_BASE_URL}/players/main_characters/time_controls`)
 
 const fetchTopMainCharacters = async (timeControl, limit = MAIN_CHARACTER_LIMIT) =>
   fetchJsonOrThrow(
-    `${API_BASE_URL}/main_characters/top?time_control=${encodeURIComponent(timeControl)}&limit=${limit}`
+    `${API_BASE_URL}/players/main_characters/top?time_control=${encodeURIComponent(timeControl)}&limit=${limit}`
   )
 
 const updatePlayerGames = async (playerName) =>
   fetchJsonOrThrow(`${API_BASE_URL}/games/update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ player_name: playerName })
+  })
+
+const createPlayerGames = async (playerName) =>
+  fetchJsonOrThrow(`${API_BASE_URL}/games`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ player_name: playerName })
@@ -205,8 +212,8 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
       (players || [])
         .map((player) => ({
           ...player,
-          x: Number(player?.rating || 0),
-          y: Number(player?.score_rate || 0),
+          x: Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0),
+          y: Number(player?.score_rate ?? 0),
           games: Number(player?.n_games || 0)
         }))
         .filter(
@@ -214,10 +221,13 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
             Number.isFinite(player.x) &&
             Number.isFinite(player.y) &&
             Number.isFinite(player.games) &&
-            player.x > 0 &&
             player.games > 0
         ),
     [players]
+  )
+  const pointsForRender = useMemo(
+    () => [...points].sort((a, b) => Number(b.games || 0) - Number(a.games || 0)),
+    [points]
   )
 
   if (!points.length) {
@@ -338,7 +348,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
           wins
         </text>
 
-        {points.map((point) => {
+        {pointsForRender.map((point) => {
           const isActive = hoveredPlayerName === point.player_name
           return (
             <circle
@@ -347,7 +357,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
               cy={yScale(point.y)}
               r={isActive ? bubbleRadius(point.games) + 3 : bubbleRadius(point.games)}
               className={`main-character-scatter-point ${isActive ? 'active' : ''}`}
-              style={{ fill: bubbleColor(point.y) }}
+              style={{ fill: isActive ? '#ffffff' : bubbleColor(point.y) }}
               onMouseEnter={() => onHoverPlayer(point.player_name)}
               onFocus={() => onHoverPlayer(point.player_name)}
               tabIndex={0}
@@ -374,6 +384,9 @@ function MainCharacters() {
   const [updatingPlayers, setUpdatingPlayers] = useState({})
   const [updateStateByPlayer, setUpdateStateByPlayer] = useState({})
   const [updateMessage, setUpdateMessage] = useState('')
+  const [addingPlayer, setAddingPlayer] = useState(false)
+  const [showAddPlayerForm, setShowAddPlayerForm] = useState(false)
+  const [addPlayerName, setAddPlayerName] = useState('')
 
   useEffect(() => {
     let alive = true
@@ -421,6 +434,7 @@ function MainCharacters() {
     () => Object.values(updatingPlayers).some(Boolean),
     [updatingPlayers]
   )
+  const isPipelineBusy = addingPlayer || isGlobalUpdateBusy
 
   const handleBadgeHoverMove = (event) => {
     const target = event.currentTarget
@@ -445,6 +459,8 @@ function MainCharacters() {
     setHoveredPlayerName('')
     setTopPlayersOffset(0)
     setUpdateMessage('')
+    setShowAddPlayerForm(false)
+    setAddPlayerName('')
 
     try {
       const payload = await fetchTopMainCharacters(mode, MAIN_CHARACTER_LIMIT)
@@ -461,7 +477,7 @@ function MainCharacters() {
     const normalized = String(playerName || '').trim().toLowerCase()
     if (!normalized) return
     if (updateStateByPlayer[normalized] === 'all_ready') return
-    if (isGlobalUpdateBusy) return
+    if (isPipelineBusy) return
 
     setUpdateMessage('')
     setUpdateStateByPlayer((previous) => ({ ...previous, [normalized]: '' }))
@@ -484,6 +500,39 @@ function MainCharacters() {
       setUpdateMessage(error instanceof Error ? error.message : 'Failed to update games.')
     } finally {
       setUpdatingPlayers((previous) => ({ ...previous, [normalized]: false }))
+      setTopLoading(false)
+    }
+  }
+
+  const handleAddPlayer = async () => {
+    if (isPipelineBusy) return
+    const normalized = String(addPlayerName || '').trim().toLowerCase()
+    if (!normalized) return
+
+    setAddingPlayer(true)
+    setUpdateMessage('')
+    try {
+      const payload = await createPlayerGames(normalized)
+      setUpdateMessage(payload?.message || `Download started for ${normalized}.`)
+      setAddPlayerName('')
+      setShowAddPlayerForm(false)
+      if (selectedMode) {
+        setTopLoading(true)
+        const refreshed = await fetchTopMainCharacters(selectedMode, MAIN_CHARACTER_LIMIT)
+        setTopPayload(refreshed)
+      }
+      const countsPayload = await fetchMainCharacterTimeControls()
+      const counts = {
+        bullet: Number(countsPayload?.bullet || 0),
+        blitz: Number(countsPayload?.blitz || 0),
+        rapid: Number(countsPayload?.rapid || 0)
+      }
+      setTimeControlCounts(counts)
+      writeCachedCounts(counts)
+    } catch (error) {
+      setUpdateMessage(error instanceof Error ? error.message : 'Failed to add player.')
+    } finally {
+      setAddingPlayer(false)
       setTopLoading(false)
     }
   }
@@ -521,6 +570,10 @@ function MainCharacters() {
     if (!hoveredPlayerName) return null
     return sortedByRating.find((player) => player.player_name === hoveredPlayerName) || null
   }, [sortedByRating, hoveredPlayerName])
+  const hoveredPlayerIndex = useMemo(
+    () => sortedByRating.findIndex((player) => player.player_name === hoveredPlayerName),
+    [sortedByRating, hoveredPlayerName]
+  )
 
   useEffect(() => {
     if (!sortedByRating.length) {
@@ -553,6 +606,19 @@ function MainCharacters() {
   const handleTopPlayersNext = () => {
     const maxStart = Math.max(0, sortedByRating.length - TOP_PLAYERS_PAGE_SIZE)
     setTopPlayersOffset((previous) => Math.min(maxStart, previous + TOP_PLAYERS_PAGE_SIZE))
+  }
+  const handleHoveredPrevious = () => {
+    if (!sortedByRating.length) return
+    const current = hoveredPlayerIndex >= 0 ? hoveredPlayerIndex : 0
+    const previousIndex = (current - 1 + sortedByRating.length) % sortedByRating.length
+    setHoveredPlayerName(String(sortedByRating[previousIndex]?.player_name || ''))
+  }
+
+  const handleHoveredNext = () => {
+    if (!sortedByRating.length) return
+    const current = hoveredPlayerIndex >= 0 ? hoveredPlayerIndex : 0
+    const nextIndex = (current + 1) % sortedByRating.length
+    setHoveredPlayerName(String(sortedByRating[nextIndex]?.player_name || ''))
   }
 
   return (
@@ -617,8 +683,45 @@ function MainCharacters() {
 
           {selectedMode ? (
             <section className="games-mode-detail" aria-label={`${selectedMode} players bubble chart`}>
-              <div className="section-head">
+              <div className="section-head analytics-section-head">
                 <h2 className="games-action-title">{selectedMode}</h2>
+                <div className="main-character-add-player-wrap">
+                  {showAddPlayerForm ? (
+                    <div className="main-character-add-player-pop">
+                      <input
+                        className="text-input main-character-add-player-input"
+                        type="text"
+                        value={addPlayerName}
+                        onChange={(event) => setAddPlayerName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter') handleAddPlayer()
+                          if (event.key === 'Escape') {
+                            setShowAddPlayerForm(false)
+                            setAddPlayerName('')
+                          }
+                        }}
+                        placeholder="player name"
+                        disabled={isPipelineBusy}
+                      />
+                      <button
+                        className="btn btn-secondary"
+                        type="button"
+                        onClick={handleAddPlayer}
+                        disabled={isPipelineBusy || !String(addPlayerName || '').trim()}
+                      >
+                        {addingPlayer ? 'adding...' : 'go'}
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    className="btn btn-secondary"
+                    type="button"
+                    onClick={() => setShowAddPlayerForm((previous) => !previous)}
+                    disabled={isPipelineBusy}
+                  >
+                    add player
+                  </button>
+                </div>
               </div>
               {topLoading ? <p className="result-line">Loading main characters...</p> : null}
               {topError ? <p className="result-line">{topError}</p> : null}
@@ -632,19 +735,37 @@ function MainCharacters() {
                     />
                     <div className="main-character-hover-grid">
                       {hoveredPlayer ? (
-                        <MainCharacterCard
-                          player={hoveredPlayer}
-                          rank={rankByName.get(hoveredPlayer.player_name) || 1}
-                          totalPlayers={sortedByRating.length}
-                          onUpdate={handleUpdatePlayer}
-                          updating={Boolean(
-                            updatingPlayers[String(hoveredPlayer.player_name || '').toLowerCase()] ||
-                            isGlobalUpdateBusy
-                          )}
-                          updateState={
-                            updateStateByPlayer[String(hoveredPlayer.player_name || '').toLowerCase()] || ''
-                          }
-                        />
+                        <div className="main-character-hover-nav">
+                          <button
+                            className="btn btn-secondary main-character-hover-nav-btn"
+                            type="button"
+                            onClick={handleHoveredNext}
+                            aria-label="Previous player"
+                          >
+                            {'<'}
+                          </button>
+                          <MainCharacterCard
+                            player={hoveredPlayer}
+                            rank={rankByName.get(hoveredPlayer.player_name) || 1}
+                            totalPlayers={sortedByRating.length}
+                            onUpdate={handleUpdatePlayer}
+                            updating={Boolean(
+                              updatingPlayers[String(hoveredPlayer.player_name || '').toLowerCase()] ||
+                              isPipelineBusy
+                            )}
+                            updateState={
+                              updateStateByPlayer[String(hoveredPlayer.player_name || '').toLowerCase()] || ''
+                            }
+                          />
+                          <button
+                            className="btn btn-secondary main-character-hover-nav-btn"
+                            type="button"
+                            onClick={handleHoveredPrevious}
+                            aria-label="Next player"
+                          >
+                            {'>'}
+                          </button>
+                        </div>
                       ) : (
                         <p className="result-line">Hover a point to inspect that player.</p>
                       )}
@@ -658,10 +779,10 @@ function MainCharacters() {
             </section>
           ) : null}
 
-          {selectedMode && !topLoading && !topError && sortedByRating.length ? (
+              {selectedMode && !topLoading && !topError && sortedByRating.length ? (
             <section className="games-mode-detail" aria-label={`${selectedMode} top players`}>
               <div className="section-head">
-                <h2 className="games-action-title">top players</h2>
+                <h2 className="games-action-title">{selectedMode} top players</h2>
               </div>
               <div className="main-character-top-layout">
                 <button
@@ -681,7 +802,7 @@ function MainCharacters() {
                     totalPlayers={sortedByRating.length}
                     onUpdate={handleUpdatePlayer}
                     updating={Boolean(
-                      updatingPlayers[String(player.player_name || '').toLowerCase()] || isGlobalUpdateBusy
+                      updatingPlayers[String(player.player_name || '').toLowerCase()] || isPipelineBusy
                       )}
                       updateState={updateStateByPlayer[String(player.player_name || '').toLowerCase()] || ''}
                     />

@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # --- FIXED IMPORTS ---
 from chessism_api.database.engine import AsyncDBSession
 # --- MODIFIED: Import new association model ---
-from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation
+from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player
 # ---
 
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -173,6 +173,13 @@ class DBInterface:
                         index_elements=['game_link', 'fen_fen', 'n_move', 'move_color']
                 )
                 # We pass the data as the *second argument*
+                await session.execute(stmt, clean_chunk)
+            
+            elif self.db_class == Player:
+                # Player names are unique; ignore duplicates during bulk shell inserts.
+                stmt = pg_insert(self.db_class).on_conflict_do_nothing(
+                    index_elements=['player_name']
+                )
                 await session.execute(stmt, clean_chunk)
             
             else:

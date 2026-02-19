@@ -8,7 +8,7 @@ function SideRail() {
         <a className="rail-btn" href="/games">
           Games
         </a>
-        <a className="rail-btn" href="/players">
+        <a className="rail-btn" href="/main_characters">
           Players
         </a>
         <a className="rail-btn" href="http://localhost:6789/download_new_games">
