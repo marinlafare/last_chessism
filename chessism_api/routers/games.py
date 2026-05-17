@@ -1,13 +1,9 @@
-# chessism_api/routers/games.py
-
-# chessism_api/routers/games.py
-
-from fastapi.responses import JSONResponse
-from fastapi import APIRouter, Body, HTTPException, Query # <-- Added HTTPException
-from typing import Dict, Any # <-- Added typing
 import asyncio
+from typing import Any, Dict
 
-# --- FIXED IMPORTS ---
+from fastapi import APIRouter, Body, HTTPException, Query
+from fastapi.responses import JSONResponse
+
 from chessism_api.operations.games import (
     create_games,
     read_game,
@@ -33,11 +29,16 @@ from chessism_api.database.ask_db import (
     get_time_control_top_moves,
     get_time_control_top_openings
 )
-from chessism_api.database.ask_db import open_async_request # <-- Fixed import
-# ---
 
 router = APIRouter()
 GAME_PIPELINE_LOCK = asyncio.Lock()
+
+
+def _payload_player_name(data: Dict[str, Any]) -> str:
+    player_name = str(data.get("player_name", "")).strip().lower()
+    if not player_name:
+        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+    return player_name
 
 @router.get("/database/generalities")
 async def api_get_games_database_generalities() -> JSONResponse:
@@ -179,34 +180,27 @@ async def api_get_time_control_activity_trend(
     return JSONResponse(content=result)
 
 
-@router.get("/{link}") # --- FIX: Removed '/games' prefix ---
+@router.get("/{link}")
 async def api_read_game(link: str) -> JSONResponse:
     """
     Retrieves game information by its link.
     """
     print(f'api call for link: {link}')
-    try:
-        game = await read_game(link)
-        if not game: # Check if game list is empty
-            raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
-        # Return the first game found (links should be unique)
-        return JSONResponse(content=game[0])
-    except Exception as e:
-        print(f"Error fetching game {link}: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    game = await read_game(link)
+    if not game:
+        raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
+    return JSONResponse(content=game[0])
 
-@router.post("") # --- FIX: Changed route from "/" to "" ---
-async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <-- Use Dict
+@router.post("")
+async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse:
     """
     data = {"player_name": "some_player_name"}
     
     Fetches every available game for the player_name,
     formats them and inserts them into DB.
     """
-    try:
-        player_name = data["player_name"]
-    except KeyError:
-        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+    player_name = _payload_player_name(data)
+    data["player_name"] = player_name
         
     if GAME_PIPELINE_LOCK.locked():
         return JSONResponse(
@@ -226,7 +220,6 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse: # <
             )
 
 
-# --- NEW ENDPOINT ---
 @router.post("/update")
 async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONResponse:
     """
@@ -234,10 +227,8 @@ async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONRespo
     
     Fetches games from the last recorded month to the present.
     """
-    try:
-        player_name = data["player_name"]
-    except KeyError:
-        raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
+    player_name = _payload_player_name(data)
+    data["player_name"] = player_name
         
     if GAME_PIPELINE_LOCK.locked():
         return JSONResponse(
@@ -246,8 +237,15 @@ async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONRespo
         )
 
     async with GAME_PIPELINE_LOCK:
-        message = await update_player_games(data)
-        return JSONResponse(content={"message": message})
+        try:
+            message = await update_player_games(data)
+            return JSONResponse(content={"message": message})
+        except Exception as error:
+            print(f"Error updating games for {player_name}: {error}")
+            return JSONResponse(
+                status_code=500,
+                content={"message": f"Failed to update games for {player_name}."}
+            )
 
 
 @router.get("/{player_name}/count")

@@ -1,16 +1,11 @@
-# chessism_api/database/engine.py
-
 import asyncio
-import time # <-- NEW
+import re
 from urllib.parse import urlparse
-import asyncpg # For direct async DB operations
+import asyncpg
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-# --- CORRECTED IMPORT ---
-# This is the correct absolute import path based on your project structure.
 from chessism_api.database.models import Base
-# ---
 
 async_engine = None
 AsyncDBSession = sessionmaker(expire_on_commit=False, class_=AsyncSession)
@@ -29,6 +24,8 @@ async def init_db(connection_string: str):
     db_host = parsed_url.hostname
     db_port = parsed_url.port if parsed_url.port else 5432 # Default PostgreSQL port
     db_name = parsed_url.path.lstrip('/')
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", db_name):
+        raise ValueError(f"Unsafe database name in DATABASE_URL: {db_name!r}")
 
     temp_conn = None
     try:
@@ -42,8 +39,10 @@ async def init_db(connection_string: str):
         )
         
         # Check if the target database exists
-        db_exists_query = f"SELECT 1 FROM pg_database WHERE datname='{db_name}'"
-        db_exists = await temp_conn.fetchval(db_exists_query)
+        db_exists = await temp_conn.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1",
+            db_name
+        )
 
         if not db_exists:
             print(f"Database '{db_name}' does not exist. Creating...")
@@ -70,8 +69,6 @@ async def init_db(connection_string: str):
 
     async_engine = create_async_engine(connection_string, echo=False) # echo=True for SQL logging
 
-    # --- THIS IS THE FIX ---
-    # Add a retry loop to wait for the database to be ready.
     max_retries = 10
     retry_delay_seconds = 5
     
@@ -80,8 +77,6 @@ async def init_db(connection_string: str):
             # Ensure database tables exist using the async engine
             async with async_engine.begin() as conn:
                 print("Ensuring database tables exist...")
-                # run_sync is used to execute synchronous metadata operations (like create_all)
-                # within an async context
                 await conn.run_sync(Base.metadata.create_all)
                 print("Database tables checked/created.")
             
@@ -101,8 +96,5 @@ async def init_db(connection_string: str):
                 raise # Re-raise the unknown error
     else: # This 'else' block runs if the 'for' loop completes without 'break'
         raise RuntimeError("Database connection failed after all retries. The database may be down.")
-    # --- END FIX ---
-        
-    # Configure the sessionmaker to use this async engine
     AsyncDBSession.configure(bind=async_engine)
     print("Asynchronous database initialization complete.")

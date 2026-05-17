@@ -1,6 +1,10 @@
 # db_monitor.py
 import asyncio
+import sys
+from pathlib import Path
 from typing import Optional
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select, update
 

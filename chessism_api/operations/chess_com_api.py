@@ -1,18 +1,11 @@
-#chessism_api/operations/chess_com_api.py
-
 import asyncio
 import httpx
 import json
 import time
-from typing import List, Tuple, Dict, Any, Optional
-import pprint
+from typing import List, Dict, Any, Optional
 
-# --- FIXED IMPORTS ---
 import constants
 from chessism_api.operations.models import PlayerCreateData
-# ---
-
-# --- API CLIENT FUNCTIONS ---
 
 async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
     """

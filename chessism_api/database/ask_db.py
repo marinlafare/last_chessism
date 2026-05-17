@@ -77,7 +77,7 @@ async def open_async_request(sql_question: str,
 
             if fetch_as_dict:
                 rows = result.fetchall()
-                return [row._mapping for row in rows]
+                return [dict(row._mapping) for row in rows]
             else:
                 return result.fetchall()
                 

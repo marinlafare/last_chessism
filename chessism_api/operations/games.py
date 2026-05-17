@@ -1,16 +1,9 @@
-# chessism_api/operations/games.py
-
-# chessism_api/operations/games.py
-
 import time
 from datetime import datetime
-from typing import List, Dict, Any, Union # <-- Added Union
+from typing import List, Dict, Any, Union
 
-from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
-from sqlalchemy import select # <-- Added select
+from sqlalchemy import select
 
-# --- FIXED IMPORTS ---
 from chessism_api.operations.format_games import format_games, insert_games_months_moves_and_players
 from chessism_api.operations.chess_com_api import download_months
 from chessism_api.database.ask_db import (
@@ -19,13 +12,10 @@ from chessism_api.database.ask_db import (
     get_time_control_game_length_analytics,
     get_time_control_activity_trend
 )
-from chessism_api.database.models import Month # <-- Added Month
-from chessism_api.database.db_interface import DBInterface # <-- Added DBInterface
-
-# --- Import operations modules correctly ---
+from chessism_api.database.models import Month
+from chessism_api.database.db_interface import DBInterface
 from chessism_api.operations import players as players_ops
 from chessism_api.operations import months as months_ops
-# ---
 
 async def read_game(data):
     params = {"link": int(data)}

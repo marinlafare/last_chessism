@@ -1,23 +1,16 @@
-#chessism_api/operations/players.py
-
-import asyncio # <-- NEW
-import time # <-- NEW
-from fastapi.encoders import jsonable_encoder
-from typing import Optional, Union, Dict, Any, Tuple, List
+import asyncio
+from typing import Optional, Dict, Any, List
 from sqlalchemy.exc import IntegrityError
-from sqlalchemy import select, update
 
-# --- FIXED IMPORTS ---
 from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.models import Player, PlayerStats, to_dict # <-- NEW (PlayerStats, to_dict)
+from chessism_api.database.models import Player, PlayerStats
 from chessism_api.database.ask_db import open_async_request
 from chessism_api.database.ask_db import (
     get_main_character_time_control_counts,
     get_top_main_characters_by_time_control
 )
-from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData # <-- NEW
-from chessism_api.operations.chess_com_api import get_profile, get_player_stats # <-- NEW
-# ---
+from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData
+from chessism_api.operations.chess_com_api import get_profile, get_player_stats
 
 async def read_player(player_name: str) -> Optional[Dict[str, Any]]:
     """
@@ -174,20 +167,11 @@ async def create_and_store_player_stats(player_name: str) -> Optional[PlayerStat
             print(f"Failed to create player {player_name_lower}. Cannot add stats.")
             return None
 
-    # 2. Fetch the raw stats from Chess.com API
     raw_stats = await get_player_stats(player_name_lower)
     if not raw_stats:
         print(f"Failed to fetch stats from Chess.com for {player_name_lower}.")
         return None
-        
-    # --- Debug Print ---
-    print(f"--- RAW STATS FOR {player_name_lower} ---")
-    import pprint
-    pprint.pprint(raw_stats)
-    print("---------------------------------")
-    # ---
     
-    # 3. Parse the raw stats into the Pydantic model format
     parsed_data = {"player_name": player_name_lower}
     
     parsed_data.update(_parse_stats_category(raw_stats, 'chess_rapid'))
@@ -206,7 +190,6 @@ async def create_and_store_player_stats(player_name: str) -> Optional[PlayerStat
         print(f"Error validating parsed stats for {player_name_lower}: {e}")
         return None
 
-    # 4. Perform an "UPSERT"
     stats_interface = DBInterface(PlayerStats)
     stats_data_dict = stats_data.model_dump()
 

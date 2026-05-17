@@ -1,8 +1,10 @@
 # local
 .virtual_documents/
+.codex
 backups/
 db_data/
 api_logs/
+logs/
 tablebases/
 # Byte-compiled / optimized / DLL files
 __pycache__/

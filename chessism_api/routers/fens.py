@@ -1,36 +1,27 @@
-#chessism_api/routers/fens.py
-
-# --- MODIFIED: Imports ---
-from fastapi import APIRouter, Body, HTTPException, Depends
+from fastapi import APIRouter, Body, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
-import math # <-- Import math
 
-# --- Import the job function (for reference) and redis client ---
-# --- MODIFIED: Import the "boss" job ---
-from chessism_api.operations.fens import run_fen_pipeline
 from chessism_api.redis_client import get_redis_pool
-# ---
-
-# --- REMOVED: Admin Task Imports ---
-# from chessism_api.database.db_interface import reset_all_game_fens_done_to_false
-# from chessism_api.database.ask_db import delete_analysis_tables
-# ---
-
 from chessism_api.database.ask_db import (
     get_top_fens, 
     get_sum_n_games, 
     get_top_fens_unscored
 )
-from typing import Dict, Any 
 
 router = APIRouter()
 
-# --- THIS IS THE FIX ---
-# This endpoint now enqueues ONE "boss" job
+
+class FenGenerationRequest(BaseModel):
+    total_games_to_process: int = Field(1_000_000, ge=1)
+    batch_size: int = Field(1_000, ge=1)
+    num_workers: int = Field(3, ge=1, le=16)
+
+
 @router.post("/generate")
 async def api_generate_fens(
-    data: Dict[str, int] = Body(...),
+    data: FenGenerationRequest = Body(...),
     redis: ArqRedis = Depends(get_redis_pool)
 ):
     """
@@ -40,32 +31,26 @@ async def api_generate_fens(
     
     Payload: {"total_games_to_process": 400000, "batch_size": 1000}
     """
-    try:
-        total_games = data.get("total_games_to_process", 1000000)
-        batch_size = data.get("batch_size", 1000)
-        num_workers = 3
-    except Exception:
-        raise HTTPException(status_code=400, detail="Invalid payload format.")
+    total_games = data.total_games_to_process
     
     print(f"Enqueuing FEN Pipeline job for {total_games} games.")
     
-    # Enqueue 1 "boss" job
-    await redis.enqueue_job(
-        'run_fen_pipeline', # The "boss" job
+    job = await redis.enqueue_job(
+        'run_fen_pipeline',
         total_games_to_process=total_games,
-        batch_size=batch_size,
-        num_workers=num_workers,
-        _queue_name='pipeline_queue' # Send to the pipeline worker
+        batch_size=data.batch_size,
+        num_workers=data.num_workers,
+        _queue_name='pipeline_queue'
     )
+    job_id = str(getattr(job, "job_id", job))
     
     return JSONResponse(
-        status_code=202, # Accepted
-        content={"message": f"FEN Generation Pipeline started for {total_games} total games."}
+        status_code=202,
+        content={
+            "message": f"FEN Generation Pipeline started for {total_games} total games.",
+            "job_id": job_id
+        }
     )
-# --- END FIX ---
-
-
-# --- (The rest of the router file is unchanged) ---
 @router.get("/top")
 async def api_get_top_fens(limit: int = 20) -> JSONResponse:
     """
@@ -124,7 +109,7 @@ async def api_get_sum_n_games(threshold: int = 10) -> JSONResponse:
         
     return JSONResponse(content={
         "threshold": threshold,
-        "total_sum_n_games": total_sum
+        "total_sum_n_games": int(total_sum)
     })
 
 # --- REMOVED: ADMIN ENDPOINTS ---

@@ -1,20 +1,11 @@
-#chessism_api/database/db_interface.py
-
-import os
 from typing import Any, List, Dict, TypeVar
-# --- THIS IS THE FIX: Import 'case' ---
-from sqlalchemy import select, insert, Integer, func, update, bindparam, text, case
-from sqlalchemy.orm import Session, joinedload
+
+from sqlalchemy import select, Integer, func, update, bindparam, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# --- FIXED IMPORTS ---
 from chessism_api.database.engine import AsyncDBSession
-# --- MODIFIED: Import new association model ---
 from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player
-# ---
-
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from datetime import datetime, timezone
 
 _ModelType = TypeVar("_ModelType", bound=Base)
 
@@ -123,12 +114,10 @@ class DBInterface:
 
         effective_batch_size = INSERT_BATCH_SIZE
 
-        chunks = [data[i:i + effective_batch_size] for i in range(0, len(data), effective_batch_size)]
-        
         valid_columns = {c.name for c in self.db_class.__table__.columns}
         
-        # This function now uses the *provided* session and does NOT commit.
-        for i, chunk in enumerate(chunks):
+        for start in range(0, len(data), effective_batch_size):
+            chunk = data[start:start + effective_batch_size]
             if not chunk:
                 continue
             

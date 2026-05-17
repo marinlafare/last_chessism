@@ -1,8 +1,13 @@
 import httpx
 import asyncio
 import os
+import sys
 import time
+from pathlib import Path
 from pprint import pprint
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 from arq import create_pool
 from chessism_api.redis_client import redis_settings
 
