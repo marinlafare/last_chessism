@@ -9,6 +9,7 @@ const formatNumber = (value) => {
 const fetchJson = async (path, signal) => {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     signal,
+    credentials: 'include',
     headers: { Accept: 'application/json' }
   })
 
@@ -19,7 +20,7 @@ const fetchJson = async (path, signal) => {
   return response.json()
 }
 
-function Hero() {
+export function DashboardSummaryPanel() {
   const [generalities, setGeneralities] = useState(null)
   const [timeControls, setTimeControls] = useState(null)
   const [error, setError] = useState('')
@@ -58,49 +59,51 @@ function Hero() {
   ]
 
   return (
-    <section className="dashboard-hero" id="top">
-      <div className="dashboard-hero-copy">
-        <p className="eyebrow">Live database overview</p>
-        <h2>Chess intelligence, organized for analysis.</h2>
-        <p>
-          Track games, players, positions, and engine coverage from one compact control surface.
-        </p>
-        <div className="hero-actions">
-          <a className="btn btn-primary" href="/games">Open Games</a>
-          <a className="btn btn-secondary" href="/main_characters">Review Players</a>
-        </div>
-        {error ? <p className="result-line">{error}</p> : null}
+    <div className="dashboard-panel" aria-label="Database summary">
+      <div className="metric-grid">
+        {metrics.map((metric) => (
+          <article className="metric-card" key={metric.label}>
+            <span>{metric.label}</span>
+            <strong>{metric.value === undefined ? '-' : formatNumber(metric.value)}</strong>
+          </article>
+        ))}
       </div>
 
-      <div className="dashboard-panel" aria-label="Database summary">
-        <div className="metric-grid">
-          {metrics.map((metric) => (
-            <article className="metric-card" key={metric.label}>
-              <span>{metric.label}</span>
-              <strong>{metric.value === undefined ? '-' : formatNumber(metric.value)}</strong>
-            </article>
-          ))}
+      <div className="mode-summary">
+        <div className="mode-summary-head">
+          <span>Time Controls</span>
+          <strong>{formatNumber(modeTotal)}</strong>
         </div>
-
-        <div className="mode-summary">
-          <div className="mode-summary-head">
-            <span>Time Controls</span>
-            <strong>{formatNumber(modeTotal)}</strong>
-          </div>
-          {['bullet', 'blitz', 'rapid'].map((mode) => {
-            const value = Number(timeControls?.[mode] || 0)
-            const width = modeTotal ? Math.max(3, (value / modeTotal) * 100) : 0
-            return (
-              <div className="mode-row" key={mode}>
-                <span>{mode}</span>
-                <div className="mode-track">
-                  <div className={`mode-fill ${mode}`} style={{ width: `${width}%` }} />
-                </div>
-                <strong>{timeControls ? formatNumber(value) : '-'}</strong>
+        {['bullet', 'blitz', 'rapid'].map((mode) => {
+          const value = Number(timeControls?.[mode] || 0)
+          const width = modeTotal ? Math.max(3, (value / modeTotal) * 100) : 0
+          return (
+            <div className="mode-row" key={mode}>
+              <span>{mode}</span>
+              <div className="mode-track">
+                <div className={`mode-fill ${mode}`} style={{ width: `${width}%` }} />
               </div>
-            )
-          })}
-        </div>
+              <strong>{timeControls ? formatNumber(value) : '-'}</strong>
+            </div>
+          )
+        })}
+      </div>
+      {error ? <p className="result-line">{error}</p> : null}
+    </div>
+  )
+}
+
+function Hero() {
+  return (
+    <section className="dashboard-hero-copy dashboard-hero-standalone" id="top">
+      <p className="eyebrow">Live database overview</p>
+      <h2>Chess intelligence, organized for analysis.</h2>
+      <p>
+        Track games, players, positions, and engine coverage from one compact control surface.
+      </p>
+      <div className="hero-actions">
+        <a className="btn btn-primary" href="/games">Open Games</a>
+        <a className="btn btn-secondary" href="/main_characters">Review Players</a>
       </div>
     </section>
   )

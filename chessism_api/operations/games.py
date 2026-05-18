@@ -1,6 +1,7 @@
+import json
 import time
 from datetime import datetime
-from typing import List, Dict, Any, Union
+from typing import Awaitable, Callable, List, Dict, Any, Union
 
 from sqlalchemy import select
 
@@ -10,12 +11,55 @@ from chessism_api.database.ask_db import (
     open_async_request,
     get_time_control_result_color_matrix,
     get_time_control_game_length_analytics,
-    get_time_control_activity_trend
+    get_time_control_activity_trend,
+    refresh_main_character_mode_summary
 )
 from chessism_api.database.models import Month
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.operations import players as players_ops
 from chessism_api.operations import months as months_ops
+
+PROGRESS_TTL_SECONDS = 60 * 60 * 24
+GAME_UPDATE_PROGRESS_KIND = "game_update"
+ProgressCallback = Callable[[str, int, int, str | None], Awaitable[None]]
+
+
+async def _write_game_job_progress(
+    ctx: dict,
+    job_id: str,
+    *,
+    player_name: str,
+    total: int,
+    processed: int,
+    failed: int = 0,
+    phase: str,
+    detail: str | None = None,
+    result: str | None = None
+) -> None:
+    redis = ctx.get("redis")
+    if not redis:
+        return
+
+    payload = {
+        "job_id": job_id,
+        "kind": GAME_UPDATE_PROGRESS_KIND,
+        "player_name": player_name,
+        "total": int(total),
+        "processed": int(processed),
+        "failed": int(failed),
+        "phase": phase,
+        "detail": detail,
+        "result": result,
+        "updated_at": time.time(),
+    }
+    try:
+        await redis.set(
+            f"chessism:job_progress:{job_id}",
+            json.dumps(payload),
+            ex=PROGRESS_TTL_SECONDS
+        )
+    except Exception as error:
+        print(f"Failed to write game job progress for {job_id}: {repr(error)}", flush=True)
 
 async def read_game(data):
     params = {"link": int(data)}
@@ -122,7 +166,7 @@ async def just_new_months(player_name: str) -> Union[List[str], Dict[str, Any], 
     
     return new_months_to_fetch
 
-async def create_games(data: dict) -> str:
+async def create_games(data: dict, progress_callback: ProgressCallback | None = None) -> str:
     """
     Fetches all games for a player for all new months.
     """
@@ -135,6 +179,7 @@ async def create_games(data: dict) -> str:
     if new_months is False:
         print('#####')
         print("MONTHS found: 0", 'time elapsed: ',time.time()-start_new_months)
+        await refresh_main_character_mode_summary()
         return 'ALL MONTHS IN DB ALREADY'
     elif isinstance(new_months, dict): # Handle error case
         print(f"Error finding new months: {new_months.get('error')}")
@@ -142,9 +187,21 @@ async def create_games(data: dict) -> str:
     else:
         print('#####')
         print(f"MONTHS found: {len(new_months)}", 'time elapsed: ',time.time()-start_new_months)
+
+    total_steps = max(1, len(new_months) + 2)
+    if progress_callback:
+        await progress_callback("downloading", total_steps, 0, f"Downloading {len(new_months)} months.")
+
+    async def on_month_downloaded(index: int, month_str: str) -> None:
+        if progress_callback:
+            await progress_callback("downloading", total_steps, index, f"Downloaded {month_str}.")
     
     print('... Starting DOWNLOAD ...')
-    downloaded_games_by_month = await download_months(player_name, new_months)    
+    downloaded_games_by_month = await download_months(
+        player_name,
+        new_months,
+        progress_callback=on_month_downloaded
+    )
     
     num_downloaded_games = sum(len(v) for y in downloaded_games_by_month.values()
                                 for v in y.values()) if downloaded_games_by_month else 0
@@ -154,14 +211,19 @@ async def create_games(data: dict) -> str:
     print('#####')
     print('Start the formating of the games')
     start_format = time.time()
+    if progress_callback:
+        await progress_callback("formatting", total_steps, len(new_months), "Formatting downloaded games.")
     
     formatted_games_results = await format_games(downloaded_games_by_month, player_name)
     
     if isinstance(formatted_games_results, str): # Handle "All games already in DB"
         print(formatted_games_results)
+        await refresh_main_character_mode_summary()
         return formatted_games_results
         
     print(f'FORMAT of {len(formatted_games_results)} games in: {time.time()-start_format}')
+    if progress_callback:
+        await progress_callback("inserting", total_steps, len(new_months) + 1, "Saving games to the database.")
     
     await insert_games_months_moves_and_players(formatted_games_results, player_name)
     
@@ -171,7 +233,7 @@ async def create_games(data: dict) -> str:
 
 
 # --- NEW FUNCTION ---
-async def update_player_games(data: dict) -> str:
+async def update_player_games(data: dict, progress_callback: ProgressCallback | None = None) -> str:
     """
     Fetches games only from the most recent month in the DB up to the current month.
     This includes re-downloading the most recent month to catch games played
@@ -179,6 +241,8 @@ async def update_player_games(data: dict) -> str:
     """
     player_name = data['player_name'].lower()
     start_update_games = time.time()
+    if progress_callback:
+        await progress_callback("preparing", 1, 0, f"Checking existing months for {player_name}.")
 
     # 1. Get the most recent month from the DB
     month_db_interface = DBInterface(Month)
@@ -188,7 +252,7 @@ async def update_player_games(data: dict) -> str:
 
     if not most_recent_month_dict:
         print(f"No existing months found for {player_name}. Running full 'create_games' instead.")
-        return await create_games(data)
+        return await create_games(data, progress_callback=progress_callback)
 
     # 2. Generate month strings from that date until now
     # This will include the most_recent_month itself
@@ -196,40 +260,115 @@ async def update_player_games(data: dict) -> str:
     
     if not months_to_fetch:
         print(f"Player {player_name} is already up to date.")
+        await refresh_main_character_mode_summary()
         return f"Player {player_name} is already up to date."
 
     print('#####')
     print(f"UPDATING {len(months_to_fetch)} months (from {months_to_fetch[0]} to present)...")
+    total_steps = max(1, len(months_to_fetch) + 2)
+    if progress_callback:
+        await progress_callback("downloading", total_steps, 0, f"Downloading {len(months_to_fetch)} months.")
+
+    async def on_month_downloaded(index: int, month_str: str) -> None:
+        if progress_callback:
+            await progress_callback("downloading", total_steps, index, f"Downloaded {month_str}.")
 
     # 3. Download games for these months
     print('... Starting DOWNLOAD ...')
-    downloaded_games_by_month = await download_months(player_name, months_to_fetch)    
+    downloaded_games_by_month = await download_months(
+        player_name,
+        months_to_fetch,
+        progress_callback=on_month_downloaded
+    )
     
     num_downloaded_games = sum(len(v) for y in downloaded_games_by_month.values()
                                 for v in y.values()) if downloaded_games_by_month else 0
     
     print(f"Processed {len(months_to_fetch)} months. Downloaded games: {num_downloaded_games}")
     if num_downloaded_games == 0:
+        await refresh_main_character_mode_summary()
         return f"No new games found for {player_name}."
 
     # 4. Format and insert
     print('#####')
     print('Start the formating of the games')
     start_format = time.time()
+    if progress_callback:
+        await progress_callback("formatting", total_steps, len(months_to_fetch), "Formatting downloaded games.")
     
     formatted_games_results = await format_games(downloaded_games_by_month, player_name)
     
     if isinstance(formatted_games_results, str): # Handle "All games already in DB"
         print(formatted_games_results)
+        await refresh_main_character_mode_summary()
         return formatted_games_results
         
     print(f'FORMAT of {len(formatted_games_results)} games in: {time.time()-start_format}')
+    if progress_callback:
+        await progress_callback("inserting", total_steps, len(months_to_fetch) + 1, "Saving games to the database.")
     
     await insert_games_months_moves_and_players(formatted_games_results, player_name)
     
     end_update_games = time.time()
     print('Update done in: ',(end_update_games-start_update_games)/60)
     return f"DATA UPDATED FOR {player_name}"
+
+
+async def run_update_player_games_job(ctx: dict, data: dict, **kwargs) -> str:
+    arq_job_id = str(ctx.get("job_id") or "game-update")
+    player_name = str(data.get("player_name", "")).strip().lower()
+    latest_total = 1
+    latest_processed = 0
+
+    async def progress_callback(phase: str, total: int, processed: int, detail: str | None = None) -> None:
+        nonlocal latest_total, latest_processed
+        latest_total = max(1, int(total or 1))
+        latest_processed = max(0, min(latest_total, int(processed or 0)))
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_processed,
+            phase=phase,
+            detail=detail
+        )
+
+    await _write_game_job_progress(
+        ctx,
+        arq_job_id,
+        player_name=player_name,
+        total=1,
+        processed=0,
+        phase="queued",
+        detail=f"Queued update for {player_name}."
+    )
+
+    try:
+        message = await update_player_games(data, progress_callback=progress_callback)
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_total,
+            phase="complete",
+            detail=message,
+            result=message
+        )
+        return message
+    except Exception as error:
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_processed,
+            failed=1,
+            phase="failed",
+            detail=str(error)
+        )
+        raise
 
 
 async def get_time_control_result_color_matrix_payload(

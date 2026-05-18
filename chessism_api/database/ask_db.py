@@ -264,38 +264,41 @@ async def get_main_character_time_control_counts() -> Dict[str, int]:
     return counts
 
 
-async def get_top_main_characters_by_time_control(
-    time_control: str,
-    limit: int = 5
-) -> Dict[str, Any]:
+async def refresh_main_character_mode_summary() -> Dict[str, int]:
     """
-    Returns top main characters for one normalized time control.
-    Ranking is based on number of participations in that time control.
+    Rebuilds the small precomputed table used by main-character time-control filters.
+    The expensive scan happens here instead of on every filter click.
     """
-    target_mode = (time_control or "").strip().lower()
-    if target_mode not in {"bullet", "blitz", "rapid"}:
-        return {"time_control": target_mode, "players": [], "limit": 0}
-
-    # Keep a high cap so the bubble chart can include the full mode population.
-    safe_limit = max(1, min(int(limit), 5000))
-
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
-        WITH filtered_games AS (
+    delete_query = "DELETE FROM main_character_mode_summary;"
+    insert_query = """
+        INSERT INTO main_character_mode_summary (
+            mode,
+            player_name,
+            n_games,
+            rating,
+            avg_game_rating,
+            last_rating,
+            wins,
+            draws,
+            losses,
+            as_white,
+            as_black,
+            last_game_at,
+            refreshed_at
+        )
+        WITH classified_games AS (
             SELECT
+                CASE
+                    WHEN g.time_control LIKE '%/%' THEN 'daily'
+                    WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                        CASE
+                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                            ELSE 'classical'
+                        END
+                    ELSE 'unknown'
+                END AS mode,
                 g.white,
                 g.black,
                 g.white_elo,
@@ -311,24 +314,27 @@ async def get_top_main_characters_by_time_control(
                     g.second::double precision
                 ) AS played_at
             FROM game g
-            WHERE {mode_sql} = :mode
         ),
         player_rows AS (
             SELECT
-                fg.white AS player_name,
-                fg.white_elo::int AS rating,
-                fg.white_result AS result,
+                cg.mode,
+                cg.white AS player_name,
+                cg.white_elo::int AS rating,
+                cg.white_result AS result,
                 'white'::text AS color,
-                fg.played_at
-            FROM filtered_games fg
+                cg.played_at
+            FROM classified_games cg
+            WHERE cg.mode IN ('bullet', 'blitz', 'rapid')
             UNION ALL
             SELECT
-                fg.black AS player_name,
-                fg.black_elo::int AS rating,
-                fg.black_result AS result,
+                cg.mode,
+                cg.black AS player_name,
+                cg.black_elo::int AS rating,
+                cg.black_result AS result,
                 'black'::text AS color,
-                fg.played_at
-            FROM filtered_games fg
+                cg.played_at
+            FROM classified_games cg
+            WHERE cg.mode IN ('bullet', 'blitz', 'rapid')
         ),
         main_player_rows AS (
             SELECT pr.*
@@ -339,6 +345,7 @@ async def get_top_main_characters_by_time_control(
         ),
         aggregated AS (
             SELECT
+                mode,
                 player_name,
                 COUNT(*)::int AS n_games,
                 ROUND(AVG(rating))::int AS avg_game_rating,
@@ -348,20 +355,22 @@ async def get_top_main_characters_by_time_control(
                 SUM(CASE WHEN color = 'white' THEN 1 ELSE 0 END)::int AS as_white,
                 SUM(CASE WHEN color = 'black' THEN 1 ELSE 0 END)::int AS as_black
             FROM main_player_rows
-            GROUP BY player_name
+            GROUP BY mode, player_name
         ),
         latest_per_player AS (
-            SELECT DISTINCT ON (player_name)
+            SELECT DISTINCT ON (mode, player_name)
+                mode,
                 player_name,
                 rating::int AS last_game_rating,
                 played_at AS last_game_at
             FROM main_player_rows
-            ORDER BY player_name, played_at DESC
+            ORDER BY mode, player_name, played_at DESC
         )
         SELECT
+            a.mode,
             a.player_name,
             a.n_games,
-            COALESCE(lp.last_game_rating, a.avg_game_rating)::int AS rating,
+            lp.last_game_rating::int AS rating,
             a.avg_game_rating::int AS avg_game_rating,
             lp.last_game_rating::int AS last_rating,
             a.wins,
@@ -369,14 +378,110 @@ async def get_top_main_characters_by_time_control(
             a.losses,
             a.as_white,
             a.as_black,
-            TO_CHAR(lp.last_game_at, 'YYYY-MON-DD') AS last_game_date,
+            lp.last_game_at,
+            CURRENT_TIMESTAMP AS refreshed_at
+        FROM aggregated a
+        LEFT JOIN latest_per_player lp
+          ON lp.mode = a.mode
+         AND lp.player_name = a.player_name
+        RETURNING mode;
+    """
+
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text(delete_query))
+            result = await session.execute(text(insert_query))
+            rows = result.mappings().all()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    counts = {"bullet": 0, "blitz": 0, "rapid": 0}
+    for row in rows:
+        mode = str(row.get("mode") or "")
+        if mode in counts:
+            counts[mode] += 1
+    counts["total"] = sum(counts.values())
+    return counts
+
+
+async def ensure_main_character_mode_summary() -> Dict[str, Any]:
+    """
+    Builds the summary table when it is empty. Existing rows are trusted because
+    ingestion refreshes the table after writing games.
+    """
+    query = """
+        SELECT
+            (SELECT COUNT(*) FROM main_character_mode_summary)::int AS summary_rows,
+            (SELECT COUNT(*) FROM game)::int AS games,
+            (
+                SELECT COUNT(*)
+                FROM player
+                WHERE joined IS NOT NULL
+                  AND joined <> 0
+            )::int AS main_players;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+
+    summary_rows = int(row.get("summary_rows") or 0) if row else 0
+    games = int(row.get("games") or 0) if row else 0
+    main_players = int(row.get("main_players") or 0) if row else 0
+
+    if summary_rows == 0 and games > 0 and main_players > 0:
+        return {
+            "summary_rows": 0,
+            "refreshed": True,
+            "counts": await refresh_main_character_mode_summary()
+        }
+
+    return {
+        "summary_rows": summary_rows,
+        "games": games,
+        "main_players": main_players,
+        "refreshed": False
+    }
+
+
+async def get_top_main_characters_by_time_control(
+    time_control: str,
+    limit: int = 5
+) -> Dict[str, Any]:
+    """
+    Returns main characters for one normalized time control from the precomputed summary.
+    """
+    target_mode = (time_control or "").strip().lower()
+    if target_mode not in {"bullet", "blitz", "rapid"}:
+        return {"time_control": target_mode, "players": [], "limit": 0}
+
+    # Keep a high cap so the bubble chart can include the full mode population.
+    safe_limit = max(1, min(int(limit), 5000))
+
+    await ensure_main_character_mode_summary()
+
+    query = """
+        SELECT
+            s.player_name,
+            s.n_games,
+            s.rating,
+            s.avg_game_rating,
+            s.last_rating,
+            s.wins,
+            s.draws,
+            s.losses,
+            s.as_white,
+            s.as_black,
+            TO_CHAR(s.last_game_at, 'YYYY-MON-DD') AS last_game_date,
             p.name AS full_name,
             p.avatar,
             p.url AS profile_url
-        FROM aggregated a
-        LEFT JOIN latest_per_player lp ON lp.player_name = a.player_name
-        LEFT JOIN player p ON p.player_name = a.player_name
-        ORDER BY a.n_games DESC, rating DESC, a.player_name ASC
+        FROM main_character_mode_summary s
+        LEFT JOIN player p ON p.player_name = s.player_name
+        WHERE s.mode = :mode
+        ORDER BY s.rating DESC NULLS LAST, s.n_games DESC, s.player_name ASC
         LIMIT :limit;
     """
 

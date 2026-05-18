@@ -20,7 +20,8 @@ from chessism_api.operations import players as players_ops
 
 # --- FIXED: Correct function name imported from ask_db ---
 from chessism_api.database.ask_db import (
-    get_games_already_in_db
+    get_games_already_in_db,
+    refresh_main_character_mode_summary
 )
 
 # --- FIXED: Correct function name imported from check_player_in_db ---
@@ -568,6 +569,10 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
     start_insert = time.time()
     await insert_new_data(games_list_for_db, moves_list_for_db, months_list_for_db)
     print(f'Inserted games, moves, and months for {len(games_list_for_db)} games in: {time.time()-start_insert:.2f} seconds')
+    if games_list_for_db:
+        summary_start = time.time()
+        summary_counts = await refresh_main_character_mode_summary()
+        print(f"Refreshed main-character mode summary in: {time.time()-summary_start:.2f} seconds ({summary_counts})")
 
     print(f"Total time for insert_games_months_moves_and_players: {(time.time()-start_moves_format):.2f} seconds")
 

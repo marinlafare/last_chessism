@@ -1,41 +1,45 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# --- Stop script on any error ---
-set -e
-
-# --- Configuration ---
-CONTAINER_NAME="db"
-DB_USER="chessism_user"
-DB_NAME="chessism_db"
-BACKUP_DIR="./backups"
-BACKUP_PATTERN="$BACKUP_DIR/backup-${DB_NAME}-*.dump"
-
-echo "Starting database restoration for '$DB_NAME'..."
-
-# --- 1. Find the latest backup file ---
-# ls -t lists by modification time, newest first. head -n 1 takes the newest file.
-LATEST_BACKUP=$(ls -t $BACKUP_PATTERN 2>/dev/null | head -n 1)
-
-if [ -z "$LATEST_BACKUP" ]; then
-    echo "❌ Error: No backup files found matching pattern '$BACKUP_PATTERN'."
-    exit 1
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
 fi
 
-echo "Found latest backup file: $(basename $LATEST_BACKUP)"
-echo "Restoring database from $LATEST_BACKUP..."
+DB_SERVICE="${DB_SERVICE:-db}"
+DB_USER="${POSTGRES_USER:?POSTGRES_USER is required in .env or the environment}"
+DB_NAME="${POSTGRES_DB:?POSTGRES_DB is required in .env or the environment}"
+BACKUP_DIR="${BACKUP_DIR:-./db_backup}"
+BACKUP_FILE="${1:-}"
 
-# --- 2. Check if containers are running ---
-# Check if the target container is running (returns non-zero if not running)
-if ! docker compose ps -q $CONTAINER_NAME | grep -q .; then
-    echo "❌ Error: Docker service '$CONTAINER_NAME' is not running. Please run 'docker compose up -d' first."
-    exit 1
+if [ -z "$BACKUP_FILE" ]; then
+  BACKUP_FILE="$(ls -t "$BACKUP_DIR"/"${DB_NAME}"-*.dump 2>/dev/null | head -n 1 || true)"
 fi
 
-# --- 3. Execute the Restore Command ---
-# cat [file] | pipes the file content into the pg_restore command inside the container.
-# --clean: drops existing tables before restoring them.
-cat "$LATEST_BACKUP" | docker compose exec -T $CONTAINER_NAME pg_restore -U $DB_USER -d $DB_NAME --clean
+if [ -z "$BACKUP_FILE" ] || [ ! -f "$BACKUP_FILE" ]; then
+  echo "Error: no backup file found. Pass a .dump path or create one with ./backup.sh."
+  exit 1
+fi
 
-# --- 4. Success Message ---
+if ! docker compose ps -q "$DB_SERVICE" | grep -q .; then
+  echo "Error: docker compose service '$DB_SERVICE' is not running."
+  exit 1
+fi
+
+echo "Restoring '$DB_NAME' from: $BACKUP_FILE"
+echo "This will drop and recreate objects inside the target database."
+
+docker compose exec -T "$DB_SERVICE" \
+  pg_restore \
+  -U "$DB_USER" \
+  -d "$DB_NAME" \
+  --clean \
+  --if-exists \
+  --no-owner \
+  --no-privileges \
+  < "$BACKUP_FILE"
+
 echo ""
-echo "✅ Restoration complete! The database '$DB_NAME' is now restored."
+echo "Restore complete."

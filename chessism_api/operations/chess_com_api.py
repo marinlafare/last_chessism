@@ -2,7 +2,7 @@ import asyncio
 import httpx
 import json
 import time
-from typing import List, Dict, Any, Optional
+from typing import Awaitable, Callable, List, Dict, Any, Optional
 
 import constants
 from chessism_api.operations.models import PlayerCreateData
@@ -199,7 +199,8 @@ async def download_months(
                         player_name: str,
                         valid_dates: List[str],
                         # --- REMOVED: Concurrency parameters ---
-                        min_delay_between_requests: float = 0.5
+                        min_delay_between_requests: float = 0.5,
+                        progress_callback: Callable[[int, str], Awaitable[None]] | None = None
                         ) -> Dict[int, Dict[int, List[Dict[str, Any]]]]:
     """
     --- SERIAL VERSION ---
@@ -216,7 +217,7 @@ async def download_months(
         start_time = time.time()
         
         # --- MODIFIED: Use a simple for loop instead of asyncio.gather ---
-        for month_str in valid_dates:
+        for index, month_str in enumerate(valid_dates, start=1):
             await asyncio.sleep(min_delay_between_requests) # Respect rate limit
 
             year_str, month_str_val = month_str.split('-')
@@ -240,6 +241,9 @@ async def download_months(
 
             except Exception as e:
                 print(f"An error occurred processing {month_str}: {e}")
+
+            if progress_callback:
+                await progress_callback(index, month_str)
         
         end_time = time.time()
         print(f"Finished downloading {len(valid_dates)} months in {end_time - start_time:.2f} seconds.")

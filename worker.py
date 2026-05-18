@@ -17,6 +17,7 @@ from chessism_api.operations.fens import (
     run_fen_insertion_job,
     run_association_insertion_job
 )
+from chessism_api.operations.games import run_update_player_games_job
 
 # --- NEW: Import the database initializer ---
 from chessism_api.database.engine import init_db
@@ -74,7 +75,8 @@ class WorkerSettings:
         run_fen_generation_job,
         run_fen_pipeline,
         run_fen_insertion_job,
-        run_association_insertion_job
+        run_association_insertion_job,
+        run_update_player_games_job
     ]
     
     redis_settings = redis_settings

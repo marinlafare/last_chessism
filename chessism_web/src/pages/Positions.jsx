@@ -8,6 +8,7 @@ import { API_BASE_URL } from '../config'
 
 const START_FEN = new Chess().fen()
 const DEFAULT_ANALYSIS_NODES = 1_000_000
+const POSITION_JOBS_STORAGE_KEY = 'chessism:positions:jobs'
 
 const formatNumber = (value) => {
   const numeric = Number(value ?? 0)
@@ -61,6 +62,34 @@ const getAnalysisLines = (result) => {
   const analysis = result?.analysis
   if (Array.isArray(analysis)) return analysis
   return analysis && typeof analysis === 'object' ? [analysis] : []
+}
+
+const isTrackedJobActive = (state) => {
+  if (!state?.jobId) return false
+  const status = state?.status?.status
+  return status !== 'complete' && status !== 'not_found'
+}
+
+const loadStoredJobState = () => {
+  if (typeof window === 'undefined') return {}
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(POSITION_JOBS_STORAGE_KEY) || '{}')
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+const storeJobState = (state) => {
+  if (typeof window === 'undefined') return
+  const trackedState = Object.fromEntries(
+    Object.entries(state).filter(([, value]) => value?.jobId)
+  )
+  if (!Object.keys(trackedState).length) {
+    window.localStorage.removeItem(POSITION_JOBS_STORAGE_KEY)
+    return
+  }
+  window.localStorage.setItem(POSITION_JOBS_STORAGE_KEY, JSON.stringify(trackedState))
 }
 
 const getAudioContext = () => {
@@ -147,7 +176,7 @@ function Positions() {
   const [fenJob, setFenJob] = useState({ totalGames: 100000, batchSize: 1000, workers: 3 })
   const [globalJob, setGlobalJob] = useState({ totalFens: 10000, batchSize: 100 })
   const [playerJob, setPlayerJob] = useState({ playerName: '', totalFens: 1000, batchSize: 50 })
-  const [jobState, setJobState] = useState({})
+  const [jobState, setJobState] = useState(loadStoredJobState)
   const boardWrapRef = useRef(null)
   const audioContextRef = useRef(null)
   const completedSoundJobsRef = useRef(new Set())
@@ -157,7 +186,7 @@ function Positions() {
   const bestLine = analysisLines[0]
   const turnLabel = validation.game?.turn() === 'b' ? 'Black' : 'White'
   const unscoredPositions = Number(analysisCounts?.unscored_fens ?? Math.max(0, Number(coverage?.n_positions || 0) - Number(coverage?.scored_fens || 0)))
-  const canGenerateFens = remainingFenGames !== null && remainingFenGames > 0 && !jobState.fen?.loading
+  const canGenerateFens = remainingFenGames !== null && remainingFenGames > 0 && !jobState.fen?.loading && !isTrackedJobActive(jobState.fen)
 
   useEffect(() => {
     const node = boardWrapRef.current
@@ -198,26 +227,67 @@ function Positions() {
     return payload
   }
 
+  const hydrateActiveJobs = async () => {
+    const payload = await fetchJson('/jobs/active')
+    const jobs = Array.isArray(payload.jobs) ? payload.jobs : []
+    jobs.forEach((job) => {
+      const progress = job.progress || {}
+      const kind = progress.kind || progress.job_kind
+      const key = kind === 'character_repeated' || kind === 'player' ? 'player' : 'global'
+      setJobState((current) => {
+        if (isTrackedJobActive(current[key])) return current
+        const target = Math.max(1, Number(progress.total || 1))
+        const processed = Number(progress.processed || 0)
+        const next = {
+          ...current,
+          [key]: {
+            ...(current[key] || {}),
+            payload: { job_id: job.job_id },
+            jobId: job.job_id,
+            loading: false,
+            error: '',
+            status: job,
+            targetFens: target,
+            progress: {
+              analyzed: Math.min(target, processed),
+              failed: Number(progress.failed || 0),
+              target,
+              percent: Math.min(100, Math.round((Math.min(target, processed) / target) * 100)),
+              phase: progress.phase,
+              detail: progress.detail
+            }
+          }
+        }
+        storeJobState(next)
+        return next
+      })
+    })
+  }
+
   useEffect(() => {
     loadCoverage()
     loadFenRemaining().catch(() => {})
     loadAnalysisCounts().catch(() => {})
+    hydrateActiveJobs().catch(() => {})
   }, [])
 
   const updateJobState = (key, patch) => {
-    setJobState((current) => ({
-      ...current,
-      [key]: {
-        ...(current[key] || {}),
-        ...patch
+    setJobState((current) => {
+      const next = {
+        ...current,
+        [key]: {
+          ...(current[key] || {}),
+          ...patch
+        }
       }
-    }))
+      storeJobState(next)
+      return next
+    })
   }
 
   useEffect(() => {
     const activeJobs = Object.entries(jobState).filter(([, state]) => {
-      const status = state?.status?.status
-      return state?.jobId && status !== 'complete' && status !== 'not_found'
+      return isTrackedJobActive(state)
     })
 
     if (!activeJobs.length) return undefined
@@ -575,8 +645,8 @@ function Positions() {
                     />
                   </label>
                 </div>
-                <button className="btn btn-primary" type="submit" disabled={jobState.global?.loading}>
-                  {jobState.global?.loading ? 'Queueing' : 'Analyze'}
+                <button className="btn btn-primary" type="submit" disabled={jobState.global?.loading || isTrackedJobActive(jobState.global)}>
+                  {jobState.global?.loading ? 'Queueing' : isTrackedJobActive(jobState.global) ? 'Analyzing' : 'Analyze'}
                 </button>
                 {renderJobResult('global')}
               </form>
@@ -618,8 +688,8 @@ function Positions() {
                     />
                   </label>
                 </div>
-                <button className="btn btn-primary" type="submit" disabled={jobState.player?.loading}>
-                  {jobState.player?.loading ? 'Queueing' : 'Analyze'}
+                <button className="btn btn-primary" type="submit" disabled={jobState.player?.loading || isTrackedJobActive(jobState.player)}>
+                  {jobState.player?.loading ? 'Queueing' : isTrackedJobActive(jobState.player) ? 'Analyzing' : 'Analyze'}
                 </button>
                 {renderJobResult('player')}
               </form>

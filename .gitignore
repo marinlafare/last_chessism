@@ -2,6 +2,7 @@
 .virtual_documents/
 .codex
 backups/
+db_backup/
 db_data/
 api_logs/
 logs/

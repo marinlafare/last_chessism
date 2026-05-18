@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../../config'
 
 const TIME_CONTROLS = ['blitz', 'rapid', 'bullet']
@@ -10,12 +10,6 @@ const formatNumber = (value) => {
   return numeric.toLocaleString('en-US')
 }
 
-const formatPercent = (value) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0%'
-  return `${Math.round(numeric * 100)}%`
-}
-
 const getDisplayName = (player) => {
   const fullName = String(player?.full_name || '').trim()
   return fullName || String(player?.player_name || '').trim() || 'Unknown player'
@@ -23,17 +17,11 @@ const getDisplayName = (player) => {
 
 const getPlayerRating = (player) => Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0)
 
-const getPlayerInitial = (player) => {
-  const name = getDisplayName(player)
-  return name.charAt(0).toUpperCase()
-}
-
 function MainCharactersCarousel() {
   const [selectedMode, setSelectedMode] = useState('blitz')
   const [players, setPlayers] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const trackRef = useRef(null)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -73,15 +61,6 @@ function MainCharactersCarousel() {
     return () => controller.abort()
   }, [selectedMode])
 
-  const scrollCarousel = (direction) => {
-    const track = trackRef.current
-    if (!track) return
-    track.scrollBy({
-      left: direction * Math.min(720, track.clientWidth * 0.82),
-      behavior: 'smooth'
-    })
-  }
-
   return (
     <section className="main-characters-carousel" aria-labelledby="main-characters-title">
       <div className="carousel-head">
@@ -107,58 +86,23 @@ function MainCharactersCarousel() {
 
       {error ? <div className="status-banner warn">{error}</div> : null}
 
-      <div className="carousel-stage">
-        <button className="carousel-edge-btn" type="button" onClick={() => scrollCarousel(-1)} aria-label="Previous players">
-          {'<'}
-        </button>
-        <div className="carousel-track" ref={trackRef}>
-          {loading
-            ? Array.from({ length: 3 }).map((_, index) => (
-                <div className="carousel-player-card loading" key={`loading-${index}`} />
-              ))
-            : players.map((player, index) => {
-                const playerName = String(player?.player_name || '').trim()
-                const profileHref = `/players?player=${encodeURIComponent(playerName)}`
+      <div className="character-rating-list" aria-label={`${selectedMode} main character ratings`}>
+        {loading
+          ? Array.from({ length: 6 }).map((_, index) => (
+              <div className="character-rating-row loading" key={`loading-${index}`} />
+            ))
+          : players.map((player, index) => {
+              const playerName = String(player?.player_name || '').trim()
+              const profileHref = `/players?player=${encodeURIComponent(playerName)}`
 
-                return (
-                  <a className="carousel-player-card" href={profileHref} key={playerName || index}>
-                    <div className="carousel-player-top">
-                      <span className="carousel-rank">#{index + 1}</span>
-                      {player.avatar ? (
-                        <img
-                          className="carousel-avatar"
-                          src={player.avatar}
-                          alt={`${getDisplayName(player)} avatar`}
-                        />
-                      ) : (
-                        <span className="carousel-avatar fallback">{getPlayerInitial(player)}</span>
-                      )}
-                    </div>
-                    <div className="carousel-player-copy">
-                      <h3>{getDisplayName(player)}</h3>
-                      <p>{playerName}</p>
-                    </div>
-                    <div className="carousel-stat-grid">
-                      <span>
-                        <strong>{formatNumber(getPlayerRating(player))}</strong>
-                        <small>rating</small>
-                      </span>
-                      <span>
-                        <strong>{formatNumber(player.n_games)}</strong>
-                        <small>games</small>
-                      </span>
-                      <span>
-                        <strong>{formatPercent(player.score_rate)}</strong>
-                        <small>score</small>
-                      </span>
-                    </div>
-                  </a>
-                )
-              })}
-        </div>
-        <button className="carousel-edge-btn" type="button" onClick={() => scrollCarousel(1)} aria-label="Next players">
-          {'>'}
-        </button>
+              return (
+                <a className="character-rating-row" href={profileHref} key={playerName || index}>
+                  <span className="character-rating-rank">#{index + 1}</span>
+                  <span className="character-rating-name">{getDisplayName(player)}</span>
+                  <strong className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
+                </a>
+              )
+            })}
       </div>
 
       <div className="carousel-footer">

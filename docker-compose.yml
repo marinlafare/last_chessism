@@ -5,8 +5,14 @@ services:
     ports:
       - "8003:8000"
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - SUPERADMIN_GATE_CODE=${SUPERADMIN_GATE_CODE}
+      - AUTH_COOKIE_NAME=${AUTH_COOKIE_NAME}
+      - AUTH_SESSION_TTL_DAYS=${AUTH_SESSION_TTL_DAYS}
+      - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE}
+      - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
+      - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
     networks:
       - chessism_net
     depends_on:
@@ -25,8 +31,8 @@ services:
     ports:
       - "6789:6789"
     environment:
-      - VITE_API_BASE_URL=/api
-      - VITE_DEV_PROXY_TARGET=http://chessism-api:8000
+      - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+      - VITE_DEV_PROXY_TARGET=${VITE_DEV_PROXY_TARGET}
     command: sh -lc "npm install && npm run dev"
     volumes:
       - ./chessism_web:/app
@@ -41,12 +47,12 @@ services:
     build: ./stockfish-service
     image: stockfish-service:latest
     environment:
-      - STOCKFISH_THREADS=1
-      - STOCKFISH_HASH_MB=2048
-      - STOCKFISH_ANALYSE_TIMEOUT_SEC=30
-      - STOCKFISH_SYZYGY_PATH=/syzygy
-      - STOCKFISH_SYZYGY_PROBE_DEPTH=1
-      - REDIS_HOST=redis
+      - STOCKFISH_THREADS=${STOCKFISH_THREADS}
+      - STOCKFISH_HASH_MB=${STOCKFISH_HASH_MB}
+      - STOCKFISH_ANALYSE_TIMEOUT_SEC=${STOCKFISH_ANALYSE_TIMEOUT_SEC}
+      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
+      - STOCKFISH_SYZYGY_PROBE_DEPTH=${STOCKFISH_SYZYGY_PROBE_DEPTH}
+      - REDIS_HOST=${REDIS_HOST}
     volumes:
       - ./syzygy:/syzygy:ro
     networks:
@@ -55,9 +61,9 @@ services:
   db:
     image: postgres:15
     environment:
-      POSTGRES_USER: chessism_user
-      POSTGRES_PASSWORD: chessism_pass
-      POSTGRES_DB: chessism_db
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     command: ["postgres", "-c", "max_wal_size=4GB", "-c", "checkpoint_timeout=15min"]
     ports:
       - "5433:5432"
@@ -66,7 +72,7 @@ services:
     networks:
       - chessism_net
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U chessism_user -d chessism_db"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -92,10 +98,10 @@ services:
     image: chessism-api:latest
     command: arq worker.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=analysis_queue
-      - ANALYSIS_CONCURRENCY=1
+      - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY}
     networks:
       - chessism_net
     depends_on:
@@ -106,14 +112,30 @@ services:
       stockfish-service:
         condition: service_started
 
+  worker-games:
+    build: .
+    image: chessism-api:latest
+    command: arq worker.WorkerSettings
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=games_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
   fen-worker-1:
     build: .
     image: chessism-api:latest
     container_name: fen-worker-1
     command: arq worker.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
@@ -129,8 +151,8 @@ services:
     container_name: fen-worker-2
     command: arq worker.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
@@ -146,8 +168,8 @@ services:
     container_name: fen-worker-3
     command: arq worker.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
@@ -164,8 +186,8 @@ services:
     container_name: pipeline-worker
     command: arq worker.WorkerSettings
     environment:
-      - DATABASE_URL=postgresql+asyncpg://chessism_user:chessism_pass@db:5432/chessism_db
-      - REDIS_HOST=redis
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
     networks:
       - chessism_net

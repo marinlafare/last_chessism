@@ -1,61 +1,46 @@
-#!/bin/bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-# This script creates a compressed backup of your PostgreSQL database.
-# It uses 'docker-compose exec' to run pg_dump inside the running 'db' container.
-# --- MODIFIED: This script will now delete the single most recent backup in
-#          the target directory before creating a new one. ---
-
-# --- Stop script on any error ---
-set -e
-
-# --- Configuration ---
-# Get these values from your docker-compose.yml
-CONTAINER_NAME="db"
-DB_USER="chessism_user"
-DB_NAME="chessism_db"
-OUTPUT_DIR="./backups" # We will create this directory
-
-# --- Create backup directory if it doesn't exist ---
-mkdir -p $OUTPUT_DIR
-
-# --- NEW: Find and delete the most recent backup ---
-echo "Checking for previous backup..."
-# Find the newest file in the directory matching the pattern
-# ls -t lists by modification time, newest first
-# head -n 1 takes only the first line
-# 2>/dev/null hides the "No such file or directory" error if no backups exist
-LATEST_BACKUP=$(ls -t "$OUTPUT_DIR"/backup-"$DB_NAME"-*.dump 2>/dev/null | head -n 1)
-
-if [ -f "$LATEST_BACKUP" ]; then
-    echo "Found previous backup: $LATEST_BACKUP"
-    echo "Deleting it..."
-    rm "$LATEST_BACKUP"
-    echo "Previous backup deleted."
-else
-    echo "No previous backups found."
+if [ -f ".env" ]; then
+  set -a
+  # shellcheck disable=SC1091
+  source ".env"
+  set +a
 fi
-# --- END NEW SECTION ---
 
+DB_SERVICE="${DB_SERVICE:-db}"
+DB_USER="${POSTGRES_USER:?POSTGRES_USER is required in .env or the environment}"
+DB_NAME="${POSTGRES_DB:?POSTGRES_DB is required in .env or the environment}"
+OUTPUT_DIR="${BACKUP_DIR:-./db_backup}"
+TIMESTAMP="$(date +%Y_%m_%d-%H_%M_%S)"
 
-# --- Backup Filename ---
-# Creates a filename like: backup-chessism_db-2025_11_10-22_15_30.dump
-FILENAME="backup-${DB_NAME}-$(date +%Y_%m_%d-%H_%M_%S).dump"
-FULL_PATH="$OUTPUT_DIR/$FILENAME"
+mkdir -p "$OUTPUT_DIR"
 
-echo "Starting new backup of database '$DB_NAME'..."
+DUMP_PATH="$OUTPUT_DIR/${DB_NAME}-${TIMESTAMP}.dump"
+LOG_PATH="$OUTPUT_DIR/${DB_NAME}-${TIMESTAMP}.pg_dump.log"
+SHA_PATH="$DUMP_PATH.sha256"
+TOC_PATH="$OUTPUT_DIR/${DB_NAME}-${TIMESTAMP}.toc"
 
-# --- The Backup Command ---
-# docker-compose exec [service_name] [command_to_run]
-#
-# -T               : Disables pseudo-tty allocation (necessary for redirecting output)
-# pg_dump          : The PostgreSQL backup utility
-# -U $DB_USER    : The username to connect as
-# -d $DB_NAME    : The database to dump
-# -F c             : Format = Custom (compressed, efficient format)
-# > $FULL_PATH   : Redirects the output from the command to a file on your host machine
-docker-compose exec -T $CONTAINER_NAME pg_dump -U $DB_USER -d $DB_NAME -F c > $FULL_PATH
+echo "Starting backup of database '$DB_NAME' from docker compose service '$DB_SERVICE'."
+echo "Writing custom-format dump to: $DUMP_PATH"
 
-# --- Success Message ---
+docker compose exec -T "$DB_SERVICE" \
+  pg_dump \
+  -U "$DB_USER" \
+  -d "$DB_NAME" \
+  -F c \
+  --no-owner \
+  --no-privileges \
+  --verbose \
+  > "$DUMP_PATH" \
+  2> "$LOG_PATH"
+
+sha256sum "$DUMP_PATH" > "$SHA_PATH"
+docker compose exec -T "$DB_SERVICE" pg_restore --list < "$DUMP_PATH" > "$TOC_PATH"
+
 echo ""
-echo "✅ New backup complete!"
-echo "File created at: $FULL_PATH"
+echo "Backup complete."
+echo "Dump:     $DUMP_PATH"
+echo "Checksum: $SHA_PATH"
+echo "TOC:      $TOC_PATH"
+echo "Log:      $LOG_PATH"

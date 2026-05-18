@@ -8,3 +8,4 @@ httpx
 requests
 python-chess
 arq[redis]
+argon2-cffi

@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { API_BASE_URL } from '../config'
+
+const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
 
 async function sendPlayerAction(path, playerName) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -20,6 +22,69 @@ async function sendPlayerAction(path, playerName) {
   return payload
 }
 
+async function fetchJobStatus(jobId) {
+  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`)
+  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
+
+  if (!response.ok) {
+    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+  }
+
+  return payload
+}
+
+function loadStoredUpdateJob() {
+  if (typeof window === 'undefined') return null
+  try {
+    const parsed = JSON.parse(window.localStorage.getItem(UPDATE_JOB_STORAGE_KEY) || 'null')
+    return parsed?.jobId ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function storeUpdateJob(job) {
+  if (typeof window === 'undefined') return
+  if (!job?.jobId) {
+    window.localStorage.removeItem(UPDATE_JOB_STORAGE_KEY)
+    return
+  }
+  window.localStorage.setItem(UPDATE_JOB_STORAGE_KEY, JSON.stringify(job))
+}
+
+function isTerminalJobStatus(status) {
+  const phase = status?.progress?.phase
+  return status?.status === 'complete' || status?.status === 'not_found' || phase === 'complete' || phase === 'failed'
+}
+
+function formatStatusMessage(value) {
+  if (!value) return ''
+  return typeof value === 'string' ? value : JSON.stringify(value)
+}
+
+function renderUpdateProgress(status) {
+  const progress = status?.progress
+  if (!progress) return null
+
+  const total = Math.max(1, Number(progress.total || 1))
+  const processed = Math.min(total, Number(progress.processed || 0))
+  const percent = Math.min(100, Math.round((processed / total) * 100))
+  const phase = progress.phase || status.status || 'working'
+
+  return (
+    <div className="job-progress" aria-label="Update progress">
+      <div className="job-progress-head">
+        <strong>{phase}</strong>
+        <span>{percent}%</span>
+      </div>
+      <div className="job-progress-track">
+        <div className="job-progress-fill" style={{ width: `${percent}%` }} />
+      </div>
+      <p className="result-line">{progress.detail || `${processed} of ${total}`}</p>
+    </div>
+  )
+}
+
 function DownloadNewGames() {
   const [downloadPlayer, setDownloadPlayer] = useState('')
   const [updatePlayer, setUpdatePlayer] = useState('')
@@ -27,7 +92,44 @@ function DownloadNewGames() {
   const [updateResult, setUpdateResult] = useState('')
   const [downloadLoading, setDownloadLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
-  const actionBusy = downloadLoading || updateLoading
+  const [updateJob, setUpdateJob] = useState(loadStoredUpdateJob)
+  const [updateJobStatus, setUpdateJobStatus] = useState(null)
+  const updateJobActive = updateJob?.jobId && !isTerminalJobStatus(updateJobStatus)
+  const actionBusy = downloadLoading || updateLoading || updateJobActive
+
+  useEffect(() => {
+    if (!updateJob?.jobId) return undefined
+
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const status = await fetchJobStatus(updateJob.jobId)
+        if (cancelled) return
+        setUpdateJobStatus(status)
+
+        if (isTerminalJobStatus(status)) {
+          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
+          setUpdateResult(resultMessage || (status.progress?.phase === 'failed' ? 'Games update failed.' : 'Games update finished.'))
+          storeUpdateJob(null)
+          setUpdateJob(null)
+        }
+      } catch (error) {
+        if (cancelled) return
+        setUpdateJobStatus({ status: 'not_found', progress: { phase: 'failed', detail: error instanceof Error ? error.message : 'Unable to read job status.' } })
+        setUpdateResult(error instanceof Error ? error.message : 'Unable to read job status.')
+        storeUpdateJob(null)
+        setUpdateJob(null)
+      }
+    }
+
+    poll()
+    const interval = window.setInterval(poll, 1500)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [updateJob?.jobId])
 
   const handleDownload = async () => {
     if (actionBusy) return
@@ -59,9 +161,17 @@ function DownloadNewGames() {
 
     setUpdateLoading(true)
     setUpdateResult('')
+    setUpdateJobStatus(null)
     try {
       const payload = await sendPlayerAction('/games/update', player)
-      setUpdateResult(payload.message || 'Games update started.')
+      if (payload.job_id) {
+        const job = { jobId: payload.job_id, playerName: payload.player_name || player }
+        storeUpdateJob(job)
+        setUpdateJob(job)
+        setUpdateResult(payload.message || 'Games update started.')
+      } else {
+        setUpdateResult(payload.message || 'Games update started.')
+      }
     } catch (error) {
       setUpdateResult(error instanceof Error ? error.message : 'Request failed.')
     } finally {
@@ -111,8 +221,9 @@ function DownloadNewGames() {
                 placeholder="e.g. magnuscarlsen"
               />
               <button className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
-                {updateLoading ? 'Working...' : actionBusy ? 'Busy...' : 'Update Games'}
+                {updateLoading ? 'Queueing...' : updateJobActive ? 'Updating...' : actionBusy ? 'Busy...' : 'Update Games'}
               </button>
+              {renderUpdateProgress(updateJobStatus)}
               <p className="result-line">{updateResult || '-'}</p>
             </article>
           </section>

@@ -59,6 +59,130 @@ code {
   font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
+.superadmin-gate {
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: var(--bg);
+}
+
+.superadmin-gate-input {
+  width: min(280px, calc(100vw - 48px));
+  height: 42px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  font-family: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 18px;
+  text-align: center;
+  outline: none;
+}
+
+.superadmin-gate-input:focus {
+  border-color: var(--accent-2);
+}
+
+.admins-gate-page {
+  position: relative;
+  display: grid;
+  min-height: 100vh;
+  place-items: center;
+  background: var(--bg);
+  padding: 24px;
+}
+
+.admins-panel {
+  display: grid;
+  gap: 18px;
+  width: min(420px, calc(100vw - 48px));
+  min-height: 220px;
+  place-items: center;
+  padding: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.admins-empty {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+}
+
+.admins-list,
+.admin-auth-form {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.admin-name-button,
+.admin-auth-submit,
+.admin-signup-fab {
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0f151c;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.admin-name-button:hover,
+.admin-auth-submit:hover,
+.admin-signup-fab:hover {
+  border-color: var(--accent-2);
+}
+
+.admin-auth-input {
+  width: 100%;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  padding: 8px 10px;
+  outline: none;
+}
+
+.admin-auth-input:focus {
+  border-color: var(--accent-2);
+}
+
+.admin-auth-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+  text-align: center;
+}
+
+.admin-signup-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  padding: 0 16px;
+}
+
+.superadmin-logout {
+  position: fixed;
+  left: 14px;
+  bottom: 18px;
+  z-index: 50;
+  width: calc(var(--rail-width) - 28px);
+  min-height: 40px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: #0f151c;
+  color: var(--muted);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.superadmin-logout:hover {
+  border-color: var(--accent-2);
+  color: var(--text);
+}
+
 .page-frame {
   display: grid;
   grid-template-columns: var(--rail-width) minmax(0, 1fr);
@@ -193,6 +317,13 @@ main,
   align-items: stretch;
 }
 
+.home-top-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: stretch;
+}
+
 .dashboard-hero-copy,
 .dashboard-panel,
 .main-characters-carousel,
@@ -245,11 +376,19 @@ main,
   font-size: 16px;
 }
 
+.dashboard-hero-standalone {
+  min-height: 260px;
+}
+
 .dashboard-panel {
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 18px;
+}
+
+.home-top-grid .dashboard-panel .metric-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
 .metric-grid,
@@ -421,6 +560,64 @@ main,
   border-color: rgba(117, 199, 166, 0.55);
   background: rgba(117, 199, 166, 0.12);
   color: var(--text);
+}
+
+.character-rating-list {
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  min-height: 268px;
+  max-height: 268px;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  scrollbar-color: var(--border) transparent;
+}
+
+.character-rating-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) minmax(72px, auto);
+  align-items: center;
+  gap: 12px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  text-decoration: none;
+}
+
+.character-rating-row:hover {
+  border-color: rgba(117, 199, 166, 0.5);
+  background: rgba(117, 199, 166, 0.08);
+}
+
+.character-rating-row.loading {
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+}
+
+.character-rating-rank {
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.character-rating-name {
+  overflow: hidden;
+  color: var(--text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.character-rating-value {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 14px;
+  text-align: right;
 }
 
 .carousel-stage {
@@ -1457,6 +1654,11 @@ select:focus {
     --rail-width: 84px;
   }
 
+  .superadmin-logout {
+    width: 56px;
+    font-size: 11px;
+  }
+
   .rail-brand span,
   .rail-btn span:last-child {
     display: none;
@@ -1467,6 +1669,7 @@ select:focus {
   }
 
   .dashboard-hero,
+  .home-top-grid,
   .players-profile-layout,
   .main-character-hover-grid,
   .openings-layout,
@@ -1500,6 +1703,13 @@ select:focus {
 
   .left-rail-menu {
     padding: 10px;
+  }
+
+  .superadmin-logout {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
   }
 
   .rail-nav {

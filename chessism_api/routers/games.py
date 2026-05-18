@@ -1,13 +1,16 @@
 import asyncio
+import json
+import time
 from typing import Any, Dict
 
-from fastapi import APIRouter, Body, HTTPException, Query
+from arq.connections import ArqRedis
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
+from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.games import (
     create_games,
     read_game,
-    update_player_games,
     get_time_control_result_color_matrix_payload,
     get_time_control_game_length_analytics_payload,
     get_time_control_activity_trend_payload
@@ -32,6 +35,8 @@ from chessism_api.database.ask_db import (
 
 router = APIRouter()
 GAME_PIPELINE_LOCK = asyncio.Lock()
+GAME_QUEUE_NAME = "games_queue"
+PROGRESS_TTL_SECONDS = 60 * 60 * 24
 
 
 def _payload_player_name(data: Dict[str, Any]) -> str:
@@ -39,6 +44,46 @@ def _payload_player_name(data: Dict[str, Any]) -> str:
     if not player_name:
         raise HTTPException(status_code=400, detail="Payload must include 'player_name'.")
     return player_name
+
+
+async def _has_active_game_job(redis: ArqRedis) -> bool:
+    keys = await redis.keys("chessism:job_progress:*")
+    for key in keys:
+        raw = await redis.get(key)
+        if not raw:
+            continue
+        try:
+            if isinstance(raw, bytes):
+                raw = raw.decode("utf-8")
+            payload = json.loads(raw)
+        except Exception:
+            continue
+
+        if payload.get("kind") != "game_update":
+            continue
+        if payload.get("phase") not in ("complete", "failed"):
+            return True
+    return False
+
+
+async def _write_queued_game_job(redis: ArqRedis, job_id: str, player_name: str) -> None:
+    payload = {
+        "job_id": job_id,
+        "kind": "game_update",
+        "player_name": player_name,
+        "total": 1,
+        "processed": 0,
+        "failed": 0,
+        "phase": "queued",
+        "detail": f"Queued update for {player_name}.",
+        "result": None,
+        "updated_at": time.time(),
+    }
+    await redis.set(
+        f"chessism:job_progress:{job_id}",
+        json.dumps(payload),
+        ex=PROGRESS_TTL_SECONDS
+    )
 
 @router.get("/database/generalities")
 async def api_get_games_database_generalities() -> JSONResponse:
@@ -192,7 +237,10 @@ async def api_read_game(link: str) -> JSONResponse:
     return JSONResponse(content=game[0])
 
 @router.post("")
-async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse:
+async def api_create_game(
+    data: Dict[str, Any] = Body(...),
+    redis: ArqRedis = Depends(get_redis_pool)
+) -> JSONResponse:
     """
     data = {"player_name": "some_player_name"}
     
@@ -202,7 +250,7 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse:
     player_name = _payload_player_name(data)
     data["player_name"] = player_name
         
-    if GAME_PIPELINE_LOCK.locked():
+    if GAME_PIPELINE_LOCK.locked() or await _has_active_game_job(redis):
         return JSONResponse(
             status_code=409,
             content={"message": "Another download/update is running. Wait until it finishes."}
@@ -221,7 +269,10 @@ async def api_create_game(data: Dict[str, Any] = Body(...)) -> JSONResponse:
 
 
 @router.post("/update")
-async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONResponse:
+async def api_update_player_games(
+    data: Dict[str, Any] = Body(...),
+    redis: ArqRedis = Depends(get_redis_pool)
+) -> JSONResponse:
     """
     data = {"player_name": "some_player_name"}
     
@@ -230,22 +281,35 @@ async def api_update_player_games(data: Dict[str, Any] = Body(...)) -> JSONRespo
     player_name = _payload_player_name(data)
     data["player_name"] = player_name
         
-    if GAME_PIPELINE_LOCK.locked():
+    if GAME_PIPELINE_LOCK.locked() or await _has_active_game_job(redis):
         return JSONResponse(
             status_code=409,
             content={"message": "Another download/update is running. Wait until it finishes."}
         )
 
-    async with GAME_PIPELINE_LOCK:
-        try:
-            message = await update_player_games(data)
-            return JSONResponse(content={"message": message})
-        except Exception as error:
-            print(f"Error updating games for {player_name}: {error}")
-            return JSONResponse(
-                status_code=500,
-                content={"message": f"Failed to update games for {player_name}."}
-            )
+    try:
+        job = await redis.enqueue_job(
+            "run_update_player_games_job",
+            data,
+            _queue_name=GAME_QUEUE_NAME,
+            _job_timeout=60 * 60 * 6
+        )
+        job_id = str(getattr(job, "job_id", job))
+        await _write_queued_game_job(redis, job_id, player_name)
+        return JSONResponse(
+            status_code=202,
+            content={
+                "message": f"Games update for {player_name} enqueued on {GAME_QUEUE_NAME}.",
+                "player_name": player_name,
+                "job_id": job_id
+            }
+        )
+    except Exception as error:
+        print(f"Error enqueueing games update for {player_name}: {error}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Failed to enqueue games update for {player_name}."}
+        )
 
 
 @router.get("/{player_name}/count")

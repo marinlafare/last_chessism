@@ -11,7 +11,7 @@ from chessism_api.redis_client import get_redis_pool
 
 router = APIRouter()
 
-KNOWN_QUEUES = ("pipeline_queue", "fen_queue", "analysis_queue", "arq:queue")
+KNOWN_QUEUES = ("pipeline_queue", "fen_queue", "analysis_queue", "games_queue", "arq:queue")
 
 
 def _serialize_value(value: Any) -> Any:
@@ -63,6 +63,54 @@ async def _read_progress(redis: ArqRedis, job_id: str) -> dict[str, Any] | None:
         return json.loads(raw)
     except Exception:
         return None
+
+
+@router.get("/active")
+async def api_get_active_jobs(redis: ArqRedis = Depends(get_redis_pool)) -> JSONResponse:
+    """
+    Returns jobs with live progress payloads that have not completed yet.
+    This lets the UI recover a running job after navigation or refresh.
+    """
+    jobs = []
+    keys = await redis.keys("chessism:job_progress:*")
+    for key in keys:
+        key_text = key.decode("utf-8") if isinstance(key, bytes) else str(key)
+        job_id = key_text.rsplit(":", 1)[-1]
+        progress = await _read_progress(redis, job_id)
+        if not progress:
+            continue
+
+        phase = str(progress.get("phase") or "")
+        if phase in ("complete", "failed"):
+            continue
+
+        status_payload = None
+        for queue_name in KNOWN_QUEUES:
+            job = Job(job_id, redis, _queue_name=queue_name)
+            status = await job.status()
+            if status == JobStatus.not_found:
+                continue
+            status_payload = {
+                "job_id": job_id,
+                "queue_name": queue_name,
+                "status": status.value if isinstance(status, JobStatus) else str(status),
+                "info": _serialize_job_info(await job.info()),
+                "result": _serialize_result(await job.result_info()),
+                "progress": progress,
+            }
+            break
+
+        jobs.append(status_payload or {
+            "job_id": job_id,
+            "queue_name": None,
+            "status": "in_progress",
+            "info": None,
+            "result": None,
+            "progress": progress,
+        })
+
+    jobs.sort(key=lambda item: item.get("progress", {}).get("updated_at", 0), reverse=True)
+    return JSONResponse(content={"jobs": jobs})
 
 
 @router.get("/{job_id}")

@@ -3,7 +3,7 @@ import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MainCharactersCarousel from '../components/home/MainCharactersCarousel'
-import Hero from '../components/home/Hero'
+import Hero, { DashboardSummaryPanel } from '../components/home/Hero'
 import StatusPanel from '../components/home/StatusPanel'
 import ExploreGrid from '../components/home/ExploreGrid'
 import ProofPoints from '../components/home/ProofPoints'
@@ -20,7 +20,10 @@ function Home() {
       <div className="home-shell">
         <Header />
         <main>
-          <MainCharactersCarousel />
+          <div className="home-top-grid">
+            <MainCharactersCarousel />
+            <DashboardSummaryPanel />
+          </div>
           <Hero />
           <StatusPanel {...status} />
           <ExploreGrid />

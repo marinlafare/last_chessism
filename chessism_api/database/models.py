@@ -1,13 +1,19 @@
 # chessism_api/database/models.py
+import enum
 from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger, Table,
-    DateTime, func, UniqueConstraint
+    DateTime, Enum, func, UniqueConstraint, Index
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
 
 Base = declarative_base()
+
+
+class AccountRole(str, enum.Enum):
+    admin = "admin"
+    user = "user"
 
 
 def to_dict(obj: Base) -> Dict[str, Any]:
@@ -250,3 +256,65 @@ class PlayerStats(Base):
     puzzle_rush_best_score = Column(Integer, nullable=True)
     tactics_highest_rating = Column(Integer, nullable=True)
     tactics_lowest_rating = Column(Integer, nullable=True)
+
+
+class MainCharacterModeSummary(Base):
+    __tablename__ = "main_character_mode_summary"
+
+    mode = Column(String(16), primary_key=True, nullable=False)
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", ondelete="CASCADE"),
+        primary_key=True,
+        nullable=False
+    )
+    n_games = Column(Integer, nullable=False, default=0)
+    rating = Column(Integer, nullable=True)
+    avg_game_rating = Column(Integer, nullable=True)
+    last_rating = Column(Integer, nullable=True)
+    wins = Column(Integer, nullable=False, default=0)
+    draws = Column(Integer, nullable=False, default=0)
+    losses = Column(Integer, nullable=False, default=0)
+    as_white = Column(Integer, nullable=False, default=0)
+    as_black = Column(Integer, nullable=False, default=0)
+    last_game_at = Column(DateTime(timezone=True), nullable=True)
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    player = relationship(Player, foreign_keys=[player_name])
+
+    __table_args__ = (
+        Index("ix_main_character_mode_summary_mode_rating", "mode", "rating"),
+        Index("ix_main_character_mode_summary_mode_games", "mode", "n_games"),
+    )
+
+
+class Account(Base):
+    __tablename__ = "account"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=False, unique=True, index=True)
+    password_hash = Column(String, nullable=False)
+    chess_com_nickname = Column(String, nullable=True, index=True)
+    role = Column(Enum(AccountRole, name="account_role"), nullable=False, default=AccountRole.user)
+    is_active = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    last_login_at = Column(DateTime(timezone=True), nullable=True)
+
+    sessions = relationship("AuthSession", back_populates="account", cascade="all, delete-orphan")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_session"
+
+    id = Column(String(36), primary_key=True)
+    account_id = Column(String(36), ForeignKey("account.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True, index=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    ip_address = Column(String, nullable=True)
+    user_agent = Column(String, nullable=True)
+
+    account = relationship("Account", back_populates="sessions")
