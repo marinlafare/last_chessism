@@ -17,7 +17,7 @@ RUN set -eux; \
     apt-get clean; \
     rm -rf /var/lib/apt/lists/*
 
-RUN pip install --no-cache-dir fastapi uvicorn[standard] python-chess
+RUN pip install --no-cache-dir fastapi uvicorn[standard] python-chess redis
 
 WORKDIR /app
 COPY . /app

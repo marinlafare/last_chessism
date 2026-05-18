@@ -5,6 +5,7 @@ function SideRail() {
     { href: '/games', label: 'Games', short: 'G' },
     { href: '/main_characters', label: 'Players', short: 'P' },
     { href: '/positions', label: 'Positions', short: 'F' },
+    { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
     { href: '/download_new_games', label: 'Ingest', short: '+' }
   ]
 

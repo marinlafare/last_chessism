@@ -189,6 +189,19 @@ class FenContinuation(Base):
     )
 
 
+class AnalysisTime(Base):
+    __tablename__ = "analysis_time"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False, index=True)
+    source = Column(String(32), nullable=False, index=True)
+    fen_hash = Column(String(64), nullable=False, index=True)
+    n_pieces = Column(Integer, nullable=False, index=True)
+    nodes_limit = Column(Integer, nullable=False)
+    multipv = Column(Integer, nullable=False)
+    elapsed_ms = Column(Float, nullable=False)
+
+
 class PlayerStats(Base):
     __tablename__ = "player_stats"
     

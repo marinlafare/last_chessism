@@ -7,7 +7,9 @@ from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.ask_db import (
     get_top_fens, 
     get_sum_n_games, 
-    get_top_fens_unscored
+    get_top_fens_unscored,
+    get_fen_analysis_counts,
+    _get_remaining_fens_count_committed
 )
 
 router = APIRouter()
@@ -51,6 +53,26 @@ async def api_generate_fens(
             "job_id": job_id
         }
     )
+
+
+@router.get("/remaining_games")
+async def api_get_remaining_games_needing_fens() -> JSONResponse:
+    """
+    Returns how many games still need FEN extraction.
+    """
+    remaining = await _get_remaining_fens_count_committed()
+    return JSONResponse(content={"remaining_games": int(remaining or 0)})
+
+
+@router.get("/analysis_counts")
+async def api_get_fen_analysis_counts() -> JSONResponse:
+    """
+    Returns FEN analysis coverage counts.
+    """
+    counts = await get_fen_analysis_counts()
+    return JSONResponse(content=counts)
+
+
 @router.get("/top")
 async def api_get_top_fens(limit: int = 20) -> JSONResponse:
     """

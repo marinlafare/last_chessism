@@ -15,6 +15,8 @@ STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/usr/local/bin/stockfish")
 THREADS = int(os.environ.get("STOCKFISH_THREADS", "1"))
 HASH_MB = int(os.environ.get("STOCKFISH_HASH_MB", "256"))
 ANALYSE_TIMEOUT_SEC = float(os.environ.get("STOCKFISH_ANALYSE_TIMEOUT_SEC", "30"))
+SYZYGY_PATH = os.environ.get("STOCKFISH_SYZYGY_PATH", "")
+SYZYGY_PROBE_DEPTH = int(os.environ.get("STOCKFISH_SYZYGY_PROBE_DEPTH", "1"))
 
 
 def convert_to_serializable(value: Any) -> Any:
@@ -101,8 +103,14 @@ async def _start_engine() -> tuple[Any, chess.engine.UciProtocol]:
             extra_options["UCI_ShowWDL"] = True
         if "Analysis Contempt" in engine_uci.options:
             extra_options["Analysis Contempt"] = "Off"
+        if SYZYGY_PATH and os.path.isdir(SYZYGY_PATH) and "SyzygyPath" in engine_uci.options:
+            extra_options["SyzygyPath"] = SYZYGY_PATH
+        if "SyzygyProbeDepth" in engine_uci.options:
+            extra_options["SyzygyProbeDepth"] = SYZYGY_PROBE_DEPTH
         if extra_options:
             await engine_uci.configure(extra_options)
+            if "SyzygyPath" in extra_options:
+                print(f"--- [ENGINE] Syzygy tablebases enabled: {SYZYGY_PATH} ---", flush=True)
 
         return transport, engine_uci
 

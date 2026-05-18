@@ -6,6 +6,7 @@ db_data/
 api_logs/
 logs/
 tablebases/
+syzygy/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

@@ -1599,6 +1599,37 @@ async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
             print(f"Error calculating sum of n_games: {e}")
             return None
 
+
+async def get_fen_analysis_counts() -> Dict[str, int]:
+    """
+    Returns FEN analysis coverage counts.
+    analyzed_fens counts every FEN with a stored score, including score 0.
+    """
+    sql_query = """
+        SELECT
+            COUNT(*) AS total_fens,
+            COUNT(*) FILTER (WHERE score IS NOT NULL) AS analyzed_fens,
+            COUNT(*) FILTER (WHERE score IS NULL) AS unscored_fens,
+            COUNT(*) FILTER (WHERE score IS NOT NULL AND score <> 0) AS nonzero_scored_fens
+        FROM fen;
+    """
+    rows = await open_async_request(sql_query, fetch_as_dict=True)
+    if not rows:
+        return {
+            "total_fens": 0,
+            "analyzed_fens": 0,
+            "unscored_fens": 0,
+            "nonzero_scored_fens": 0,
+        }
+
+    row = rows[0]
+    return {
+        "total_fens": int(row.get("total_fens") or 0),
+        "analyzed_fens": int(row.get("analyzed_fens") or 0),
+        "unscored_fens": int(row.get("unscored_fens") or 0),
+        "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
+    }
+
 async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of FENs that need analysis.

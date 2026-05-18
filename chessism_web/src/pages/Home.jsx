@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import MainCharactersCarousel from '../components/home/MainCharactersCarousel'
 import Hero from '../components/home/Hero'
 import StatusPanel from '../components/home/StatusPanel'
 import ExploreGrid from '../components/home/ExploreGrid'
@@ -19,6 +20,7 @@ function Home() {
       <div className="home-shell">
         <Header />
         <main>
+          <MainCharactersCarousel />
           <Hero />
           <StatusPanel {...status} />
           <ExploreGrid />

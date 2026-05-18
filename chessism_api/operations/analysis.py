@@ -2,6 +2,7 @@
 
 import asyncio
 import httpx
+import json
 import time
 import os
 from typing import List, Dict, Any, Optional, Tuple
@@ -16,6 +17,7 @@ from chessism_api.database.ask_db import (
     get_fens_for_analysis,
     get_player_fens_for_analysis
 )
+from chessism_api.operations.analysis_times import record_analysis_times
 # ---
 
 # --- Engine service URL ---
@@ -26,12 +28,17 @@ fen_interface = DBInterface(Fen)
 
 # Concurrency for analysis batches (number of parallel workers per job)
 ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "1")))
+PROGRESS_TTL_SECONDS = 60 * 60 * 24
 
 async def _call_engine_service(
     client: httpx.AsyncClient,
     url: str,
     fens: List[str],
-    nodes: int
+    nodes: int,
+    *,
+    progress_job_id: str | None = None,
+    progress_total: int | None = None,
+    progress_offset: int = 0,
 ) -> Optional[List[Dict[str, Any]]]:
     """
     Sends a batch of FENs to the specified analysis engine service.
@@ -40,6 +47,12 @@ async def _call_engine_service(
         "fens": fens,
         "nodes_limit": nodes
     }
+    if progress_job_id:
+        payload.update({
+            "progress_job_id": progress_job_id,
+            "progress_total": progress_total or len(fens),
+            "progress_offset": progress_offset,
+        })
     try:
         response = await client.post(url, json=payload, timeout=None) # Disable timeout
         response.raise_for_status()
@@ -53,6 +66,39 @@ async def _call_engine_service(
     except Exception as e:
         print(f"Unexpected error in _call_engine_service: {repr(e)}", flush=True)
         return None
+
+
+async def _write_job_progress(
+    ctx: dict,
+    job_id: str,
+    *,
+    total: int,
+    processed: int,
+    failed: int,
+    phase: str,
+    detail: str | None = None
+) -> None:
+    redis = ctx.get("redis")
+    if not redis:
+        return
+
+    payload = {
+        "job_id": job_id,
+        "total": int(total),
+        "processed": int(processed),
+        "failed": int(failed),
+        "phase": phase,
+        "detail": detail,
+        "updated_at": time.time(),
+    }
+    try:
+        await redis.set(
+            f"chessism:job_progress:{job_id}",
+            json.dumps(payload),
+            ex=PROGRESS_TTL_SECONDS
+        )
+    except Exception as e:
+        print(f"Failed to write job progress for {job_id}: {repr(e)}", flush=True)
 
 def _format_engine_results(
     engine_output: List[Dict[str, Any]]
@@ -112,6 +158,44 @@ def _format_engine_results(
                     })
     return formatted_results, continuations
 
+
+def _engine_elapsed_ms(result: Dict[str, Any]) -> float | None:
+    analysis = result.get("analysis")
+    if isinstance(analysis, list) and analysis:
+        value = analysis[0].get("time")
+    elif isinstance(analysis, dict):
+        value = analysis.get("time")
+    else:
+        value = None
+    try:
+        return float(value) * 1000
+    except (TypeError, ValueError):
+        return None
+
+
+def _timing_rows_from_engine_results(
+    fens: List[str],
+    engine_results: List[Dict[str, Any]],
+    *,
+    source: str,
+    nodes_limit: int,
+    multipv: int = 4,
+) -> List[Dict[str, Any]]:
+    rows = []
+    for fen, result in zip(fens, engine_results):
+        elapsed_ms = _engine_elapsed_ms(result)
+        if elapsed_ms is None:
+            continue
+        rows.append({
+            "fen": fen,
+            "source": source,
+            "nodes_limit": nodes_limit,
+            "multipv": multipv,
+            "elapsed_ms": elapsed_ms,
+            "engine_result": result,
+        })
+    return rows
+
 async def run_analysis_job(
     ctx: dict, 
     total_fens_to_process: int,
@@ -123,6 +207,7 @@ async def run_analysis_job(
     The main background task for a general analysis job.
     '**kwargs' is added to accept extra arq arguments.
     """
+    arq_job_id = str(ctx.get("job_id") or "analysis")
     job_id = "ANALYSIS"
     engine_url = ENGINE_URL
     
@@ -131,12 +216,22 @@ async def run_analysis_job(
     print(f"[{job_id}] Routing to: {engine_url}", flush=True) # <-- Test log
 
     total_processed = 0
+    total_engine_processed = 0
     total_failed_batches = 0
+    total_failed_fens = 0
     job_start_time = time.time()
     counter_lock = asyncio.Lock()
+    await _write_job_progress(
+        ctx,
+        arq_job_id,
+        total=total_fens_to_process,
+        processed=0,
+        failed=0,
+        phase="queued"
+    )
 
     async def _worker(worker_id: int):
-        nonlocal total_processed, total_failed_batches
+        nonlocal total_processed, total_engine_processed, total_failed_batches, total_failed_fens
         async with httpx.AsyncClient() as client:
             while True:
                 async with counter_lock:
@@ -161,12 +256,18 @@ async def run_analysis_job(
                     # --- MODIFIED: Start timing ---
                     batch_start_time = time.time()
 
-                    # 2. Call engine service
+                    async with counter_lock:
+                        progress_offset = total_engine_processed
+
+                    # 2. Call engine service once per batch. Stockfish service updates per-FEN progress.
                     engine_results = await _call_engine_service(
                         client,
                         engine_url,
                         fens_to_process,
-                        nodes_limit
+                        nodes_limit,
+                        progress_job_id=arq_job_id,
+                        progress_total=total_fens_to_process,
+                        progress_offset=progress_offset,
                     )
 
                     # --- MODIFIED: End timing ---
@@ -179,6 +280,13 @@ async def run_analysis_job(
                         # Rollback to release the locks
                         await session.rollback()
                         continue
+
+                    await record_analysis_times(_timing_rows_from_engine_results(
+                        fens_to_process,
+                        engine_results,
+                        source="most_repeated",
+                        nodes_limit=nodes_limit,
+                    ))
 
                     # 3. Format results
                     db_ready_data, continuation_rows = _format_engine_results(engine_results)
@@ -207,10 +315,20 @@ async def run_analysis_job(
                     fens_in_batch = len(fens_to_process)
                     time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
                     async with counter_lock:
+                        total_engine_processed += len(engine_results)
                         total_processed += fens_in_batch
                         total_so_far = total_processed
 
                     print(f"[{job_id}] Batch complete. Total FENs: {total_so_far}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
+                    await _write_job_progress(
+                        ctx,
+                        arq_job_id,
+                        total=total_fens_to_process,
+                        processed=total_engine_processed,
+                        failed=total_failed_fens,
+                        phase="committed",
+                        detail=f"committed {total_so_far}/{total_fens_to_process}"
+                    )
 
                 except Exception as e:
                     print(f"CRITICAL: Unhandled error in {job_id} analysis loop: {repr(e)}", flush=True)
@@ -233,6 +351,15 @@ async def run_analysis_job(
     print(f"Total time: {(job_end_time - job_start_time):.2f} seconds", flush=True)
     print(f"Total FENs processed: {total_processed}", flush=True)
     print(f"Total failed batches: {total_failed_batches}", flush=True)
+    await _write_job_progress(
+        ctx,
+        arq_job_id,
+        total=total_fens_to_process,
+        processed=total_engine_processed,
+        failed=total_failed_fens,
+        phase="complete",
+        detail=f"processed {total_processed}"
+    )
 
 async def run_player_analysis_job(
     ctx: dict, 
@@ -246,6 +373,7 @@ async def run_player_analysis_job(
     The main background task for a player-specific analysis job.
     '**kwargs' is added to accept extra arq arguments.
     """
+    arq_job_id = str(ctx.get("job_id") or f"analysis-player-{player_name}")
     job_id = f"ANALYSIS (Player: {player_name})"
     engine_url = ENGINE_URL
     
@@ -254,12 +382,22 @@ async def run_player_analysis_job(
     print(f"[{job_id}] Routing to: {engine_url}", flush=True) # <-- Test log
 
     total_processed = 0
+    total_engine_processed = 0
     total_failed_batches = 0
+    total_failed_fens = 0
     job_start_time = time.time()
     counter_lock = asyncio.Lock()
+    await _write_job_progress(
+        ctx,
+        arq_job_id,
+        total=total_fens_to_process,
+        processed=0,
+        failed=0,
+        phase="queued"
+    )
 
     async def _worker(worker_id: int):
-        nonlocal total_processed, total_failed_batches
+        nonlocal total_processed, total_engine_processed, total_failed_batches, total_failed_fens
         async with httpx.AsyncClient() as client:
             while True:
                 async with counter_lock:
@@ -287,12 +425,18 @@ async def run_player_analysis_job(
                     # --- MODIFIED: Start timing ---
                     batch_start_time = time.time()
 
-                    # 2. Call engine service
+                    async with counter_lock:
+                        progress_offset = total_engine_processed
+
+                    # 2. Call engine service once per batch. Stockfish service updates per-FEN progress.
                     engine_results = await _call_engine_service(
                         client,
                         engine_url,
                         fens_to_process,
-                        nodes_limit
+                        nodes_limit,
+                        progress_job_id=arq_job_id,
+                        progress_total=total_fens_to_process,
+                        progress_offset=progress_offset,
                     )
 
                     # --- MODIFIED: End timing ---
@@ -304,6 +448,13 @@ async def run_player_analysis_job(
                         total_failed_batches += 1
                         await session.rollback()
                         continue
+
+                    await record_analysis_times(_timing_rows_from_engine_results(
+                        fens_to_process,
+                        engine_results,
+                        source="character_repeated",
+                        nodes_limit=nodes_limit,
+                    ))
 
                     # 3. Format results
                     db_ready_data, continuation_rows = _format_engine_results(engine_results)
@@ -330,10 +481,20 @@ async def run_player_analysis_job(
                     fens_in_batch = len(fens_to_process)
                     time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
                     async with counter_lock:
+                        total_engine_processed += len(engine_results)
                         total_processed += fens_in_batch
                         total_so_far = total_processed
 
                     print(f"[{job_id}] Batch complete. Total FENs: {total_so_far}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
+                    await _write_job_progress(
+                        ctx,
+                        arq_job_id,
+                        total=total_fens_to_process,
+                        processed=total_engine_processed,
+                        failed=total_failed_fens,
+                        phase="committed",
+                        detail=f"committed {total_so_far}/{total_fens_to_process}"
+                    )
 
                 except Exception as e:
                     print(f"CRITICAL: Unhandled error in {job_id} loop: {repr(e)}", flush=True)
@@ -355,3 +516,12 @@ async def run_player_analysis_job(
     print(f"Total time: {(job_end_time - job_start_time):.2f} seconds", flush=True)
     print(f"Total FENs processed: {total_processed}", flush=True)
     print(f"Total failed batches: {total_failed_batches}", flush=True)
+    await _write_job_progress(
+        ctx,
+        arq_job_id,
+        total=total_fens_to_process,
+        processed=total_engine_processed,
+        failed=total_failed_fens,
+        phase="complete",
+        detail=f"processed {total_processed}"
+    )

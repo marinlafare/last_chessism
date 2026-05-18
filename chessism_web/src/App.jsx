@@ -5,6 +5,7 @@ import DownloadNewGames from './pages/DownloadNewGames'
 import MainCharacters from './pages/MainCharacters'
 import SecondaryCharacter from './pages/SecondaryCharacter'
 import Positions from './pages/Positions'
+import AnalyzeTimes from './pages/AnalyzeTimes'
 
 function App() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
@@ -31,6 +32,10 @@ function App() {
 
   if (path === '/positions') {
     return <Positions />
+  }
+
+  if (path === '/analyze_times') {
+    return <AnalyzeTimes />
   }
 
   return <Home />

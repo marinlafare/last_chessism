@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 import constants
 
 # --- MODIFIED: Import the fens and new analysis router ---
-from chessism_api.routers import players, games, fens, analysis
+from chessism_api.routers import players, games, fens, analysis, jobs, analysis_times
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
@@ -51,3 +51,7 @@ app.include_router(fens.router, prefix="/fens", tags=["FENs"])
 
 # --- NEW: Include the Analysis router ---
 app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"])
+
+app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"])
+
+app.include_router(analysis_times.router, prefix="/analysis_times", tags=["Analysis Times"])
