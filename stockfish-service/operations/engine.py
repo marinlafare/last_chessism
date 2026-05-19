@@ -129,6 +129,22 @@ class EngineManager:
     def lock(self) -> asyncio.Lock:
         return self._lock
 
+    def status(self) -> dict[str, Any]:
+        total = 1
+        busy = 1 if self._lock.locked() else 0
+        return {
+            "ok": self._engine is not None,
+            "workers": {
+                "total": total,
+                "busy": busy,
+                "idle": total - busy,
+            },
+            "config": {
+                "threads": THREADS,
+                "hash_mb": HASH_MB,
+            },
+        }
+
     async def initialize(self) -> None:
         if self._engine is not None:
             return

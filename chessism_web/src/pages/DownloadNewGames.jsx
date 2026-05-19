@@ -5,6 +5,7 @@ import SideRail from '../components/layout/SideRail'
 import { API_BASE_URL } from '../config'
 
 const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
+const DOWNLOAD_JOB_STORAGE_KEY = 'chessism:download-new-games:download-job'
 
 async function sendPlayerAction(path, playerName) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
@@ -33,23 +34,23 @@ async function fetchJobStatus(jobId) {
   return payload
 }
 
-function loadStoredUpdateJob() {
+function loadStoredJob(storageKey) {
   if (typeof window === 'undefined') return null
   try {
-    const parsed = JSON.parse(window.localStorage.getItem(UPDATE_JOB_STORAGE_KEY) || 'null')
+    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || 'null')
     return parsed?.jobId ? parsed : null
   } catch {
     return null
   }
 }
 
-function storeUpdateJob(job) {
+function storeJob(storageKey, job) {
   if (typeof window === 'undefined') return
   if (!job?.jobId) {
-    window.localStorage.removeItem(UPDATE_JOB_STORAGE_KEY)
+    window.localStorage.removeItem(storageKey)
     return
   }
-  window.localStorage.setItem(UPDATE_JOB_STORAGE_KEY, JSON.stringify(job))
+  window.localStorage.setItem(storageKey, JSON.stringify(job))
 }
 
 function isTerminalJobStatus(status) {
@@ -92,10 +93,47 @@ function DownloadNewGames() {
   const [updateResult, setUpdateResult] = useState('')
   const [downloadLoading, setDownloadLoading] = useState(false)
   const [updateLoading, setUpdateLoading] = useState(false)
-  const [updateJob, setUpdateJob] = useState(loadStoredUpdateJob)
+  const [downloadJob, setDownloadJob] = useState(() => loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY))
+  const [updateJob, setUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
+  const [downloadJobStatus, setDownloadJobStatus] = useState(null)
   const [updateJobStatus, setUpdateJobStatus] = useState(null)
+  const downloadJobActive = downloadJob?.jobId && !isTerminalJobStatus(downloadJobStatus)
   const updateJobActive = updateJob?.jobId && !isTerminalJobStatus(updateJobStatus)
-  const actionBusy = downloadLoading || updateLoading || updateJobActive
+  const actionBusy = downloadLoading || updateLoading || downloadJobActive || updateJobActive
+
+  useEffect(() => {
+    if (!downloadJob?.jobId) return undefined
+
+    let cancelled = false
+
+    const poll = async () => {
+      try {
+        const status = await fetchJobStatus(downloadJob.jobId)
+        if (cancelled) return
+        setDownloadJobStatus(status)
+
+        if (isTerminalJobStatus(status)) {
+          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
+          setDownloadResult(resultMessage || (status.progress?.phase === 'failed' ? 'Games download failed.' : 'Games download finished.'))
+          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
+          setDownloadJob(null)
+        }
+      } catch (error) {
+        if (cancelled) return
+        setDownloadJobStatus({ status: 'not_found', progress: { phase: 'failed', detail: error instanceof Error ? error.message : 'Unable to read job status.' } })
+        setDownloadResult(error instanceof Error ? error.message : 'Unable to read job status.')
+        storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
+        setDownloadJob(null)
+      }
+    }
+
+    poll()
+    const interval = window.setInterval(poll, 1500)
+    return () => {
+      cancelled = true
+      window.clearInterval(interval)
+    }
+  }, [downloadJob?.jobId])
 
   useEffect(() => {
     if (!updateJob?.jobId) return undefined
@@ -111,14 +149,14 @@ function DownloadNewGames() {
         if (isTerminalJobStatus(status)) {
           const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
           setUpdateResult(resultMessage || (status.progress?.phase === 'failed' ? 'Games update failed.' : 'Games update finished.'))
-          storeUpdateJob(null)
+          storeJob(UPDATE_JOB_STORAGE_KEY, null)
           setUpdateJob(null)
         }
       } catch (error) {
         if (cancelled) return
         setUpdateJobStatus({ status: 'not_found', progress: { phase: 'failed', detail: error instanceof Error ? error.message : 'Unable to read job status.' } })
         setUpdateResult(error instanceof Error ? error.message : 'Unable to read job status.')
-        storeUpdateJob(null)
+        storeJob(UPDATE_JOB_STORAGE_KEY, null)
         setUpdateJob(null)
       }
     }
@@ -143,7 +181,14 @@ function DownloadNewGames() {
     setDownloadResult('')
     try {
       const payload = await sendPlayerAction('/games', player)
-      setDownloadResult(payload.message || 'Games download started.')
+      if (payload.job_id) {
+        const job = { jobId: payload.job_id, playerName: payload.player_name || player }
+        storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
+        setDownloadJob(job)
+        setDownloadResult(payload.message || 'Games download started.')
+      } else {
+        setDownloadResult(payload.message || 'Games download started.')
+      }
     } catch (error) {
       setDownloadResult(error instanceof Error ? error.message : 'Request failed.')
     } finally {
@@ -166,7 +211,7 @@ function DownloadNewGames() {
       const payload = await sendPlayerAction('/games/update', player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
-        storeUpdateJob(job)
+        storeJob(UPDATE_JOB_STORAGE_KEY, job)
         setUpdateJob(job)
         setUpdateResult(payload.message || 'Games update started.')
       } else {
@@ -186,7 +231,7 @@ function DownloadNewGames() {
         <Header />
         <main>
           <section className="games-hero">
-            <h1>download_new_games</h1>
+            <h1>Add Games</h1>
           </section>
 
           <section className="games-actions" aria-label="Games actions">
@@ -203,8 +248,9 @@ function DownloadNewGames() {
                 placeholder="e.g. hikaru"
               />
               <button className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
-                {downloadLoading ? 'Working...' : actionBusy ? 'Busy...' : 'Download Games'}
+                {downloadLoading ? 'Queueing...' : downloadJobActive ? 'Downloading...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
+              {renderUpdateProgress(downloadJobStatus)}
               <p className="result-line">{downloadResult || '-'}</p>
             </article>
 

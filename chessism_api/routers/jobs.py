@@ -17,13 +17,22 @@ KNOWN_QUEUES = ("pipeline_queue", "fen_queue", "analysis_queue", "games_queue", 
 def _serialize_value(value: Any) -> Any:
     if isinstance(value, datetime):
         return value.isoformat()
+    if isinstance(value, BaseException):
+        return {
+            "type": value.__class__.__name__,
+            "message": str(value),
+        }
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
     if isinstance(value, tuple):
         return [_serialize_value(item) for item in value]
     if isinstance(value, list):
         return [_serialize_value(item) for item in value]
+    if isinstance(value, set):
+        return [_serialize_value(item) for item in value]
     if isinstance(value, dict):
         return {str(key): _serialize_value(item) for key, item in value.items()}
-    return value
+    return str(value)
 
 
 def _serialize_job_info(info: Any) -> dict[str, Any] | None:

@@ -1264,7 +1264,7 @@ function Games() {
               </a>
               <a
                 className="games-generality-card games-link-card"
-                href="/positions"
+                href="/analize_positions"
                 data-note="stats about the positions"
               >
                 <h3>Number of positions</h3>
@@ -1276,7 +1276,7 @@ function Games() {
               </a>
               <a
                 className="games-generality-card games-link-card"
-                href="/positions"
+                href="/scored_positions"
                 data-note="stats about the positions"
               >
                 <h3>Scored fens</h3>
@@ -1288,7 +1288,7 @@ function Games() {
               </a>
               <a
                 className="games-generality-card games-link-card"
-                href="/positions"
+                href="/analize_positions"
                 data-note="stats about the positions"
               >
                 <h3>Unscored fens</h3>

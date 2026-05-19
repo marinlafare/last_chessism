@@ -11,8 +11,7 @@ from chessism_api.database.ask_db import (
     open_async_request,
     get_time_control_result_color_matrix,
     get_time_control_game_length_analytics,
-    get_time_control_activity_trend,
-    refresh_main_character_mode_summary
+    get_time_control_activity_trend
 )
 from chessism_api.database.models import Month
 from chessism_api.database.db_interface import DBInterface
@@ -179,7 +178,6 @@ async def create_games(data: dict, progress_callback: ProgressCallback | None = 
     if new_months is False:
         print('#####')
         print("MONTHS found: 0", 'time elapsed: ',time.time()-start_new_months)
-        await refresh_main_character_mode_summary()
         return 'ALL MONTHS IN DB ALREADY'
     elif isinstance(new_months, dict): # Handle error case
         print(f"Error finding new months: {new_months.get('error')}")
@@ -218,7 +216,6 @@ async def create_games(data: dict, progress_callback: ProgressCallback | None = 
     
     if isinstance(formatted_games_results, str): # Handle "All games already in DB"
         print(formatted_games_results)
-        await refresh_main_character_mode_summary()
         return formatted_games_results
         
     print(f'FORMAT of {len(formatted_games_results)} games in: {time.time()-start_format}')
@@ -260,7 +257,6 @@ async def update_player_games(data: dict, progress_callback: ProgressCallback | 
     
     if not months_to_fetch:
         print(f"Player {player_name} is already up to date.")
-        await refresh_main_character_mode_summary()
         return f"Player {player_name} is already up to date."
 
     print('#####')
@@ -286,7 +282,6 @@ async def update_player_games(data: dict, progress_callback: ProgressCallback | 
     
     print(f"Processed {len(months_to_fetch)} months. Downloaded games: {num_downloaded_games}")
     if num_downloaded_games == 0:
-        await refresh_main_character_mode_summary()
         return f"No new games found for {player_name}."
 
     # 4. Format and insert
@@ -300,7 +295,6 @@ async def update_player_games(data: dict, progress_callback: ProgressCallback | 
     
     if isinstance(formatted_games_results, str): # Handle "All games already in DB"
         print(formatted_games_results)
-        await refresh_main_character_mode_summary()
         return formatted_games_results
         
     print(f'FORMAT of {len(formatted_games_results)} games in: {time.time()-start_format}')
@@ -312,6 +306,63 @@ async def update_player_games(data: dict, progress_callback: ProgressCallback | 
     end_update_games = time.time()
     print('Update done in: ',(end_update_games-start_update_games)/60)
     return f"DATA UPDATED FOR {player_name}"
+
+
+async def run_create_player_games_job(ctx: dict, data: dict, **kwargs) -> str:
+    arq_job_id = str(ctx.get("job_id") or "game-download")
+    player_name = str(data.get("player_name", "")).strip().lower()
+    latest_total = 1
+    latest_processed = 0
+
+    async def progress_callback(phase: str, total: int, processed: int, detail: str | None = None) -> None:
+        nonlocal latest_total, latest_processed
+        latest_total = max(1, int(total or 1))
+        latest_processed = max(0, min(latest_total, int(processed or 0)))
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_processed,
+            phase=phase,
+            detail=detail
+        )
+
+    await _write_game_job_progress(
+        ctx,
+        arq_job_id,
+        player_name=player_name,
+        total=1,
+        processed=0,
+        phase="queued",
+        detail=f"Queued full download for {player_name}."
+    )
+
+    try:
+        message = await create_games(data, progress_callback=progress_callback)
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_total,
+            phase="complete",
+            detail=message,
+            result=message
+        )
+        return message
+    except Exception as error:
+        await _write_game_job_progress(
+            ctx,
+            arq_job_id,
+            player_name=player_name,
+            total=latest_total,
+            processed=latest_processed,
+            failed=1,
+            phase="failed",
+            detail=str(error)
+        )
+        raise
 
 
 async def run_update_player_games_job(ctx: dict, data: dict, **kwargs) -> str:

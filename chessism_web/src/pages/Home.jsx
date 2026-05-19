@@ -3,9 +3,8 @@ import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MainCharactersCarousel from '../components/home/MainCharactersCarousel'
-import Hero, { DashboardSummaryPanel } from '../components/home/Hero'
+import { DashboardSummaryPanel } from '../components/home/Hero'
 import StatusPanel from '../components/home/StatusPanel'
-import ExploreGrid from '../components/home/ExploreGrid'
 import ProofPoints from '../components/home/ProofPoints'
 import { usePoll } from '../hooks/usePoll'
 import { fetchStatus } from '../services/statusService'
@@ -22,11 +21,9 @@ function Home() {
         <main>
           <div className="home-top-grid">
             <MainCharactersCarousel />
-            <DashboardSummaryPanel />
+            <StatusPanel {...status} />
           </div>
-          <Hero />
-          <StatusPanel {...status} />
-          <ExploreGrid />
+          <DashboardSummaryPanel />
           <ProofPoints />
         </main>
         <Footer />

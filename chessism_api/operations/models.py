@@ -1,5 +1,6 @@
 from typing import Optional, List, Any, Dict 
 from pydantic import BaseModel, Field
+from datetime import datetime
 
 # --- Pydantic model for creating a Player (used in operations/players.py) ---
 class PlayerCreateData(BaseModel):
@@ -40,6 +41,9 @@ class GameCreateData(BaseModel):
     white_str_result: str
     black_str_result: str
     time_control: str
+    mode: Optional[str] = None
+    played_at: Optional[datetime] = None
+    avg_elo: Optional[float] = None
     eco: str
     time_elapsed: float # Matches the Float in models.py
     n_moves: int

@@ -13,6 +13,7 @@ services:
       - AUTH_COOKIE_SECURE=${AUTH_COOKIE_SECURE}
       - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
       - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
+      - STOCKFISH_STATUS_URL=${STOCKFISH_STATUS_URL}
     networks:
       - chessism_net
     depends_on:
@@ -33,7 +34,7 @@ services:
     environment:
       - VITE_API_BASE_URL=${VITE_API_BASE_URL}
       - VITE_DEV_PROXY_TARGET=${VITE_DEV_PROXY_TARGET}
-    command: sh -lc "npm install && npm run dev"
+    command: sh -lc "npm install --no-fund --no-audit && npm run dev"
     volumes:
       - ./chessism_web:/app
       - chessism_web_node_modules:/app/node_modules

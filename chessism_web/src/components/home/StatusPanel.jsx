@@ -10,6 +10,8 @@ const fmt = (value) => {
   return value
 }
 
+const hasValue = (value) => value !== null && value !== undefined
+
 function cardTone(ok, stale) {
   if (stale) return 'warn'
   return ok ? 'ok' : 'down'
@@ -22,9 +24,21 @@ function StatusPanel({ loading, error, data, lastSuccessAt }) {
   }, [lastSuccessAt])
 
   const hasKnownData = Boolean(data)
-  const apiOk = data?.api?.ok ?? false
-  const apiLatency = data?.api?.latency_ms
-  const label = apiOk ? 'Up' : hasKnownData ? 'Down' : '-'
+  const queuedJobs = Number(data?.jobs?.queued ?? 0)
+  const runningJobs = Number(data?.jobs?.running ?? 0)
+  const activeJobs = queuedJobs + runningJobs
+  const activityLabel = stale ? 'Stale' : activeJobs > 0 ? 'Active' : 'Idle'
+  const activityClass = stale ? 'queue-stale' : activeJobs > 0 ? 'queue-active' : 'queue-idle'
+  const activityMeta = stale
+    ? `last update ${lastSuccessAt ? new Date(lastSuccessAt).toLocaleTimeString() : '-'}`
+    : `${fmt(queuedJobs)} queued / ${fmt(runningJobs)} running`
+  const workerValues = [data?.workers?.busy, data?.workers?.idle, data?.workers?.total]
+  const workersHaveData = workerValues.every(hasValue)
+  const workerText = workersHaveData ? workerValues.map(fmt).join('/') : '-/-/-'
+  const jobValues = [data?.jobs?.queued, data?.jobs?.running, data?.jobs?.failed, data?.jobs?.completed]
+  const jobsHaveData = jobValues.every(hasValue)
+  const jobsHaveAnyCount = jobsHaveData && jobValues.some((value) => Number(value || 0) > 0)
+  const jobsText = jobsHaveData ? jobValues.map(fmt).join('/') : '-/-/-/-'
 
   const lastUpdated = lastSuccessAt
     ? new Date(lastSuccessAt).toLocaleTimeString()
@@ -34,7 +48,6 @@ function StatusPanel({ loading, error, data, lastSuccessAt }) {
     <section className="status" id="status" aria-live="polite">
       <div className="section-head">
         <h2>System Status</h2>
-        <p>Operational view across API, workers, queue, and versions.</p>
       </div>
 
       {error ? (
@@ -58,21 +71,21 @@ function StatusPanel({ loading, error, data, lastSuccessAt }) {
         </div>
       ) : (
         <div className="status-grid">
-          <article className={`status-card ${cardTone(apiOk, stale)}`}>
-            <h3>API Health</h3>
-            <p className="value">{label}</p>
-            <p className="meta">latency {fmt(apiLatency)} ms</p>
+          <article className={`status-card ${cardTone(hasKnownData, stale)} ${activityClass}`}>
+            <h3>Queue Activity</h3>
+            <p className="value">{activityLabel}</p>
+            <p className="meta">{activityMeta}</p>
           </article>
 
           <article className="status-card neutral">
-            <h3>Stockfish Workers</h3>
-            <p className="value">{fmt(data?.workers?.busy)}/{fmt(data?.workers?.idle)}/{fmt(data?.workers?.total)}</p>
+            <h3>Stockfish</h3>
+            <p className={`value ${workersHaveData ? 'status-value-good' : 'status-value-bad'}`}>{workerText}</p>
             <p className="meta">active / idle / total</p>
           </article>
 
           <article className="status-card neutral">
-            <h3>Job Queue</h3>
-            <p className="value">{fmt(data?.jobs?.queued)}/{fmt(data?.jobs?.running)}/{fmt(data?.jobs?.failed)}/{fmt(data?.jobs?.completed)}</p>
+            <h3>Jobs</h3>
+            <p className={`value ${jobsHaveAnyCount ? 'status-value-good' : 'status-value-bad'}`}>{jobsText}</p>
             <p className="meta">queued / running / failed / completed</p>
           </article>
 

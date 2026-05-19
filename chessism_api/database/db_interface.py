@@ -4,7 +4,7 @@ from sqlalchemy import select, Integer, func, update, bindparam, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player
+from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player, Month
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 _ModelType = TypeVar("_ModelType", bound=Base)
@@ -168,6 +168,13 @@ class DBInterface:
                 # Player names are unique; ignore duplicates during bulk shell inserts.
                 stmt = pg_insert(self.db_class).on_conflict_do_nothing(
                     index_elements=['player_name']
+                )
+                await session.execute(stmt, clean_chunk)
+
+            elif self.db_class == Month:
+                stmt = pg_insert(self.db_class).on_conflict_do_update(
+                    index_elements=['player_name', 'year', 'month'],
+                    set_={'n_games': pg_insert(self.db_class).excluded.n_games}
                 )
                 await session.execute(stmt, clean_chunk)
             

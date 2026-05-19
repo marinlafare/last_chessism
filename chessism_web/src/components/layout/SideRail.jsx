@@ -1,12 +1,11 @@
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
-    { href: '/', label: 'Home', short: 'H' },
-    { href: '/games', label: 'Games', short: 'G' },
-    { href: '/main_characters', label: 'Players', short: 'P' },
-    { href: '/positions', label: 'Positions', short: 'F' },
+    { href: '/scored_positions', label: 'Scored Positions', short: 'S' },
+    { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
+    { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
     { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
-    { href: '/download_new_games', label: 'Ingest', short: '+' }
+    { href: '/add_games', label: 'Add Games', short: '+' }
   ]
 
   return (

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { API_BASE_URL } from '../../config'
 
-const TIME_CONTROLS = ['blitz', 'rapid', 'bullet']
-const PLAYER_LIMIT = 12
+const TIME_CONTROLS = ['bullet', 'blitz', 'rapid']
+const PLAYER_PAGE_SIZE = 50
+const PLAYER_FETCH_LIMIT = 5000
 
 const formatNumber = (value) => {
   const numeric = Number(value ?? 0)
@@ -18,8 +19,9 @@ const getDisplayName = (player) => {
 const getPlayerRating = (player) => Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0)
 
 function MainCharactersCarousel() {
-  const [selectedMode, setSelectedMode] = useState('blitz')
+  const [selectedMode, setSelectedMode] = useState('bullet')
   const [players, setPlayers] = useState([])
+  const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -32,8 +34,12 @@ function MainCharactersCarousel() {
 
       try {
         const response = await fetch(
-          `${API_BASE_URL}/players/main_characters/top?time_control=${encodeURIComponent(selectedMode)}&limit=${PLAYER_LIMIT}`,
-          { signal: controller.signal }
+          `${API_BASE_URL}/players/main_characters/top?time_control=${encodeURIComponent(selectedMode)}&limit=${PLAYER_FETCH_LIMIT}`,
+          {
+            signal: controller.signal,
+            credentials: 'include',
+            headers: { Accept: 'application/json' }
+          }
         )
         const payload = await response.json().catch(() => ({}))
 
@@ -45,6 +51,7 @@ function MainCharactersCarousel() {
           ? [...payload.players].sort((a, b) => getPlayerRating(b) - getPlayerRating(a))
           : []
         setPlayers(sortedPlayers)
+        setPage(1)
       } catch (err) {
         if (err.name !== 'AbortError') {
           setError(err.message || 'Main characters unavailable')
@@ -60,6 +67,16 @@ function MainCharactersCarousel() {
     loadPlayers()
     return () => controller.abort()
   }, [selectedMode])
+
+  const totalPages = Math.max(1, Math.ceil(players.length / PLAYER_PAGE_SIZE))
+  const safePage = Math.min(page, totalPages)
+  const pageStart = (safePage - 1) * PLAYER_PAGE_SIZE
+  const pagePlayers = players.slice(pageStart, pageStart + PLAYER_PAGE_SIZE)
+  const pageEnd = pageStart + pagePlayers.length
+  const hasPagination = players.length > PLAYER_PAGE_SIZE
+  const rangeLabel = players.length > 0
+    ? `${formatNumber(pageEnd)} / ${formatNumber(players.length)}`
+    : '0 of 0'
 
   return (
     <section className="main-characters-carousel" aria-labelledby="main-characters-title">
@@ -88,16 +105,17 @@ function MainCharactersCarousel() {
 
       <div className="character-rating-list" aria-label={`${selectedMode} main character ratings`}>
         {loading
-          ? Array.from({ length: 6 }).map((_, index) => (
+          ? Array.from({ length: 10 }).map((_, index) => (
               <div className="character-rating-row loading" key={`loading-${index}`} />
             ))
-          : players.map((player, index) => {
+          : pagePlayers.map((player, index) => {
               const playerName = String(player?.player_name || '').trim()
               const profileHref = `/players?player=${encodeURIComponent(playerName)}`
+              const absoluteIndex = pageStart + index
 
               return (
                 <a className="character-rating-row" href={profileHref} key={playerName || index}>
-                  <span className="character-rating-rank">#{index + 1}</span>
+                  <span className="character-rating-rank">#{absoluteIndex + 1}</span>
                   <span className="character-rating-name">{getDisplayName(player)}</span>
                   <strong className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
                 </a>
@@ -106,8 +124,32 @@ function MainCharactersCarousel() {
       </div>
 
       <div className="carousel-footer">
-        <span>{formatNumber(players.length)} loaded</span>
-        <a className="btn btn-secondary btn-inline" href="/main_characters">Open table</a>
+        <span>
+          {loading
+            ? 'Loading'
+            : rangeLabel}
+        </span>
+        {hasPagination ? (
+          <div className="character-pagination" aria-label="Main character pages">
+            <button
+              className="btn btn-secondary btn-inline"
+              type="button"
+              disabled={safePage <= 1}
+              onClick={() => setPage((current) => Math.max(1, current - 1))}
+            >
+              Previous
+            </button>
+            <span>{safePage} / {totalPages}</span>
+            <button
+              className="btn btn-secondary btn-inline"
+              type="button"
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((current) => Math.min(totalPages, current + 1))}
+            >
+              Next
+            </button>
+          </div>
+        ) : null}
       </div>
     </section>
   )

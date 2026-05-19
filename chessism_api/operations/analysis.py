@@ -15,7 +15,11 @@ from chessism_api.database.models import Fen, FenContinuation
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.ask_db import (
     get_fens_for_analysis,
-    get_player_fens_for_analysis
+    get_player_fens_for_analysis,
+    increment_game_analysis_summary_for_scored_fens,
+    increment_database_summary_fen_counts,
+    refresh_scored_position_summary,
+    refresh_scored_rating_summary
 )
 from chessism_api.operations.analysis_times import record_analysis_times
 # ---
@@ -196,6 +200,54 @@ def _timing_rows_from_engine_results(
         })
     return rows
 
+
+async def _increment_summary_for_analysis_results(
+    db_ready_data: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    analyzed_delta = len(db_ready_data)
+    nonzero_scored_delta = 0
+    for item in db_ready_data:
+        try:
+            if float(item.get("score") or 0) != 0.0:
+                nonzero_scored_delta += 1
+        except (TypeError, ValueError):
+            continue
+
+    if analyzed_delta <= 0:
+        return {"games": 0, "fens": 0, "fully_analyzed_games": 0}
+
+    try:
+        await increment_database_summary_fen_counts(
+            analyzed_delta=analyzed_delta,
+            nonzero_scored_delta=nonzero_scored_delta
+        )
+        return await increment_game_analysis_summary_for_scored_fens(db_ready_data)
+    except Exception as error:
+        print(f"Failed to update database summary after analysis batch: {repr(error)}", flush=True)
+        return {"games": 0, "fens": 0, "fully_analyzed_games": 0}
+
+
+async def _refresh_scored_projections_after_analysis(job_id: str, processed: int) -> None:
+    if processed <= 0:
+        return
+
+    try:
+        scored_summary = await refresh_scored_position_summary()
+        print(
+            f"[{job_id}] Refreshed scored position summary at job end: "
+            f"{scored_summary.get('scored_positions', 0)} scored positions.",
+            flush=True
+        )
+    except Exception as error:
+        print(f"Failed to refresh scored position summary after {job_id}: {repr(error)}", flush=True)
+
+    try:
+        await refresh_scored_rating_summary()
+        print(f"[{job_id}] Refreshed scored rating summary at job end.", flush=True)
+    except Exception as error:
+        print(f"Failed to refresh scored rating summary after {job_id}: {repr(error)}", flush=True)
+
+
 async def run_analysis_job(
     ctx: dict, 
     total_fens_to_process: int,
@@ -310,6 +362,7 @@ async def run_analysis_job(
                     # 5. Commit the transaction
                     # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
                     await session.commit()
+                    await _increment_summary_for_analysis_results(db_ready_data)
 
                     # --- MODIFIED: Calculate time per FEN ---
                     fens_in_batch = len(fens_to_process)
@@ -351,6 +404,7 @@ async def run_analysis_job(
     print(f"Total time: {(job_end_time - job_start_time):.2f} seconds", flush=True)
     print(f"Total FENs processed: {total_processed}", flush=True)
     print(f"Total failed batches: {total_failed_batches}", flush=True)
+    await _refresh_scored_projections_after_analysis(job_id, total_engine_processed)
     await _write_job_progress(
         ctx,
         arq_job_id,
@@ -476,6 +530,7 @@ async def run_player_analysis_job(
 
                     # 5. Commit the transaction
                     await session.commit()
+                    await _increment_summary_for_analysis_results(db_ready_data)
 
                     # --- MODIFIED: Calculate time per FEN ---
                     fens_in_batch = len(fens_to_process)
@@ -516,6 +571,7 @@ async def run_player_analysis_job(
     print(f"Total time: {(job_end_time - job_start_time):.2f} seconds", flush=True)
     print(f"Total FENs processed: {total_processed}", flush=True)
     print(f"Total failed batches: {total_failed_batches}", flush=True)
+    await _refresh_scored_projections_after_analysis(job_id, total_engine_processed)
     await _write_job_progress(
         ctx,
         arq_job_id,

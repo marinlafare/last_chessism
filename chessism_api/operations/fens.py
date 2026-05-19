@@ -22,7 +22,13 @@ from chessism_api.database.models import Game, Move, Fen
 from chessism_api.database.models import GameFenAssociation
 from chessism_api.database.db_interface import DBInterface
 # --- THIS IS THE FIX: Import the missing function ---
-from chessism_api.database.ask_db import _get_remaining_fens_count_committed
+from chessism_api.database.ask_db import (
+    _get_remaining_fens_count_committed,
+    refresh_game_analysis_summary,
+    refresh_database_summary_fen_counts,
+    refresh_scored_position_summary,
+    refresh_scored_rating_summary
+)
 
 
 # ---
@@ -595,4 +601,23 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
             print(f"CRITICAL: {job_log_prefix} Association insertion job {i+1} (ID: {job.job_id}) FAILED: {repr(e)}", flush=True)
 
     print(f"{job_log_prefix} All association insertion jobs complete.", flush=True)
+    try:
+        summary_counts = await refresh_database_summary_fen_counts()
+        print(f"{job_log_prefix} Refreshed database FEN summary: {summary_counts}", flush=True)
+        scored_summary = await refresh_scored_position_summary()
+        print(f"{job_log_prefix} Refreshed scored position summary: {scored_summary.get('scored_positions', 0)} scored positions.", flush=True)
+    except Exception as e:
+        print(f"CRITICAL: {job_log_prefix} Failed to refresh database FEN summary: {repr(e)}", flush=True)
+    try:
+        game_links = tuple(sorted({
+            int(assoc["game_link"])
+            for assoc in associations_to_insert
+            if assoc.get("game_link") is not None
+        }))
+        game_summary_counts = await refresh_game_analysis_summary(game_links)
+        print(f"{job_log_prefix} Refreshed game analysis summary: {game_summary_counts}", flush=True)
+        await refresh_scored_rating_summary()
+        print(f"{job_log_prefix} Refreshed scored rating summary.", flush=True)
+    except Exception as e:
+        print(f"CRITICAL: {job_log_prefix} Failed to refresh game analysis summary: {repr(e)}", flush=True)
     print(f"--- [END] {job_log_prefix} ---", flush=True)

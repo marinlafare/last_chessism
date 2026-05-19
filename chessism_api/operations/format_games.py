@@ -2,26 +2,24 @@
 
 from typing import Union,Dict,Any, List, Set, Tuple
 import asyncio
-import concurrent.futures
-from sqlalchemy import text, select
-from fastapi.encoders import jsonable_encoder
+from sqlalchemy import text
 
 from constants import DRAW_RESULTS, LOSE_RESULTS, WINING_RESULT
 import re
-import multiprocessing as mp
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 # --- FIXED IMPORTS & STUBS ---
-from chessism_api.operations.models import PlayerCreateData, GameCreateData, MoveCreateData, MonthCreateData
+from chessism_api.operations.models import GameCreateData, MoveCreateData
 from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.models import Player, Game, Month, Move
-from chessism_api.operations import players as players_ops
+from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.models import Player, Game, Move, GamePlayer, GameOpening
 
 # --- FIXED: Correct function name imported from ask_db ---
 from chessism_api.database.ask_db import (
     get_games_already_in_db,
-    refresh_main_character_mode_summary
+    refresh_database_summary_game_counts,
+    refresh_main_character_mode_summary_for_players
 )
 
 # --- FIXED: Correct function name imported from check_player_in_db ---
@@ -30,11 +28,89 @@ from chessism_api.operations.check_player_in_db import (
 )
 # ---
 
-# this should be at the main.py i think
-cpu_bound_executor = concurrent.futures.ThreadPoolExecutor(max_workers=mp.cpu_count())
+FORMAT_CHUNK_SIZE = 500
+MOVE_FORMAT_CHUNK_SIZE = 500
 
 
-async def insert_new_data(games_list, moves_list, months_list):
+def normalize_time_control_mode(time_control: str | None) -> str:
+    if not time_control:
+        return "unknown"
+    raw_time_control = str(time_control).strip()
+    if not raw_time_control:
+        return "unknown"
+    if "/" in raw_time_control:
+        return "daily"
+
+    base_seconds = raw_time_control.split("+", 1)[0]
+    try:
+        seconds = int(base_seconds)
+    except (TypeError, ValueError):
+        return "unknown"
+
+    if seconds < 180:
+        return "bullet"
+    if seconds < 600:
+        return "blitz"
+    if seconds <= 1800:
+        return "rapid"
+    return "classical"
+
+
+async def _sync_player_month_counts_with_session(session, player_name: str, affected_months: Set[Tuple[int, int]]) -> None:
+    if not affected_months:
+        return
+
+    await session.execute(text("""
+        CREATE TEMPORARY TABLE IF NOT EXISTS temp_ingested_months (
+            year INTEGER NOT NULL,
+            month INTEGER NOT NULL,
+            PRIMARY KEY (year, month)
+        ) ON COMMIT DROP;
+    """))
+
+    month_rows = tuple(sorted(affected_months))
+    for start in range(0, len(month_rows), 1000):
+        chunk = month_rows[start:start + 1000]
+        values = ", ".join(
+            f"(:year_{idx}, :month_{idx})"
+            for idx in range(len(chunk))
+        )
+        params = {}
+        for idx, (year, month) in enumerate(chunk):
+            params[f"year_{idx}"] = int(year)
+            params[f"month_{idx}"] = int(month)
+        await session.execute(text(f"""
+            INSERT INTO temp_ingested_months (year, month)
+            VALUES {values}
+            ON CONFLICT DO NOTHING;
+        """), params)
+
+    await session.execute(text("""
+        INSERT INTO months (player_name, year, month, n_games)
+        SELECT
+            :player_name,
+            ingested.year,
+            ingested.month,
+            COUNT(g.link)::int AS n_games
+        FROM temp_ingested_months ingested
+        LEFT JOIN game g
+          ON g.year = ingested.year
+         AND g.month = ingested.month
+         AND (g.white = :player_name OR g.black = :player_name)
+        GROUP BY ingested.year, ingested.month
+        ON CONFLICT (player_name, year, month) DO UPDATE SET
+            n_games = EXCLUDED.n_games;
+    """), {"player_name": player_name})
+
+
+async def insert_new_data(
+    games_list,
+    moves_list,
+    game_players_list,
+    game_openings_list,
+    player_name: str,
+    affected_months: Set[Tuple[int, int]]
+):
     """
     Inserts formatted game, move, and month data into the database in the correct order
     to respect foreign key constraints. Games must be inserted before moves.
@@ -47,33 +123,46 @@ async def insert_new_data(games_list, moves_list, months_list):
     """
     game_interface = DBInterface(Game)
     move_interface = DBInterface(Move)
-    month_interface = DBInterface(Month)
+    game_player_interface = DBInterface(GamePlayer)
+    game_opening_interface = DBInterface(GameOpening)
 
-    # Step 1: Insert games first. This is crucial for foreign key integrity with moves.
-    if games_list:
-        await game_interface.create_all(games_list)
-        print(f"Successfully inserted {len(games_list)} games.")
-    else:
-        print("No new games to insert.")
+    async with AsyncDBSession() as session:
+        try:
+            if games_list:
+                await game_interface.create_all_with_session(session, games_list)
+                print(f"Successfully inserted {len(games_list)} games.")
+            else:
+                print("No new games to insert.")
 
-    # Step 2: Insert moves after games are confirmed to be in the database.
-    if moves_list:
-        await move_interface.create_all(moves_list)
-        print(f"Successfully inserted {len(moves_list)} moves.")
-    else:
-        print("No new moves to insert.")
+            if moves_list:
+                await move_interface.create_all_with_session(session, moves_list)
+                print(f"Successfully inserted {len(moves_list)} moves.")
+            else:
+                print("No new moves to insert.")
 
-    # Step 3: Insert months. This can be done after games and moves, or even concurrently
+            if game_players_list:
+                await game_player_interface.create_all_with_session(session, game_players_list)
+                print(f"Successfully inserted {len(game_players_list)} game-player rows.")
+            else:
+                print("No new game-player rows to insert.")
 
-    if months_list:
-        await month_interface.create_all(months_list)
-        print(f"Successfully inserted {len(months_list)} months.")
-    else:
-        print("No new months to insert.")
+            if game_openings_list:
+                await game_opening_interface.create_all_with_session(session, game_openings_list)
+                print(f"Successfully inserted {len(game_openings_list)} opening rows.")
+            else:
+                print("No new opening rows to insert.")
 
-    total_inserted_items = len(games_list) + len(moves_list) + len(months_list)
+            await _sync_player_month_counts_with_session(session, player_name, affected_months)
+            print(f"Synced {len(affected_months)} month ledger rows.")
+
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    total_inserted_items = len(games_list) + len(moves_list) + len(game_players_list) + len(game_openings_list)
     if total_inserted_items > 0:
-        print(f"Overall database insertion completed for {len(games_list)} games, {len(moves_list)} moves, and {len(months_list)} months.")
+        print(f"Overall database insertion completed for {len(games_list)} games, {len(moves_list)} moves, {len(game_players_list)} game-player rows, and {len(game_openings_list)} opening rows.")
     else:
         print("No data was inserted into the database.")
 
@@ -349,6 +438,7 @@ def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
     game_for_db['fens_done'] = False
     game_for_db['link'] = int(game_raw_data['url'].split('/')[-1])
     game_for_db['time_control'] = game_raw_data['time_control']
+    game_for_db['mode'] = normalize_time_control_mode(game_for_db['time_control'])
     game_for_db = get_start_and_end_date(game_raw_data, game_for_db)
 
     if game_for_db['year'] == 0:
@@ -356,6 +446,16 @@ def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
         return False
 
     game_for_db = get_black_and_white_data(game_raw_data, game_for_db)
+    game_for_db['played_at'] = datetime(
+        year=game_for_db['year'],
+        month=game_for_db['month'],
+        day=game_for_db['day'],
+        hour=game_for_db['hour'],
+        minute=game_for_db['minute'],
+        second=game_for_db['second'],
+        tzinfo=timezone.utc
+    )
+    game_for_db['avg_elo'] = (game_for_db['white_elo'] + game_for_db['black_elo']) / 2.0
 
     if game_for_db['white_result'] is None or game_for_db['black_result'] is None:
         print(f"Skipping game {game_raw_data.get('url', 'N/A')} due to unrecognised result string.")
@@ -419,6 +519,76 @@ def format_one_game_moves(moves: dict) -> List[Dict[str, Any]]:
     return to_insert_moves
 
 
+def create_game_player_rows(game_data: Dict[str, Any]) -> List[Dict[str, Any]]:
+    return [
+        {
+            "link": game_data["link"],
+            "color": "white",
+            "player_name": game_data["white"],
+            "opponent_name": game_data["black"],
+            "result": game_data["white_result"],
+            "rating": game_data["white_elo"],
+            "opponent_rating": game_data["black_elo"],
+            "mode": game_data.get("mode"),
+            "played_at": game_data.get("played_at"),
+            "eco": game_data["eco"],
+            "n_moves": game_data["n_moves"],
+            "time_elapsed": game_data["time_elapsed"],
+            "avg_elo": game_data.get("avg_elo"),
+        },
+        {
+            "link": game_data["link"],
+            "color": "black",
+            "player_name": game_data["black"],
+            "opponent_name": game_data["white"],
+            "result": game_data["black_result"],
+            "rating": game_data["black_elo"],
+            "opponent_rating": game_data["white_elo"],
+            "mode": game_data.get("mode"),
+            "played_at": game_data.get("played_at"),
+            "eco": game_data["eco"],
+            "n_moves": game_data["n_moves"],
+            "time_elapsed": game_data["time_elapsed"],
+            "avg_elo": game_data.get("avg_elo"),
+        },
+    ]
+
+
+def create_game_opening_rows(game_data: Dict[str, Any], moves: dict | None) -> List[Dict[str, Any]]:
+    if not moves:
+        return []
+
+    white_moves = moves.get("white_moves") or []
+    black_moves = moves.get("black_moves") or []
+    max_full_moves = min(10, len(white_moves), len(black_moves))
+    opening_rows: List[Dict[str, Any]] = []
+
+    for n_moves in range(3, max_full_moves + 1):
+        san_moves: List[str] = []
+        complete = True
+        for idx in range(n_moves):
+            white_move = str(white_moves[idx] or "").strip()
+            black_move = str(black_moves[idx] or "").strip()
+            if not white_move or not black_move or white_move == "--" or black_move == "--":
+                complete = False
+                break
+            san_moves.extend([white_move, black_move])
+
+        if not complete:
+            continue
+
+        opening_rows.append({
+            "link": game_data["link"],
+            "n_moves": n_moves,
+            "opening": " ".join(san_moves),
+            "mode": game_data.get("mode"),
+            "avg_elo": game_data.get("avg_elo"),
+            "played_at": game_data.get("played_at"),
+        })
+
+    return opening_rows
+
+
 # --- MAIN FORMAT AND INSERT FUNCTION ---
 
 async def format_games(games, player_name) -> Union[List[Dict[str, Any]], str]:
@@ -477,13 +647,15 @@ async def format_games(games, player_name) -> Union[List[Dict[str, Any]], str]:
         for game_raw_data in month_games
     ]
 
-    # --- OPTIMIZATION: Schedule each game format as a separate thread task ---
-    for game_raw_data in all_raw_games_to_format:
-        game_future = asyncio.to_thread(create_game_dict, game_raw_data)
-        games_futures.append(game_future)
-
-    # Await all game formatting futures concurrently
-    formatted_games_results = await asyncio.gather(*games_futures)
+    # Keep thread task fan-out bounded for large downloads.
+    formatted_games_results = []
+    for start in range(0, len(all_raw_games_to_format), FORMAT_CHUNK_SIZE):
+        chunk = all_raw_games_to_format[start:start + FORMAT_CHUNK_SIZE]
+        games_futures = [
+            asyncio.to_thread(create_game_dict, game_raw_data)
+            for game_raw_data in chunk
+        ]
+        formatted_games_results.extend(await asyncio.gather(*games_futures))
     
     # Filter out failed formats (None, False, "NO PGN")
     valid_formatted_games = [
@@ -503,7 +675,10 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
     
     games_list_for_db = []
     moves_futures = [] # Store futures for move formatting
-    months_processed_count = {} # { (year, month): count }
+    game_players_list_for_db = []
+    game_openings_list_for_db = []
+    affected_months: Set[Tuple[int, int]] = set()
+    affected_players: Set[str] = set()
     
     start_moves_format = time.time()
 
@@ -524,21 +699,27 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
 
         # Prepare the game data for insertion
         try:
-            games_list_for_db.append(GameCreateData(**game_dict_result).model_dump())
+            game_payload = GameCreateData(**game_dict_result).model_dump()
+            games_list_for_db.append(game_payload)
+            game_players_list_for_db.extend(create_game_player_rows(game_payload))
+            game_openings_list_for_db.extend(create_game_opening_rows(game_payload, moves_data))
+            affected_players.add(str(game_payload["white"]).lower())
+            affected_players.add(str(game_payload["black"]).lower())
             
             # Update month counts
             game_year = game_dict_result.get('year')
             game_month = game_dict_result.get('month')
             if game_year and game_month:
-                key = (int(game_year), int(game_month))
-                months_processed_count[key] = months_processed_count.get(key, 0) + 1
+                affected_months.add((int(game_year), int(game_month)))
 
         except Exception as e:
             print(f"Error creating GameCreateData for formatted game {game_dict_result.get('link', 'N/A')}: {e}. Skipping game.")
             continue
             
-    # --- Await all move formatting tasks ---
-    moves_list_results = await asyncio.gather(*moves_futures)
+    # --- Await all move formatting tasks in bounded chunks ---
+    moves_list_results = []
+    for start in range(0, len(moves_futures), MOVE_FORMAT_CHUNK_SIZE):
+        moves_list_results.extend(await asyncio.gather(*moves_futures[start:start + MOVE_FORMAT_CHUNK_SIZE]))
     
     # Flatten the list of lists of moves
     moves_list_for_db = [
@@ -549,30 +730,31 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
 
     print(f'{len(games_list_for_db)} Games ready to insert')
     print(f'{len(moves_list_for_db)} Moves ready to insert')
-
-    # Create months_list_for_db from the collected counts
-    months_list_for_db = []
-    for (year, month), n_games in months_processed_count.items():
-        month_data = {
-            "player_name": player_name,
-            "year": year,
-            "month": month,
-            "n_games": n_games
-        }
-        months_list_for_db.append(MonthCreateData(**month_data).model_dump())
+    print(f'{len(game_players_list_for_db)} Game-player rows ready to insert')
+    print(f'{len(game_openings_list_for_db)} Opening rows ready to insert')
 
     # Step 4: Insert data into DB (I/O-bound, run concurrently)
-    if not games_list_for_db and not moves_list_for_db and not months_list_for_db:
+    if not games_list_for_db and not moves_list_for_db and not game_players_list_for_db and not game_openings_list_for_db:
         print("No data to insert after formatting. Skipping database insertion.")
         return f"No new data to insert for {player_name}."
 
     start_insert = time.time()
-    await insert_new_data(games_list_for_db, moves_list_for_db, months_list_for_db)
+    await insert_new_data(
+        games_list_for_db,
+        moves_list_for_db,
+        game_players_list_for_db,
+        game_openings_list_for_db,
+        player_name,
+        affected_months
+    )
     print(f'Inserted games, moves, and months for {len(games_list_for_db)} games in: {time.time()-start_insert:.2f} seconds')
     if games_list_for_db:
         summary_start = time.time()
-        summary_counts = await refresh_main_character_mode_summary()
-        print(f"Refreshed main-character mode summary in: {time.time()-summary_start:.2f} seconds ({summary_counts})")
+        summary_counts = await refresh_main_character_mode_summary_for_players(affected_players)
+        print(f"Refreshed affected main-character mode summary in: {time.time()-summary_start:.2f} seconds ({summary_counts})")
+        database_summary_start = time.time()
+        database_summary_counts = await refresh_database_summary_game_counts()
+        print(f"Refreshed database game summary in: {time.time()-database_summary_start:.2f} seconds ({database_summary_counts})")
 
     print(f"Total time for insert_games_months_moves_and_players: {(time.time()-start_moves_format):.2f} seconds")
 

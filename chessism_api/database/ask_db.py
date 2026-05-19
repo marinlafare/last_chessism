@@ -3,6 +3,7 @@ import os
 import asyncio
 import time
 import math
+import json
 from typing import List, Dict, Any, Tuple, Set, Optional
 from datetime import datetime, timedelta
 from constants import CONN_STRING
@@ -130,6 +131,664 @@ async def get_players_with_names() -> List[Dict[str, Any]]:
     )
     return result
 
+
+DATABASE_SUMMARY_COLUMNS = """
+    n_games_in_db,
+    main_characters,
+    secondary_characters,
+    n_positions,
+    analyzed_fens,
+    unscored_fens,
+    scored_fens,
+    nonzero_scored_fens,
+    bullet_games,
+    blitz_games,
+    rapid_games
+"""
+
+DATABASE_SUMMARY_RETURNING_COLUMNS = """
+    database_summary.n_games_in_db AS n_games_in_db,
+    database_summary.main_characters AS main_characters,
+    database_summary.secondary_characters AS secondary_characters,
+    database_summary.n_positions AS n_positions,
+    database_summary.analyzed_fens AS analyzed_fens,
+    database_summary.unscored_fens AS unscored_fens,
+    database_summary.scored_fens AS scored_fens,
+    database_summary.nonzero_scored_fens AS nonzero_scored_fens,
+    database_summary.bullet_games AS bullet_games,
+    database_summary.blitz_games AS blitz_games,
+    database_summary.rapid_games AS rapid_games
+"""
+
+
+def _database_summary_from_row(row: Any) -> Dict[str, int]:
+    return {
+        "n_games_in_db": int(row.get("n_games_in_db") or 0),
+        "main_characters": int(row.get("main_characters") or 0),
+        "secondary_characters": int(row.get("secondary_characters") or 0),
+        "n_positions": int(row.get("n_positions") or 0),
+        "analyzed_fens": int(row.get("analyzed_fens") or 0),
+        "unscored_fens": int(row.get("unscored_fens") or 0),
+        "scored_fens": int(row.get("scored_fens") or 0),
+        "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
+        "bullet_games": int(row.get("bullet_games") or 0),
+        "blitz_games": int(row.get("blitz_games") or 0),
+        "rapid_games": int(row.get("rapid_games") or 0),
+    }
+
+
+async def _read_database_summary() -> Optional[Dict[str, int]]:
+    query = f"""
+        SELECT {DATABASE_SUMMARY_COLUMNS}
+        FROM database_summary
+        WHERE id = 1;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+
+    if not row:
+        return None
+    return _database_summary_from_row(row)
+
+
+async def refresh_database_summary() -> Dict[str, int]:
+    """
+    Rebuilds the full dashboard summary. This intentionally does the expensive
+    FEN counts in a refresh path, not in page-render endpoints.
+    """
+    query = f"""
+        INSERT INTO database_summary (
+            id,
+            n_games_in_db,
+            main_characters,
+            secondary_characters,
+            n_positions,
+            analyzed_fens,
+            unscored_fens,
+            scored_fens,
+            nonzero_scored_fens,
+            bullet_games,
+            blitz_games,
+            rapid_games,
+            refreshed_at
+        )
+        SELECT
+            1,
+            (SELECT COUNT(*)::bigint FROM game),
+            (SELECT COUNT(*)::bigint FROM player WHERE joined IS NOT NULL AND joined <> 0),
+            (SELECT COUNT(*)::bigint FROM player WHERE joined IS NULL OR joined = 0),
+            (SELECT COUNT(*)::bigint FROM fen),
+            (SELECT COUNT(*)::bigint FROM fen WHERE score IS NOT NULL),
+            (SELECT COUNT(*)::bigint FROM fen WHERE score IS NULL),
+            (SELECT COUNT(*)::bigint FROM fen WHERE score IS NOT NULL AND score <> 0),
+            (SELECT COUNT(*)::bigint FROM fen WHERE score IS NOT NULL AND score <> 0),
+            (SELECT COUNT(*)::bigint FROM game WHERE mode = 'bullet'),
+            (SELECT COUNT(*)::bigint FROM game WHERE mode = 'blitz'),
+            (SELECT COUNT(*)::bigint FROM game WHERE mode = 'rapid'),
+            CURRENT_TIMESTAMP
+        ON CONFLICT (id) DO UPDATE SET
+            n_games_in_db = EXCLUDED.n_games_in_db,
+            main_characters = EXCLUDED.main_characters,
+            secondary_characters = EXCLUDED.secondary_characters,
+            n_positions = EXCLUDED.n_positions,
+            analyzed_fens = EXCLUDED.analyzed_fens,
+            unscored_fens = EXCLUDED.unscored_fens,
+            scored_fens = EXCLUDED.scored_fens,
+            nonzero_scored_fens = EXCLUDED.nonzero_scored_fens,
+            bullet_games = EXCLUDED.bullet_games,
+            blitz_games = EXCLUDED.blitz_games,
+            rapid_games = EXCLUDED.rapid_games,
+            refreshed_at = EXCLUDED.refreshed_at
+        RETURNING {DATABASE_SUMMARY_COLUMNS};
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query))
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return _database_summary_from_row(row or {})
+
+
+async def refresh_database_summary_game_counts() -> Dict[str, int]:
+    """
+    Refreshes game/player/time-control counts without scanning the FEN table.
+    """
+    if await _read_database_summary() is None:
+        return await refresh_database_summary()
+
+    query = f"""
+        UPDATE database_summary
+        SET
+            n_games_in_db = counts.n_games_in_db,
+            main_characters = counts.main_characters,
+            secondary_characters = counts.secondary_characters,
+            bullet_games = counts.bullet_games,
+            blitz_games = counts.blitz_games,
+            rapid_games = counts.rapid_games,
+            refreshed_at = CURRENT_TIMESTAMP
+        FROM (
+            SELECT
+                (SELECT COUNT(*)::bigint FROM game) AS n_games_in_db,
+                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NOT NULL AND joined <> 0) AS main_characters,
+                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NULL OR joined = 0) AS secondary_characters,
+                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'bullet') AS bullet_games,
+                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'blitz') AS blitz_games,
+                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'rapid') AS rapid_games
+        ) counts
+        WHERE database_summary.id = 1
+        RETURNING {DATABASE_SUMMARY_RETURNING_COLUMNS};
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query))
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    if not row:
+        return await refresh_database_summary()
+    return _database_summary_from_row(row)
+
+
+async def refresh_database_summary_fen_counts() -> Dict[str, int]:
+    """
+    Refreshes only FEN coverage counts. This scans the FEN table and should be
+    called after bulk FEN generation, not during page rendering.
+    """
+    if await _read_database_summary() is None:
+        return await refresh_database_summary()
+
+    query = f"""
+        UPDATE database_summary
+        SET
+            n_positions = counts.n_positions,
+            analyzed_fens = counts.analyzed_fens,
+            unscored_fens = counts.unscored_fens,
+            scored_fens = counts.scored_fens,
+            nonzero_scored_fens = counts.nonzero_scored_fens,
+            refreshed_at = CURRENT_TIMESTAMP
+        FROM (
+            SELECT
+                COUNT(*)::bigint AS n_positions,
+                COUNT(*) FILTER (WHERE score IS NOT NULL)::bigint AS analyzed_fens,
+                COUNT(*) FILTER (WHERE score IS NULL)::bigint AS unscored_fens,
+                COUNT(*) FILTER (WHERE score IS NOT NULL AND score <> 0)::bigint AS scored_fens,
+                COUNT(*) FILTER (WHERE score IS NOT NULL AND score <> 0)::bigint AS nonzero_scored_fens
+            FROM fen
+        ) counts
+        WHERE database_summary.id = 1
+        RETURNING {DATABASE_SUMMARY_RETURNING_COLUMNS};
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query))
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    if not row:
+        return await refresh_database_summary()
+    return _database_summary_from_row(row)
+
+
+async def increment_database_summary_fen_counts(
+    analyzed_delta: int,
+    nonzero_scored_delta: int
+) -> Dict[str, int]:
+    """
+    Applies committed analysis progress to the summary row without rescanning FEN.
+    """
+    safe_analyzed_delta = max(0, int(analyzed_delta or 0))
+    safe_nonzero_delta = max(0, int(nonzero_scored_delta or 0))
+    if safe_analyzed_delta == 0 and safe_nonzero_delta == 0:
+        return await ensure_database_summary()
+
+    existing = await _read_database_summary()
+    if existing is None:
+        return await refresh_database_summary()
+
+    query = f"""
+        UPDATE database_summary
+        SET
+            analyzed_fens = analyzed_fens + :analyzed_delta,
+            unscored_fens = GREATEST(unscored_fens - :analyzed_delta, 0),
+            scored_fens = scored_fens + :nonzero_scored_delta,
+            nonzero_scored_fens = nonzero_scored_fens + :nonzero_scored_delta,
+            refreshed_at = CURRENT_TIMESTAMP
+        WHERE id = 1
+        RETURNING {DATABASE_SUMMARY_COLUMNS};
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query), {
+                "analyzed_delta": safe_analyzed_delta,
+                "nonzero_scored_delta": safe_nonzero_delta
+            })
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return _database_summary_from_row(row or existing)
+
+
+async def ensure_database_summary() -> Dict[str, int]:
+    """
+    Returns the precomputed summary, building it only if the row does not exist.
+    """
+    summary = await _read_database_summary()
+    if summary is not None:
+        return summary
+    return await refresh_database_summary()
+
+
+SCORED_POSITION_SUMMARY_COLUMNS = """
+    total_positions,
+    analyzed_fens,
+    scored_positions,
+    nonzero_scored_fens,
+    unscored_fens,
+    equal_positions,
+    small_positions,
+    clear_positions,
+    decisive_positions,
+    mate_positions,
+    equal_appearances,
+    small_appearances,
+    clear_appearances,
+    decisive_appearances,
+    mate_appearances,
+    equal_abs_score_sum,
+    small_abs_score_sum,
+    clear_abs_score_sum,
+    decisive_abs_score_sum,
+    mate_abs_score_sum,
+    white_better,
+    black_better,
+    balanced,
+    score_sum,
+    abs_score_sum,
+    wdl_win_sum,
+    wdl_draw_sum,
+    wdl_loss_sum,
+    wdl_positions
+"""
+
+
+SCORED_BUCKET_DEFINITIONS = [
+    ("equal", "Equal", 1),
+    ("small", "Small", 2),
+    ("clear", "Clear", 3),
+    ("decisive", "Decisive", 4),
+    ("mate", "Mate", 5),
+]
+
+
+def _json_payload(value: Any, fallback: Any) -> Any:
+    if value is None:
+        return fallback
+    if isinstance(value, str):
+        try:
+            return json.loads(value)
+        except json.JSONDecodeError:
+            return fallback
+    return value
+
+
+def _scored_bucket_payload(row: Any, key: str, label: str, order: int) -> Dict[str, Any]:
+    positions = int(row.get(f"{key}_positions") or 0)
+    appearances = int(row.get(f"{key}_appearances") or 0)
+    abs_score_sum = float(row.get(f"{key}_abs_score_sum") or 0.0)
+    return {
+        "key": key,
+        "label": label,
+        "order": order,
+        "positions": positions,
+        "appearances": appearances,
+        "avg_abs_score": round(abs_score_sum / positions, 2) if positions else 0.0
+    }
+
+
+def _scored_position_summary_from_row(row: Any) -> Dict[str, Any]:
+    analyzed_fens = int(row.get("analyzed_fens") or 0)
+    wdl_positions = int(row.get("wdl_positions") or 0)
+    score_sum = float(row.get("score_sum") or 0.0)
+    abs_score_sum = float(row.get("abs_score_sum") or 0.0)
+
+    return {
+        "total_positions": int(row.get("total_positions") or 0),
+        "analyzed_fens": analyzed_fens,
+        "scored_positions": int(row.get("scored_positions") or 0),
+        "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
+        "unscored_fens": int(row.get("unscored_fens") or 0),
+        "buckets": [
+            _scored_bucket_payload(row, key, label, order)
+            for key, label, order in SCORED_BUCKET_DEFINITIONS
+        ],
+        "side_balance": {
+            "white_better": int(row.get("white_better") or 0),
+            "black_better": int(row.get("black_better") or 0),
+            "balanced": int(row.get("balanced") or 0),
+            "avg_score": round(score_sum / analyzed_fens, 2) if analyzed_fens else 0.0,
+            "avg_abs_score": round(abs_score_sum / analyzed_fens, 2) if analyzed_fens else 0.0
+        },
+        "wdl": {
+            "positions": wdl_positions,
+            "avg_white_win": round(float(row.get("wdl_win_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0,
+            "avg_draw": round(float(row.get("wdl_draw_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0,
+            "avg_white_loss": round(float(row.get("wdl_loss_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0
+        }
+    }
+
+
+async def _read_scored_position_summary() -> Optional[Dict[str, Any]]:
+    query = f"""
+        SELECT {SCORED_POSITION_SUMMARY_COLUMNS}
+        FROM scored_position_summary
+        WHERE id = 1;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+
+    if not row:
+        return None
+    return _scored_position_summary_from_row(row)
+
+
+async def refresh_scored_position_summary() -> Dict[str, Any]:
+    """
+    Rebuilds scored-position aggregates. This scans only scored FEN rows and
+    should run in refresh paths, not page-render code.
+    """
+    summary = await ensure_database_summary()
+    query = f"""
+        WITH scored AS (
+            SELECT
+                COUNT(*) FILTER (WHERE ABS(score) < 50)::bigint AS equal_positions,
+                COUNT(*) FILTER (WHERE ABS(score) >= 50 AND ABS(score) < 150)::bigint AS small_positions,
+                COUNT(*) FILTER (WHERE ABS(score) >= 150 AND ABS(score) < 300)::bigint AS clear_positions,
+                COUNT(*) FILTER (WHERE ABS(score) >= 300 AND ABS(score) < 9000)::bigint AS decisive_positions,
+                COUNT(*) FILTER (WHERE ABS(score) >= 9000)::bigint AS mate_positions,
+                COALESCE(SUM(n_games) FILTER (WHERE ABS(score) < 50), 0)::bigint AS equal_appearances,
+                COALESCE(SUM(n_games) FILTER (WHERE ABS(score) >= 50 AND ABS(score) < 150), 0)::bigint AS small_appearances,
+                COALESCE(SUM(n_games) FILTER (WHERE ABS(score) >= 150 AND ABS(score) < 300), 0)::bigint AS clear_appearances,
+                COALESCE(SUM(n_games) FILTER (WHERE ABS(score) >= 300 AND ABS(score) < 9000), 0)::bigint AS decisive_appearances,
+                COALESCE(SUM(n_games) FILTER (WHERE ABS(score) >= 9000), 0)::bigint AS mate_appearances,
+                COALESCE(SUM(ABS(score)) FILTER (WHERE ABS(score) < 50), 0)::double precision AS equal_abs_score_sum,
+                COALESCE(SUM(ABS(score)) FILTER (WHERE ABS(score) >= 50 AND ABS(score) < 150), 0)::double precision AS small_abs_score_sum,
+                COALESCE(SUM(ABS(score)) FILTER (WHERE ABS(score) >= 150 AND ABS(score) < 300), 0)::double precision AS clear_abs_score_sum,
+                COALESCE(SUM(ABS(score)) FILTER (WHERE ABS(score) >= 300 AND ABS(score) < 9000), 0)::double precision AS decisive_abs_score_sum,
+                COALESCE(SUM(ABS(score)) FILTER (WHERE ABS(score) >= 9000), 0)::double precision AS mate_abs_score_sum,
+                COUNT(*) FILTER (WHERE score > 50)::bigint AS white_better,
+                COUNT(*) FILTER (WHERE score < -50)::bigint AS black_better,
+                COUNT(*) FILTER (WHERE ABS(score) <= 50)::bigint AS balanced,
+                COALESCE(SUM(score), 0)::double precision AS score_sum,
+                COALESCE(SUM(ABS(score)), 0)::double precision AS abs_score_sum,
+                COALESCE(SUM(wdl_win) FILTER (WHERE wdl_win IS NOT NULL AND wdl_draw IS NOT NULL AND wdl_loss IS NOT NULL), 0)::double precision AS wdl_win_sum,
+                COALESCE(SUM(wdl_draw) FILTER (WHERE wdl_win IS NOT NULL AND wdl_draw IS NOT NULL AND wdl_loss IS NOT NULL), 0)::double precision AS wdl_draw_sum,
+                COALESCE(SUM(wdl_loss) FILTER (WHERE wdl_win IS NOT NULL AND wdl_draw IS NOT NULL AND wdl_loss IS NOT NULL), 0)::double precision AS wdl_loss_sum,
+                COUNT(*) FILTER (WHERE wdl_win IS NOT NULL AND wdl_draw IS NOT NULL AND wdl_loss IS NOT NULL)::bigint AS wdl_positions
+            FROM fen
+            WHERE score IS NOT NULL
+        )
+        INSERT INTO scored_position_summary (
+            id,
+            {SCORED_POSITION_SUMMARY_COLUMNS},
+            refreshed_at
+        )
+        SELECT
+            1,
+            :total_positions,
+            :analyzed_fens,
+            :scored_positions,
+            :nonzero_scored_fens,
+            :unscored_fens,
+            scored.equal_positions,
+            scored.small_positions,
+            scored.clear_positions,
+            scored.decisive_positions,
+            scored.mate_positions,
+            scored.equal_appearances,
+            scored.small_appearances,
+            scored.clear_appearances,
+            scored.decisive_appearances,
+            scored.mate_appearances,
+            scored.equal_abs_score_sum,
+            scored.small_abs_score_sum,
+            scored.clear_abs_score_sum,
+            scored.decisive_abs_score_sum,
+            scored.mate_abs_score_sum,
+            scored.white_better,
+            scored.black_better,
+            scored.balanced,
+            scored.score_sum,
+            scored.abs_score_sum,
+            scored.wdl_win_sum,
+            scored.wdl_draw_sum,
+            scored.wdl_loss_sum,
+            scored.wdl_positions,
+            CURRENT_TIMESTAMP
+        FROM scored
+        ON CONFLICT (id) DO UPDATE SET
+            total_positions = EXCLUDED.total_positions,
+            analyzed_fens = EXCLUDED.analyzed_fens,
+            scored_positions = EXCLUDED.scored_positions,
+            nonzero_scored_fens = EXCLUDED.nonzero_scored_fens,
+            unscored_fens = EXCLUDED.unscored_fens,
+            equal_positions = EXCLUDED.equal_positions,
+            small_positions = EXCLUDED.small_positions,
+            clear_positions = EXCLUDED.clear_positions,
+            decisive_positions = EXCLUDED.decisive_positions,
+            mate_positions = EXCLUDED.mate_positions,
+            equal_appearances = EXCLUDED.equal_appearances,
+            small_appearances = EXCLUDED.small_appearances,
+            clear_appearances = EXCLUDED.clear_appearances,
+            decisive_appearances = EXCLUDED.decisive_appearances,
+            mate_appearances = EXCLUDED.mate_appearances,
+            equal_abs_score_sum = EXCLUDED.equal_abs_score_sum,
+            small_abs_score_sum = EXCLUDED.small_abs_score_sum,
+            clear_abs_score_sum = EXCLUDED.clear_abs_score_sum,
+            decisive_abs_score_sum = EXCLUDED.decisive_abs_score_sum,
+            mate_abs_score_sum = EXCLUDED.mate_abs_score_sum,
+            white_better = EXCLUDED.white_better,
+            black_better = EXCLUDED.black_better,
+            balanced = EXCLUDED.balanced,
+            score_sum = EXCLUDED.score_sum,
+            abs_score_sum = EXCLUDED.abs_score_sum,
+            wdl_win_sum = EXCLUDED.wdl_win_sum,
+            wdl_draw_sum = EXCLUDED.wdl_draw_sum,
+            wdl_loss_sum = EXCLUDED.wdl_loss_sum,
+            wdl_positions = EXCLUDED.wdl_positions,
+            refreshed_at = EXCLUDED.refreshed_at
+        RETURNING {SCORED_POSITION_SUMMARY_COLUMNS};
+    """
+    params = {
+        "total_positions": int(summary.get("n_positions") or 0),
+        "analyzed_fens": int(summary.get("analyzed_fens") or 0),
+        "scored_positions": int(summary.get("analyzed_fens") or 0),
+        "nonzero_scored_fens": int(summary.get("nonzero_scored_fens") or 0),
+        "unscored_fens": int(summary.get("unscored_fens") or 0),
+    }
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query), params)
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return _scored_position_summary_from_row(row or {})
+
+
+async def increment_scored_position_summary_for_scored_fens(
+    scored_fens: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    """
+    Incrementally updates scored-position aggregates for FENs that transitioned
+    from unscored to scored.
+    """
+    clean_rows = []
+    seen_fens: Set[str] = set()
+    for item in scored_fens or []:
+        fen_value = str(item.get("fen") or "").strip()
+        if not fen_value or fen_value in seen_fens:
+            continue
+        seen_fens.add(fen_value)
+        try:
+            score_value = float(item.get("score") or 0.0)
+        except (TypeError, ValueError):
+            score_value = 0.0
+
+        clean_rows.append({
+            "fen": fen_value,
+            "score": score_value,
+            "wdl_win": item.get("wdl_win"),
+            "wdl_draw": item.get("wdl_draw"),
+            "wdl_loss": item.get("wdl_loss"),
+        })
+
+    if not clean_rows:
+        return {"fens": 0}
+
+    if await _read_scored_position_summary() is None:
+        await refresh_scored_position_summary()
+
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text("""
+                CREATE TEMPORARY TABLE IF NOT EXISTS temp_scored_position_summary_fens (
+                    fen VARCHAR PRIMARY KEY,
+                    score DOUBLE PRECISION NOT NULL,
+                    wdl_win DOUBLE PRECISION NULL,
+                    wdl_draw DOUBLE PRECISION NULL,
+                    wdl_loss DOUBLE PRECISION NULL
+                ) ON COMMIT DROP;
+            """))
+            for start in range(0, len(clean_rows), 1000):
+                chunk = clean_rows[start:start + 1000]
+                values = ", ".join(
+                    f"(:fen_{idx}, :score_{idx}, :wdl_win_{idx}, :wdl_draw_{idx}, :wdl_loss_{idx})"
+                    for idx in range(len(chunk))
+                )
+                params: Dict[str, Any] = {}
+                for idx, row in enumerate(chunk):
+                    params[f"fen_{idx}"] = row["fen"]
+                    params[f"score_{idx}"] = row["score"]
+                    params[f"wdl_win_{idx}"] = row["wdl_win"]
+                    params[f"wdl_draw_{idx}"] = row["wdl_draw"]
+                    params[f"wdl_loss_{idx}"] = row["wdl_loss"]
+                await session.execute(text(f"""
+                    INSERT INTO temp_scored_position_summary_fens (
+                        fen,
+                        score,
+                        wdl_win,
+                        wdl_draw,
+                        wdl_loss
+                    )
+                    VALUES {values}
+                    ON CONFLICT (fen) DO UPDATE SET
+                        score = EXCLUDED.score,
+                        wdl_win = EXCLUDED.wdl_win,
+                        wdl_draw = EXCLUDED.wdl_draw,
+                        wdl_loss = EXCLUDED.wdl_loss;
+                """), params)
+
+            update_query = f"""
+                WITH delta AS (
+                    SELECT
+                        COUNT(*)::bigint AS analyzed_delta,
+                        COUNT(*) FILTER (WHERE tsf.score <> 0)::bigint AS nonzero_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) < 50)::bigint AS equal_positions,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 50 AND ABS(tsf.score) < 150)::bigint AS small_positions,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 150 AND ABS(tsf.score) < 300)::bigint AS clear_positions,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 300 AND ABS(tsf.score) < 9000)::bigint AS decisive_positions,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 9000)::bigint AS mate_positions,
+                        COALESCE(SUM(f.n_games) FILTER (WHERE ABS(tsf.score) < 50), 0)::bigint AS equal_appearances,
+                        COALESCE(SUM(f.n_games) FILTER (WHERE ABS(tsf.score) >= 50 AND ABS(tsf.score) < 150), 0)::bigint AS small_appearances,
+                        COALESCE(SUM(f.n_games) FILTER (WHERE ABS(tsf.score) >= 150 AND ABS(tsf.score) < 300), 0)::bigint AS clear_appearances,
+                        COALESCE(SUM(f.n_games) FILTER (WHERE ABS(tsf.score) >= 300 AND ABS(tsf.score) < 9000), 0)::bigint AS decisive_appearances,
+                        COALESCE(SUM(f.n_games) FILTER (WHERE ABS(tsf.score) >= 9000), 0)::bigint AS mate_appearances,
+                        COALESCE(SUM(ABS(tsf.score)) FILTER (WHERE ABS(tsf.score) < 50), 0)::double precision AS equal_abs_score_sum,
+                        COALESCE(SUM(ABS(tsf.score)) FILTER (WHERE ABS(tsf.score) >= 50 AND ABS(tsf.score) < 150), 0)::double precision AS small_abs_score_sum,
+                        COALESCE(SUM(ABS(tsf.score)) FILTER (WHERE ABS(tsf.score) >= 150 AND ABS(tsf.score) < 300), 0)::double precision AS clear_abs_score_sum,
+                        COALESCE(SUM(ABS(tsf.score)) FILTER (WHERE ABS(tsf.score) >= 300 AND ABS(tsf.score) < 9000), 0)::double precision AS decisive_abs_score_sum,
+                        COALESCE(SUM(ABS(tsf.score)) FILTER (WHERE ABS(tsf.score) >= 9000), 0)::double precision AS mate_abs_score_sum,
+                        COUNT(*) FILTER (WHERE tsf.score > 50)::bigint AS white_better,
+                        COUNT(*) FILTER (WHERE tsf.score < -50)::bigint AS black_better,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) <= 50)::bigint AS balanced,
+                        COALESCE(SUM(tsf.score), 0)::double precision AS score_sum,
+                        COALESCE(SUM(ABS(tsf.score)), 0)::double precision AS abs_score_sum,
+                        COALESCE(SUM(tsf.wdl_win) FILTER (WHERE tsf.wdl_win IS NOT NULL AND tsf.wdl_draw IS NOT NULL AND tsf.wdl_loss IS NOT NULL), 0)::double precision AS wdl_win_sum,
+                        COALESCE(SUM(tsf.wdl_draw) FILTER (WHERE tsf.wdl_win IS NOT NULL AND tsf.wdl_draw IS NOT NULL AND tsf.wdl_loss IS NOT NULL), 0)::double precision AS wdl_draw_sum,
+                        COALESCE(SUM(tsf.wdl_loss) FILTER (WHERE tsf.wdl_win IS NOT NULL AND tsf.wdl_draw IS NOT NULL AND tsf.wdl_loss IS NOT NULL), 0)::double precision AS wdl_loss_sum,
+                        COUNT(*) FILTER (WHERE tsf.wdl_win IS NOT NULL AND tsf.wdl_draw IS NOT NULL AND tsf.wdl_loss IS NOT NULL)::bigint AS wdl_positions
+                    FROM temp_scored_position_summary_fens tsf
+                    JOIN fen f ON f.fen = tsf.fen
+                )
+                UPDATE scored_position_summary sps
+                SET
+                    analyzed_fens = sps.analyzed_fens + delta.analyzed_delta,
+                    scored_positions = sps.scored_positions + delta.analyzed_delta,
+                    nonzero_scored_fens = sps.nonzero_scored_fens + delta.nonzero_delta,
+                    unscored_fens = GREATEST(0, sps.unscored_fens - delta.analyzed_delta),
+                    equal_positions = sps.equal_positions + delta.equal_positions,
+                    small_positions = sps.small_positions + delta.small_positions,
+                    clear_positions = sps.clear_positions + delta.clear_positions,
+                    decisive_positions = sps.decisive_positions + delta.decisive_positions,
+                    mate_positions = sps.mate_positions + delta.mate_positions,
+                    equal_appearances = sps.equal_appearances + delta.equal_appearances,
+                    small_appearances = sps.small_appearances + delta.small_appearances,
+                    clear_appearances = sps.clear_appearances + delta.clear_appearances,
+                    decisive_appearances = sps.decisive_appearances + delta.decisive_appearances,
+                    mate_appearances = sps.mate_appearances + delta.mate_appearances,
+                    equal_abs_score_sum = sps.equal_abs_score_sum + delta.equal_abs_score_sum,
+                    small_abs_score_sum = sps.small_abs_score_sum + delta.small_abs_score_sum,
+                    clear_abs_score_sum = sps.clear_abs_score_sum + delta.clear_abs_score_sum,
+                    decisive_abs_score_sum = sps.decisive_abs_score_sum + delta.decisive_abs_score_sum,
+                    mate_abs_score_sum = sps.mate_abs_score_sum + delta.mate_abs_score_sum,
+                    white_better = sps.white_better + delta.white_better,
+                    black_better = sps.black_better + delta.black_better,
+                    balanced = sps.balanced + delta.balanced,
+                    score_sum = sps.score_sum + delta.score_sum,
+                    abs_score_sum = sps.abs_score_sum + delta.abs_score_sum,
+                    wdl_win_sum = sps.wdl_win_sum + delta.wdl_win_sum,
+                    wdl_draw_sum = sps.wdl_draw_sum + delta.wdl_draw_sum,
+                    wdl_loss_sum = sps.wdl_loss_sum + delta.wdl_loss_sum,
+                    wdl_positions = sps.wdl_positions + delta.wdl_positions,
+                    refreshed_at = CURRENT_TIMESTAMP
+                FROM delta
+                WHERE sps.id = 1
+                RETURNING {SCORED_POSITION_SUMMARY_COLUMNS};
+            """
+            result = await session.execute(text(update_query))
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {"fens": len(clean_rows)}
+
+
+async def ensure_scored_position_summary() -> Dict[str, Any]:
+    summary = await _read_scored_position_summary()
+    if summary is not None:
+        return summary
+    return await refresh_scored_position_summary()
+
+
 async def get_games_database_generalities() -> Dict[str, int]:
     """
     Returns core database generalities for the games dashboard:
@@ -139,25 +798,7 @@ async def get_games_database_generalities() -> Dict[str, int]:
     - total positions (fens)
     - scored fens (score != 0)
     """
-    sql_query = """
-        SELECT
-            (SELECT COUNT(*) FROM game) AS n_games_in_db,
-            (SELECT COUNT(*) FROM player WHERE joined IS NOT NULL AND joined <> 0) AS main_characters,
-            (SELECT COUNT(*) FROM player WHERE joined IS NULL OR joined = 0) AS secondary_characters,
-            (SELECT COUNT(*) FROM fen) AS n_positions,
-            (SELECT COUNT(*) FROM fen WHERE score IS NOT NULL AND score <> 0) AS scored_fens;
-    """
-    rows = await open_async_request(sql_query, fetch_as_dict=True)
-    if not rows:
-        return {
-            "n_games_in_db": 0,
-            "main_characters": 0,
-            "secondary_characters": 0,
-            "n_positions": 0,
-            "scored_fens": 0
-        }
-
-    row = rows[0]
+    row = await ensure_database_summary()
     return {
         "n_games_in_db": int(row.get("n_games_in_db") or 0),
         "main_characters": int(row.get("main_characters") or 0),
@@ -171,40 +812,12 @@ async def get_time_control_mode_counts() -> Dict[str, int]:
     """
     Returns normalized game counts for bullet, blitz and rapid.
     """
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-    query = f"""
-        SELECT mode, COUNT(*)::int AS total
-        FROM (
-            SELECT {mode_sql} AS mode
-            FROM game g
-        ) categorized
-        WHERE mode IN ('bullet', 'blitz', 'rapid')
-        GROUP BY mode;
-    """
-
-    async with AsyncDBSession() as session:
-        result = await session.execute(text(query))
-        rows = result.mappings().all()
-
-    counts = {"bullet": 0, "blitz": 0, "rapid": 0}
-    for row in rows:
-        mode = str(row.get("mode") or "")
-        if mode in counts:
-            counts[mode] = int(row.get("total") or 0)
-
-    return counts
+    row = await ensure_database_summary()
+    return {
+        "bullet": int(row.get("bullet_games") or 0),
+        "blitz": int(row.get("blitz_games") or 0),
+        "rapid": int(row.get("rapid_games") or 0)
+    }
 
 
 async def get_main_character_time_control_counts() -> Dict[str, int]:
@@ -212,43 +825,16 @@ async def get_main_character_time_control_counts() -> Dict[str, int]:
     Returns normalized game counts for bullet/blitz/rapid where at least one
     main character (joined != 0 and not NULL) is present.
     """
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
-        WITH main_players AS (
-            SELECT p.player_name
-            FROM player p
-            WHERE p.joined IS NOT NULL
-              AND p.joined <> 0
-        )
+    query = """
         SELECT
-            mode,
-            COUNT(*)::int AS total
-        FROM (
-            SELECT
-                {mode_sql} AS mode,
-                g.white,
-                g.black
-            FROM game g
-        ) classified
-        WHERE mode IN ('bullet', 'blitz', 'rapid')
-          AND (
-                white IN (SELECT player_name FROM main_players)
-                OR black IN (SELECT player_name FROM main_players)
-          )
-        GROUP BY mode;
+            gp.mode,
+            COUNT(DISTINCT gp.link)::int AS total
+        FROM game_player gp
+        JOIN player p ON p.player_name = gp.player_name
+        WHERE gp.mode IN ('bullet', 'blitz', 'rapid')
+          AND p.joined IS NOT NULL
+          AND p.joined <> 0
+        GROUP BY gp.mode;
     """
 
     async with AsyncDBSession() as session:
@@ -286,62 +872,19 @@ async def refresh_main_character_mode_summary() -> Dict[str, int]:
             last_game_at,
             refreshed_at
         )
-        WITH classified_games AS (
+        WITH main_player_rows AS (
             SELECT
-                CASE
-                    WHEN g.time_control LIKE '%/%' THEN 'daily'
-                    WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                        CASE
-                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                            WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                            ELSE 'classical'
-                        END
-                    ELSE 'unknown'
-                END AS mode,
-                g.white,
-                g.black,
-                g.white_elo,
-                g.black_elo,
-                g.white_result,
-                g.black_result,
-                make_timestamp(
-                    g.year::int,
-                    g.month::int,
-                    g.day::int,
-                    g.hour::int,
-                    g.minute::int,
-                    g.second::double precision
-                ) AS played_at
-            FROM game g
-        ),
-        player_rows AS (
-            SELECT
-                cg.mode,
-                cg.white AS player_name,
-                cg.white_elo::int AS rating,
-                cg.white_result AS result,
-                'white'::text AS color,
-                cg.played_at
-            FROM classified_games cg
-            WHERE cg.mode IN ('bullet', 'blitz', 'rapid')
-            UNION ALL
-            SELECT
-                cg.mode,
-                cg.black AS player_name,
-                cg.black_elo::int AS rating,
-                cg.black_result AS result,
-                'black'::text AS color,
-                cg.played_at
-            FROM classified_games cg
-            WHERE cg.mode IN ('bullet', 'blitz', 'rapid')
-        ),
-        main_player_rows AS (
-            SELECT pr.*
-            FROM player_rows pr
-            JOIN player p ON p.player_name = pr.player_name
+                gp.mode,
+                gp.player_name,
+                gp.rating,
+                gp.result,
+                gp.color,
+                gp.played_at
+            FROM game_player gp
+            JOIN player p ON p.player_name = gp.player_name
             WHERE p.joined IS NOT NULL
               AND p.joined <> 0
+              AND gp.mode IN ('bullet', 'blitz', 'rapid')
         ),
         aggregated AS (
             SELECT
@@ -406,6 +949,133 @@ async def refresh_main_character_mode_summary() -> Dict[str, int]:
     return counts
 
 
+async def refresh_main_character_mode_summary_for_players(player_names: Set[str]) -> Dict[str, int]:
+    """
+    Refreshes main-character mode summaries only for the affected players.
+    Non-main players are deleted from the summary and not reinserted.
+    """
+    clean_players = tuple(sorted({
+        str(player_name).strip().lower()
+        for player_name in player_names or set()
+        if str(player_name or "").strip()
+    }))
+    counts = {"bullet": 0, "blitz": 0, "rapid": 0, "total": 0}
+    if not clean_players:
+        return counts
+
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text("""
+                CREATE TEMPORARY TABLE IF NOT EXISTS temp_main_summary_players (
+                    player_name VARCHAR PRIMARY KEY
+                ) ON COMMIT DROP;
+            """))
+            for start in range(0, len(clean_players), 1000):
+                chunk = clean_players[start:start + 1000]
+                values = ", ".join(f"(:player_{idx})" for idx in range(len(chunk)))
+                params = {f"player_{idx}": player_name for idx, player_name in enumerate(chunk)}
+                await session.execute(text(f"""
+                    INSERT INTO temp_main_summary_players (player_name)
+                    VALUES {values}
+                    ON CONFLICT DO NOTHING;
+                """), params)
+
+            await session.execute(text("""
+                DELETE FROM main_character_mode_summary summary
+                USING temp_main_summary_players players
+                WHERE summary.player_name = players.player_name;
+            """))
+
+            insert_query = """
+                INSERT INTO main_character_mode_summary (
+                    mode,
+                    player_name,
+                    n_games,
+                    rating,
+                    avg_game_rating,
+                    last_rating,
+                    wins,
+                    draws,
+                    losses,
+                    as_white,
+                    as_black,
+                    last_game_at,
+                    refreshed_at
+                )
+                WITH main_player_rows AS (
+                    SELECT
+                        gp.mode,
+                        gp.player_name,
+                        gp.rating,
+                        gp.result,
+                        gp.color,
+                        gp.played_at
+                    FROM game_player gp
+                    JOIN temp_main_summary_players affected
+                      ON affected.player_name = gp.player_name
+                    JOIN player p ON p.player_name = gp.player_name
+                    WHERE p.joined IS NOT NULL
+                      AND p.joined <> 0
+                      AND gp.mode IN ('bullet', 'blitz', 'rapid')
+                ),
+                aggregated AS (
+                    SELECT
+                        mode,
+                        player_name,
+                        COUNT(*)::int AS n_games,
+                        ROUND(AVG(rating))::int AS avg_game_rating,
+                        SUM(CASE WHEN result = 1.0 THEN 1 ELSE 0 END)::int AS wins,
+                        SUM(CASE WHEN result = 0.5 THEN 1 ELSE 0 END)::int AS draws,
+                        SUM(CASE WHEN result = 0.0 THEN 1 ELSE 0 END)::int AS losses,
+                        SUM(CASE WHEN color = 'white' THEN 1 ELSE 0 END)::int AS as_white,
+                        SUM(CASE WHEN color = 'black' THEN 1 ELSE 0 END)::int AS as_black
+                    FROM main_player_rows
+                    GROUP BY mode, player_name
+                ),
+                latest_per_player AS (
+                    SELECT DISTINCT ON (mode, player_name)
+                        mode,
+                        player_name,
+                        rating::int AS last_game_rating,
+                        played_at AS last_game_at
+                    FROM main_player_rows
+                    ORDER BY mode, player_name, played_at DESC
+                )
+                SELECT
+                    a.mode,
+                    a.player_name,
+                    a.n_games,
+                    lp.last_game_rating::int AS rating,
+                    a.avg_game_rating::int AS avg_game_rating,
+                    lp.last_game_rating::int AS last_rating,
+                    a.wins,
+                    a.draws,
+                    a.losses,
+                    a.as_white,
+                    a.as_black,
+                    lp.last_game_at,
+                    CURRENT_TIMESTAMP AS refreshed_at
+                FROM aggregated a
+                LEFT JOIN latest_per_player lp
+                  ON lp.mode = a.mode
+                 AND lp.player_name = a.player_name
+                RETURNING mode;
+            """
+            result = await session.execute(text(insert_query))
+            rows = result.mappings().all()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    for row in rows:
+        mode = str(row.get("mode") or "")
+        if mode in counts:
+            counts[mode] += 1
+    counts["total"] = sum(counts.values())
+    return counts
+
+
 async def ensure_main_character_mode_summary() -> Dict[str, Any]:
     """
     Builds the summary table when it is empty. Existing rows are trusted because
@@ -443,6 +1113,214 @@ async def ensure_main_character_mode_summary() -> Dict[str, Any]:
         "games": games,
         "main_players": main_players,
         "refreshed": False
+    }
+
+
+async def sync_game_analytics_projection(game_links: Optional[Tuple[int, ...]] = None) -> Dict[str, int]:
+    """
+    Syncs additive analytical projection tables for either all games or a specific
+    set of game links. Postgres remains the source of truth.
+    """
+    clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
+    source_join = ""
+    source_from = ""
+    source_where = ""
+    move_source_join = ""
+
+    async with AsyncDBSession() as session:
+        try:
+            if clean_links:
+                await session.execute(text("""
+                    CREATE TEMPORARY TABLE IF NOT EXISTS temp_projection_game_links (
+                        link BIGINT PRIMARY KEY
+                    ) ON COMMIT DROP;
+                """))
+                for start in range(0, len(clean_links), 1000):
+                    chunk = clean_links[start:start + 1000]
+                    values = ", ".join(f"({link})" for link in chunk)
+                    if values:
+                        await session.execute(text(f"""
+                            INSERT INTO temp_projection_game_links (link)
+                            VALUES {values}
+                            ON CONFLICT DO NOTHING;
+                        """))
+                source_join = "JOIN temp_projection_game_links tpl ON tpl.link = g.link"
+                source_from = "FROM temp_projection_game_links tpl"
+                source_where = "tpl.link = g.link AND"
+                move_source_join = "JOIN temp_projection_game_links tpl ON tpl.link = m.link"
+
+            game_columns_update = f"""
+                UPDATE game g
+                SET
+                    mode = CASE
+                        WHEN g.time_control LIKE '%/%' THEN 'daily'
+                        WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
+                            CASE
+                                WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
+                                WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
+                                WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
+                                ELSE 'classical'
+                            END
+                        ELSE 'unknown'
+                    END,
+                    played_at = make_timestamp(
+                        g.year::int,
+                        g.month::int,
+                        g.day::int,
+                        g.hour::int,
+                        g.minute::int,
+                        g.second::double precision
+                    ) AT TIME ZONE 'UTC',
+                    avg_elo = (g.white_elo + g.black_elo) / 2.0
+                {source_from}
+                WHERE {source_where} (
+                    g.mode IS NULL
+                    OR g.played_at IS NULL
+                    OR g.avg_elo IS NULL
+                );
+            """
+            await session.execute(text(game_columns_update))
+
+            game_player_insert = f"""
+                INSERT INTO game_player (
+                    link,
+                    color,
+                    player_name,
+                    opponent_name,
+                    result,
+                    rating,
+                    opponent_rating,
+                    mode,
+                    played_at,
+                    eco,
+                    n_moves,
+                    time_elapsed,
+                    avg_elo
+                )
+                SELECT
+                    g.link,
+                    'white',
+                    g.white,
+                    g.black,
+                    g.white_result,
+                    g.white_elo,
+                    g.black_elo,
+                    g.mode,
+                    g.played_at,
+                    g.eco,
+                    g.n_moves,
+                    g.time_elapsed,
+                    g.avg_elo
+                FROM game g
+                {source_join}
+                UNION ALL
+                SELECT
+                    g.link,
+                    'black',
+                    g.black,
+                    g.white,
+                    g.black_result,
+                    g.black_elo,
+                    g.white_elo,
+                    g.mode,
+                    g.played_at,
+                    g.eco,
+                    g.n_moves,
+                    g.time_elapsed,
+                    g.avg_elo
+                FROM game g
+                {source_join}
+                ON CONFLICT (link, color) DO UPDATE SET
+                    player_name = EXCLUDED.player_name,
+                    opponent_name = EXCLUDED.opponent_name,
+                    result = EXCLUDED.result,
+                    rating = EXCLUDED.rating,
+                    opponent_rating = EXCLUDED.opponent_rating,
+                    mode = EXCLUDED.mode,
+                    played_at = EXCLUDED.played_at,
+                    eco = EXCLUDED.eco,
+                    n_moves = EXCLUDED.n_moves,
+                    time_elapsed = EXCLUDED.time_elapsed,
+                    avg_elo = EXCLUDED.avg_elo;
+            """
+            await session.execute(text(game_player_insert))
+
+            opening_insert = f"""
+                WITH requested AS (
+                    SELECT n_moves, n_moves * 2 AS required_half_moves
+                    FROM generate_series(3, 10) AS supported(n_moves)
+                ),
+                opening_moves AS (
+                    SELECT
+                        m.link,
+                        r.n_moves,
+                        m.n_move,
+                        m.white_move,
+                        m.black_move
+                    FROM moves m
+                    {move_source_join}
+                    JOIN requested r ON m.n_move BETWEEN 1 AND r.n_moves
+                ),
+                complete_games AS (
+                    SELECT link, n_moves
+                    FROM opening_moves
+                    GROUP BY link, n_moves
+                    HAVING COUNT(DISTINCT n_move) = n_moves
+                ),
+                ply_moves AS (
+                    SELECT link, n_moves, (n_move * 2 - 1) AS ply, white_move AS san
+                    FROM opening_moves
+                    UNION ALL
+                    SELECT link, n_moves, (n_move * 2) AS ply, black_move AS san
+                    FROM opening_moves
+                ),
+                openings AS (
+                    SELECT
+                        pm.link,
+                        pm.n_moves,
+                        string_agg(pm.san, ' ' ORDER BY pm.ply) AS opening
+                    FROM ply_moves pm
+                    JOIN complete_games cg
+                      ON cg.link = pm.link
+                     AND cg.n_moves = pm.n_moves
+                    WHERE pm.san IS NOT NULL
+                      AND pm.san <> ''
+                      AND pm.san <> '--'
+                    GROUP BY pm.link, pm.n_moves
+                    HAVING COUNT(*) = (pm.n_moves * 2)
+                )
+                INSERT INTO game_opening (
+                    link,
+                    n_moves,
+                    opening,
+                    mode,
+                    avg_elo,
+                    played_at
+                )
+                SELECT
+                    o.link,
+                    o.n_moves,
+                    o.opening,
+                    g.mode,
+                    g.avg_elo,
+                    g.played_at
+                FROM openings o
+                JOIN game g ON g.link = o.link
+                ON CONFLICT (link, n_moves) DO UPDATE SET
+                    opening = EXCLUDED.opening,
+                    mode = EXCLUDED.mode,
+                    avg_elo = EXCLUDED.avg_elo,
+                    played_at = EXCLUDED.played_at;
+            """
+            await session.execute(text(opening_insert))
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {
+        "games": len(clean_links),
+        "scope": "links" if clean_links else "all"
     }
 
 
@@ -619,42 +1497,13 @@ async def get_rating_time_control_chart(time_control: str) -> Dict[str, Any]:
     if target_mode not in {"bullet", "blitz", "rapid"}:
         return {"x": [], "y": [], "time_control": target_mode}
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
-        WITH filtered_games AS (
-            SELECT
-                g.white_elo,
-                g.black_elo,
-                {mode_sql} AS mode
-            FROM game g
-            WHERE g.white_elo IS NOT NULL
-              AND g.black_elo IS NOT NULL
-        ),
-        rating_rows AS (
-            SELECT white_elo::int AS rating, mode
-            FROM filtered_games
-            UNION ALL
-            SELECT black_elo::int AS rating, mode
-            FROM filtered_games
-        )
+    query = """
         SELECT
             rating,
             COUNT(*)::int AS appearances
-        FROM rating_rows
+        FROM game_player
         WHERE mode = :mode
+          AND rating IS NOT NULL
         GROUP BY rating
         ORDER BY rating ASC;
     """
@@ -727,20 +1576,6 @@ async def get_time_control_top_moves(
         safe_page = total_pages
     offset = (safe_page - 1) * safe_page_size
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
     query = f"""
         WITH filtered_moves AS (
             SELECT
@@ -748,10 +1583,10 @@ async def get_time_control_top_moves(
                 CASE
                     WHEN :move_color = 'black' THEN m.black_move
                     ELSE m.white_move
-                END AS move
+            END AS move
             FROM moves m
             JOIN game g ON g.link = m.link
-            WHERE {mode_sql} = :mode
+            WHERE g.mode = :mode
               AND m.n_move BETWEEN 1 AND :max_move
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
@@ -873,131 +1708,38 @@ async def get_time_control_top_openings(
     if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
         safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    count_query = f"""
-        WITH filtered_games AS (
-            SELECT g.link
-            FROM game g
-            WHERE {mode_sql} = :mode
+    count_query = """
+        WITH aggregated AS (
+            SELECT opening
+            FROM game_opening
+            WHERE mode = :mode
+              AND n_moves = :n_moves
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
                     OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
+                    OR avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
               )
-        ),
-        opening_moves AS (
-            SELECT m.link, m.n_move, m.white_move, m.black_move
-            FROM moves m
-            JOIN filtered_games fg ON fg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :n_moves
-        ),
-        complete_games AS (
-            SELECT link
-            FROM opening_moves
-            GROUP BY link
-            HAVING COUNT(DISTINCT n_move) = :n_moves
-        ),
-        ply_moves AS (
-            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
-            UNION ALL
-            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
-        ),
-        clean_ply AS (
-            SELECT link, ply, san
-            FROM ply_moves
-            WHERE san IS NOT NULL
-              AND san <> ''
-              AND san <> '--'
-        ),
-        openings AS (
-            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
-            FROM clean_ply
-            WHERE link IN (SELECT link FROM complete_games)
-            GROUP BY link
-            HAVING COUNT(*) = :required_half_moves
-        ),
-        aggregated AS (
-            SELECT opening
-            FROM openings
-            WHERE opening IS NOT NULL
-              AND opening <> ''
             GROUP BY opening
         )
         SELECT COUNT(*)::int AS total
         FROM aggregated;
     """
 
-    data_query = f"""
-        WITH filtered_games AS (
-            SELECT g.link
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (
-                    CAST(:min_rating AS INTEGER) IS NULL
-                    OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
-              )
-        ),
-        opening_moves AS (
-            SELECT m.link, m.n_move, m.white_move, m.black_move
-            FROM moves m
-            JOIN filtered_games fg ON fg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :n_moves
-        ),
-        complete_games AS (
-            SELECT link
-            FROM opening_moves
-            GROUP BY link
-            HAVING COUNT(DISTINCT n_move) = :n_moves
-        ),
-        ply_moves AS (
-            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
-            UNION ALL
-            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
-        ),
-        clean_ply AS (
-            SELECT link, ply, san
-            FROM ply_moves
-            WHERE san IS NOT NULL
-              AND san <> ''
-              AND san <> '--'
-        ),
-        openings AS (
-            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
-            FROM clean_ply
-            WHERE link IN (SELECT link FROM complete_games)
-            GROUP BY link
-            HAVING COUNT(*) = :required_half_moves
-        )
+    data_query = """
         SELECT
             opening,
             COUNT(*)::int AS times_played,
-            ROUND(AVG((g.white_elo + g.black_elo) / 2.0))::int AS mean_rating_for_this_opening
-        FROM openings o
-        JOIN game g ON g.link = o.link
-        WHERE opening IS NOT NULL
+            ROUND(AVG(avg_elo))::int AS mean_rating_for_this_opening
+        FROM game_opening
+        WHERE mode = :mode
+          AND n_moves = :n_moves
+          AND opening IS NOT NULL
           AND opening <> ''
+              AND (
+                    CAST(:min_rating AS INTEGER) IS NULL
+                    OR CAST(:max_rating AS INTEGER) IS NULL
+                    OR avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
+              )
         GROUP BY opening
         ORDER BY times_played DESC, opening ASC
         OFFSET :offset
@@ -1008,7 +1750,6 @@ async def get_time_control_top_openings(
         count_result = await session.execute(text(count_query), {
             "mode": target_mode,
             "n_moves": safe_n_moves,
-            "required_half_moves": required_half_moves,
             "min_rating": safe_min_rating,
             "max_rating": safe_max_rating
         })
@@ -1023,7 +1764,6 @@ async def get_time_control_top_openings(
         result = await session.execute(text(data_query), {
             "mode": target_mode,
             "n_moves": safe_n_moves,
-            "required_half_moves": required_half_moves,
             "min_rating": safe_min_rating,
             "max_rating": safe_max_rating,
             "offset": offset,
@@ -1132,35 +1872,17 @@ async def get_time_control_result_color_matrix(
     if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
         safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
+    query = """
         WITH filtered_games AS (
             SELECT
                 g.white_result,
                 g.black_result
             FROM game g
-            WHERE {mode_sql} = :mode
+            WHERE g.mode = :mode
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
                     OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
+                    OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
               )
         )
         SELECT
@@ -1251,33 +1973,15 @@ async def get_time_control_game_length_analytics(
     if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
         safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    summary_query = f"""
+    summary_query = """
         WITH filtered_games AS (
             SELECT g.n_moves, g.time_elapsed
             FROM game g
-            WHERE {mode_sql} = :mode
+            WHERE g.mode = :mode
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
                     OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
+                    OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
               )
         )
         SELECT
@@ -1291,19 +1995,15 @@ async def get_time_control_game_length_analytics(
         FROM filtered_games;
     """
 
-    moves_hist_query = f"""
+    moves_hist_query = """
         WITH filtered_games AS (
             SELECT g.n_moves
             FROM game g
-            WHERE {mode_sql} = :mode
+            WHERE g.mode = :mode
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
                     OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
+                    OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
               )
         )
         SELECT
@@ -1315,19 +2015,15 @@ async def get_time_control_game_length_analytics(
         ORDER BY bucket_start;
     """
 
-    elapsed_hist_query = f"""
+    elapsed_hist_query = """
         WITH filtered_games AS (
             SELECT g.time_elapsed
             FROM game g
-            WHERE {mode_sql} = :mode
+            WHERE g.mode = :mode
               AND (
                     CAST(:min_rating AS INTEGER) IS NULL
                     OR CAST(:max_rating AS INTEGER) IS NULL
-                    OR (
-                        g.white_elo IS NOT NULL
-                        AND g.black_elo IS NOT NULL
-                        AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                    )
+                    OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
               )
         ),
         bucketed AS (
@@ -1435,68 +2131,42 @@ async def get_time_control_activity_trend(
     if safe_min_rating is not None and safe_max_rating is not None and safe_min_rating > safe_max_rating:
         safe_min_rating, safe_max_rating = safe_max_rating, safe_min_rating
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    month_query = f"""
+    month_query = """
         SELECT g.month::int AS month_idx, COUNT(*)::int AS total
         FROM game g
-        WHERE {mode_sql} = :mode
+        WHERE g.mode = :mode
           AND (
                 CAST(:min_rating AS INTEGER) IS NULL
                 OR CAST(:max_rating AS INTEGER) IS NULL
-                OR (
-                    g.white_elo IS NOT NULL
-                    AND g.black_elo IS NOT NULL
-                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                )
+                OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
           )
         GROUP BY month_idx
         ORDER BY month_idx;
     """
 
-    weekday_query = f"""
+    weekday_query = """
         SELECT
-            EXTRACT(DOW FROM make_date(g.year, g.month, g.day))::int AS dow_idx,
+            EXTRACT(DOW FROM g.played_at)::int AS dow_idx,
             COUNT(*)::int AS total
         FROM game g
-        WHERE {mode_sql} = :mode
+        WHERE g.mode = :mode
           AND (
                 CAST(:min_rating AS INTEGER) IS NULL
                 OR CAST(:max_rating AS INTEGER) IS NULL
-                OR (
-                    g.white_elo IS NOT NULL
-                    AND g.black_elo IS NOT NULL
-                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                )
+                OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
           )
         GROUP BY dow_idx
         ORDER BY dow_idx;
     """
 
-    hour_query = f"""
+    hour_query = """
         SELECT g.hour::int AS hour_idx, COUNT(*)::int AS total
         FROM game g
-        WHERE {mode_sql} = :mode
+        WHERE g.mode = :mode
           AND (
                 CAST(:min_rating AS INTEGER) IS NULL
                 OR CAST(:max_rating AS INTEGER) IS NULL
-                OR (
-                    g.white_elo IS NOT NULL
-                    AND g.black_elo IS NOT NULL
-                    AND ((g.white_elo + g.black_elo) / 2.0) BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
-                )
+                OR g.avg_elo BETWEEN CAST(:min_rating AS NUMERIC) AND CAST(:max_rating AS NUMERIC)
           )
         GROUP BY hour_idx
         ORDER BY hour_idx;
@@ -1640,19 +2310,19 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     Retrieves the top N FENs based on the highest count of n_games.
     """
     sql_query = """
-        SELECT 
+        SELECT
             fen,
             n_games,
             moves_counter,
             score
-        FROM 
+        FROM
             fen
-        ORDER BY 
+        ORDER BY
             n_games DESC
         LIMIT :limit;
     """
     params = {"limit": limit}
-    
+
     result = await open_async_request(
         sql_query,
         params=params,
@@ -1666,20 +2336,20 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
     where the score has NOT been calculated yet.
     """
     sql_query = """
-        SELECT 
+        SELECT
             fen,
             n_games,
             score
-        FROM 
+        FROM
             fen
         WHERE
             score IS NULL
-        ORDER BY 
+        ORDER BY
             n_games DESC
         LIMIT :limit;
     """
     params = {"limit": limit}
-    
+
     result = await open_async_request(
         sql_query,
         params=params,
@@ -1710,30 +2380,759 @@ async def get_fen_analysis_counts() -> Dict[str, int]:
     Returns FEN analysis coverage counts.
     analyzed_fens counts every FEN with a stored score, including score 0.
     """
-    sql_query = """
-        SELECT
-            COUNT(*) AS total_fens,
-            COUNT(*) FILTER (WHERE score IS NOT NULL) AS analyzed_fens,
-            COUNT(*) FILTER (WHERE score IS NULL) AS unscored_fens,
-            COUNT(*) FILTER (WHERE score IS NOT NULL AND score <> 0) AS nonzero_scored_fens
-        FROM fen;
-    """
-    rows = await open_async_request(sql_query, fetch_as_dict=True)
-    if not rows:
-        return {
-            "total_fens": 0,
-            "analyzed_fens": 0,
-            "unscored_fens": 0,
-            "nonzero_scored_fens": 0,
-        }
-
-    row = rows[0]
+    row = await ensure_database_summary()
     return {
-        "total_fens": int(row.get("total_fens") or 0),
+        "total_fens": int(row.get("n_positions") or 0),
         "analyzed_fens": int(row.get("analyzed_fens") or 0),
         "unscored_fens": int(row.get("unscored_fens") or 0),
         "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
     }
+
+
+async def get_scored_positions_overview() -> Dict[str, Any]:
+    """
+    Returns aggregate analysis for scored FENs from the precomputed projection.
+    """
+    return await ensure_scored_position_summary()
+
+
+async def _build_scored_advantage_by_rating_payload() -> Dict[str, Any]:
+    """
+    Splits fully analyzed games into three avg_elo groups using weighted Jenks
+    natural breaks, then counts scored position occurrences by advantage bucket
+    inside each group.
+    """
+    labels = [
+        ("bad", "Bad"),
+        ("medium", "Medium"),
+        ("great", "Great")
+    ]
+    bucket_template = [
+        {"key": "equal", "label": "Equal", "order": 1, "positions": 0},
+        {"key": "small", "label": "Small", "order": 2, "positions": 0},
+        {"key": "clear", "label": "Clear", "order": 3, "positions": 0},
+        {"key": "decisive", "label": "Decisive", "order": 4, "positions": 0},
+        {"key": "mate", "label": "Mate", "order": 5, "positions": 0},
+    ]
+    rating_query = """
+        SELECT
+            ROUND(g.avg_elo::numeric)::int AS rating,
+            COUNT(*)::int AS games
+        FROM game_analysis_summary gas
+        JOIN game g ON g.link = gas.link
+        WHERE gas.is_fully_analyzed = true
+          AND gas.total_positions > 0
+          AND g.avg_elo > 0
+        GROUP BY ROUND(g.avg_elo::numeric)::int
+        ORDER BY rating ASC;
+    """
+    rating_points_query = """
+        SELECT
+            g.link,
+            ROW_NUMBER() OVER (
+                ORDER BY ROUND(g.avg_elo::numeric)::int ASC, g.link ASC
+            )::int AS x_index,
+            ROUND(g.avg_elo::numeric)::int AS rating,
+            COUNT(*) OVER ()::int AS total_games
+        FROM game_analysis_summary gas
+        JOIN game g ON g.link = gas.link
+        WHERE gas.is_fully_analyzed = true
+          AND gas.total_positions > 0
+          AND g.avg_elo > 0
+        ORDER BY rating ASC, g.link ASC;
+    """
+
+    async with AsyncDBSession() as session:
+        rating_result = await session.execute(text(rating_query))
+        rating_rows = rating_result.mappings().all()
+        rating_points_result = await session.execute(text(rating_points_query))
+        rating_point_rows = rating_points_result.mappings().all()
+
+        x_values = [int(row.get("rating") or 0) for row in rating_rows]
+        y_values = [int(row.get("games") or 0) for row in rating_rows]
+        jenks_ranges = _weighted_jenks_breaks(x_values, y_values, n_classes=3)
+
+        groups = []
+        for idx, (group_key, group_label) in enumerate(labels):
+            if idx < len(jenks_ranges):
+                min_rating, max_rating = jenks_ranges[idx]
+            else:
+                min_rating, max_rating = 0, 0
+            groups.append({
+                "key": group_key,
+                "label": group_label,
+                "min_rating": int(min_rating or 0),
+                "max_rating": int(max_rating or 0),
+                "games": 0,
+                "positions": 0,
+                "buckets": [dict(bucket) for bucket in bucket_template],
+            })
+
+        valid_groups = [group for group in groups if group["min_rating"] > 0 or group["max_rating"] > 0]
+        if not valid_groups:
+            return {
+                "rating_basis": "avg_elo",
+                "groups": groups,
+                "ratings": []
+            }
+
+        values_sql = ", ".join(
+            f"("
+            f"CAST(:group_key_{idx} AS TEXT), "
+            f"CAST(:group_label_{idx} AS TEXT), "
+            f"CAST(:min_rating_{idx} AS INTEGER), "
+            f"CAST(:max_rating_{idx} AS INTEGER), "
+            f"CAST(:group_order_{idx} AS INTEGER)"
+            f")"
+            for idx, _ in enumerate(valid_groups)
+        )
+        params: Dict[str, Any] = {}
+        for idx, group in enumerate(valid_groups):
+            params[f"group_key_{idx}"] = group["key"]
+            params[f"group_label_{idx}"] = group["label"]
+            params[f"min_rating_{idx}"] = group["min_rating"]
+            params[f"max_rating_{idx}"] = group["max_rating"]
+            params[f"group_order_{idx}"] = idx + 1
+
+        group_summary_query = f"""
+            WITH rating_groups(group_key, group_label, min_rating, max_rating, group_order) AS (
+                VALUES {values_sql}
+            ),
+            scoped_games AS (
+                SELECT
+                    rg.group_key,
+                    gas.link,
+                    gas.total_positions
+                FROM rating_groups rg
+                JOIN game g
+                  ON ROUND(g.avg_elo::numeric)::int BETWEEN rg.min_rating AND rg.max_rating
+                JOIN game_analysis_summary gas ON gas.link = g.link
+                WHERE gas.is_fully_analyzed = true
+                  AND gas.total_positions > 0
+                  AND g.avg_elo > 0
+            )
+            SELECT
+                group_key,
+                COUNT(*)::bigint AS games,
+                COALESCE(SUM(total_positions), 0)::bigint AS positions
+            FROM scoped_games
+            GROUP BY group_key;
+        """
+        bucket_query = f"""
+            WITH rating_groups(group_key, group_label, min_rating, max_rating, group_order) AS (
+                VALUES {values_sql}
+            ),
+            scoped_games AS (
+                SELECT
+                    rg.group_key,
+                    gas.equal_positions,
+                    gas.small_positions,
+                    gas.clear_positions,
+                    gas.decisive_positions,
+                    gas.mate_positions
+                FROM rating_groups rg
+                JOIN game g
+                  ON ROUND(g.avg_elo::numeric)::int BETWEEN rg.min_rating AND rg.max_rating
+                JOIN game_analysis_summary gas ON gas.link = g.link
+                WHERE gas.is_fully_analyzed = true
+                  AND gas.total_positions > 0
+                  AND g.avg_elo > 0
+            )
+            SELECT
+                group_key,
+                bucket_key,
+                bucket_label,
+                bucket_order,
+                SUM(positions)::bigint AS positions
+            FROM (
+                SELECT group_key, 'equal' AS bucket_key, 'Equal' AS bucket_label, 1 AS bucket_order, equal_positions AS positions FROM scoped_games
+                UNION ALL
+                SELECT group_key, 'small' AS bucket_key, 'Small' AS bucket_label, 2 AS bucket_order, small_positions AS positions FROM scoped_games
+                UNION ALL
+                SELECT group_key, 'clear' AS bucket_key, 'Clear' AS bucket_label, 3 AS bucket_order, clear_positions AS positions FROM scoped_games
+                UNION ALL
+                SELECT group_key, 'decisive' AS bucket_key, 'Decisive' AS bucket_label, 4 AS bucket_order, decisive_positions AS positions FROM scoped_games
+                UNION ALL
+                SELECT group_key, 'mate' AS bucket_key, 'Mate' AS bucket_label, 5 AS bucket_order, mate_positions AS positions FROM scoped_games
+            ) bucketed
+            GROUP BY group_key, bucket_key, bucket_label, bucket_order
+            ORDER BY group_key, bucket_order;
+        """
+
+        summary_result = await session.execute(text(group_summary_query), params)
+        summary_rows = summary_result.mappings().all()
+        bucket_result = await session.execute(text(bucket_query), params)
+        bucket_rows = bucket_result.mappings().all()
+
+    groups_by_key = {group["key"]: group for group in groups}
+    for row in summary_rows:
+        group = groups_by_key.get(str(row.get("group_key") or ""))
+        if not group:
+            continue
+        group["games"] = int(row.get("games") or 0)
+        group["positions"] = int(row.get("positions") or 0)
+
+    for row in bucket_rows:
+        group = groups_by_key.get(str(row.get("group_key") or ""))
+        if not group:
+            continue
+        bucket_key = str(row.get("bucket_key") or "")
+        for bucket in group["buckets"]:
+            if bucket["key"] == bucket_key:
+                bucket["positions"] = int(row.get("positions") or 0)
+                break
+
+    rating_points = []
+    for row in rating_point_rows:
+        link = int(row.get("link") or 0)
+        x_index = int(row.get("x_index") or 0)
+        rating = int(row.get("rating") or 0)
+        group_key = ""
+        for group in groups:
+            if group["min_rating"] <= rating <= group["max_rating"]:
+                group_key = group["key"]
+                break
+        if not group_key and groups:
+            if rating < groups[0]["min_rating"]:
+                group_key = groups[0]["key"]
+            elif rating > groups[-1]["max_rating"]:
+                group_key = groups[-1]["key"]
+        rating_points.append({
+            "link": link,
+            "x_index": x_index,
+            "rating": rating,
+            "group": group_key
+        })
+
+    return {
+        "rating_basis": "avg_elo",
+        "groups": groups,
+        "ratings": rating_points
+    }
+
+
+async def _read_scored_rating_summary() -> Optional[Dict[str, Any]]:
+    query = """
+        SELECT
+            rating_basis,
+            source_full_games,
+            source_distinct_ratings,
+            groups_payload,
+            ratings_payload
+        FROM scored_rating_summary
+        WHERE id = 1;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+
+    if not row:
+        return None
+
+    return {
+        "rating_basis": str(row.get("rating_basis") or "avg_elo"),
+        "groups": _json_payload(row.get("groups_payload"), []),
+        "ratings": _json_payload(row.get("ratings_payload"), []),
+    }
+
+
+async def refresh_scored_rating_summary() -> Dict[str, Any]:
+    """
+    Rebuilds the rating-group chart projection. The weighted Jenks calculation
+    is intentionally kept out of page-render requests.
+    """
+    payload = await _build_scored_advantage_by_rating_payload()
+    groups = payload.get("groups") or []
+    ratings = payload.get("ratings") or []
+    distinct_ratings = len({int(point.get("rating") or 0) for point in ratings})
+
+    query = """
+        INSERT INTO scored_rating_summary (
+            id,
+            rating_basis,
+            source_full_games,
+            source_distinct_ratings,
+            groups_payload,
+            ratings_payload,
+            refreshed_at
+        )
+        VALUES (
+            1,
+            :rating_basis,
+            :source_full_games,
+            :source_distinct_ratings,
+            CAST(:groups_payload AS JSONB),
+            CAST(:ratings_payload AS JSONB),
+            CURRENT_TIMESTAMP
+        )
+        ON CONFLICT (id) DO UPDATE SET
+            rating_basis = EXCLUDED.rating_basis,
+            source_full_games = EXCLUDED.source_full_games,
+            source_distinct_ratings = EXCLUDED.source_distinct_ratings,
+            groups_payload = EXCLUDED.groups_payload,
+            ratings_payload = EXCLUDED.ratings_payload,
+            refreshed_at = EXCLUDED.refreshed_at
+        RETURNING rating_basis, groups_payload, ratings_payload;
+    """
+    params = {
+        "rating_basis": str(payload.get("rating_basis") or "avg_elo"),
+        "source_full_games": len(ratings),
+        "source_distinct_ratings": distinct_ratings,
+        "groups_payload": json.dumps(groups),
+        "ratings_payload": json.dumps(ratings),
+    }
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query), params)
+            row = result.mappings().first()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {
+        "rating_basis": str(row.get("rating_basis") or "avg_elo") if row else params["rating_basis"],
+        "groups": _json_payload(row.get("groups_payload"), groups) if row else groups,
+        "ratings": _json_payload(row.get("ratings_payload"), ratings) if row else ratings,
+    }
+
+
+async def get_scored_advantage_by_rating() -> Dict[str, Any]:
+    summary = await _read_scored_rating_summary()
+    if summary is not None:
+        return summary
+    return await refresh_scored_rating_summary()
+
+
+async def get_scored_positions_page(
+    sort: str = "impact",
+    min_abs_score: int = 0,
+    page: int = 1,
+    page_size: int = 20
+) -> Dict[str, Any]:
+    """
+    Returns paginated scored FEN rows for the scored positions page.
+    """
+    target_sort = (sort or "impact").strip().lower()
+    order_sql_by_sort = {
+        "frequency": "n_games DESC, ABS(score) DESC, fen ASC",
+        "impact": "(n_games * ABS(score)) DESC, n_games DESC, fen ASC",
+        "evaluation": "ABS(score) DESC, n_games DESC, fen ASC"
+    }
+    order_sql = order_sql_by_sort.get(target_sort, order_sql_by_sort["impact"])
+    if target_sort not in order_sql_by_sort:
+        target_sort = "impact"
+
+    safe_min_abs_score = max(0, min(int(min_abs_score or 0), 10000))
+    safe_page_size = max(1, min(int(page_size or 20), 50))
+    safe_page = max(1, int(page or 1))
+
+    where_sql = """
+        score IS NOT NULL
+        AND ABS(score) >= :min_abs_score
+    """
+    count_query = f"""
+        SELECT COUNT(*)::bigint AS total
+        FROM fen
+        WHERE {where_sql};
+    """
+    data_query = f"""
+        SELECT
+            fen,
+            n_games,
+            moves_counter,
+            next_moves,
+            score,
+            wdl_win,
+            wdl_draw,
+            wdl_loss,
+            split_part(fen, ' ', 2) AS side_to_move,
+            (n_games * ABS(score)) AS impact_score
+        FROM fen
+        WHERE {where_sql}
+        ORDER BY {order_sql}
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        count_result = await session.execute(text(count_query), {
+            "min_abs_score": safe_min_abs_score
+        })
+        count_row = count_result.mappings().first() or {}
+        total = int(count_row.get("total") or 0)
+        total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+        if total_pages > 0 and safe_page > total_pages:
+            safe_page = total_pages
+        offset = (safe_page - 1) * safe_page_size
+
+        data_result = await session.execute(text(data_query), {
+            "min_abs_score": safe_min_abs_score,
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = data_result.mappings().all()
+
+    return {
+        "sort": target_sort,
+        "min_abs_score": safe_min_abs_score,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "rows": [
+            {
+                "fen": str(row.get("fen") or ""),
+                "n_games": int(row.get("n_games") or 0),
+                "moves_counter": str(row.get("moves_counter") or ""),
+                "next_moves": str(row.get("next_moves") or ""),
+                "score": float(row.get("score") or 0.0),
+                "wdl_win": float(row.get("wdl_win") or 0.0) if row.get("wdl_win") is not None else None,
+                "wdl_draw": float(row.get("wdl_draw") or 0.0) if row.get("wdl_draw") is not None else None,
+                "wdl_loss": float(row.get("wdl_loss") or 0.0) if row.get("wdl_loss") is not None else None,
+                "side_to_move": str(row.get("side_to_move") or ""),
+                "impact_score": float(row.get("impact_score") or 0.0)
+            }
+            for row in rows
+        ]
+    }
+
+
+async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = None) -> Dict[str, int]:
+    """
+    Rebuilds per-game scored-position coverage. When game_links are provided,
+    only those games are refreshed.
+    """
+    clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
+    source_join = ""
+    source_filter = ""
+
+    async with AsyncDBSession() as session:
+        try:
+            if clean_links:
+                await session.execute(text("""
+                    CREATE TEMPORARY TABLE IF NOT EXISTS temp_game_analysis_links (
+                        link BIGINT PRIMARY KEY
+                    ) ON COMMIT DROP;
+                """))
+                for start in range(0, len(clean_links), 1000):
+                    chunk = clean_links[start:start + 1000]
+                    values = ", ".join(f"({link})" for link in chunk)
+                    if values:
+                        await session.execute(text(f"""
+                            INSERT INTO temp_game_analysis_links (link)
+                            VALUES {values}
+                            ON CONFLICT DO NOTHING;
+                        """))
+                source_join = "JOIN temp_game_analysis_links tgal ON tgal.link = gfa.game_link"
+                source_filter = "WHERE link IN (SELECT link FROM temp_game_analysis_links)"
+
+            delete_missing_query = f"""
+                DELETE FROM game_analysis_summary
+                {source_filter}
+                  {"AND" if source_filter else "WHERE"} link NOT IN (
+                    SELECT DISTINCT gfa.game_link
+                    FROM game_fen_association gfa
+                    {source_join}
+                );
+            """
+            refresh_query = f"""
+                INSERT INTO game_analysis_summary (
+                    link,
+                    total_positions,
+                    analyzed_positions,
+                    unscored_positions,
+                    is_fully_analyzed,
+                    score_sum,
+                    abs_score_sum,
+                    avg_score,
+                    avg_abs_score,
+                    max_abs_score,
+                    equal_positions,
+                    small_positions,
+                    clear_positions,
+                    decisive_positions,
+                    mate_positions,
+                    refreshed_at
+                )
+                SELECT
+                    gfa.game_link AS link,
+                    COUNT(*)::int AS total_positions,
+                    COUNT(f.score)::int AS analyzed_positions,
+                    (COUNT(*) - COUNT(f.score))::int AS unscored_positions,
+                    (COUNT(*) > 0 AND COUNT(*) = COUNT(f.score)) AS is_fully_analyzed,
+                    COALESCE(SUM(f.score) FILTER (WHERE f.score IS NOT NULL), 0)::double precision AS score_sum,
+                    COALESCE(SUM(ABS(f.score)) FILTER (WHERE f.score IS NOT NULL), 0)::double precision AS abs_score_sum,
+                    (AVG(f.score) FILTER (WHERE f.score IS NOT NULL))::double precision AS avg_score,
+                    (AVG(ABS(f.score)) FILTER (WHERE f.score IS NOT NULL))::double precision AS avg_abs_score,
+                    (MAX(ABS(f.score)) FILTER (WHERE f.score IS NOT NULL))::double precision AS max_abs_score,
+                    COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) < 50)::int AS equal_positions,
+                    COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 50 AND ABS(f.score) < 150)::int AS small_positions,
+                    COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 150 AND ABS(f.score) < 300)::int AS clear_positions,
+                    COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 300 AND ABS(f.score) < 9000)::int AS decisive_positions,
+                    COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 9000)::int AS mate_positions,
+                    CURRENT_TIMESTAMP AS refreshed_at
+                FROM game_fen_association gfa
+                JOIN fen f ON f.fen = gfa.fen_fen
+                {source_join}
+                GROUP BY gfa.game_link
+                ON CONFLICT (link) DO UPDATE SET
+                    total_positions = EXCLUDED.total_positions,
+                    analyzed_positions = EXCLUDED.analyzed_positions,
+                    unscored_positions = EXCLUDED.unscored_positions,
+                    is_fully_analyzed = EXCLUDED.is_fully_analyzed,
+                    score_sum = EXCLUDED.score_sum,
+                    abs_score_sum = EXCLUDED.abs_score_sum,
+                    avg_score = EXCLUDED.avg_score,
+                    avg_abs_score = EXCLUDED.avg_abs_score,
+                    max_abs_score = EXCLUDED.max_abs_score,
+                    equal_positions = EXCLUDED.equal_positions,
+                    small_positions = EXCLUDED.small_positions,
+                    clear_positions = EXCLUDED.clear_positions,
+                    decisive_positions = EXCLUDED.decisive_positions,
+                    mate_positions = EXCLUDED.mate_positions,
+                    refreshed_at = EXCLUDED.refreshed_at
+                RETURNING link;
+            """
+            await session.execute(text(delete_missing_query))
+            result = await session.execute(text(refresh_query))
+            rows = result.mappings().all()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {
+        "games": len(rows),
+        "scope": "links" if clean_links else "all"
+    }
+
+
+async def increment_game_analysis_summary_for_scored_fens(
+    scored_fens: List[Dict[str, Any]]
+) -> Dict[str, int]:
+    """
+    Updates per-game coverage for a batch of newly scored FENs.
+    The caller should pass only FENs that transitioned from unscored to scored.
+    """
+    clean_rows = []
+    seen_fens: Set[str] = set()
+    for item in scored_fens or []:
+        fen_value = str(item.get("fen") or "").strip()
+        if not fen_value or fen_value in seen_fens:
+            continue
+        seen_fens.add(fen_value)
+        try:
+            score_value = float(item.get("score") or 0.0)
+        except (TypeError, ValueError):
+            score_value = 0.0
+        clean_rows.append({"fen": fen_value, "score": score_value})
+
+    if not clean_rows:
+        return {"games": 0, "fens": 0}
+
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text("""
+                CREATE TEMPORARY TABLE IF NOT EXISTS temp_scored_fens (
+                    fen VARCHAR PRIMARY KEY,
+                    score DOUBLE PRECISION NOT NULL
+                ) ON COMMIT DROP;
+            """))
+            for start in range(0, len(clean_rows), 1000):
+                chunk = clean_rows[start:start + 1000]
+                values = ", ".join(
+                    f"(:fen_{idx}, :score_{idx})"
+                    for idx in range(len(chunk))
+                )
+                params = {}
+                for idx, row in enumerate(chunk):
+                    params[f"fen_{idx}"] = row["fen"]
+                    params[f"score_{idx}"] = row["score"]
+                await session.execute(text(f"""
+                    INSERT INTO temp_scored_fens (fen, score)
+                    VALUES {values}
+                    ON CONFLICT (fen) DO UPDATE SET score = EXCLUDED.score;
+                """), params)
+
+            update_query = """
+                WITH affected AS (
+                    SELECT
+                        gfa.game_link AS link,
+                        COUNT(*)::int AS newly_analyzed,
+                        SUM(tsf.score)::double precision AS score_delta,
+                        SUM(ABS(tsf.score))::double precision AS abs_score_delta,
+                        MAX(ABS(tsf.score))::double precision AS max_abs_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) < 50)::int AS equal_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 50 AND ABS(tsf.score) < 150)::int AS small_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 150 AND ABS(tsf.score) < 300)::int AS clear_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 300 AND ABS(tsf.score) < 9000)::int AS decisive_delta,
+                        COUNT(*) FILTER (WHERE ABS(tsf.score) >= 9000)::int AS mate_delta
+                    FROM game_fen_association gfa
+                    JOIN temp_scored_fens tsf ON tsf.fen = gfa.fen_fen
+                    GROUP BY gfa.game_link
+                )
+                UPDATE game_analysis_summary gas
+                SET
+                    analyzed_positions = LEAST(gas.total_positions, gas.analyzed_positions + affected.newly_analyzed),
+                    unscored_positions = GREATEST(0, gas.unscored_positions - affected.newly_analyzed),
+                    is_fully_analyzed = gas.total_positions > 0
+                        AND GREATEST(0, gas.unscored_positions - affected.newly_analyzed) = 0,
+                    score_sum = gas.score_sum + affected.score_delta,
+                    abs_score_sum = gas.abs_score_sum + affected.abs_score_delta,
+                    avg_score = CASE
+                        WHEN LEAST(gas.total_positions, gas.analyzed_positions + affected.newly_analyzed) > 0
+                            THEN (gas.score_sum + affected.score_delta)
+                                / LEAST(gas.total_positions, gas.analyzed_positions + affected.newly_analyzed)
+                        ELSE NULL
+                    END,
+                    avg_abs_score = CASE
+                        WHEN LEAST(gas.total_positions, gas.analyzed_positions + affected.newly_analyzed) > 0
+                            THEN (gas.abs_score_sum + affected.abs_score_delta)
+                                / LEAST(gas.total_positions, gas.analyzed_positions + affected.newly_analyzed)
+                        ELSE NULL
+                    END,
+                    max_abs_score = GREATEST(COALESCE(gas.max_abs_score, 0), COALESCE(affected.max_abs_delta, 0)),
+                    equal_positions = gas.equal_positions + affected.equal_delta,
+                    small_positions = gas.small_positions + affected.small_delta,
+                    clear_positions = gas.clear_positions + affected.clear_delta,
+                    decisive_positions = gas.decisive_positions + affected.decisive_delta,
+                    mate_positions = gas.mate_positions + affected.mate_delta,
+                    refreshed_at = CURRENT_TIMESTAMP
+                FROM affected
+                WHERE gas.link = affected.link
+                RETURNING gas.link, gas.is_fully_analyzed;
+            """
+            result = await session.execute(text(update_query))
+            rows = result.mappings().all()
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {
+        "games": len(rows),
+        "fully_analyzed_games": sum(1 for row in rows if bool(row.get("is_fully_analyzed"))),
+        "fens": len(clean_rows)
+    }
+
+
+async def get_scored_game_analysis_overview() -> Dict[str, int]:
+    query = """
+        SELECT
+            COUNT(*)::bigint AS games_with_positions,
+            COUNT(*) FILTER (WHERE is_fully_analyzed)::bigint AS fully_analyzed_games,
+            COUNT(*) FILTER (WHERE NOT is_fully_analyzed AND total_positions > 0)::bigint AS incomplete_games,
+            COALESCE(SUM(total_positions), 0)::bigint AS total_game_positions,
+            COALESCE(SUM(analyzed_positions), 0)::bigint AS analyzed_game_positions,
+            COALESCE(SUM(unscored_positions), 0)::bigint AS unscored_game_positions
+        FROM game_analysis_summary;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first() or {}
+
+    return {
+        "games_with_positions": int(row.get("games_with_positions") or 0),
+        "fully_analyzed_games": int(row.get("fully_analyzed_games") or 0),
+        "incomplete_games": int(row.get("incomplete_games") or 0),
+        "total_game_positions": int(row.get("total_game_positions") or 0),
+        "analyzed_game_positions": int(row.get("analyzed_game_positions") or 0),
+        "unscored_game_positions": int(row.get("unscored_game_positions") or 0)
+    }
+
+
+async def get_scored_game_analysis_page(
+    status: str = "fully",
+    page: int = 1,
+    page_size: int = 20
+) -> Dict[str, Any]:
+    target_status = (status or "fully").strip().lower()
+    if target_status not in {"fully", "incomplete", "all"}:
+        target_status = "fully"
+    safe_page_size = max(1, min(int(page_size or 20), 50))
+    safe_page = max(1, int(page or 1))
+
+    where_sql = "gas.total_positions > 0"
+    if target_status == "fully":
+        where_sql += " AND gas.is_fully_analyzed = true"
+        order_sql = "gas.total_positions DESC, gas.max_abs_score DESC NULLS LAST, gas.link DESC"
+    elif target_status == "incomplete":
+        where_sql += " AND gas.is_fully_analyzed = false"
+        order_sql = "gas.unscored_positions DESC, gas.total_positions DESC, gas.link DESC"
+    else:
+        order_sql = "gas.is_fully_analyzed DESC, gas.total_positions DESC, gas.link DESC"
+
+    count_query = f"""
+        SELECT COUNT(*)::bigint AS total
+        FROM game_analysis_summary gas
+        WHERE {where_sql};
+    """
+    data_query = f"""
+        SELECT
+            gas.link,
+            gas.total_positions,
+            gas.analyzed_positions,
+            gas.unscored_positions,
+            gas.is_fully_analyzed,
+            gas.avg_score,
+            gas.avg_abs_score,
+            gas.max_abs_score,
+            g.white,
+            g.black,
+            g.mode,
+            g.played_at,
+            g.white_result,
+            g.black_result
+        FROM game_analysis_summary gas
+        JOIN game g ON g.link = gas.link
+        WHERE {where_sql}
+        ORDER BY {order_sql}
+        OFFSET :offset
+        LIMIT :limit;
+    """
+
+    async with AsyncDBSession() as session:
+        count_result = await session.execute(text(count_query))
+        count_row = count_result.mappings().first() or {}
+        total = int(count_row.get("total") or 0)
+        total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
+        if total_pages > 0 and safe_page > total_pages:
+            safe_page = total_pages
+        offset = (safe_page - 1) * safe_page_size
+        data_result = await session.execute(text(data_query), {
+            "offset": offset,
+            "limit": safe_page_size
+        })
+        rows = data_result.mappings().all()
+
+    return {
+        "status": target_status,
+        "page": safe_page,
+        "page_size": safe_page_size,
+        "total": total,
+        "total_pages": total_pages,
+        "rows": [
+            {
+                "link": int(row.get("link") or 0),
+                "total_positions": int(row.get("total_positions") or 0),
+                "analyzed_positions": int(row.get("analyzed_positions") or 0),
+                "unscored_positions": int(row.get("unscored_positions") or 0),
+                "is_fully_analyzed": bool(row.get("is_fully_analyzed")),
+                "avg_score": float(row.get("avg_score") or 0.0) if row.get("avg_score") is not None else None,
+                "avg_abs_score": float(row.get("avg_abs_score") or 0.0) if row.get("avg_abs_score") is not None else None,
+                "max_abs_score": float(row.get("max_abs_score") or 0.0) if row.get("max_abs_score") is not None else None,
+                "white": str(row.get("white") or ""),
+                "black": str(row.get("black") or ""),
+                "mode": str(row.get("mode") or ""),
+                "played_at": row.get("played_at").isoformat() if row.get("played_at") else "",
+                "white_result": float(row.get("white_result") or 0.0),
+                "black_result": float(row.get("black_result") or 0.0)
+            }
+            for row in rows
+        ]
+    }
+
 
 async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
@@ -1827,24 +3226,28 @@ async def get_player_fens_for_analysis(
 
 async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
     """
-    Counts FENs for a specific player based on their score status.
+    Counts per-game position coverage for a specific player.
     """
-    # --- FIX: Added DISTINCT to the counts ---
     sql_query = """
         SELECT
-            COUNT(DISTINCT CASE WHEN f.score = 0 THEN f.fen END) as score_zero,
-            COUNT(DISTINCT CASE WHEN f.score != 0 THEN f.fen END) as score_not_zero,
-            COUNT(DISTINCT CASE WHEN f.score IS NULL THEN f.fen END) as score_null
-        FROM fen f
-        JOIN game_fen_association gfa ON f.fen = gfa.fen_fen
-        JOIN game g ON gfa.game_link = g.link
-        WHERE g.white = :player OR g.black = :player;
+            COALESCE(SUM(gas.total_positions), 0)::bigint AS total_positions,
+            COALESCE(SUM(gas.analyzed_positions), 0)::bigint AS analyzed_positions,
+            COALESCE(SUM(gas.unscored_positions), 0)::bigint AS unscored_positions
+        FROM game_player gp
+        LEFT JOIN game_analysis_summary gas ON gas.link = gp.link
+        WHERE gp.player_name = :player;
     """
     
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
         row = result.mappings().first()
-        return dict(row) if row else {"score_zero": 0, "score_not_zero": 0, "score_null": 0}
+
+    return {
+        "player_name": player_name,
+        "total_positions": int((row or {}).get("total_positions") or 0),
+        "analyzed_positions": int((row or {}).get("analyzed_positions") or 0),
+        "unscored_positions": int((row or {}).get("unscored_positions") or 0),
+    }
 
 
 # --- NEW: STATISTICAL ANALYSIS QUERIES ---
@@ -1855,20 +3258,17 @@ async def get_player_performance_summary(player_name: str) -> Optional[Dict[str,
     """
     sql_query = """
         SELECT
-            COUNT(*) as total_games,
-            
-            SUM(CASE WHEN white = :player THEN 1 ELSE 0 END) as white_games,
-            SUM(CASE WHEN white = :player AND white_result = 1.0 THEN 1 ELSE 0 END) as white_wins,
-            SUM(CASE WHEN white = :player AND white_result = 0.0 THEN 1 ELSE 0 END) as white_losses,
-            SUM(CASE WHEN white = :player AND white_result = 0.5 THEN 1 ELSE 0 END) as white_draws,
-            
-            SUM(CASE WHEN black = :player THEN 1 ELSE 0 END) as black_games,
-            SUM(CASE WHEN black = :player AND black_result = 1.0 THEN 1 ELSE 0 END) as black_wins,
-            SUM(CASE WHEN black = :player AND black_result = 0.0 THEN 1 ELSE 0 END) as black_losses,
-            SUM(CASE WHEN black = :player AND black_result = 0.5 THEN 1 ELSE 0 END) as black_draws
-            
-        FROM game
-        WHERE white = :player OR black = :player;
+            COUNT(*) AS total_games,
+            SUM(CASE WHEN color = 'white' THEN 1 ELSE 0 END) AS white_games,
+            SUM(CASE WHEN color = 'white' AND result = 1.0 THEN 1 ELSE 0 END) AS white_wins,
+            SUM(CASE WHEN color = 'white' AND result = 0.0 THEN 1 ELSE 0 END) AS white_losses,
+            SUM(CASE WHEN color = 'white' AND result = 0.5 THEN 1 ELSE 0 END) AS white_draws,
+            SUM(CASE WHEN color = 'black' THEN 1 ELSE 0 END) AS black_games,
+            SUM(CASE WHEN color = 'black' AND result = 1.0 THEN 1 ELSE 0 END) AS black_wins,
+            SUM(CASE WHEN color = 'black' AND result = 0.0 THEN 1 ELSE 0 END) AS black_losses,
+            SUM(CASE WHEN color = 'black' AND result = 0.5 THEN 1 ELSE 0 END) AS black_draws
+        FROM game_player
+        WHERE player_name = :player;
     """
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
@@ -1882,12 +3282,9 @@ async def get_player_game_averages(player_name: str) -> Optional[Dict[str, Any]]
     sql_query = """
         SELECT
             AVG(n_moves) as avg_game_length,
-            AVG(CASE 
-                WHEN white = :player THEN black_elo
-                ELSE white_elo 
-            END) as avg_opponent_rating
-        FROM game
-        WHERE white = :player OR black = :player;
+            AVG(opponent_rating) as avg_opponent_rating
+        FROM game_player
+        WHERE player_name = :player;
     """
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
@@ -1900,12 +3297,13 @@ async def get_player_termination_stats(player_name: str) -> Optional[Dict[str, A
     """
     sql_query = """
         SELECT
-            SUM(CASE WHEN (white = :player AND white_str_result = 'checkmated') OR (black = :player AND black_str_result = 'checkmated') THEN 1 ELSE 0 END) as checkmated,
-            SUM(CASE WHEN (white = :player AND white_str_result = 'resigned') OR (black = :player AND black_str_result = 'resigned') THEN 1 ELSE 0 END) as resigned,
-            SUM(CASE WHEN (white = :player AND white_str_result = 'timeout') OR (black = :player AND black_str_result = 'timeout') THEN 1 ELSE 0 END) as timeout,
-            SUM(CASE WHEN (white = :player AND white_str_result = 'abandoned') OR (black = :player AND black_str_result = 'abandoned') THEN 1 ELSE 0 END) as abandoned
-        FROM game
-        WHERE white = :player OR black = :player;
+            SUM(CASE WHEN (gp.color = 'white' AND g.white_str_result = 'checkmated') OR (gp.color = 'black' AND g.black_str_result = 'checkmated') THEN 1 ELSE 0 END) as checkmated,
+            SUM(CASE WHEN (gp.color = 'white' AND g.white_str_result = 'resigned') OR (gp.color = 'black' AND g.black_str_result = 'resigned') THEN 1 ELSE 0 END) as resigned,
+            SUM(CASE WHEN (gp.color = 'white' AND g.white_str_result = 'timeout') OR (gp.color = 'black' AND g.black_str_result = 'timeout') THEN 1 ELSE 0 END) as timeout,
+            SUM(CASE WHEN (gp.color = 'white' AND g.white_str_result = 'abandoned') OR (gp.color = 'black' AND g.black_str_result = 'abandoned') THEN 1 ELSE 0 END) as abandoned
+        FROM game_player gp
+        JOIN game g ON g.link = gp.link
+        WHERE gp.player_name = :player;
     """
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
@@ -1920,23 +3318,12 @@ async def get_player_top_openings(player_name: str, limit: int = 5) -> List[Dict
         SELECT
             eco,
             COUNT(*) as total_games,
-            SUM(CASE 
-                WHEN white = :player AND white_result = 1.0 THEN 1
-                WHEN black = :player AND black_result = 1.0 THEN 1
-                ELSE 0 
-            END) as wins,
-            SUM(CASE 
-                WHEN white = :player AND white_result = 0.0 THEN 1
-                WHEN black = :player AND black_result = 0.0 THEN 1
-                ELSE 0 
-            END) as losses,
-            SUM(CASE 
-                WHEN white = :player AND white_result = 0.5 THEN 1
-                WHEN black = :player AND black_result = 0.5 THEN 1
-                ELSE 0 
-            END) as draws
-        FROM game
-        WHERE (white = :player OR black = :player) AND eco != 'no_eco'
+            SUM(CASE WHEN result = 1.0 THEN 1 ELSE 0 END) as wins,
+            SUM(CASE WHEN result = 0.0 THEN 1 ELSE 0 END) as losses,
+            SUM(CASE WHEN result = 0.5 THEN 1 ELSE 0 END) as draws
+        FROM game_player
+        WHERE player_name = :player
+          AND eco != 'no_eco'
         GROUP BY eco
         ORDER BY total_games DESC
         LIMIT :limit;
@@ -1972,30 +3359,19 @@ async def get_player_games_page(player_name: str, page: int = 1, page_size: int 
 
     count_query = """
         SELECT COUNT(*) AS total
-        FROM game
-        WHERE white = :player OR black = :player;
+        FROM game_player
+        WHERE player_name = :player;
     """
 
     games_query = """
         SELECT
             link,
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second,
-            CASE
-                WHEN white = :player THEN 'white'
-                ELSE 'black'
-            END AS color,
-            CASE
-                WHEN white = :player THEN white_result
-                ELSE black_result
-            END AS player_score
-        FROM game
-        WHERE white = :player OR black = :player
-        ORDER BY year DESC, month DESC, day DESC, hour DESC, minute DESC, second DESC
+            played_at,
+            color,
+            result AS player_score
+        FROM game_player
+        WHERE player_name = :player
+        ORDER BY played_at DESC, link DESC
         LIMIT :limit OFFSET :offset;
     """
 
@@ -2021,10 +3397,8 @@ async def get_player_games_page(player_name: str, page: int = 1, page_size: int 
         else:
             result_label = "unknown"
 
-        played_at = (
-            f"{int(row['year']):04d}-{int(row['month']):02d}-{int(row['day']):02d} "
-            f"{int(row['hour']):02d}:{int(row['minute']):02d}:{int(row['second']):02d}"
-        )
+        played_at_value = row.get("played_at")
+        played_at = played_at_value.strftime("%Y-%m-%d %H:%M:%S") if played_at_value else ""
 
         games.append({
             "link": row["link"],
@@ -2051,37 +3425,22 @@ async def get_player_game_summary(player_name: str) -> Dict[str, Any]:
     """
     summary_query = """
         SELECT
-            SUM(CASE WHEN white = :player THEN white_result WHEN black = :player THEN black_result ELSE NULL END) as win_points,
-            SUM(
-                CASE
-                    WHEN (white = :player AND white_result = 1.0) OR (black = :player AND black_result = 1.0) THEN 1
-                    ELSE 0
-                END
-            ) as wins,
-            SUM(
-                CASE
-                    WHEN (white = :player AND white_result = 0.0) OR (black = :player AND black_result = 0.0) THEN 1
-                    ELSE 0
-                END
-            ) as losses,
-            SUM(
-                CASE
-                    WHEN (white = :player AND white_result = 0.5) OR (black = :player AND black_result = 0.5) THEN 1
-                    ELSE 0
-                END
-            ) as draws,
-            MIN(make_timestamp(year, month, day, hour, minute, second)) as first_game,
-            MAX(make_timestamp(year, month, day, hour, minute, second)) as last_game,
+            SUM(result) AS win_points,
+            SUM(CASE WHEN result = 1.0 THEN 1 ELSE 0 END) AS wins,
+            SUM(CASE WHEN result = 0.0 THEN 1 ELSE 0 END) AS losses,
+            SUM(CASE WHEN result = 0.5 THEN 1 ELSE 0 END) AS draws,
+            MIN(played_at) AS first_game,
+            MAX(played_at) AS last_game,
             COUNT(*) as total_games
-        FROM game
-        WHERE white = :player OR black = :player;
+        FROM game_player
+        WHERE player_name = :player;
     """
 
     time_control_query = """
-        SELECT time_control, COUNT(*) as total
-        FROM game
-        WHERE white = :player OR black = :player
-        GROUP BY time_control
+        SELECT mode AS time_control, COUNT(*) as total
+        FROM game_player
+        WHERE player_name = :player
+        GROUP BY mode
         ORDER BY total DESC;
     """
 
@@ -2127,41 +3486,16 @@ async def get_player_mode_games(player_name: str, mode: str) -> Dict[str, Any]:
             "games": []
         }
 
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
+    query = """
         SELECT
-            g.link,
-            g.year,
-            g.month,
-            g.day,
-            g.hour,
-            g.minute,
-            g.second,
-            CASE
-                WHEN g.white = :player THEN 'white'
-                ELSE 'black'
-            END AS color,
-            CASE
-                WHEN g.white = :player THEN g.white_result
-                ELSE g.black_result
-            END AS player_score
-        FROM game g
-        WHERE (g.white = :player OR g.black = :player)
-          AND {mode_sql} = :mode
-        ORDER BY g.year DESC, g.month DESC, g.day DESC, g.hour DESC, g.minute DESC, g.second DESC;
+            link,
+            played_at,
+            color,
+            result AS player_score
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
+        ORDER BY played_at DESC, link DESC;
     """
 
     async with AsyncDBSession() as session:
@@ -2185,10 +3519,8 @@ async def get_player_mode_games(player_name: str, mode: str) -> Dict[str, Any]:
         else:
             result_label = "unknown"
 
-        played_at = (
-            f"{int(row['year']):04d}-{int(row['month']):02d}-{int(row['day']):02d} "
-            f"{int(row['hour']):02d}:{int(row['minute']):02d}:{int(row['second']):02d}"
-        )
+        played_at_value = row.get("played_at")
+        played_at = played_at_value.strftime("%Y-%m-%d %H:%M:%S") if played_at_value else ""
 
         games.append({
             "link": row["link"],
@@ -2221,34 +3553,14 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     Returns total played hours and played hours split by normalized time control mode.
     Uses game.time_elapsed (seconds).
     """
-    mode_sql = """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
-
-    query = f"""
-        WITH player_games AS (
-            SELECT
-                {mode_sql} AS mode,
-                COALESCE(g.time_elapsed, 0) AS time_elapsed
-            FROM game g
-            WHERE g.white = :player OR g.black = :player
-        )
+    query = """
         SELECT
-            ROUND(COALESCE(SUM(time_elapsed), 0) / 3600.0, 2) AS total_hours,
-            ROUND(COALESCE(SUM(CASE WHEN mode = 'bullet' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS bullet_hours,
-            ROUND(COALESCE(SUM(CASE WHEN mode = 'blitz' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS blitz_hours,
-            ROUND(COALESCE(SUM(CASE WHEN mode = 'rapid' THEN time_elapsed ELSE 0 END), 0) / 3600.0, 2) AS rapid_hours
-        FROM player_games;
+            ROUND((COALESCE(SUM(time_elapsed), 0) / 3600.0)::numeric, 2) AS total_hours,
+            ROUND((COALESCE(SUM(CASE WHEN mode = 'bullet' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS bullet_hours,
+            ROUND((COALESCE(SUM(CASE WHEN mode = 'blitz' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS blitz_hours,
+            ROUND((COALESCE(SUM(CASE WHEN mode = 'rapid' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS rapid_hours
+        FROM game_player
+        WHERE player_name = :player;
     """
 
     async with AsyncDBSession() as session:
@@ -2262,22 +3574,6 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
         "blitz_hours": float(row.get("blitz_hours") or 0.0),
         "rapid_hours": float(row.get("rapid_hours") or 0.0)
     }
-
-
-def _mode_case_sql() -> str:
-    return """
-        CASE
-            WHEN g.time_control LIKE '%/%' THEN 'daily'
-            WHEN split_part(g.time_control, '+', 1) ~ '^[0-9]+$' THEN
-                CASE
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 180 THEN 'bullet'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) < 600 THEN 'blitz'
-                    WHEN CAST(split_part(g.time_control, '+', 1) AS INTEGER) <= 1800 THEN 'rapid'
-                    ELSE 'classical'
-                END
-            ELSE 'unknown'
-        END
-    """
 
 
 def _player_result_to_score(result_filter: str) -> Optional[float]:
@@ -2323,17 +3619,13 @@ async def get_player_time_control_top_moves(
     if total_pages > 0 and safe_page > total_pages:
         safe_page = total_pages
     offset = (safe_page - 1) * safe_page_size
-    mode_sql = _mode_case_sql()
-
-    query = f"""
+    query = """
         WITH player_games AS (
-            SELECT g.link
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (
-                  (:move_color = 'white' AND g.white = :player)
-                  OR (:move_color = 'black' AND g.black = :player)
-              )
+            SELECT link
+            FROM game_player
+            WHERE player_name = :player
+              AND mode = :mode
+              AND color = :move_color
         ),
         filtered_moves AS (
             SELECT
@@ -2431,109 +3723,40 @@ async def get_player_time_control_top_openings(
     safe_page = max(1, int(page))
     safe_n_moves = max(3, min(int(n_moves), 10))
     required_half_moves = safe_n_moves * 2
-    mode_sql = _mode_case_sql()
 
-    count_query = f"""
-        WITH player_games AS (
-            SELECT
-                g.link
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (g.white = :player OR g.black = :player)
-              AND (
-                    CASE
-                        WHEN g.white = :player THEN g.white_result
-                        ELSE g.black_result
-                    END
-                  ) = :target_score
-        ),
-        opening_moves AS (
-            SELECT m.link, m.n_move, m.white_move, m.black_move
-            FROM moves m
-            JOIN player_games pg ON pg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :n_moves
-        ),
-        complete_games AS (
-            SELECT link
-            FROM opening_moves
-            GROUP BY link
-            HAVING COUNT(DISTINCT n_move) = :n_moves
-        ),
-        ply_moves AS (
-            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
-            UNION ALL
-            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
-        ),
-        clean_ply AS (
-            SELECT link, ply, san
-            FROM ply_moves
-            WHERE san IS NOT NULL AND san <> '' AND san <> '--'
-        ),
-        openings AS (
-            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
-            FROM clean_ply
-            WHERE link IN (SELECT link FROM complete_games)
-            GROUP BY link
-            HAVING COUNT(*) = :required_half_moves
+    count_query = """
+        WITH player_openings AS (
+            SELECT go.opening
+            FROM game_opening go
+            JOIN game_player gp ON gp.link = go.link
+            WHERE gp.player_name = :player
+              AND gp.mode = :mode
+              AND gp.result = :target_score
+              AND go.n_moves = :n_moves
+              AND go.opening IS NOT NULL
+              AND go.opening <> ''
         ),
         aggregated AS (
             SELECT opening
-            FROM openings
-            WHERE opening IS NOT NULL AND opening <> ''
+            FROM player_openings
             GROUP BY opening
         )
         SELECT COUNT(*)::int AS total FROM aggregated;
     """
 
-    data_query = f"""
-        WITH player_games AS (
-            SELECT
-                g.link
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (g.white = :player OR g.black = :player)
-              AND (
-                    CASE
-                        WHEN g.white = :player THEN g.white_result
-                        ELSE g.black_result
-                    END
-                  ) = :target_score
-        ),
-        opening_moves AS (
-            SELECT m.link, m.n_move, m.white_move, m.black_move
-            FROM moves m
-            JOIN player_games pg ON pg.link = m.link
-            WHERE m.n_move BETWEEN 1 AND :n_moves
-        ),
-        complete_games AS (
-            SELECT link
-            FROM opening_moves
-            GROUP BY link
-            HAVING COUNT(DISTINCT n_move) = :n_moves
-        ),
-        ply_moves AS (
-            SELECT link, (n_move * 2 - 1) AS ply, white_move AS san FROM opening_moves
-            UNION ALL
-            SELECT link, (n_move * 2) AS ply, black_move AS san FROM opening_moves
-        ),
-        clean_ply AS (
-            SELECT link, ply, san
-            FROM ply_moves
-            WHERE san IS NOT NULL AND san <> '' AND san <> '--'
-        ),
-        openings AS (
-            SELECT link, string_agg(san, ' ' ORDER BY ply) AS opening
-            FROM clean_ply
-            WHERE link IN (SELECT link FROM complete_games)
-            GROUP BY link
-            HAVING COUNT(*) = :required_half_moves
-        )
+    data_query = """
         SELECT
-            opening,
+            go.opening,
             COUNT(*)::int AS times_played
-        FROM openings
-        WHERE opening IS NOT NULL AND opening <> ''
-        GROUP BY opening
+        FROM game_opening go
+        JOIN game_player gp ON gp.link = go.link
+        WHERE gp.player_name = :player
+          AND gp.mode = :mode
+          AND gp.result = :target_score
+          AND go.n_moves = :n_moves
+          AND go.opening IS NOT NULL
+          AND go.opening <> ''
+        GROUP BY go.opening
         ORDER BY times_played DESC, opening ASC
         OFFSET :offset
         LIMIT :limit;
@@ -2544,8 +3767,7 @@ async def get_player_time_control_top_openings(
             "mode": target_mode,
             "player": player_name,
             "target_score": target_score,
-            "n_moves": safe_n_moves,
-            "required_half_moves": required_half_moves
+            "n_moves": safe_n_moves
         })
         count_row = count_result.mappings().first()
         total = int((count_row or {}).get("total") or 0)
@@ -2560,7 +3782,6 @@ async def get_player_time_control_top_openings(
             "player": player_name,
             "target_score": target_score,
             "n_moves": safe_n_moves,
-            "required_half_moves": required_half_moves,
             "offset": offset,
             "limit": safe_page_size
         })
@@ -2602,49 +3823,36 @@ async def get_player_time_control_lengths(player_name: str, mode: str) -> Dict[s
     if target_mode not in {"bullet", "blitz", "rapid"}:
         return {"mode": target_mode, "total_games": 0, "summary": {}, "n_moves_hist": {"x": [], "y": []}, "time_elapsed_hist": {"x": [], "y": [], "unit": "minutes"}}
 
-    mode_sql = _mode_case_sql()
-    summary_query = f"""
-        WITH filtered_games AS (
-            SELECT g.n_moves, g.time_elapsed
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (g.white = :player OR g.black = :player)
-        )
+    summary_query = """
         SELECT
             COUNT(*)::int AS total_games,
             ROUND(AVG(n_moves)::numeric, 2) AS avg_n_moves,
             percentile_cont(0.5) WITHIN GROUP (ORDER BY n_moves) AS median_n_moves,
             percentile_cont(0.9) WITHIN GROUP (ORDER BY n_moves) AS p90_n_moves,
             ROUND(AVG(time_elapsed)::numeric, 2) AS avg_time_elapsed_sec
-        FROM filtered_games;
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode;
     """
-    moves_hist_query = f"""
-        WITH filtered_games AS (
-            SELECT g.n_moves
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (g.white = :player OR g.black = :player)
-        )
+    moves_hist_query = """
         SELECT
             (FLOOR(n_moves / 10.0) * 10)::int AS bucket_start,
             (FLOOR(n_moves / 10.0) * 10 + 9)::int AS bucket_end,
             COUNT(*)::int AS total
-        FROM filtered_games
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
         GROUP BY bucket_start, bucket_end
         ORDER BY bucket_start;
     """
-    elapsed_hist_query = f"""
-        WITH filtered_games AS (
-            SELECT g.time_elapsed
-            FROM game g
-            WHERE {mode_sql} = :mode
-              AND (g.white = :player OR g.black = :player)
-        )
+    elapsed_hist_query = """
         SELECT
             (FLOOR((time_elapsed / 60.0) / 1.0) * 1)::int AS bucket_start_min,
             (FLOOR((time_elapsed / 60.0) / 1.0) * 1 + 1)::int AS bucket_end_min,
             COUNT(*)::int AS total
-        FROM filtered_games
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
         GROUP BY bucket_start_min, bucket_end_min
         ORDER BY bucket_start_min;
     """
@@ -2681,30 +3889,29 @@ async def get_player_time_control_activity_trend(player_name: str, mode: str) ->
     target_mode = (mode or "").strip().lower()
     if target_mode not in {"bullet", "blitz", "rapid"}:
         return {"mode": target_mode, "month_heat": {"labels": [], "values": []}, "weekday_heat": {"labels": [], "values": []}, "hour_heat": {"labels": [], "values": []}}
-    mode_sql = _mode_case_sql()
-    month_query = f"""
-        SELECT month::int AS idx, COUNT(*)::int AS total
-        FROM game g
-        WHERE {mode_sql} = :mode
-          AND (g.white = :player OR g.black = :player)
-        GROUP BY month
-        ORDER BY month;
-    """
-    weekday_query = f"""
-        SELECT EXTRACT(DOW FROM make_timestamp(year, month, day, hour, minute, second))::int AS idx, COUNT(*)::int AS total
-        FROM game g
-        WHERE {mode_sql} = :mode
-          AND (g.white = :player OR g.black = :player)
+    month_query = """
+        SELECT EXTRACT(MONTH FROM played_at)::int AS idx, COUNT(*)::int AS total
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
         GROUP BY idx
         ORDER BY idx;
     """
-    hour_query = f"""
-        SELECT hour::int AS idx, COUNT(*)::int AS total
-        FROM game g
-        WHERE {mode_sql} = :mode
-          AND (g.white = :player OR g.black = :player)
-        GROUP BY hour
-        ORDER BY hour;
+    weekday_query = """
+        SELECT EXTRACT(DOW FROM played_at)::int AS idx, COUNT(*)::int AS total
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
+        GROUP BY idx
+        ORDER BY idx;
+    """
+    hour_query = """
+        SELECT EXTRACT(HOUR FROM played_at)::int AS idx, COUNT(*)::int AS total
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
+        GROUP BY idx
+        ORDER BY idx;
     """
     async with AsyncDBSession() as session:
         mres = await session.execute(text(month_query), {"mode": target_mode, "player": player_name})
@@ -2733,60 +3940,19 @@ async def get_player_time_control_activity_trend(player_name: str, mode: str) ->
     }
 
 
-def _normalize_time_control_mode(time_control: Optional[str]) -> str:
-    """
-    Normalizes raw time_control strings into mode buckets.
-    Examples: 60 and 60+1 -> bullet.
-    """
-    if not time_control:
-        return "unknown"
-
-    tc = str(time_control).strip()
-    if not tc:
-        return "unknown"
-
-    if "/" in tc:
-        return "daily"
-
-    primary = tc.split("+", 1)[0]
-    try:
-        seconds = int(primary)
-    except (TypeError, ValueError):
-        return "unknown"
-
-    # Chess.com-style buckets requested by user:
-    # - bullet: < 3 minutes
-    # - blitz:  < 10 minutes
-    # - rapid:  10 to 30 minutes
-    if seconds < 180:
-        return "bullet"
-    if seconds < 600:
-        return "blitz"
-    if seconds <= 1800:
-        return "rapid"
-    return "classical"
-
-
 async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
     """
     Returns per-mode stats for a player keyed by normalized mode.
     """
     query = """
         SELECT
-            white,
-            black,
-            white_elo,
-            black_elo,
-            time_control,
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second
-        FROM game
-        WHERE white = :player OR black = :player
-        ORDER BY year ASC, month ASC, day ASC, hour ASC, minute ASC, second ASC;
+            mode,
+            color,
+            rating,
+            played_at
+        FROM game_player
+        WHERE player_name = :player
+        ORDER BY played_at ASC, link ASC;
     """
 
     async with AsyncDBSession() as session:
@@ -2795,9 +3961,9 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
 
     by_mode: Dict[str, Dict[str, int]] = {}
     for row in rows:
-        mode = _normalize_time_control_mode(row.get("time_control"))
-        as_white = row.get("white") == player_name
-        rating = int(row.get("white_elo") if as_white else row.get("black_elo"))
+        mode = str(row.get("mode") or "unknown")
+        as_white = row.get("color") == "white"
+        rating = int(row.get("rating") or 0)
 
         if mode not in by_mode:
             by_mode[mode] = {
@@ -2851,45 +4017,28 @@ async def get_player_mode_chart(
     Returns chart data for a single normalized mode (oldest to newest),
     including backend-computed color buckets from mean/std.
     """
-    target_mode = mode.strip().lower()
+    target_mode = (mode or "").strip().lower()
     query = """
         SELECT
-            white,
-            black,
-            white_elo,
-            black_elo,
-            time_control,
-            year,
-            month,
-            day,
-            hour,
-            minute,
-            second
-        FROM game
-        WHERE white = :player OR black = :player
-        ORDER BY year ASC, month ASC, day ASC, hour ASC, minute ASC, second ASC;
+            rating,
+            played_at
+        FROM game_player
+        WHERE player_name = :player
+          AND mode = :mode
+        ORDER BY played_at ASC, link ASC;
     """
 
     async with AsyncDBSession() as session:
-        result = await session.execute(text(query), {"player": player_name})
+        result = await session.execute(text(query), {"player": player_name, "mode": target_mode})
         rows = result.mappings().all()
 
     mode_points: List[Tuple[datetime, str, int]] = []
     for row in rows:
-        row_mode = _normalize_time_control_mode(row.get("time_control"))
-        if row_mode != target_mode:
+        dt = row.get("played_at")
+        if not dt:
             continue
 
-        is_white = row.get("white") == player_name
-        rating = int(row.get("white_elo") if is_white else row.get("black_elo"))
-        dt = datetime(
-            int(row["year"]),
-            int(row["month"]),
-            int(row["day"]),
-            int(row["hour"]),
-            int(row["minute"]),
-            int(row["second"])
-        )
+        rating = int(row.get("rating") or 0)
         date_value = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
         mode_points.append((dt, date_value, rating))
 

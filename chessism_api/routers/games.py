@@ -1,4 +1,3 @@
-import asyncio
 import json
 import time
 from typing import Any, Dict
@@ -9,7 +8,6 @@ from fastapi.responses import JSONResponse
 
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.games import (
-    create_games,
     read_game,
     get_time_control_result_color_matrix_payload,
     get_time_control_game_length_analytics_payload,
@@ -34,7 +32,6 @@ from chessism_api.database.ask_db import (
 )
 
 router = APIRouter()
-GAME_PIPELINE_LOCK = asyncio.Lock()
 GAME_QUEUE_NAME = "games_queue"
 PROGRESS_TTL_SECONDS = 60 * 60 * 24
 
@@ -250,22 +247,35 @@ async def api_create_game(
     player_name = _payload_player_name(data)
     data["player_name"] = player_name
         
-    if GAME_PIPELINE_LOCK.locked() or await _has_active_game_job(redis):
+    if await _has_active_game_job(redis):
         return JSONResponse(
             status_code=409,
             content={"message": "Another download/update is running. Wait until it finishes."}
         )
 
-    async with GAME_PIPELINE_LOCK:
-        try:
-            congratulation = await create_games(data)
-            return JSONResponse(content={"message": congratulation})
-        except Exception as error:
-            print(f"Error creating games for {player_name}: {error}")
-            return JSONResponse(
-                status_code=500,
-                content={"message": f"Failed to download games for {player_name}."}
-            )
+    try:
+        job = await redis.enqueue_job(
+            "run_create_player_games_job",
+            data,
+            _queue_name=GAME_QUEUE_NAME,
+            _job_timeout=60 * 60 * 12
+        )
+        job_id = str(getattr(job, "job_id", job))
+        await _write_queued_game_job(redis, job_id, player_name)
+        return JSONResponse(
+            status_code=202,
+            content={
+                "message": f"Games download for {player_name} enqueued on {GAME_QUEUE_NAME}.",
+                "player_name": player_name,
+                "job_id": job_id
+            }
+        )
+    except Exception as error:
+        print(f"Error enqueueing games download for {player_name}: {error}")
+        return JSONResponse(
+            status_code=500,
+            content={"message": f"Failed to enqueue games download for {player_name}."}
+        )
 
 
 @router.post("/update")
@@ -281,7 +291,7 @@ async def api_update_player_games(
     player_name = _payload_player_name(data)
     data["player_name"] = player_name
         
-    if GAME_PIPELINE_LOCK.locked() or await _has_active_game_job(redis):
+    if await _has_active_game_job(redis):
         return JSONResponse(
             status_code=409,
             content={"message": "Another download/update is running. Wait until it finishes."}

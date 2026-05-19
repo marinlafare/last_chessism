@@ -3,7 +3,7 @@ import enum
 from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger, Table,
-    DateTime, Enum, func, UniqueConstraint, Index
+    DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
@@ -43,7 +43,7 @@ class Player(Base):
     stats = relationship(
         "PlayerStats", 
         back_populates="player", 
-        uselist=False, # Signifies a one-to-one relationship
+        uselist=False, # one-to-one relationship
         cascade="all, delete-orphan"
     )
 
@@ -67,6 +67,9 @@ class Game(Base):
     white_str_result = Column("white_str_result", String, nullable=False)
     black_str_result = Column("black_str_result", String, nullable=False)
     time_control = Column("time_control", String, nullable=False)
+    mode = Column("mode", String(16), nullable=True)
+    played_at = Column("played_at", DateTime(timezone=True), nullable=True)
+    avg_elo = Column("avg_elo", Float, nullable=True)
     eco = Column("eco", String, nullable=False)
     
     time_elapsed = Column("time_elapsed", Float, nullable=False)
@@ -88,6 +91,164 @@ class Game(Base):
     
     # --- NEW: Add direct relationship to the association object ---
     fen_associations = relationship("GameFenAssociation", back_populates="game", overlaps="games,fens")
+
+    __table_args__ = (
+        Index("ix_game_mode", "mode"),
+        Index("ix_game_played_at", "played_at"),
+        Index("ix_game_mode_avg_elo", "mode", "avg_elo"),
+        Index("ix_game_white_played_at", "white", "played_at"),
+        Index("ix_game_black_played_at", "black", "played_at"),
+    )
+
+
+class GamePlayer(Base):
+    __tablename__ = "game_player"
+
+    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
+    color = Column(String(5), primary_key=True, nullable=False)
+    player_name = Column(String, ForeignKey("player.player_name"), nullable=False)
+    opponent_name = Column(String, ForeignKey("player.player_name"), nullable=False)
+    result = Column(Float, nullable=False)
+    rating = Column(Integer, nullable=False)
+    opponent_rating = Column(Integer, nullable=False)
+    mode = Column(String(16), nullable=True)
+    played_at = Column(DateTime(timezone=True), nullable=True)
+    eco = Column(String, nullable=False)
+    n_moves = Column(Integer, nullable=False)
+    time_elapsed = Column(Float, nullable=False)
+    avg_elo = Column(Float, nullable=True)
+
+    game = relationship(Game, foreign_keys=[link])
+    player = relationship(Player, foreign_keys=[player_name])
+    opponent = relationship(Player, foreign_keys=[opponent_name])
+
+    __table_args__ = (
+        Index("ix_game_player_player_played_at", "player_name", "played_at"),
+        Index("ix_game_player_player_mode_played_at", "player_name", "mode", "played_at"),
+        Index("ix_game_player_mode_rating", "mode", "rating"),
+        Index("ix_game_player_link", "link"),
+    )
+
+
+class GameOpening(Base):
+    __tablename__ = "game_opening"
+
+    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
+    n_moves = Column(Integer, primary_key=True, nullable=False)
+    opening = Column(String, nullable=False)
+    mode = Column(String(16), nullable=True)
+    avg_elo = Column(Float, nullable=True)
+    played_at = Column(DateTime(timezone=True), nullable=True)
+
+    game = relationship(Game, foreign_keys=[link])
+
+    __table_args__ = (
+        Index("ix_game_opening_mode_n_moves_opening", "mode", "n_moves", "opening"),
+        Index("ix_game_opening_n_moves_mode_avg_elo", "n_moves", "mode", "avg_elo"),
+    )
+
+
+class GameAnalysisSummary(Base):
+    __tablename__ = "game_analysis_summary"
+
+    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
+    total_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    analyzed_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    unscored_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    is_fully_analyzed = Column(Boolean, nullable=False, default=False, server_default="false")
+    score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    avg_score = Column(Float, nullable=True)
+    avg_abs_score = Column(Float, nullable=True)
+    max_abs_score = Column(Float, nullable=True)
+    equal_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    small_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    clear_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    decisive_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    mate_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    game = relationship(Game, foreign_keys=[link])
+
+    __table_args__ = (
+        Index(
+            "ix_game_analysis_summary_fully_positions",
+            total_positions.desc(),
+            max_abs_score.desc().nulls_last(),
+            link.desc(),
+            postgresql_where=is_fully_analyzed.is_(True) & (total_positions > 0),
+        ),
+        Index(
+            "ix_game_analysis_summary_incomplete",
+            unscored_positions.desc(),
+            total_positions.desc(),
+            link.desc(),
+            postgresql_where=is_fully_analyzed.is_(False) & (total_positions > 0),
+        ),
+        Index(
+            "ix_game_analysis_summary_all_positions",
+            is_fully_analyzed.desc(),
+            total_positions.desc(),
+            link.desc(),
+            postgresql_where=total_positions > 0,
+        ),
+    )
+
+
+class ScoredPositionSummary(Base):
+    __tablename__ = "scored_position_summary"
+
+    id = Column(Integer, primary_key=True, default=1, server_default="1")
+    total_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    analyzed_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    scored_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    nonzero_scored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    unscored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    equal_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    small_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    clear_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    decisive_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    mate_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    equal_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
+    small_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
+    clear_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
+    decisive_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
+    mate_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
+    equal_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    small_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    clear_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    decisive_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    mate_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    white_better = Column(BigInteger, nullable=False, default=0, server_default="0")
+    black_better = Column(BigInteger, nullable=False, default=0, server_default="0")
+    balanced = Column(BigInteger, nullable=False, default=0, server_default="0")
+    score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
+    wdl_win_sum = Column(Float, nullable=False, default=0, server_default="0")
+    wdl_draw_sum = Column(Float, nullable=False, default=0, server_default="0")
+    wdl_loss_sum = Column(Float, nullable=False, default=0, server_default="0")
+    wdl_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="scored_position_summary_singleton"),
+    )
+
+
+class ScoredRatingSummary(Base):
+    __tablename__ = "scored_rating_summary"
+
+    id = Column(Integer, primary_key=True, default=1, server_default="1")
+    rating_basis = Column(String(32), nullable=False, default="avg_elo")
+    source_full_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    source_distinct_ratings = Column(BigInteger, nullable=False, default=0, server_default="0")
+    groups_payload = Column(JSON, nullable=False)
+    ratings_payload = Column(JSON, nullable=False)
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="scored_rating_summary_singleton"),
+    )
 
 
 class Month(Base):
@@ -147,7 +308,6 @@ class Fen(Base):
         'Game',
         secondary='game_fen_association',
         back_populates='fens',
-        # --- FIX: Tell SQLAlchemy this overlaps with the 'game_associations' relationship ---
         overlaps="game_associations"
     )
     
@@ -161,7 +321,7 @@ class Fen(Base):
     )
 
 
-# --- NEW: The GameFenAssociation class ---
+
 class GameFenAssociation(Base):
     __tablename__ = 'game_fen_association'
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -285,6 +445,28 @@ class MainCharacterModeSummary(Base):
     __table_args__ = (
         Index("ix_main_character_mode_summary_mode_rating", "mode", "rating"),
         Index("ix_main_character_mode_summary_mode_games", "mode", "n_games"),
+    )
+
+
+class DatabaseSummary(Base):
+    __tablename__ = "database_summary"
+
+    id = Column(Integer, primary_key=True, default=1, server_default="1")
+    n_games_in_db = Column(BigInteger, nullable=False, default=0, server_default="0")
+    main_characters = Column(BigInteger, nullable=False, default=0, server_default="0")
+    secondary_characters = Column(BigInteger, nullable=False, default=0, server_default="0")
+    n_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
+    analyzed_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    unscored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    scored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    nonzero_scored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
+    bullet_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    blitz_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    rapid_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="database_summary_singleton"),
     )
 
 

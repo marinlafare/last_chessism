@@ -52,10 +52,10 @@ export function DashboardSummaryPanel() {
   }, [timeControls])
 
   const metrics = [
-    { label: 'Games', value: generalities?.n_games_in_db },
     { label: 'Main Players', value: generalities?.main_characters },
+    { label: 'Games', value: generalities?.n_games_in_db },
     { label: 'Positions', value: generalities?.n_positions },
-    { label: 'Scored FENs', value: generalities?.scored_fens }
+    { label: 'Scored Positions', value: generalities?.scored_fens }
   ]
 
   return (
@@ -92,21 +92,3 @@ export function DashboardSummaryPanel() {
     </div>
   )
 }
-
-function Hero() {
-  return (
-    <section className="dashboard-hero-copy dashboard-hero-standalone" id="top">
-      <p className="eyebrow">Live database overview</p>
-      <h2>Chess intelligence, organized for analysis.</h2>
-      <p>
-        Track games, players, positions, and engine coverage from one compact control surface.
-      </p>
-      <div className="hero-actions">
-        <a className="btn btn-primary" href="/games">Open Games</a>
-        <a className="btn btn-secondary" href="/main_characters">Review Players</a>
-      </div>
-    </section>
-  )
-}
-
-export default Hero

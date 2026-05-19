@@ -6,6 +6,8 @@ import DownloadNewGames from './pages/DownloadNewGames'
 import MainCharacters from './pages/MainCharacters'
 import SecondaryCharacter from './pages/SecondaryCharacter'
 import Positions from './pages/Positions'
+import LiveAnalysis from './pages/LiveAnalysis'
+import ScoredPositions from './pages/ScoredPositions'
 import AnalyzeTimes from './pages/AnalyzeTimes'
 import { API_BASE_URL } from './config'
 
@@ -194,7 +196,18 @@ function AdminsPage({ onAuthenticated, onGateExpired }) {
   )
 }
 
-function SuperadminSystem({ onLogout }) {
+function AdminOnlineStatus({ account }) {
+  const displayName = account?.name || account?.email || 'Admin'
+
+  return (
+    <div className="admin-online-status" aria-label={`${displayName} online`}>
+      <span className="admin-online-dot" aria-hidden="true" />
+      <span>{displayName}</span>
+    </div>
+  )
+}
+
+function SuperadminSystem({ account, onLogout }) {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   let page = <Home />
 
@@ -202,14 +215,18 @@ function SuperadminSystem({ onLogout }) {
     page = <Games />
   } else if (path === '/players') {
     page = <Players />
-  } else if (path === '/download_new_games') {
+  } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {
     page = <MainCharacters />
   } else if (path === '/secondary_character') {
     page = <SecondaryCharacter />
-  } else if (path === '/positions') {
+  } else if (path === '/analize_positions' || path === '/positions') {
     page = <Positions />
+  } else if (path === '/live_analysis' || path === '/live_analyzis') {
+    page = <LiveAnalysis />
+  } else if (path === '/scored_positions') {
+    page = <ScoredPositions />
   } else if (path === '/analyze_times') {
     page = <AnalyzeTimes />
   }
@@ -217,6 +234,7 @@ function SuperadminSystem({ onLogout }) {
   return (
     <>
       {page}
+      <AdminOnlineStatus account={account} />
       <button className="superadmin-logout" type="button" onClick={onLogout}>
         Log out
       </button>
@@ -278,7 +296,7 @@ function App() {
     return <SuperadminGate onUnlock={openAdmins} />
   }
 
-  return <SuperadminSystem onLogout={handleLogout} />
+  return <SuperadminSystem account={account} onLogout={handleLogout} />
 }
 
 export default App
