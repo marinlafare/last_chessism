@@ -5,7 +5,7 @@ import time
 import math
 import json
 from typing import List, Dict, Any, Tuple, Set, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
 # --- MODIFIED: Import distinct ---
@@ -3948,6 +3948,7 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
         SELECT
             mode,
             color,
+            result,
             rating,
             played_at
         FROM game_player
@@ -3964,12 +3965,16 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
         mode = str(row.get("mode") or "unknown")
         as_white = row.get("color") == "white"
         rating = int(row.get("rating") or 0)
+        result_value = float(row.get("result") or 0.0)
 
         if mode not in by_mode:
             by_mode[mode] = {
                 "n_games": 0,
                 "as_white": 0,
                 "as_black": 0,
+                "wins": 0,
+                "losses": 0,
+                "draws": 0,
                 "oldest_rating": rating,
                 "newest_rating": rating
             }
@@ -3979,7 +3984,19 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
             by_mode[mode]["as_white"] += 1
         else:
             by_mode[mode]["as_black"] += 1
+        if result_value == 1.0:
+            by_mode[mode]["wins"] += 1
+        elif result_value == 0.5:
+            by_mode[mode]["draws"] += 1
+        else:
+            by_mode[mode]["losses"] += 1
         by_mode[mode]["newest_rating"] = rating
+
+    for stats in by_mode.values():
+        total = int(stats.get("n_games") or 0)
+        wins = int(stats.get("wins") or 0)
+        draws = int(stats.get("draws") or 0)
+        stats["score_rate"] = round(((wins + 0.5 * draws) / total), 4) if total > 0 else 0.0
 
     sorted_modes = sorted(by_mode.items(), key=lambda item: item[1]["n_games"], reverse=True)
     return {mode: stats for mode, stats in sorted_modes}
@@ -3995,16 +4012,33 @@ def _build_y_ticks(min_rating: int, max_rating: int, count: int = 5) -> List[int
     return sorted(set(ticks))
 
 
-def _resolve_chart_cutoff(range_type: str, years: Optional[int], latest_dt: datetime) -> Tuple[Optional[datetime], str, Optional[int]]:
+def _resolve_chart_cutoff(range_type: str, years: Optional[int], current_dt: datetime) -> Tuple[Optional[datetime], str, Optional[int]]:
     rt = (range_type or "all").strip().lower()
     if rt == "six_months":
-        return latest_dt - timedelta(days=183), "six_months", None
+        return current_dt - timedelta(days=183), "six_months", None
     if rt == "one_year":
-        return latest_dt - timedelta(days=365), "one_year", None
+        return current_dt - timedelta(days=365), "one_year", None
     if rt == "years":
         safe_years = max(1, years or 1)
-        return latest_dt - timedelta(days=365 * safe_years), "years", safe_years
+        return current_dt - timedelta(days=365 * safe_years), "years", safe_years
     return None, "all", None
+
+
+def _chart_history_payload(first_dt: datetime, latest_dt: datetime) -> Dict[str, Any]:
+    span_days = max(0, (latest_dt - first_dt).days)
+    complete_years = min(20, int(span_days // 365))
+    return {
+        "start": f"{first_dt.year:04d}-{first_dt.month:02d}-{first_dt.day:02d}",
+        "end": f"{latest_dt.year:04d}-{latest_dt.month:02d}-{latest_dt.day:02d}",
+        "span_days": span_days,
+        "year_ticks": list(range(complete_years, 0, -1))
+    }
+
+
+def _to_naive_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt
+    return dt.astimezone(timezone.utc).replace(tzinfo=None)
 
 
 async def get_player_mode_chart(
@@ -4037,6 +4071,7 @@ async def get_player_mode_chart(
         dt = row.get("played_at")
         if not dt:
             continue
+        dt = _to_naive_utc(dt)
 
         rating = int(row.get("rating") or 0)
         date_value = f"{dt.year:04d}-{dt.month:02d}-{dt.day:02d}"
@@ -4047,13 +4082,17 @@ async def get_player_mode_chart(
             "points": [],
             "chart_title": f"rating of {target_mode}",
             "mode": target_mode,
-            "range": {"type": "all", "years": None},
+            "range": {"type": "all", "years": None, "history": None},
             "stats": {"mean": None, "std": None, "lower": None, "upper": None, "count": 0},
             "y_axis": {"min": None, "max": None, "ticks": []}
         }
 
+    first_dt = mode_points[0][0]
     latest_dt = mode_points[-1][0]
-    cutoff, resolved_range, resolved_years = _resolve_chart_cutoff(range_type, years, latest_dt)
+    current_dt = datetime.utcnow()
+    history_end_dt = max(latest_dt, current_dt)
+    history = _chart_history_payload(first_dt, history_end_dt)
+    cutoff, resolved_range, resolved_years = _resolve_chart_cutoff(range_type, years, history_end_dt)
 
     filtered = [
         point for point in mode_points
@@ -4065,7 +4104,7 @@ async def get_player_mode_chart(
             "points": [],
             "chart_title": f"rating of {target_mode}",
             "mode": target_mode,
-            "range": {"type": resolved_range, "years": resolved_years},
+            "range": {"type": resolved_range, "years": resolved_years, "history": history},
             "stats": {"mean": None, "std": None, "lower": None, "upper": None, "count": 0},
             "y_axis": {"min": None, "max": None, "ticks": []}
         }
@@ -4105,7 +4144,7 @@ async def get_player_mode_chart(
         "points": points,
         "chart_title": f"rating of {target_mode}",
         "mode": target_mode,
-        "range": {"type": resolved_range, "years": resolved_years},
+        "range": {"type": resolved_range, "years": resolved_years, "history": history},
         "stats": {
             "mean": round(mean_value, 2),
             "std": round(std_value, 2),

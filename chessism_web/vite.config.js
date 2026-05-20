@@ -11,6 +11,7 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 6789,
       strictPort: true,
+      allowedHosts: ['chessism.blackcrowlabs.com'],
       proxy: {
         '/api': {
           target: proxyTarget,
