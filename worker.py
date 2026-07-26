@@ -1,14 +1,19 @@
 # worker.py
 import os
 import constants
-from arq.connections import RedisSettings
 from arq import create_pool 
 
 # --- Import the actual job functions from your operations ---
 # These are the tasks the worker is allowed to run.
 from chessism_api.operations.analysis import (
     run_analysis_job, 
-    run_player_analysis_job
+    run_player_analysis_job,
+    run_analysis_loop_job,
+    run_player_games_analysis_job,
+)
+from chessism_api.operations.analysis_backups import (
+    run_fen_analysis_backup_job,
+    run_fen_analysis_restore_job,
 )
 # --- MODIFIED: Import ALL FEN jobs ---
 from chessism_api.operations.fens import (
@@ -18,6 +23,8 @@ from chessism_api.operations.fens import (
     run_association_insertion_job
 )
 from chessism_api.operations.games import run_create_player_games_job, run_update_player_games_job
+from chessism_api.operations.tablebase import run_tablebase_analysis_job
+from chessism_api.operations.player_deletion import run_delete_player_job
 
 # --- NEW: Import the database initializer ---
 from chessism_api.database.engine import init_db
@@ -72,12 +79,18 @@ class WorkerSettings:
     functions = [
         run_analysis_job, 
         run_player_analysis_job,
+        run_analysis_loop_job,
+        run_player_games_analysis_job,
         run_fen_generation_job,
         run_fen_pipeline,
         run_fen_insertion_job,
         run_association_insertion_job,
         run_create_player_games_job,
-        run_update_player_games_job
+        run_update_player_games_job,
+        run_fen_analysis_backup_job,
+        run_fen_analysis_restore_job,
+        run_tablebase_analysis_job,
+        run_delete_player_job,
     ]
     
     redis_settings = redis_settings

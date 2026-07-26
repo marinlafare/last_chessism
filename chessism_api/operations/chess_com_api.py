@@ -1,8 +1,9 @@
-import asyncio
-import httpx
 import json
 import time
-from typing import Awaitable, Callable, List, Dict, Any, Optional
+import asyncio
+from typing import Any, Awaitable, Callable, Dict, List, Optional
+
+import httpx
 
 import constants
 from chessism_api.operations.models import PlayerCreateData
@@ -11,13 +12,13 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
     """
     Fetches a player's profile from the Chess.com API.
     """
-    PLAYER_URL = constants.PLAYER.replace('{player}', player_name)
+    player_url = constants.PLAYER.replace("{player}", player_name)
     
     # --- FIX: Force HTTP/1.1 ---
     async with httpx.AsyncClient(timeout=5, http2=False) as client:
         try:
             response = await client.get(
-                PLAYER_URL,
+                player_url,
                 headers={"User-Agent": constants.USER_AGENT}
             )
             response.raise_for_status()
@@ -83,12 +84,12 @@ async def get_player_stats(player_name: str) -> Optional[Dict[str, Any]]:
     Fetches a player's stats from the Chess.com API.
     Returns the raw JSON dictionary.
     """
-    STATS_URL = constants.STATS.replace('{username}', player_name)
+    stats_url = constants.STATS.replace("{username}", player_name)
     
     async with httpx.AsyncClient(timeout=5, http2=False) as client:
         try:
             response = await client.get(
-                STATS_URL,
+                stats_url,
                 headers={"User-Agent": constants.USER_AGENT}
             )
             response.raise_for_status()
@@ -109,13 +110,15 @@ async def get_player_stats(player_name: str) -> Optional[Dict[str, Any]]:
             return None
 
 
-async def ask_twice(player_name: str, year: int, month: int, client: httpx.AsyncClient) -> Optional[httpx.Response]:
-    """
-    Fetches game archives for a specific month, with a retry logic.
-    """
+async def download_month(
+    player_name: str,
+    year: int,
+    month: int,
+    client: httpx.AsyncClient,
+) -> Optional[httpx.Response]:
+    """Fetch one monthly archive, retrying once on an empty response."""
     month_str = f"{month:02d}"
-
-    DOWNLOAD_MONTH_URL = (
+    download_url = (
         constants.DOWNLOAD_MONTH
         .replace("{player}", player_name)
         .replace("{year}", str(year))
@@ -124,7 +127,7 @@ async def ask_twice(player_name: str, year: int, month: int, client: httpx.Async
 
     try:
         games_response = await client.get(
-            DOWNLOAD_MONTH_URL,
+            download_url,
             follow_redirects=True,
             timeout=5,
             headers={"User-Agent": constants.USER_AGENT}
@@ -133,7 +136,7 @@ async def ask_twice(player_name: str, year: int, month: int, client: httpx.Async
         if not games_response.content:
             await asyncio.sleep(1)
             games_response = await client.get(
-                DOWNLOAD_MONTH_URL,
+                download_url,
                 follow_redirects=True,
                 timeout=10,
                 headers={"User-Agent": constants.USER_AGENT}
@@ -160,22 +163,15 @@ async def ask_twice(player_name: str, year: int, month: int, client: httpx.Async
         return None
 
 
-async def download_month(player_name: str, year: int, month: int, client: httpx.AsyncClient) -> Optional[httpx.Response]:
-    """
-    Wrapper for ask_twice to get a month's games, passing the shared client.
-    """
-    games = await ask_twice(player_name, year, month, client)
-    return games
-
-
-async def month_of_games(param: Dict[str, Any], client: httpx.AsyncClient) -> Optional[Dict[str, Any]]:
+async def _month_of_games(
+    player_name: str,
+    year: int,
+    month: int,
+    client: httpx.AsyncClient,
+) -> Optional[Dict[str, Any]]:
     """
     Downloads a month of games and returns as parsed JSON dictionary.
     """
-    player_name = param["player_name"]
-    year = param["year"]
-    month = param["month"]
-
     pgn_response = await download_month(player_name, year, month, client)
     
     if pgn_response is None:
@@ -196,54 +192,45 @@ async def month_of_games(param: Dict[str, Any], client: httpx.AsyncClient) -> Op
 
 
 async def download_months(
-                        player_name: str,
-                        valid_dates: List[str],
-                        # --- REMOVED: Concurrency parameters ---
-                        min_delay_between_requests: float = 0.5,
-                        progress_callback: Callable[[int, str], Awaitable[None]] | None = None
-                        ) -> Dict[int, Dict[int, List[Dict[str, Any]]]]:
+    player_name: str,
+    valid_dates: List[str],
+    min_delay_between_requests: float = 0.5,
+    progress_callback: Callable[[int, str], Awaitable[None]] | None = None,
+) -> Dict[int, Dict[int, List[Dict[str, Any]]]]:
     """
-    --- SERIAL VERSION ---
     Downloads games for a player's month strings one by one
     to comply with Chess.com policies.
     """
     all_games_by_month: Dict[int, Dict[int, List[Dict[str, Any]]]] = {}
     
-    # --- MODIFIED: Removed Semaphore ---
-    
     async with httpx.AsyncClient(timeout=15, http2=False) as shared_client:
-        
         print(f"Starting serial download of {len(valid_dates)} months...")
         start_time = time.time()
-        
-        # --- MODIFIED: Use a simple for loop instead of asyncio.gather ---
+
         for index, month_str in enumerate(valid_dates, start=1):
-            await asyncio.sleep(min_delay_between_requests) # Respect rate limit
+            if index > 1:
+                await asyncio.sleep(min_delay_between_requests)
 
             year_str, month_str_val = month_str.split('-')
             year = int(year_str)
             month = int(month_str_val)
-            param = {"player_name": player_name, "year": year, "month": month}
-            
+
             try:
-                result = await month_of_games(param, shared_client) 
+                result = await _month_of_games(player_name, year, month, shared_client)
 
                 if result is None:
                     print(f"No data for {year}-{month}.")
-                    continue
-                
-                if 'games' in result and result['games'] is not None:
-                    if year not in all_games_by_month:
-                        all_games_by_month[year] = {}
-                    all_games_by_month[year][month] = result['games']
+                elif result.get('games') is not None:
+                    all_games_by_month.setdefault(year, {})[month] = result['games']
                 else:
                     print(f"No games or invalid data for {year}-{month} (missing/empty 'games' key in parsed JSON).")
 
             except Exception as e:
                 print(f"An error occurred processing {month_str}: {e}")
 
-            if progress_callback:
-                await progress_callback(index, month_str)
+            finally:
+                if progress_callback:
+                    await progress_callback(index, month_str)
         
         end_time = time.time()
         print(f"Finished downloading {len(valid_dates)} months in {end_time - start_time:.2f} seconds.")

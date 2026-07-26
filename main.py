@@ -3,9 +3,9 @@ import json
 import logging
 import os
 import asyncio
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime, timezone
 from fastapi import Depends, FastAPI
-from contextlib import asynccontextmanager
 import httpx
 import constants
 
@@ -16,6 +16,7 @@ from chessism_api.auth import require_superuser
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
 from chessism_api.database.ask_db import ensure_main_character_mode_summary
+from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
 # --- NEW: Import Redis functions ---
 from chessism_api.redis_client import get_redis_pool, close_redis_pool
 
@@ -45,6 +46,22 @@ def configure_access_log_filter() -> None:
 
 configure_access_log_filter()
 
+
+async def _queue_automatic_tablebase_cache(redis) -> None:
+    try:
+        tablebase_job = await ensure_tablebase_analysis_enqueued(redis)
+        print(f"Automatic Syzygy cache check: {tablebase_job}")
+    except asyncio.CancelledError:
+        raise
+    except Exception as error:
+        # A cache sweep must never prevent the API from serving requests. FEN
+        # ingestion will retry this same deduplicated enqueue operation later.
+        logging.getLogger(__name__).warning(
+            "Could not queue the automatic Syzygy cache sweep: %s",
+            error,
+        )
+
+
 # lifespan event handler
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,13 +72,22 @@ async def lifespan(app: FastAPI):
     await ensure_main_character_mode_summary()
     
     # --- NEW: Redis Setup ---
-    # Initialize the pool on startup
-    await get_redis_pool()
+    # Initialize the pool on startup. The existing-position sweep runs in the
+    # background because counting a large database should not delay the API.
+    redis = await get_redis_pool()
+    tablebase_startup_task = asyncio.create_task(
+        _queue_automatic_tablebase_cache(redis)
+    )
+    app.state.tablebase_startup_task = tablebase_startup_task
     
     print(f"BASAL CHESSISM Server ON YO!... (DB: {CONN_STRING.split('@')[-1]})")
     yield
     
     # --- NEW: Redis Shutdown ---
+    if not tablebase_startup_task.done():
+        tablebase_startup_task.cancel()
+        with suppress(asyncio.CancelledError):
+            await tablebase_startup_task
     await close_redis_pool()
     print('BASAL CHESSISM Server DOWN YO!...')
 

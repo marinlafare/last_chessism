@@ -64,6 +64,9 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
 
 
     fetched_profile_dict = fetched_profile.model_dump()
+    # An explicit games download is the restore path for a previously deleted
+    # main player. Merely opening the deleted shell in the UI does not call this.
+    fetched_profile_dict["deleted_at"] = None
 
     # Existing row: update directly and avoid intentional duplicate insert attempts.
     if existing_player:

@@ -42,6 +42,30 @@ body {
   line-height: 1.5;
 }
 
+.app-route-transition {
+  min-height: 100vh;
+  background: var(--bg);
+  animation: app-route-enter 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes app-route-enter {
+  from {
+    opacity: 0.72;
+    transform: translateY(3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-route-transition {
+    animation: none;
+  }
+}
+
 a {
   color: inherit;
 }
@@ -1360,6 +1384,81 @@ main,
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.analysis-backup-block {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 18px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.analysis-backup-head,
+.analysis-backup-actions,
+.analysis-backup-location {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.analysis-backup-head {
+  align-items: flex-start;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+.analysis-backup-head .panel-title {
+  margin-bottom: 4px;
+}
+
+.analysis-backup-head p,
+.analysis-backup-latest {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analysis-backup-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.analysis-backup-location {
+  align-items: flex-start;
+  font-size: 12px;
+}
+
+.analysis-backup-location span {
+  color: var(--muted);
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.analysis-backup-location code {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text);
+}
+
+.analysis-backup-latest strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.analysis-backup-status {
+  padding: 9px 10px;
+  border: 1px solid rgba(117, 199, 166, 0.45);
+  border-radius: var(--radius);
+  background: rgba(117, 199, 166, 0.08);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.analysis-backup-status.failed {
+  border-color: rgba(220, 107, 99, 0.55);
+  background: rgba(220, 107, 99, 0.08);
+}
+
 .panel-title {
   margin: 0 0 14px;
   color: var(--text);
@@ -1706,6 +1805,379 @@ main,
   font-size: 18px;
 }
 
+.analysis-loop-card {
+  grid-column: 1 / -1;
+}
+
+.analysis-processes-card {
+  grid-column: 1 / -1;
+}
+
+.player-game-analysis-card {
+  grid-column: 1 / -1;
+}
+
+.player-game-scope-form,
+.player-game-selection-controls,
+.player-game-confirmation {
+  display: grid;
+  gap: 12px;
+}
+
+.player-game-scope-form > label,
+.player-game-date-fields label,
+.player-game-selection-fields label,
+.player-game-runtime-fields label {
+  display: grid;
+  gap: 6px;
+}
+
+.player-game-mode {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.player-game-date-fields,
+.player-game-selection-fields,
+.player-game-runtime-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-game-scope-results,
+.player-game-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.player-game-scope-results > div,
+.player-game-preview-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.player-game-scope-results small,
+.player-game-preview-grid small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.player-game-scope-results strong,
+.player-game-preview-grid strong {
+  overflow-wrap: anywhere;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.player-game-preview-grid .highlight {
+  border-color: rgba(21, 199, 128, 0.55);
+  background: rgba(21, 199, 128, 0.1);
+}
+
+.player-game-preview-grid .highlight strong {
+  color: var(--accent);
+  font-size: 18px;
+}
+
+.player-game-range-choice {
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.player-game-check-option {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.player-game-check-option input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.player-game-confirmation {
+  padding: 14px;
+  border: 1px solid rgba(21, 199, 128, 0.45);
+  border-radius: var(--radius);
+  background: rgba(21, 199, 128, 0.055);
+}
+
+.player-game-confirmation-heading,
+.player-game-confirm-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.player-game-confirmation-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.player-game-confirmation-heading > div > span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.player-game-confirmation-heading > div > strong {
+  color: var(--accent);
+  font-size: 20px;
+  text-transform: capitalize;
+}
+
+.player-game-confirmation > p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+.player-game-confirm-actions {
+  justify-content: flex-end;
+}
+
+.analysis-processes-heading,
+.analysis-process-title {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.analysis-processes-heading small,
+.analysis-process-title small,
+.analysis-process-empty,
+.analysis-process-card .job-progress > small {
+  color: var(--muted);
+}
+
+.analysis-process-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
+}
+
+.analysis-process-card {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.analysis-process-title > div {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.analysis-process-title > div strong {
+  color: var(--text);
+}
+
+.analysis-process-title > div small {
+  overflow: hidden;
+  font-family: "IBM Plex Mono", monospace;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.analysis-process-phase {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid rgba(21, 199, 128, 0.42);
+  border-radius: 999px;
+  background: rgba(21, 199, 128, 0.1);
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.analysis-process-phase.queued {
+  border-color: rgba(168, 113, 222, 0.5);
+  background: rgba(168, 113, 222, 0.12);
+  color: #bd85e9;
+}
+
+.analysis-process-phase.cooling {
+  border-color: rgba(92, 177, 255, 0.48);
+  background: rgba(92, 177, 255, 0.1);
+  color: #78c0ff;
+}
+
+.analysis-process-parameters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.analysis-process-parameters > span {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+  padding: 7px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.16);
+  text-align: center;
+}
+
+.analysis-process-parameters small {
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.analysis-process-parameters strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+}
+
+.analysis-process-empty {
+  padding: 14px;
+  border: 1px dashed var(--border-soft);
+  border-radius: var(--radius);
+  text-align: center;
+}
+
+.analysis-loop-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.analysis-loop-heading small,
+.analysis-loop-note {
+  color: var(--muted);
+}
+
+.analysis-loop-scope {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.analysis-loop-scope-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, box-shadow 160ms ease;
+}
+
+.analysis-loop-scope-option:hover {
+  border-color: rgba(21, 199, 128, 0.5);
+}
+
+.analysis-loop-scope-option.selected {
+  border-color: var(--accent);
+  background: rgba(21, 199, 128, 0.12);
+  box-shadow: inset 0 0 0 1px rgba(21, 199, 128, 0.2);
+}
+
+.analysis-loop-scope-option input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.analysis-loop-scope-option span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.analysis-loop-scope-option strong {
+  color: var(--text);
+}
+
+.analysis-loop-scope-option.selected strong {
+  color: var(--accent);
+}
+
+.analysis-loop-scope-option small {
+  color: var(--muted);
+}
+
+.analysis-loop-selection {
+  margin: 0;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: rgba(21, 199, 128, 0.08);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.analysis-loop-selection strong,
+.job-scope-label {
+  color: var(--accent);
+}
+
+.job-delete-queued {
+  align-self: flex-start;
+  border-color: rgba(255, 99, 112, 0.55);
+  background: rgba(255, 99, 112, 0.1);
+  color: var(--danger);
+}
+
+.job-delete-queued:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: rgba(255, 99, 112, 0.18);
+}
+
+.analysis-loop-fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.analysis-loop-fields label,
+.analysis-loop-card > label {
+  display: grid;
+  gap: 6px;
+}
+
+.analysis-loop-fields .field-label,
+.analysis-loop-card > label .field-label {
+  text-align: center;
+}
+
+.analysis-loop-note {
+  margin: 0;
+  font-size: 12px;
+  text-align: center;
+}
+
 .pipeline-inline {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
@@ -1894,6 +2366,41 @@ main,
   height: 100%;
   border-radius: inherit;
   background: var(--ok);
+}
+
+.job-progress-fill.failed {
+  background: var(--danger);
+}
+
+.job-progress-eta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 2px;
+  padding: 7px 9px;
+  border: 1px solid rgba(92, 177, 255, 0.24);
+  border-radius: 6px;
+  background: rgba(92, 177, 255, 0.07);
+}
+
+.job-progress-eta span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.job-progress-eta strong {
+  flex: 0 0 auto;
+  color: #78c0ff;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.job-progress-eta.is-calculating strong {
+  color: var(--muted);
+  font-size: 11px;
 }
 
 .analysis-times-hero,
@@ -2154,6 +2661,17 @@ input[type="number"].text-input::-webkit-inner-spin-button {
   background: var(--surface-2);
 }
 
+.btn-danger {
+  border-color: rgba(220, 107, 99, 0.72);
+  background: rgba(220, 107, 99, 0.14);
+  color: #ffb4ae;
+}
+
+.btn-danger:hover:not(:disabled) {
+  border-color: var(--danger);
+  background: rgba(220, 107, 99, 0.24);
+}
+
 .btn-inline {
   min-height: 34px;
   padding: 7px 10px;
@@ -2399,6 +2917,236 @@ input[type="number"].text-input::-webkit-inner-spin-button {
 
 .players-top-grid .players-profile-avatar-box {
   min-height: 100%;
+}
+
+.players-update-button {
+  flex: 0 0 auto;
+}
+
+.players-title-navigation {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: 31px minmax(0, 1fr) 31px;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.players-title-navigation .games-action-title {
+  overflow: hidden;
+  min-width: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.players-profile-section > .section-head {
+  align-items: center;
+  flex-flow: row nowrap;
+}
+
+.players-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.player-delete-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.82);
+  backdrop-filter: blur(5px);
+}
+
+.player-delete-dialog {
+  display: grid;
+  gap: 16px;
+  width: min(680px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px;
+  border: 1px solid rgba(220, 107, 99, 0.58);
+  border-radius: var(--radius);
+  background: #11171e;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.58);
+}
+
+.player-delete-heading,
+.player-delete-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.player-delete-heading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.player-delete-heading span {
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.player-delete-heading h2 {
+  margin: 0;
+  font-size: 24px;
+}
+
+.player-delete-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-delete-preview-grid > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.player-delete-preview-grid > div.danger {
+  border-color: rgba(220, 107, 99, 0.42);
+  background: rgba(220, 107, 99, 0.08);
+}
+
+.player-delete-preview-grid span,
+.player-delete-preservation span,
+.player-delete-confirm-field > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.player-delete-preview-grid strong {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 20px;
+}
+
+.player-delete-preview-grid .danger strong {
+  color: var(--danger);
+}
+
+.player-delete-preservation {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid rgba(21, 199, 128, 0.38);
+  border-radius: var(--radius);
+  background: rgba(21, 199, 128, 0.07);
+}
+
+.player-delete-preservation strong {
+  color: var(--accent);
+}
+
+.player-delete-confirm-field {
+  display: grid;
+  gap: 7px;
+}
+
+.player-delete-confirm-field > span strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.player-delete-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+
+.player-delete-actions {
+  justify-content: flex-end;
+}
+
+.players-title-arrow {
+  display: grid;
+  flex: 0 0 auto;
+  width: 31px;
+  height: 31px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 17px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
+}
+
+.players-title-arrow:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: var(--surface-3);
+  transform: translateY(-1px);
+}
+
+.players-title-arrow:disabled {
+  color: var(--subtle);
+  cursor: default;
+  opacity: 0.45;
+}
+
+.players-update-progress,
+.players-update-message {
+  margin-bottom: 14px;
+}
+
+.players-position-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.players-position-stat {
+  display: grid;
+  gap: 3px;
+  min-height: 88px;
+  align-content: center;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+}
+
+.players-position-stat span,
+.players-position-stat small {
+  color: var(--muted);
+}
+
+.players-position-stat span {
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.players-position-stat strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 21px;
+}
+
+.players-position-stat small {
+  font-size: 11px;
+}
+
+.players-position-stat-analyzed strong {
+  color: var(--accent);
 }
 
 .players-hours-text {
@@ -3038,6 +3786,52 @@ input[type="number"].text-input::-webkit-inner-spin-button {
 
   .home-shell {
     padding: 16px;
+  }
+
+  .analysis-loop-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-processes-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-loop-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analysis-process-parameters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-mode,
+  .player-game-scope-results,
+  .player-game-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-confirmation-heading,
+  .player-game-confirm-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-profile-section > .section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-profile-actions,
+  .player-delete-heading,
+  .player-delete-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-delete-preview-grid {
+    grid-template-columns: 1fr;
   }
 
   .site-header,

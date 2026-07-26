@@ -1,7 +1,12 @@
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Query
+from arq.connections import ArqRedis
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Body, Depends
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+
+from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
+    get_player_neighbors,
     get_player_performance_summary,
     get_player_modes_stats,
     get_player_mode_chart
@@ -15,8 +20,20 @@ from chessism_api.operations.players import (
     get_main_character_time_control_counts_payload,
     get_top_main_characters_by_time_control_payload
 )
+from chessism_api.operations.player_deletion import (
+    find_player_deletion_conflict,
+    get_player_deletion_preview,
+    write_player_deletion_progress,
+)
 
 router = APIRouter()
+PLAYER_DELETION_QUEUE = "games_queue"
+
+
+class PlayerDeletionRequest(BaseModel):
+    confirmation: str = Field(..., min_length=1)
+    expected_exclusive_games: int = Field(..., ge=0)
+    expected_shared_games: int = Field(..., ge=0)
 
 
 @router.get("/main_characters/time_controls")
@@ -78,6 +95,83 @@ async def api_get_current_players_with_games():
     """
     result = await get_current_players_with_games_in_db()
     return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/neighbors")
+async def api_get_player_neighbors(player_name: str) -> JSONResponse:
+    """Return the previous and next full player profiles alphabetically."""
+    result = await get_player_neighbors(player_name.strip().lower())
+    return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/deletion-preview")
+async def api_get_player_deletion_preview(player_name: str) -> JSONResponse:
+    """Preview the exact exclusive/shared split without changing data."""
+    normalized_player = player_name.strip().lower()
+    try:
+        preview = await get_player_deletion_preview(normalized_player)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if preview["already_deleted"]:
+        raise HTTPException(status_code=409, detail="This player was already deleted.")
+    if not preview["is_main_player"]:
+        raise HTTPException(status_code=409, detail="Only a main player can be deleted.")
+    return JSONResponse(content=preview)
+
+
+@router.delete("/{player_name}")
+async def api_delete_player(
+    player_name: str,
+    data: PlayerDeletionRequest = Body(...),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Queue a confirmed, preview-checked player deletion."""
+    normalized_player = player_name.strip().lower()
+    if data.confirmation.strip().lower() != normalized_player:
+        raise HTTPException(status_code=422, detail="Type the exact player username to confirm deletion.")
+
+    try:
+        preview = await get_player_deletion_preview(normalized_player)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    if not preview["is_main_player"]:
+        raise HTTPException(status_code=409, detail="Only an active main player can be deleted.")
+    if (
+        preview["exclusive_games"] != data.expected_exclusive_games
+        or preview["shared_games"] != data.expected_shared_games
+    ):
+        raise HTTPException(status_code=409, detail="Player game counts changed; review a new deletion preview.")
+
+    conflict = await find_player_deletion_conflict(redis, normalized_player)
+    if conflict:
+        raise HTTPException(status_code=409, detail=conflict)
+
+    job = await redis.enqueue_job(
+        "run_delete_player_job",
+        player_name=normalized_player,
+        expected_exclusive_games=data.expected_exclusive_games,
+        expected_shared_games=data.expected_shared_games,
+        _queue_name=PLAYER_DELETION_QUEUE,
+        _job_timeout=60 * 60 * 24,
+    )
+    job_id = str(getattr(job, "job_id", job))
+    await write_player_deletion_progress(
+        redis,
+        job_id,
+        player_name=normalized_player,
+        total=data.expected_exclusive_games,
+        processed=0,
+        phase="queued",
+        detail=f"Queued deletion for {normalized_player}.",
+    )
+    return JSONResponse(status_code=202, content={
+        "message": f"Player deletion for {normalized_player} was queued.",
+        "job_id": job_id,
+        "player_name": normalized_player,
+        "exclusive_games": data.expected_exclusive_games,
+        "shared_games": data.expected_shared_games,
+        "backup_location": preview["backup_location"],
+    })
 
 @router.post("/update-all-stats")
 async def api_update_all_stats(background_tasks: BackgroundTasks):

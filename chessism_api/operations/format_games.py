@@ -1,13 +1,14 @@
 # chessism_api/operations/format_games.py
 
-from typing import Union,Dict,Any, List, Set, Tuple
 import asyncio
-from sqlalchemy import text
-
-from constants import DRAW_RESULTS, LOSE_RESULTS, WINING_RESULT
 import re
 import time
 from datetime import datetime, timezone
+from typing import Any, Dict, List, Set, Tuple, Union
+
+from sqlalchemy import text
+
+from constants import DRAW_RESULTS, LOSE_RESULTS, WINING_RESULT
 
 # --- FIXED IMPORTS & STUBS ---
 from chessism_api.operations.models import GameCreateData, MoveCreateData
@@ -168,32 +169,20 @@ async def insert_new_data(
 
 def get_pgn_item(game_pgn: str, item: str) -> str:
     """Extracts an item from a PGN string."""
-    try:
-        if item == "Termination":
-            return (
-                game_pgn.split(f"{item}")[1]
-                .split("\n")[0]
-                .replace('"', "")
-                .replace("]", "")
-                .lower()
-            )
-        return (
-            game_pgn.split(f"{item}")[1]
-            .split("\n")[0]
-            .replace('"', "")
-            .replace("]", "")
-            .replace(" ", "")
-            .lower()
-        )
-    except IndexError:
-        # Handle cases where the PGN item is missing (e.g., [StartTime ""])
-        # print(f"Warning: PGN item '{item}' not found or in unexpected format.")
-        if item in ['StartTime', 'EndTime']:
-            return "00:00:00" # Default time if missing
-        if item in ['Date', 'EndDate']:
-            return "0.0.0" # Default date if missing
-        # Re-raise for other items
-        raise
+    match = re.search(
+        rf'^\[{re.escape(item)}\s+"(.*)"\]\s*$',
+        game_pgn,
+        flags=re.MULTILINE,
+    )
+    if match:
+        value = match.group(1).lower()
+        return value if item == "Termination" else value.replace(" ", "")
+
+    if item in {'StartTime', 'EndTime'}:
+        return "00:00:00"
+    if item in {'Date', 'EndDate'}:
+        return "0.0.0"
+    raise ValueError(f"PGN item {item!r} is missing")
 
 def get_start_and_end_date(game, game_for_db):
     """Extracts and calculates game start/end dates and time elapsed."""
@@ -268,13 +257,11 @@ def translate_result_to_float(str_result):
     if str_result in WINING_RESULT:
         return 1.0
     if str_result in DRAW_RESULTS:
-        return 0.5 
+        return 0.5
     if str_result in LOSE_RESULTS:
-        return 0.0 
-    else:
-        print('""""""UNKNOWN Natural Language Result"""""""""""""')
-        print(str_result)
-        return None
+        return 0.0
+    print(f"Unknown natural-language game result: {str_result}")
+    return None
 
 def get_black_and_white_data(game, game_for_db):
     """Extracts white and black player data and results."""
@@ -310,81 +297,72 @@ def _parse_time_to_seconds(time_str: str) -> float:
         return 0.0
     try:
         parts = time_str.split(':')
-        seconds = 0.0
         if len(parts) == 3: # H:M:S.f
             seconds = int(parts[0]) * 3600 + int(parts[1]) * 60 + float(parts[2])
         elif len(parts) == 2: # M:S.f
             seconds = int(parts[0]) * 60 + float(parts[1])
-        return round(seconds, 3)
-    except Exception:
-        return 0.0
+        else:
+            raise ValueError
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"Invalid %clk value: {time_str!r}") from error
+    if seconds < 0:
+        raise ValueError(f"Invalid negative %clk value: {time_str!r}")
+    return round(seconds, 3)
 
 def _calculate_reaction_times(time_series: List[float], time_bonus: int) -> List[float]:
     """
     Re-implements pandas `diff(periods=-1).abs() + time_bonus` in pure Python.
     Calculates time_left[i] - time_left[i+1]
     """
-    reaction_times = []
-    for i in range(len(time_series)):
-        if i < len(time_series) - 1:
-            # This is the time spent on the *next* move, which is what the diff did.
-            # But the logic is flawed. The reaction time for move[i] should be time_left[i-1] - time_left[i].
-            # However, to preserve your original logic:
-            reaction = abs(time_series[i] - time_series[i+1])
-            reaction_times.append(round(reaction + time_bonus, 3))
-        else:
-            # Last move has no next move to diff against
-            reaction_times.append(round(time_bonus, 3)) # Or 0.0, based on desired logic
-    return reaction_times
+    return [
+        round(
+            abs(time_series[index] - time_series[index + 1]) + time_bonus
+            if index < len(time_series) - 1
+            else time_bonus,
+            3,
+        )
+        for index in range(len(time_series))
+    ]
 
 def create_moves_table(
-        game_url:str,
-        times: list,
-        clean_moves: list,
-        n_moves: int,
-        time_bonus: int) -> dict[str, Any]: 
+    game_url: str,
+    times: list,
+    clean_moves: list,
+    time_bonus: int,
+) -> dict[str, Any]:
     """
     Formats raw move data into a dictionary suitable for MoveCreateData.
     Calculates reaction times from the available data.
     """
-    
+    if not clean_moves:
+        raise ValueError("PGN contains no moves")
+    if len(times) != len(clean_moves):
+        raise ValueError(
+            "Every played half-move must have a %clk annotation "
+            f"({len(times)} clocks for {len(clean_moves)} moves)"
+        )
+
     link = int(game_url.split('/')[-1])
 
-    if len(clean_moves) % 2 != 0:
-        clean_moves.append("--")
-    if len(times) % 2 != 0:
-        times.append("--")
+    padded_moves = list(clean_moves)
+    padded_times = list(times)
+    if len(padded_moves) % 2 != 0:
+        padded_moves.append("--")
+        padded_times.append("--")
 
     white_moves = []
     black_moves = []
     white_times_sec = []
     black_times_sec = []
 
-    # 1. Convert times to seconds and split moves
-    for i in range(0, len(clean_moves), 2):
-        white_moves.append(str(clean_moves[i]))
-        black_moves.append(str(clean_moves[i+1]))
-        
-        # White time
-        white_times_sec.append(_parse_time_to_seconds(times[i]))
-        # Black time
-        if i + 1 < len(times):
-            black_times_sec.append(_parse_time_to_seconds(times[i+1]))
-        else:
-            black_times_sec.append(0.0)
+    for i in range(0, len(padded_moves), 2):
+        white_moves.append(str(padded_moves[i]))
+        black_moves.append(str(padded_moves[i + 1]))
+        white_times_sec.append(_parse_time_to_seconds(padded_times[i]))
+        black_times_sec.append(_parse_time_to_seconds(padded_times[i + 1]))
 
-    # 2. Calculate reaction times
-    # time_left[i] - time_left[i+1]
-    # This is the time elapsed *during* the (i+1)th move.
-    # This means the reaction time for move 2 is stored at index 1.
-    
-    def diff_minus_1(series):
-        if not series:
-            return []
-        return [abs(series[i] - series[i+1]) + time_bonus if i < len(series) - 1 else time_bonus for i in range(len(series))]
-
-    white_reaction_times = [round(x, 3) for x in diff_minus_1(white_times_sec)]
-    black_reaction_times = [round(x, 3) for x in diff_minus_1(black_times_sec)]
+    white_reaction_times = _calculate_reaction_times(white_times_sec, time_bonus)
+    black_reaction_times = _calculate_reaction_times(black_times_sec, time_bonus)
 
     result = {
         "link": link,
@@ -402,29 +380,24 @@ def get_moves_data(game: dict) -> tuple[int, dict]:
     """Extracts and formats the moves of a game."""
     time_bonus = get_time_bonus(game)
 
+    normalized_pgn = game['pgn'].replace("\r\n", "\n")
+    _, separator, move_text = normalized_pgn.partition("\n\n")
+    if not separator:
+        raise ValueError("PGN is missing a move section")
+
     raw_moves = (
-        game['pgn'].split("\n\n")[1]
+        move_text
         .replace("1/2-1/2", "")
         .replace("1-0", "")
         .replace("0-1", "")
     )
     n_moves = get_n_moves(raw_moves)
 
-    times = [x.replace("]", "").replace("}", "") for x in raw_moves.split() if ":" in x]
+    times = re.findall(r"\[%clk\s+([^\]]+)\]", raw_moves)
     just_moves = re.sub(r"{[^}]*}*", "", raw_moves)
     clean_moves = [x for x in just_moves.split() if x and "." not in x]
     
-    if len(clean_moves) % 2 != 0:
-        clean_moves.append("--")
-
-    if len(times) % 2 != 0:
-        times.append("--")
-
-    moves_data = create_moves_table(game['url'],
-                                    times,
-                                    clean_moves,
-                                    n_moves,
-                                    time_bonus)
+    moves_data = create_moves_table(game['url'], times, clean_moves, time_bonus)
     return n_moves, moves_data
 
 def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
@@ -463,8 +436,11 @@ def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
 
     try:
         n_moves, moves_data = get_moves_data(game_raw_data)
-    except Exception as e:
-        #print(f"Error getting moves data for game {game_raw_data.get('url', 'N/A')}: {e}")
+    except Exception as error:
+        print(
+            f"Skipping game {game_raw_data.get('url', 'N/A')} due to invalid "
+            f"move/clock data: {error}"
+        )
         return False
 
     game_for_db['n_moves'] = n_moves
@@ -478,12 +454,12 @@ def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
 def format_one_game_moves(moves: dict) -> List[Dict[str, Any]]:
     """Formats individual moves data for the Move model."""
     to_insert_moves = []
-    try:
-        # Ensure 'white_moves', 'black_moves', etc. are present and are lists
-        if not all(k in moves and isinstance(moves[k], list) for k in ['white_moves', 'white_reaction_times', 'white_time_left', 'black_moves', 'black_reaction_times', 'black_time_left']):
-            print(f"Warning: Missing or invalid moves data structure for game link {moves.get('link', 'N/A')}")
-            return []
-    except KeyError:
+    required_lists = (
+        'white_moves', 'white_reaction_times', 'white_time_left',
+        'black_moves', 'black_reaction_times', 'black_time_left',
+    )
+    if not all(isinstance(moves.get(key), list) for key in required_lists):
+        print(f"Warning: Missing or invalid moves data structure for game link {moves.get('link', 'N/A')}")
         return []
 
     # Ensure all lists are of comparable length, or handle index errors gracefully
@@ -520,38 +496,24 @@ def format_one_game_moves(moves: dict) -> List[Dict[str, Any]]:
 
 
 def create_game_player_rows(game_data: Dict[str, Any]) -> List[Dict[str, Any]]:
-    return [
-        {
+    rows = []
+    for color, opponent_color in (("white", "black"), ("black", "white")):
+        rows.append({
             "link": game_data["link"],
-            "color": "white",
-            "player_name": game_data["white"],
-            "opponent_name": game_data["black"],
-            "result": game_data["white_result"],
-            "rating": game_data["white_elo"],
-            "opponent_rating": game_data["black_elo"],
+            "color": color,
+            "player_name": game_data[color],
+            "opponent_name": game_data[opponent_color],
+            "result": game_data[f"{color}_result"],
+            "rating": game_data[f"{color}_elo"],
+            "opponent_rating": game_data[f"{opponent_color}_elo"],
             "mode": game_data.get("mode"),
             "played_at": game_data.get("played_at"),
             "eco": game_data["eco"],
             "n_moves": game_data["n_moves"],
             "time_elapsed": game_data["time_elapsed"],
             "avg_elo": game_data.get("avg_elo"),
-        },
-        {
-            "link": game_data["link"],
-            "color": "black",
-            "player_name": game_data["black"],
-            "opponent_name": game_data["white"],
-            "result": game_data["black_result"],
-            "rating": game_data["black_elo"],
-            "opponent_rating": game_data["white_elo"],
-            "mode": game_data.get("mode"),
-            "played_at": game_data.get("played_at"),
-            "eco": game_data["eco"],
-            "n_moves": game_data["n_moves"],
-            "time_elapsed": game_data["time_elapsed"],
-            "avg_elo": game_data.get("avg_elo"),
-        },
-    ]
+        })
+    return rows
 
 
 def create_game_opening_rows(game_data: Dict[str, Any], moves: dict | None) -> List[Dict[str, Any]]:
@@ -637,8 +599,7 @@ async def format_games(games, player_name) -> Union[List[Dict[str, Any]], str]:
 
     # Step 5: Format games (CPU-bound, run in parallel)
     start_format = time.time()
-    games_futures = []
-    
+
     # Flatten the games_to_process to a single list of game_raw_data
     all_raw_games_to_format = [
         game_raw_data
@@ -674,7 +635,7 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
     """
     
     games_list_for_db = []
-    moves_futures = [] # Store futures for move formatting
+    moves_to_format = []
     game_players_list_for_db = []
     game_openings_list_for_db = []
     affected_months: Set[Tuple[int, int]] = set()
@@ -687,30 +648,33 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
         if not game_dict_result: 
             continue
             
-        try:
-            moves_data = game_dict_result.pop('moves_data', None)
-        except Exception: 
-            continue
-        
-        if moves_data:
-            # --- OPTIMIZATION: Schedule each move format as a separate thread task ---
-            moves_formatted_future = asyncio.to_thread(format_one_game_moves, moves_data)
-            moves_futures.append(moves_formatted_future)
+        moves_data = game_dict_result.get('moves_data')
+        game_data = {
+            key: value
+            for key, value in game_dict_result.items()
+            if key != 'moves_data'
+        }
 
         # Prepare the game data for insertion
         try:
-            game_payload = GameCreateData(**game_dict_result).model_dump()
+            game_payload = GameCreateData(**game_data).model_dump()
+            game_player_rows = create_game_player_rows(game_payload)
+            game_opening_rows = create_game_opening_rows(game_payload, moves_data)
+
             games_list_for_db.append(game_payload)
-            game_players_list_for_db.extend(create_game_player_rows(game_payload))
-            game_openings_list_for_db.extend(create_game_opening_rows(game_payload, moves_data))
+            game_players_list_for_db.extend(game_player_rows)
+            game_openings_list_for_db.extend(game_opening_rows)
             affected_players.add(str(game_payload["white"]).lower())
             affected_players.add(str(game_payload["black"]).lower())
             
             # Update month counts
-            game_year = game_dict_result.get('year')
-            game_month = game_dict_result.get('month')
+            game_year = game_payload.get('year')
+            game_month = game_payload.get('month')
             if game_year and game_month:
                 affected_months.add((int(game_year), int(game_month)))
+
+            if moves_data:
+                moves_to_format.append(moves_data)
 
         except Exception as e:
             print(f"Error creating GameCreateData for formatted game {game_dict_result.get('link', 'N/A')}: {e}. Skipping game.")
@@ -718,8 +682,12 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
             
     # --- Await all move formatting tasks in bounded chunks ---
     moves_list_results = []
-    for start in range(0, len(moves_futures), MOVE_FORMAT_CHUNK_SIZE):
-        moves_list_results.extend(await asyncio.gather(*moves_futures[start:start + MOVE_FORMAT_CHUNK_SIZE]))
+    for start in range(0, len(moves_to_format), MOVE_FORMAT_CHUNK_SIZE):
+        chunk = moves_to_format[start:start + MOVE_FORMAT_CHUNK_SIZE]
+        moves_list_results.extend(await asyncio.gather(*[
+            asyncio.to_thread(format_one_game_moves, moves_data)
+            for moves_data in chunk
+        ]))
     
     # Flatten the list of lists of moves
     moves_list_for_db = [
@@ -806,17 +774,6 @@ async def get_just_new_games(games: Dict[str, Dict[str, List[Dict[str, Any]]]]) 
     for link in to_insert_game_links:
         game, year, month = game_map[link]
         
-        if year not in new_games_structured:
-            new_games_structured[year] = {}
-        if month not in new_games_structured[year]:
-            new_games_structured[year][month] = []
-            
-        new_games_structured[year][month].append(game)
-
-    total_new_games_count = len(to_insert_game_links)
-    if total_new_games_count == 0:
-        # This check is technically redundant now but good for safety
-        print("After filtering, no new games remain.")
-        return False
+        new_games_structured.setdefault(year, {}).setdefault(month, []).append(game)
 
     return new_games_structured

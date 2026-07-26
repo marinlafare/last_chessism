@@ -10,6 +10,99 @@ from chessism_api.database.models import Base
 async_engine = None
 AsyncDBSession = sessionmaker(expire_on_commit=False, class_=AsyncSession)
 
+FEN_SCHEMA_ADVISORY_LOCK = 731_946_205
+
+
+async def _ensure_fen_analysis_schema(
+    *,
+    user: str,
+    password: str | None,
+    host: str,
+    port: int,
+    database: str,
+) -> None:
+    """Apply small, idempotent FEN schema additions without a migration service."""
+    connection = await asyncpg.connect(
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    )
+    try:
+        await connection.execute("SELECT pg_advisory_lock($1)", FEN_SCHEMA_ADVISORY_LOCK)
+        existing_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'fen'
+                  AND column_name = ANY($1::text[])
+            """, [
+                "piece_count",
+                "analysis_source",
+                "tablebase_wdl",
+                "tablebase_dtz",
+                "analyzed_at",
+            ])
+        }
+        column_definitions = {
+            "piece_count": "SMALLINT",
+            "analysis_source": "VARCHAR(32)",
+            "tablebase_wdl": "SMALLINT",
+            "tablebase_dtz": "INTEGER",
+            "analyzed_at": "TIMESTAMPTZ",
+        }
+        missing_columns = [
+            (column_name, data_type)
+            for column_name, data_type in column_definitions.items()
+            if column_name not in existing_columns
+        ]
+        if missing_columns:
+            # Keep all additions under one relation lock. Releasing the lock
+            # between statements would let long-running analysis leases jump in.
+            async with connection.transaction():
+                for column_name, data_type in missing_columns:
+                    await connection.execute(
+                        f"ALTER TABLE fen ADD COLUMN {column_name} {data_type}"
+                    )
+        # This index is intentionally partial. Existing rows can use the immutable
+        # FEN expression until piece_count is filled lazily, avoiding a 47M-row
+        # table rewrite. CONCURRENTLY keeps ongoing Stockfish writes available.
+        index_exists = await connection.fetchval(
+            "SELECT to_regclass('public.ix_fen_pending_tablebase') IS NOT NULL"
+        )
+        if not index_exists:
+            await connection.execute("""
+                CREATE INDEX CONCURRENTLY ix_fen_pending_tablebase
+                ON fen (n_games DESC, fen)
+                WHERE score IS NULL
+                  AND COALESCE(analysis_source, '') <> 'tablebase_unavailable'
+                  AND COALESCE(
+                        piece_count,
+                        char_length(translate(split_part(fen, ' ', 1), '12345678/', ''))
+                      ) <= 5
+            """)
+        player_deleted_at_exists = await connection.fetchval("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'player'
+                  AND column_name = 'deleted_at'
+            )
+        """)
+        if not player_deleted_at_exists:
+            await connection.execute(
+                "ALTER TABLE player ADD COLUMN deleted_at TIMESTAMPTZ"
+            )
+    finally:
+        try:
+            await connection.execute("SELECT pg_advisory_unlock($1)", FEN_SCHEMA_ADVISORY_LOCK)
+        finally:
+            await connection.close()
+
 async def init_db(connection_string: str):
     """
     Initializes the asynchronous SQLAlchemy database engine and ensures
@@ -79,6 +172,14 @@ async def init_db(connection_string: str):
                 print("Ensuring database tables exist...")
                 await conn.run_sync(Base.metadata.create_all)
                 print("Database tables checked/created.")
+            await _ensure_fen_analysis_schema(
+                user=db_user,
+                password=db_password,
+                host=db_host,
+                port=db_port,
+                database=db_name,
+            )
+            print("Incremental FEN analysis schema checked/created.")
             
             # If successful, break the loop
             print("Database connection successful.")

@@ -141,7 +141,8 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
 
   const handleCardNavigate = () => {
     if (typeof window !== 'undefined') {
-      window.location.href = profileHref
+      window.history.pushState(null, '', profileHref)
+      window.dispatchEvent(new PopStateEvent('popstate'))
     }
   }
 

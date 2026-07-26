@@ -16,10 +16,22 @@ const RATING_GROUP_COLORS = {
   great: '#3fd089'
 }
 
+const BACKUP_JOB_STORAGE_KEY = 'chessism-fen-analysis-backup-job'
+const TERMINAL_JOB_PHASES = new Set(['complete', 'failed'])
+
 const formatNumber = (value) => {
   const numeric = Number(value ?? 0)
   if (!Number.isFinite(numeric)) return '0'
   return numeric.toLocaleString('en-US')
+}
+
+const formatBytes = (value) => {
+  const bytes = Number(value || 0)
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB']
+  const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1)
+  const amount = bytes / (1024 ** unitIndex)
+  return `${amount.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
 const niceStep = (span, targetTickCount) => {
@@ -57,6 +69,23 @@ const buildCountTicks = (maxValue, targetTickCount = 8) => {
 async function fetchJson(path, signal) {
   const response = await fetch(`${API_BASE_URL}${path}`, {
     signal,
+    credentials: 'include',
+    headers: { Accept: 'application/json' }
+  })
+  const payload = await response.json().catch(() => ({}))
+
+  if (!response.ok) {
+    const error = new Error(payload.detail || payload.message || `HTTP ${response.status}`)
+    error.status = response.status
+    throw error
+  }
+
+  return payload
+}
+
+async function postJson(path) {
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    method: 'POST',
     credentials: 'include',
     headers: { Accept: 'application/json' }
   })
@@ -156,6 +185,10 @@ function ScoredPositions() {
   const [selectedRatingGroup, setSelectedRatingGroup] = useState('medium')
   const [error, setError] = useState('')
   const [reloadToken, setReloadToken] = useState(0)
+  const [backups, setBackups] = useState([])
+  const [backupLocation, setBackupLocation] = useState('/home/jon/Desktop/workshop/db_backups/chessism')
+  const [backupError, setBackupError] = useState('')
+  const [backupJob, setBackupJob] = useState(null)
 
   const ratingGroups = useMemo(() => {
     return Array.isArray(advantageByRating?.groups) ? advantageByRating.groups : []
@@ -169,6 +202,11 @@ function ScoredPositions() {
     const buckets = Array.isArray(selectedRatingData?.buckets) ? selectedRatingData.buckets : []
     return Math.max(1, ...buckets.map((bucket) => Number(bucket.positions || 0)))
   }, [selectedRatingData])
+
+  const latestBackup = backups[0] || null
+  const backupJobActive = Boolean(
+    backupJob?.jobId && !TERMINAL_JOB_PHASES.has(backupJob.phase)
+  )
 
   useEffect(() => {
     const controller = new AbortController()
@@ -196,6 +234,133 @@ function ScoredPositions() {
   }, [reloadToken])
 
   useEffect(() => {
+    const controller = new AbortController()
+
+    fetchJson('/analysis/backups', controller.signal)
+      .then((payload) => {
+        setBackups(Array.isArray(payload.backups) ? payload.backups : [])
+        if (payload.storage_location) setBackupLocation(payload.storage_location)
+        setBackupError('')
+      })
+      .catch((loadError) => {
+        if (loadError?.name !== 'AbortError') {
+          setBackupError(loadError.message || 'FEN-analysis backups unavailable.')
+        }
+      })
+
+    return () => controller.abort()
+  }, [reloadToken])
+
+  useEffect(() => {
+    try {
+      const storedJob = JSON.parse(window.localStorage.getItem(BACKUP_JOB_STORAGE_KEY) || 'null')
+      if (storedJob?.jobId) setBackupJob(storedJob)
+    } catch {
+      window.localStorage.removeItem(BACKUP_JOB_STORAGE_KEY)
+    }
+  }, [])
+
+  useEffect(() => {
+    const jobId = backupJob?.jobId
+    if (!jobId || TERMINAL_JOB_PHASES.has(backupJob.phase)) return undefined
+
+    const controller = new AbortController()
+    let timerId
+
+    const poll = async () => {
+      try {
+        const payload = await fetchJson(`/jobs/${encodeURIComponent(jobId)}`, controller.signal)
+        const progress = payload.progress || {}
+        const resultEnvelope = payload.result || null
+        const result = progress.result || resultEnvelope?.result || null
+        let phase = progress.phase || payload.status || 'queued'
+
+        if (resultEnvelope?.success === false) phase = 'failed'
+        if (payload.status === 'complete') {
+          phase = resultEnvelope?.success === false ? 'failed' : 'complete'
+        }
+
+        const detail = progress.detail
+          || (phase === 'failed' && result?.message)
+          || (phase === 'complete' ? 'FEN-analysis operation completed.' : `Job is ${phase}.`)
+        setBackupError('')
+        setBackupJob((current) => (
+          current?.jobId === jobId
+            ? { ...current, phase, detail, result }
+            : current
+        ))
+
+        if (TERMINAL_JOB_PHASES.has(phase)) {
+          window.localStorage.removeItem(BACKUP_JOB_STORAGE_KEY)
+          setReloadToken((current) => current + 1)
+          return
+        }
+        timerId = window.setTimeout(poll, 2000)
+      } catch (pollError) {
+        if (pollError?.name === 'AbortError') return
+        if (pollError?.status === 404) {
+          window.localStorage.removeItem(BACKUP_JOB_STORAGE_KEY)
+          setBackupJob(null)
+          setBackupError('The previous backup job status expired. The saved-backup list was refreshed.')
+          setReloadToken((current) => current + 1)
+          return
+        }
+        setBackupError(pollError.message || 'Unable to read backup job status.')
+        timerId = window.setTimeout(poll, 3000)
+      }
+    }
+
+    poll()
+    return () => {
+      controller.abort()
+      window.clearTimeout(timerId)
+    }
+  }, [backupJob?.jobId, backupJob?.phase])
+
+  const rememberBackupJob = (job) => {
+    setBackupJob(job)
+    window.localStorage.setItem(BACKUP_JOB_STORAGE_KEY, JSON.stringify(job))
+  }
+
+  const saveFenAnalysis = async () => {
+    setBackupError('')
+    try {
+      const payload = await postJson('/analysis/backups')
+      rememberBackupJob({
+        jobId: payload.job_id,
+        kind: 'backup',
+        phase: 'queued',
+        detail: payload.message || 'FEN-analysis backup queued.'
+      })
+    } catch (saveError) {
+      setBackupError(saveError.message || 'Unable to queue the FEN-analysis backup.')
+    }
+  }
+
+  const restoreLatestBackup = async () => {
+    if (!latestBackup) return
+    const confirmed = window.confirm(
+      `Restore analyzed values from ${latestBackup.filename}? Existing matching FEN results will be overwritten.`
+    )
+    if (!confirmed) return
+
+    setBackupError('')
+    try {
+      const filename = encodeURIComponent(latestBackup.filename)
+      const payload = await postJson(`/analysis/backups/${filename}/restore`)
+      rememberBackupJob({
+        jobId: payload.job_id,
+        kind: 'restore',
+        filename: latestBackup.filename,
+        phase: 'queued',
+        detail: payload.message || 'FEN-analysis restore queued.'
+      })
+    } catch (restoreError) {
+      setBackupError(restoreError.message || 'Unable to queue the FEN-analysis restore.')
+    }
+  }
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
         setReloadToken((current) => current + 1)
@@ -214,6 +379,57 @@ function ScoredPositions() {
           <section className="scored-top-grid">
             <section className="scored-positions-panel scored-engine-panel">
               {error ? <div className="status-banner warn">{error}</div> : null}
+
+              <div className="analysis-backup-block">
+                <div className="analysis-backup-head">
+                  <div>
+                    <h2 className="panel-title">FEN ANALYSIS BACKUPS</h2>
+                    <p>Save the expensive Stockfish results independently of the database.</p>
+                  </div>
+                  <div className="analysis-backup-actions">
+                    <button
+                      className="btn btn-primary btn-inline"
+                      type="button"
+                      disabled={backupJobActive}
+                      onClick={saveFenAnalysis}
+                    >
+                      Save FEN analysis
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-inline"
+                      type="button"
+                      disabled={backupJobActive || !latestBackup}
+                      onClick={restoreLatestBackup}
+                    >
+                      Restore latest
+                    </button>
+                  </div>
+                </div>
+                <div className="analysis-backup-location">
+                  <span>Location</span>
+                  <code>{backupLocation}</code>
+                </div>
+                {latestBackup ? (
+                  <p className="analysis-backup-latest">
+                    Latest: <strong>{latestBackup.filename}</strong>
+                    {' · '}{formatNumber(latestBackup.records)} positions
+                    {' · '}{formatBytes(latestBackup.bytes)}
+                  </p>
+                ) : (
+                  <p className="analysis-backup-latest">No saved FEN analysis yet.</p>
+                )}
+                {backupJob ? (
+                  <div
+                    className={`analysis-backup-status ${backupJob.phase === 'failed' ? 'failed' : ''}`}
+                    aria-live="polite"
+                  >
+                    <strong>{backupJob.kind === 'restore' ? 'Restore' : 'Backup'}:</strong>
+                    {' '}{backupJob.detail}
+                    {backupJob.result?.missing ? ` ${formatNumber(backupJob.result.missing)} FENs were not present.` : ''}
+                  </div>
+                ) : null}
+                {backupError ? <div className="status-banner warn">{backupError}</div> : null}
+              </div>
 
               <div className="position-coverage-grid">
                 <article className="metric-card">

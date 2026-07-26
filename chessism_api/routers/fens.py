@@ -17,6 +17,7 @@ from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     _get_remaining_fens_count_committed
 )
+from chessism_api.operations.fens import ensure_fen_pipeline_enqueued
 
 router = APIRouter()
 
@@ -41,21 +42,27 @@ async def api_generate_fens(
     """
     total_games = data.total_games_to_process
     
-    print(f"Enqueuing FEN Pipeline job for {total_games} games.")
-    
-    job = await redis.enqueue_job(
-        'run_fen_pipeline',
+    pipeline = await ensure_fen_pipeline_enqueued(
+        redis,
         total_games_to_process=total_games,
         batch_size=data.batch_size,
         num_workers=data.num_workers,
-        _queue_name='pipeline_queue'
     )
-    job_id = str(getattr(job, "job_id", job))
+    job_id = pipeline["job_id"]
+    if pipeline["status"] == "up_to_date":
+        return JSONResponse(content={
+            "message": "FEN extraction is already up to date.",
+            "job_id": None,
+        })
     
     return JSONResponse(
         status_code=202,
         content={
-            "message": f"FEN Generation Pipeline started for {total_games} total games.",
+            "message": (
+                f"FEN extraction queued for {pipeline['pending_games']} pending games."
+                if pipeline["status"] == "queued"
+                else "FEN extraction is already running."
+            ),
             "job_id": job_id
         }
     )
@@ -82,7 +89,7 @@ async def api_get_fen_analysis_counts() -> JSONResponse:
 @router.get("/players/{player_name}/analysis_counts")
 async def api_get_player_fen_analysis_counts(player_name: str) -> JSONResponse:
     """
-    Returns distinct player-position coverage for the Character Repeated panel.
+    Returns game and per-game FEN coverage for a player.
     """
     normalized_player = str(player_name or "").strip().lower()
     counts = await get_player_fen_score_counts(normalized_player)

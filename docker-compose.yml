@@ -14,6 +14,8 @@ services:
       - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
       - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
       - STOCKFISH_STATUS_URL=${STOCKFISH_STATUS_URL}
+      - FEN_ANALYSIS_BACKUP_DIR=/backups
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
     networks:
       - chessism_net
     depends_on:
@@ -25,6 +27,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api_logs:/app/logs
+      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
 
   chessism-web:
     build: ./chessism_web
@@ -50,6 +53,7 @@ services:
     environment:
       - STOCKFISH_THREADS=${STOCKFISH_THREADS}
       - STOCKFISH_HASH_MB=${STOCKFISH_HASH_MB}
+      - STOCKFISH_ENGINE_COUNT=${STOCKFISH_ENGINE_COUNT:-4}
       - STOCKFISH_ANALYSE_TIMEOUT_SEC=${STOCKFISH_ANALYSE_TIMEOUT_SEC}
       - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
       - STOCKFISH_SYZYGY_PROBE_DEPTH=${STOCKFISH_SYZYGY_PROBE_DEPTH}
@@ -82,8 +86,6 @@ services:
     image: redis:7-alpine
     container_name: redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports:
-      - "6379:6379"
     networks:
       - chessism_net
     volumes:
@@ -102,7 +104,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=analysis_queue
-      - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY}
+      - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY:-4}
+      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
+    volumes:
+      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
     depends_on:
@@ -121,6 +126,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=games_queue
+      - FEN_ANALYSIS_BACKUP_DIR=/backups
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
+    volumes:
+      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
     networks:
       - chessism_net
     depends_on:
@@ -186,10 +195,19 @@ services:
     image: chessism-api:latest
     container_name: pipeline-worker
     command: arq worker.WorkerSettings
+    # Direct tablebase probing is fast but CPU-bound. Keep thermal/system
+    # headroom while the four reproducible Stockfish engines are active.
+    cpus: "0.50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
+      - FEN_ANALYSIS_BACKUP_DIR=/backups
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
+      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
+    volumes:
+      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
     depends_on:
