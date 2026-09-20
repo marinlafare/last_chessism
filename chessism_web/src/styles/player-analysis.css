@@ -1,0 +1,540 @@
+.player-analysis-workspace {
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.player-analysis-heading,
+.player-analysis-filters {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.player-analysis-heading h2,
+.player-analysis-heading p,
+.player-chart-head h3,
+.player-chart-head p {
+  margin: 0;
+}
+
+.player-analysis-heading > div {
+  display: grid;
+  gap: 4px;
+}
+
+.player-analysis-heading > div > p:last-child,
+.player-chart-head p,
+.player-chart-empty {
+  color: var(--muted);
+}
+
+.player-analysis-tabs {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 20px;
+  padding-inline: 12px;
+}
+
+.player-analysis-tab {
+  position: relative;
+  display: grid;
+  gap: 2px;
+  min-width: 210px;
+  padding: 10px 18px 9px;
+  border: 1px solid rgba(91, 112, 130, 0.42);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  background: #0b1117;
+  color: var(--muted);
+  text-align: left;
+  cursor: pointer;
+  transform: translateY(6px);
+  transition: 160ms ease;
+}
+
+.player-analysis-tab::after {
+  content: "";
+  position: absolute;
+  right: -13px;
+  bottom: 0;
+  width: 13px;
+  height: 13px;
+  border-bottom: 1px solid rgba(91, 112, 130, 0.42);
+  border-left: 1px solid rgba(91, 112, 130, 0.42);
+  border-bottom-left-radius: 11px;
+  box-shadow: -5px 5px 0 4px #0b1117;
+}
+
+.player-analysis-tab strong {
+  color: inherit;
+  font-size: 13px;
+}
+
+.player-analysis-tab small {
+  font-size: 10px;
+}
+
+.player-analysis-tab:hover,
+.player-analysis-tab.active {
+  border-color: rgba(21, 199, 128, 0.62);
+  background: #101a20;
+  color: var(--text);
+}
+
+.player-analysis-tab.active {
+  z-index: 2;
+  transform: translateY(1px);
+}
+
+.player-analysis-tab.active::after {
+  border-color: rgba(21, 199, 128, 0.62);
+  box-shadow: -5px 5px 0 4px #101a20;
+}
+
+.player-analysis-panel {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 16px;
+  min-height: 300px;
+  padding: 18px;
+  border: 1px solid rgba(21, 199, 128, 0.45);
+  border-radius: var(--radius);
+  background: #101a20;
+}
+
+.player-analysis-filters {
+  align-items: flex-end;
+  flex-wrap: wrap;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.player-analysis-mode-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.player-analysis-mode-filter button {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #090e13;
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.player-analysis-mode-filter button:hover,
+.player-analysis-mode-filter button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.player-analysis-mode-filter button.active {
+  background: rgba(21, 199, 128, 0.12);
+}
+
+.player-analysis-date-filter {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.player-analysis-date-filter label {
+  display: grid;
+  gap: 4px;
+}
+
+.player-analysis-date-filter label span,
+.player-analysis-coverage span,
+.player-chart-head > span {
+  color: var(--subtle);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.player-analysis-date-filter .text-input {
+  min-width: 150px;
+}
+
+.player-analysis-error,
+.player-analysis-loading {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #090e13;
+}
+
+.player-analysis-error {
+  border-color: rgba(226, 88, 88, 0.5);
+  color: #ff9b9b;
+}
+
+.player-analysis-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.player-analysis-loading span {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(21, 199, 128, 0.28);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: player-analysis-spin 700ms linear infinite;
+}
+
+@keyframes player-analysis-spin {
+  to { transform: rotate(360deg); }
+}
+
+.player-analysis-coverage {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.player-analysis-coverage > div {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #0b1117;
+}
+
+.player-analysis-coverage strong {
+  font: 700 17px "IBM Plex Mono", monospace;
+}
+
+.player-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.player-chart-card {
+  display: grid;
+  grid-template-rows: auto minmax(210px, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: #090e13;
+}
+
+.player-chart-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.player-chart-head > div {
+  display: grid;
+  gap: 4px;
+}
+
+.player-chart-head h3 {
+  font-size: 15px;
+}
+
+.player-chart-head p {
+  font-size: 11px;
+}
+
+.player-chart-head > span {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  border: 1px solid rgba(211, 182, 109, 0.32);
+  border-radius: 5px;
+  color: var(--accent-2);
+}
+
+.player-chart-body {
+  display: grid;
+  min-width: 0;
+  padding: 14px;
+}
+
+.player-chart-empty {
+  align-self: center;
+  margin: 0;
+  text-align: center;
+}
+
+.player-chart-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 14px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.player-chart-legend span::before {
+  content: "";
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 5px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.player-chart-legend .errors::before,
+.player-chart-legend .score::before,
+.player-chart-legend .remaining::before {
+  background: var(--accent-2);
+}
+
+.player-phase-chart,
+.player-conversion-chart,
+.player-pressure-chart,
+.player-endgame-chart,
+.player-opening-chart,
+.player-line-chart,
+.player-profile-charts {
+  display: grid;
+  align-content: start;
+  gap: 11px;
+  min-width: 0;
+}
+
+.player-phase-row {
+  display: grid;
+  grid-template-columns: 90px minmax(80px, 1fr) 120px;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-phase-row > div:first-child,
+.player-phase-values,
+.player-pressure-row > div:last-child,
+.player-opening-row > div:first-child,
+.player-opening-row > div:last-child,
+.player-endgame-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.player-phase-row small,
+.player-pressure-row small,
+.player-opening-row small,
+.player-endgame-row small,
+.player-conversion-row small,
+.player-line-axis {
+  color: var(--subtle);
+  font-size: 10px;
+}
+
+.player-phase-bars {
+  display: grid;
+  gap: 5px;
+}
+
+.player-horizontal-track,
+.player-stacked-track {
+  display: flex;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #172029;
+}
+
+.player-horizontal-track > span,
+.player-distributions i {
+  display: block;
+  min-width: 2px;
+  border-radius: inherit;
+  background: var(--accent);
+}
+
+.player-horizontal-track > span.errors,
+.player-opening-row .black {
+  background: var(--accent-2);
+}
+
+.player-conversion-row {
+  display: grid;
+  grid-template-columns: 100px minmax(90px, 1fr) 50px;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-conversion-row > div:first-child {
+  display: grid;
+  gap: 2px;
+}
+
+.player-stacked-track .wins { background: var(--accent); }
+.player-stacked-track .draws { background: #8d6bb4; }
+.player-stacked-track .losses { background: #d55c5c; }
+
+.player-chart-callouts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.player-chart-callouts > div {
+  display: grid;
+  gap: 3px;
+  padding: 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.player-chart-callouts strong {
+  color: var(--text);
+  font: 700 14px "IBM Plex Mono", monospace;
+}
+
+.player-pressure-row {
+  display: grid;
+  grid-template-columns: 60px minmax(90px, 1fr) 100px;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-endgame-row,
+.player-opening-row {
+  display: grid;
+  grid-template-columns: minmax(84px, 1.2fr) minmax(80px, 1fr) 72px;
+  align-items: center;
+  gap: 10px;
+}
+
+.player-opening-row > div:first-child strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.player-line-chart svg {
+  width: 100%;
+  height: 180px;
+  overflow: visible;
+}
+
+.player-line-chart path:not(.chart-grid) {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+}
+
+.player-line-chart path.score,
+.player-line-chart path.remaining {
+  stroke: var(--accent-2);
+  stroke-width: 2;
+}
+
+.player-line-chart .chart-grid {
+  fill: none;
+  stroke: rgba(91, 112, 130, 0.18);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.player-line-axis {
+  display: flex;
+  justify-content: space-between;
+}
+
+.player-line-summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.player-line-summary strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.player-profile-charts {
+  grid-template-columns: minmax(210px, 0.8fr) minmax(180px, 1.2fr);
+}
+
+.player-activity-heatmap {
+  display: grid;
+  grid-template-columns: 34px repeat(4, minmax(22px, 1fr));
+  align-content: start;
+  align-items: center;
+  gap: 4px;
+}
+
+.player-activity-heatmap > small {
+  color: var(--subtle);
+  font-size: 8px;
+  text-align: center;
+}
+
+.player-activity-row {
+  display: contents;
+}
+
+.player-activity-row strong {
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.player-activity-row span {
+  aspect-ratio: 1.45;
+  border: 1px solid rgba(21, 199, 128, 0.12);
+  border-radius: 3px;
+  background: rgba(21, 199, 128, calc(0.05 + var(--activity) * 0.8));
+}
+
+.player-distributions {
+  display: grid;
+  align-content: start;
+  grid-template-columns: 74px minmax(40px, 1fr) 34px;
+  gap: 5px 7px;
+}
+
+.player-distributions > strong {
+  grid-column: 1 / -1;
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.player-distributions > div {
+  display: contents;
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.player-distributions i {
+  align-self: center;
+  height: 5px;
+}
+
+.player-distributions small {
+  text-align: right;
+}

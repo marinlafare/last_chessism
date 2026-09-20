@@ -17,7 +17,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stockfish-service"
 
 import chess
 import operations.engine as stockfish_engine
-from chessism_api.operations import analysis, analysis_backups, fens, games, player_deletion, tablebase
+from chessism_api.operations import (
+    analysis,
+    analysis_backups,
+    fens,
+    games,
+    player_analytics,
+    player_deletion,
+    tablebase,
+)
 from chessism_api.database.ask_db import (
     _player_fens_for_analysis_stmt,
     fair_sample_player_games_by_month,
@@ -1147,6 +1155,74 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("fen ASC", sql)
         self.assertIn("OFFSET :offset", sql)
         self.assertEqual(request.await_args.kwargs["params"], {"limit": 6, "offset": 5})
+
+
+class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):
+    def test_filters_are_normalized_and_form_a_stable_cache_key(self):
+        filters = player_analytics.normalize_player_analytics_filters(
+            "  HiKaRu ",
+            "Blitz",
+            date(2024, 1, 2),
+            date(2024, 2, 3),
+        )
+
+        self.assertEqual(filters, {
+            "player": "hikaru",
+            "mode": "blitz",
+            "date_from": "2024-01-02",
+            "date_to": "2024-02-03",
+        })
+        self.assertEqual(
+            player_analytics.player_analytics_cache_key("engine", filters),
+            "chessism:player_analytics:v1:engine:hikaru:blitz:2024-01-02:2024-02-03",
+        )
+
+    def test_invalid_date_range_is_rejected_before_querying(self):
+        with self.assertRaisesRegex(ValueError, "Start date"):
+            player_analytics.normalize_player_analytics_filters(
+                "hikaru",
+                "all",
+                date(2024, 2, 3),
+                date(2024, 1, 2),
+            )
+
+    async def test_query_returns_compact_json_with_scope_metadata(self):
+        result = MagicMock()
+        result.scalar.return_value = '{"phase_quality": [{"phase": "Opening"}]}'
+        session = AsyncMock()
+        session.execute.return_value = result
+        session_context = MagicMock()
+        session_context.__aenter__ = AsyncMock(return_value=session)
+        session_context.__aexit__ = AsyncMock(return_value=False)
+        filters = {
+            "player": "hikaru",
+            "mode": "all",
+            "date_from": None,
+            "date_to": None,
+        }
+
+        with patch.object(
+            player_analytics,
+            "AsyncDBSession",
+            return_value=session_context,
+        ):
+            payload = await player_analytics.get_player_engine_insights(filters)
+
+        self.assertEqual(payload["player_name"], "hikaru")
+        self.assertEqual(payload["filters"]["mode"], "all")
+        self.assertEqual(payload["phase_quality"][0]["phase"], "Opening")
+        self.assertIn("generated_at", payload)
+        session.execute.assert_awaited_once()
+
+    def test_queries_are_aggregated_and_outputs_are_bounded(self):
+        self.assertIn("summary.is_fully_analyzed", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LAG(f.score)", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LIMIT 2000", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertNotIn("'fen'", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LIMIT 240", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LIMIT 12", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LIMIT 5000", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LEAST(20", player_analytics.PLAYING_PATTERNS_SQL)
 
 
 class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):

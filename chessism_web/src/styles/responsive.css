@@ -50,6 +50,14 @@
     grid-template-columns: 1fr;
   }
 
+  .player-chart-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .player-analysis-coverage {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .status-grid,
   .metric-grid,
   .position-coverage-grid {
@@ -153,6 +161,56 @@
   .player-delete-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .player-analysis-heading,
+  .player-analysis-filters {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-analysis-tabs {
+    overflow-x: auto;
+    padding-inline: 2px 14px;
+  }
+
+  .player-analysis-tab {
+    flex: 0 0 190px;
+    min-width: 190px;
+  }
+
+  .player-analysis-date-filter {
+    flex-wrap: wrap;
+  }
+
+  .player-analysis-date-filter label {
+    flex: 1 1 150px;
+  }
+
+  .player-analysis-date-filter .text-input {
+    min-width: 0;
+  }
+
+  .player-analysis-coverage,
+  .player-profile-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .player-chart-head,
+  .player-phase-row,
+  .player-conversion-row,
+  .player-pressure-row,
+  .player-endgame-row,
+  .player-opening-row {
+    grid-template-columns: 1fr;
+  }
+
+  .player-chart-head {
+    display: grid;
+  }
+
+  .player-chart-head > span {
+    justify-self: start;
   }
 
   .player-delete-preview-grid {

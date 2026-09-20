@@ -1,3 +1,6 @@
+import json
+from datetime import date
+
 from arq.connections import ArqRedis
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Body, Depends
 from fastapi.responses import JSONResponse
@@ -25,6 +28,13 @@ from chessism_api.operations.player_deletion import (
     get_player_deletion_preview,
     write_player_deletion_progress,
 )
+from chessism_api.operations.player_analytics import (
+    PLAYER_ANALYTICS_CACHE_SECONDS,
+    get_player_engine_insights,
+    get_player_playing_patterns,
+    normalize_player_analytics_filters,
+    player_analytics_cache_key,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -34,6 +44,54 @@ class PlayerDeletionRequest(BaseModel):
     confirmation: str = Field(..., min_length=1)
     expected_exclusive_games: int = Field(..., ge=0)
     expected_shared_games: int = Field(..., ge=0)
+
+
+async def _get_cached_player_analysis(
+    redis: ArqRedis,
+    kind: str,
+    filters: dict,
+) -> dict:
+    cache_key = player_analytics_cache_key(kind, filters)
+    cached = await redis.get(cache_key)
+    if cached:
+        if isinstance(cached, bytes):
+            cached = cached.decode("utf-8")
+        try:
+            payload = json.loads(cached)
+            if isinstance(payload, dict):
+                payload["cache_hit"] = True
+                return payload
+        except (TypeError, ValueError):
+            pass
+
+    if kind == "engine":
+        payload = await get_player_engine_insights(filters)
+    else:
+        payload = await get_player_playing_patterns(filters)
+    await redis.set(
+        cache_key,
+        json.dumps(payload),
+        ex=PLAYER_ANALYTICS_CACHE_SECONDS,
+    )
+    payload["cache_hit"] = False
+    return payload
+
+
+def _analysis_filters(
+    player_name: str,
+    mode: str,
+    date_from: date | None,
+    date_to: date | None,
+) -> dict:
+    try:
+        return normalize_player_analytics_filters(
+            player_name,
+            mode,
+            date_from,
+            date_to,
+        )
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.get("/main_characters/time_controls")
@@ -102,6 +160,34 @@ async def api_get_player_neighbors(player_name: str) -> JSONResponse:
     """Return the previous and next full player profiles alphabetically."""
     result = await get_player_neighbors(player_name.strip().lower())
     return JSONResponse(content=result)
+
+
+@router.get("/{player_name}/analysis/engine")
+async def api_get_player_engine_insights(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Return bounded, engine-derived aggregates for the player dashboard."""
+    filters = _analysis_filters(player_name, mode, date_from, date_to)
+    payload = await _get_cached_player_analysis(redis, "engine", filters)
+    return JSONResponse(content=payload)
+
+
+@router.get("/{player_name}/analysis/patterns")
+async def api_get_player_playing_patterns(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Return bounded game, rating, opening and clock aggregates."""
+    filters = _analysis_filters(player_name, mode, date_from, date_to)
+    payload = await _get_cached_player_analysis(redis, "patterns", filters)
+    return JSONResponse(content=payload)
 
 
 @router.get("/{player_name}/deletion-preview")

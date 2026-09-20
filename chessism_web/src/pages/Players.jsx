@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
+import PlayerAnalysisWorkspace from './players/PlayerAnalysisWorkspace'
 import { requestJson as fetchJson } from '../services/apiClient'
 import { formatNumber } from '../utils/formatters'
 import {
@@ -20,7 +21,6 @@ const RESULT_BARS = [
   { key: 'losses', label: 'Losses', className: 'wl-fill-loss' },
   { key: 'draws', label: 'Draws', className: 'wl-fill-draw' }
 ]
-
 const fetchPlayerProfile = (playerName) => (
   fetchJson(`/players/${encodeURIComponent(playerName)}`)
 )
@@ -395,7 +395,6 @@ function Players() {
   const gamesUpdateActive = Boolean(gamesUpdateJob?.jobId && !isTerminalJobStatus(gamesUpdateStatus))
   const deleteActive = Boolean(deleteJob?.jobId && !isTerminalJobStatus(deleteStatus))
   const deleteConfirmationMatches = deleteConfirmation.trim().toLowerCase() === activePlayer.toLowerCase()
-
   return (
     <div className="page-frame">
       <SideRail />
@@ -551,6 +550,11 @@ function Players() {
               )}
             </div>
           </section>
+
+          <PlayerAnalysisWorkspace
+            playerName={activePlayer}
+            disabled={!profileRows.length || loading || Boolean(profile?.deleted_at)}
+          />
           {deletePreview ? (
             <div className="player-delete-backdrop" onClick={closeDeletePreview}>
               <div
