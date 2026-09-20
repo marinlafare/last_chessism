@@ -2320,7 +2320,10 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
+async def get_top_fens_unscored(
+    limit: int = 20,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games,
     where the score has NOT been calculated yet.
@@ -2336,9 +2339,13 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
             score IS NULL
         ORDER BY
             n_games DESC
-        LIMIT :limit;
+        LIMIT :limit
+        OFFSET :offset;
     """
-    params = {"limit": limit}
+    params = {
+        "limit": max(1, min(100, int(limit))),
+        "offset": max(0, int(offset)),
+    }
 
     result = await open_async_request(
         sql_query,
@@ -3523,7 +3530,7 @@ async def get_game_set_fens_for_analysis(
         await session.close()
         return None, None
 
-async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
+async def get_player_fen_score_counts(player_name: str) -> Dict[str, Any]:
     """
     Counts game and per-game position coverage for a specific player.
 
@@ -3533,32 +3540,48 @@ async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
     """
     sql_query = """
         SELECT
-            COUNT(*)::bigint AS total_games,
-            COUNT(*) FILTER (
-                WHERE gas.total_positions > 0
-                  AND gas.is_fully_analyzed
-            )::bigint AS analyzed_games,
-            COALESCE(SUM(gas.total_positions), 0)::bigint AS total_positions,
-            COALESCE(SUM(gas.analyzed_positions), 0)::bigint AS analyzed_positions,
-            COALESCE(SUM(gas.unscored_positions), 0)::bigint AS unscored_positions
-        FROM game_player gp
-        LEFT JOIN LATERAL (
+            coverage.*,
+            latest.rating AS latest_rating,
+            latest.mode AS latest_rating_mode,
+            latest.played_at AS latest_rating_at
+        FROM (
             SELECT
-                total_positions,
-                analyzed_positions,
-                unscored_positions,
-                is_fully_analyzed
-            FROM game_analysis_summary
-            WHERE link = gp.link
-            OFFSET 0
-        ) gas ON TRUE
-        WHERE gp.player_name = :player;
+                COUNT(*)::bigint AS total_games,
+                COUNT(*) FILTER (
+                    WHERE gas.total_positions > 0
+                      AND gas.is_fully_analyzed
+                )::bigint AS analyzed_games,
+                COALESCE(SUM(gas.total_positions), 0)::bigint AS total_positions,
+                COALESCE(SUM(gas.analyzed_positions), 0)::bigint AS analyzed_positions,
+                COALESCE(SUM(gas.unscored_positions), 0)::bigint AS unscored_positions
+            FROM game_player gp
+            LEFT JOIN LATERAL (
+                SELECT
+                    total_positions,
+                    analyzed_positions,
+                    unscored_positions,
+                    is_fully_analyzed
+                FROM game_analysis_summary
+                WHERE link = gp.link
+                OFFSET 0
+            ) gas ON TRUE
+            WHERE gp.player_name = :player
+        ) coverage
+        LEFT JOIN LATERAL (
+            SELECT rating, mode, played_at
+            FROM game_player
+            WHERE player_name = :player
+              AND played_at IS NOT NULL
+            ORDER BY played_at DESC
+            LIMIT 1
+        ) latest ON TRUE;
     """
     
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
         row = result.mappings().first()
 
+    latest_rating_at = (row or {}).get("latest_rating_at")
     return {
         "player_name": player_name,
         "total_games": int((row or {}).get("total_games") or 0),
@@ -3568,6 +3591,17 @@ async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
         "total_positions": int((row or {}).get("total_positions") or 0),
         "analyzed_positions": int((row or {}).get("analyzed_positions") or 0),
         "unscored_positions": int((row or {}).get("unscored_positions") or 0),
+        "latest_rating": (
+            int((row or {}).get("latest_rating"))
+            if (row or {}).get("latest_rating") is not None
+            else None
+        ),
+        "latest_rating_mode": (row or {}).get("latest_rating_mode"),
+        "latest_rating_at": (
+            latest_rating_at.isoformat()
+            if hasattr(latest_rating_at, "isoformat")
+            else latest_rating_at
+        ),
     }
 
 

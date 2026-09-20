@@ -22,6 +22,7 @@ from chessism_api.database.ask_db import (
     _player_fens_for_analysis_stmt,
     fair_sample_player_games_by_month,
     get_player_fen_score_counts,
+    get_top_fens_unscored,
 )
 from chessism_api.operations.fens import _aggregate_fen_data_in_memory, split_list
 from chessism_api.operations.format_games import (
@@ -975,6 +976,121 @@ class FenAnalysisBackupTests(unittest.TestCase):
         self.assertEqual(backups[0]["records"], 42)
         self.assertEqual(backups[0]["sha256"], "abc123")
 
+    def test_latest_incremental_backup_uses_saved_snapshot_cutoff(self):
+        filename = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
+        backup_path = self.backup_directory / filename
+        backup_path.write_bytes(b"backup")
+        analysis_backups._atomic_write_json(
+            analysis_backups._metadata_path(backup_path),
+            {
+                "filename": filename,
+                "created_at": "2024-07-04T12:00:00+00:00",
+                "snapshot_cutoff": "2024-07-05T13:30:00+00:00",
+                "records": 42,
+            },
+        )
+
+        with patch.object(analysis_backups, "BACKUP_DIR", self.backup_directory):
+            selected_path, _, cutoff = analysis_backups._latest_incremental_backup()
+
+        self.assertEqual(selected_path, backup_path)
+        self.assertEqual(cutoff.isoformat(), "2024-07-05T13:30:00+00:00")
+
+
+class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.backup_directory = Path(self.temporary_directory.name)
+
+    async def test_incremental_backup_updates_same_file_and_adds_only_changes(self):
+        filename = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
+        backup_path = self.backup_directory / filename
+        created_at = "2024-07-04T12:00:00+00:00"
+        original_records = [
+            {
+                "type": "fen_analysis",
+                "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+                "score": 0.0,
+                "continuations": [],
+            },
+            {
+                "type": "fen_analysis",
+                "fen": "8/4k3/8/8/8/8/8/4K3 w - - 0 1",
+                "score": 10.0,
+                "continuations": [],
+            },
+        ]
+        with gzip.open(backup_path, "wt", encoding="utf-8") as output:
+            output.write(json.dumps({
+                "type": "metadata",
+                "format": analysis_backups.BACKUP_FORMAT,
+                "version": analysis_backups.BACKUP_VERSION,
+                "created_at": created_at,
+                "records": 2,
+            }) + "\n")
+            for record in original_records:
+                output.write(json.dumps(record) + "\n")
+
+        metadata = {
+            "filename": filename,
+            "created_at": created_at,
+            "snapshot_cutoff": created_at,
+            "records": 2,
+            "bytes": backup_path.stat().st_size,
+            "sha256": analysis_backups._sha256(backup_path),
+        }
+        analysis_backups._atomic_write_json(
+            analysis_backups._metadata_path(backup_path),
+            metadata,
+        )
+        changed_records = {
+            original_records[0]["fen"]: {
+                **original_records[0],
+                "score": 25.0,
+            },
+            "8/8/4k3/8/8/8/8/4K3 w - - 0 1": {
+                "type": "fen_analysis",
+                "fen": "8/8/4k3/8/8/8/8/4K3 w - - 0 1",
+                "score": -15.0,
+                "continuations": [],
+            },
+        }
+        session_context = MagicMock()
+        session_context.__aenter__ = AsyncMock(return_value=MagicMock())
+        session_context.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(analysis_backups, "AsyncDBSession", return_value=session_context),
+            patch.object(
+                analysis_backups,
+                "_collect_analysis_records",
+                AsyncMock(return_value=changed_records),
+            ),
+        ):
+            result = await analysis_backups._update_fen_analysis_backup(
+                {},
+                backup_path,
+                metadata,
+                datetime.fromisoformat(created_at),
+                datetime.fromisoformat("2024-07-05T12:00:00+00:00"),
+            )
+
+        _, saved_records_iterator = analysis_backups._backup_records(backup_path)
+        saved_records = {
+            record["fen"]: record for record in saved_records_iterator
+        }
+        self.assertEqual(result["filename"], filename)
+        self.assertEqual(result["records"], 3)
+        self.assertEqual(result["added_records"], 1)
+        self.assertEqual(result["updated_records"], 1)
+        self.assertEqual(saved_records[original_records[0]["fen"]]["score"], 25.0)
+        self.assertEqual(len(saved_records), 3)
+        self.assertEqual(
+            list(self.backup_directory.glob("fen-analysis-*.jsonl.gz")),
+            [backup_path],
+        )
+
 
 class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
     async def test_player_coverage_includes_complete_games_and_fen_occurrences(self):
@@ -985,6 +1101,9 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
             "total_positions": 6_400,
             "analyzed_positions": 3_200,
             "unscored_positions": 3_200,
+            "latest_rating": 3_225,
+            "latest_rating_mode": "blitz",
+            "latest_rating_at": datetime(2026, 8, 11, 18, 30, tzinfo=timezone.utc),
         }
         session = AsyncMock()
         session.execute.return_value = query_result
@@ -1004,6 +1123,30 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coverage["analyzed_fens"], 3_200)
         self.assertEqual(coverage["total_positions"], coverage["total_fens"])
         self.assertEqual(coverage["analyzed_positions"], coverage["analyzed_fens"])
+        self.assertEqual(coverage["latest_rating"], 3_225)
+        self.assertEqual(coverage["latest_rating_mode"], "blitz")
+        self.assertEqual(coverage["latest_rating_at"], "2026-08-11T18:30:00+00:00")
+        sql = str(session.execute.await_args.args[0])
+        self.assertIn("played_at IS NOT NULL", sql)
+        self.assertIn("ORDER BY played_at DESC", sql)
+        self.assertNotIn("link DESC", sql)
+
+    async def test_most_repeated_unscored_query_matches_partial_index_order(self):
+        expected = [{"fen": "8/8/8/8/8/8/8/K6k w - - 0 1", "n_games": 10, "score": None}]
+
+        with patch(
+            "chessism_api.database.ask_db.open_async_request",
+            new=AsyncMock(return_value=expected),
+        ) as request:
+            result = await get_top_fens_unscored(6, offset=5)
+
+        self.assertEqual(result, expected)
+        sql = request.await_args.args[0]
+        self.assertIn("score IS NULL", sql)
+        self.assertIn("n_games DESC", sql)
+        self.assertNotIn("fen ASC", sql)
+        self.assertIn("OFFSET :offset", sql)
+        self.assertEqual(request.await_args.kwargs["params"], {"limit": 6, "offset": 5})
 
 
 class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):

@@ -84,6 +84,13 @@ async def _ensure_fen_analysis_schema(
                         char_length(translate(split_part(fen, ' ', 1), '12345678/', ''))
                       ) <= 5
             """)
+        # Supports the "most repeated pending FENs" view and the same priority
+        # order used by global analysis selection without scanning the FEN table.
+        await connection.execute("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_fen_unscored_n_games_desc
+            ON fen (n_games DESC)
+            WHERE score IS NULL
+        """)
         player_deleted_at_exists = await connection.fetchval("""
             SELECT EXISTS (
                 SELECT 1

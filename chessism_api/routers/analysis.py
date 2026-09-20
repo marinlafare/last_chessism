@@ -481,7 +481,7 @@ async def api_list_fen_analysis_backups() -> dict[str, Any]:
 async def api_create_fen_analysis_backup(
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> JSONResponse:
-    """Queue an atomic export of every analyzed FEN."""
+    """Queue creation or an incremental update of the durable FEN snapshot."""
     job = await redis.enqueue_job(
         "run_fen_analysis_backup_job",
         _queue_name="pipeline_queue",
@@ -490,7 +490,7 @@ async def api_create_fen_analysis_backup(
     return JSONResponse(
         status_code=202,
         content={
-            "message": "FEN-analysis backup queued.",
+            "message": "FEN-analysis backup update queued.",
             "job_id": _enqueued_job_id(job),
             "storage_location": BACKUP_DISPLAY_DIR,
         },

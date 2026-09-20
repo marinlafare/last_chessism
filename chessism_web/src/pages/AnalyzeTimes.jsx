@@ -2,25 +2,10 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { getJson } from '../services/apiClient'
+import { formatNumber } from '../utils/formatters'
 
-const formatNumber = (value, digits = 0) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits
-  })
-}
-
-async function fetchSummary() {
-  const response = await fetch(`${API_BASE_URL}/analysis_times/summary?limit=10`)
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-  return payload
-}
+const fetchSummary = () => getJson('/analysis_times/summary?limit=10')
 
 function AnalyzeTimes() {
   const [data, setData] = useState(null)

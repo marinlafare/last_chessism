@@ -4,17 +4,12 @@ import { Chessboard } from 'react-chessboard'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { postJson } from '../services/apiClient'
+import { formatNumber } from '../utils/formatters'
 
 const START_FEN = new Chess().fen()
 const LIVE_ANALYSIS_NODES = 250_000
 const LIVE_ANALYSIS_MULTIPV = 3
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US')
-}
 
 const getAnalysisLines = (result) => {
   const analysis = result?.analysis
@@ -61,21 +56,11 @@ const moveToSan = (fen, move) => {
 }
 
 async function analyzeLiveFen(fen, signal) {
-  const response = await fetch(`${API_BASE_URL}/analysis/fen`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      fens: [fen],
-      nodes_limit: LIVE_ANALYSIS_NODES,
-      multipv: LIVE_ANALYSIS_MULTIPV
-    })
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
+  const payload = await postJson('/analysis/fen', {
+    fens: [fen],
+    nodes_limit: LIVE_ANALYSIS_NODES,
+    multipv: LIVE_ANALYSIS_MULTIPV
+  }, { signal })
 
   return Array.isArray(payload) ? payload[0] : payload
 }

@@ -1,40 +1,15 @@
-import { API_BASE_URL } from '../config'
+import { getJson, postJson } from './apiClient'
 
 export const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
 export const DOWNLOAD_JOB_STORAGE_KEY = 'chessism:download-new-games:download-job'
 export const PLAYER_DELETE_JOB_STORAGE_KEY = 'chessism:players:delete-job'
 
 export async function sendPlayerAction(path, playerName) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_name: playerName })
-  })
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    const error = new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-    error.status = response.status
-    throw error
-  }
-
-  return payload
+  return postJson(path, { player_name: playerName })
 }
 
 export async function fetchJobStatus(jobId) {
-  const response = await fetch(`${API_BASE_URL}/jobs/${encodeURIComponent(jobId)}`, {
-    credentials: 'include'
-  })
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    const error = new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-    error.status = response.status
-    throw error
-  }
-
-  return payload
+  return getJson(`/jobs/${encodeURIComponent(jobId)}`)
 }
 
 export function loadStoredJob(storageKey) {

@@ -1,24 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { API_BASE_URL } from '../../config'
+import { getJson } from '../../services/apiClient'
+import { formatNumber } from '../../utils/formatters'
 
-const formatNumber = (value) => {
-  const numeric = Number(value || 0)
-  return new Intl.NumberFormat().format(numeric)
-}
-
-const fetchJson = async (path, signal) => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    signal,
-    credentials: 'include',
-    headers: { Accept: 'application/json' }
-  })
-
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`)
-  }
-
-  return response.json()
-}
+const fetchJson = (path, signal) => getJson(path, { signal })
 
 export function DashboardSummaryPanel() {
   const [generalities, setGeneralities] = useState(null)

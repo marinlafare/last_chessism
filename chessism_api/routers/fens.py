@@ -105,6 +105,31 @@ async def api_get_scored_positions_overview() -> JSONResponse:
     return JSONResponse(content=result)
 
 
+@router.get("/pending/repeated")
+async def api_get_most_repeated_pending_fens(
+    page: int = Query(1, ge=1)
+) -> JSONResponse:
+    """Return the most frequent FENs still waiting for an engine score."""
+    page_size = 5
+    offset = (page - 1) * page_size
+    fens = await get_top_fens_unscored(page_size + 1, offset=offset)
+    has_next = len(fens) > page_size
+    return JSONResponse(content={
+        "definition": "score_is_null",
+        "page": page,
+        "page_size": page_size,
+        "has_previous": page > 1,
+        "has_next": has_next,
+        "rows": [
+            {
+                "fen": fen_data["fen"],
+                "repetitions": int(fen_data.get("n_games") or 0),
+            }
+            for fen_data in fens[:page_size]
+        ],
+    })
+
+
 @router.get("/scored")
 async def api_get_scored_positions_page(
     sort: str = Query("impact", pattern="^(frequency|impact|evaluation)$"),

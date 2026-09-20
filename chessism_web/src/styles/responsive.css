@@ -1,0 +1,290 @@
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.footer-links a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --rail-width: 84px;
+  }
+
+  .superadmin-logout {
+    width: 56px;
+    font-size: 11px;
+  }
+
+  .rail-brand span,
+  .rail-btn span:last-child {
+    display: none;
+  }
+
+  .rail-btn {
+    justify-content: center;
+  }
+
+  .dashboard-hero,
+  .home-top-grid,
+  .players-top-grid,
+  .players-profile-layout,
+  .main-character-hover-grid,
+  .openings-layout,
+  .positions-workbench,
+  .pipeline-grid,
+  .scored-top-grid,
+  .scored-positions-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .status-grid,
+  .metric-grid,
+  .position-coverage-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --rail-width: 1fr;
+  }
+
+  .page-frame {
+    display: block;
+  }
+
+  .repeated-pending-heading {
+    flex-direction: column;
+  }
+
+  .repeated-pending-row {
+    grid-template-columns: 48px minmax(0, 1fr) 86px;
+    gap: 8px;
+    padding-inline: 9px;
+  }
+
+  .left-rail {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .left-rail-menu {
+    padding: 10px;
+  }
+
+  .superadmin-logout {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+
+  .admin-online-status {
+    top: 10px;
+    right: 10px;
+    max-width: calc(100vw - 20px);
+  }
+
+  .rail-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+  }
+
+  .rail-brand span {
+    display: inline;
+  }
+
+  .home-shell {
+    padding: 16px;
+  }
+
+  .analysis-loop-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-processes-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-loop-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analysis-process-parameters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-mode,
+  .player-game-scope-results,
+  .player-game-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-confirmation-heading,
+  .player-game-confirm-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-profile-section > .section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-profile-actions,
+  .player-delete-heading,
+  .player-delete-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-delete-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-header,
+  .section-head,
+  .players-rating-head,
+  .carousel-head,
+  .carousel-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .players-rating-head {
+    display: flex;
+    padding-right: 0;
+  }
+
+  .rating-scale-control {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .players-chart-mode-tabs {
+    justify-content: flex-start;
+    width: 100%;
+    gap: 6px;
+  }
+
+  .players-chart-mode-tab {
+    flex: 1 1 0;
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .carousel-actions {
+    justify-content: flex-start;
+  }
+
+  .carousel-stage {
+    grid-template-columns: 24px minmax(0, 1fr) 24px;
+    gap: 6px;
+  }
+
+  .carousel-edge-btn {
+    width: 24px;
+  }
+
+  .carousel-track {
+    grid-auto-columns: minmax(248px, 86vw);
+  }
+
+  .dashboard-hero-copy h2 {
+    font-size: 32px;
+  }
+
+  .status-grid,
+  .metric-grid,
+  .position-coverage-grid,
+  .games-generalities-grid,
+  .scored-side-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .coverage-bar-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .live-analysis-stage {
+    grid-template-columns: 1fr;
+  }
+
+  .live-score-bar {
+    width: 100%;
+    min-height: 34px;
+    flex-direction: row;
+  }
+
+  .live-score-bar span {
+    transform: translate(-50%, -50%);
+  }
+
+  .live-score-black,
+  .live-score-white {
+    height: 100%;
+  }
+
+  .live-score-black {
+    width: var(--black-score-percent, 50%);
+  }
+
+  .live-score-white {
+    width: var(--white-score-percent, 50%);
+  }
+
+  .scored-position-row,
+  .scored-game-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .scored-position-row .character-rating-value,
+  .scored-game-row .character-rating-value {
+    grid-column: 2;
+    text-align: left;
+  }
+
+  .scored-game-row .stat-chip {
+    grid-column: 1 / -1;
+  }
+
+  .scored-controls,
+  .scored-table-head,
+  .advantage-rating-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rating-group-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rating-group-button {
+    min-width: 0;
+  }
+
+  .mode-summary-head,
+  .mode-row {
+    grid-template-columns: 74px minmax(0, 1fr) 74px;
+  }
+}

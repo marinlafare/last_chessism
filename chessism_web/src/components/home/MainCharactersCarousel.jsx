@@ -1,15 +1,10 @@
 import { useEffect, useState } from 'react'
-import { API_BASE_URL } from '../../config'
+import { getJson } from '../../services/apiClient'
+import { formatNumber } from '../../utils/formatters'
 
 const TIME_CONTROLS = ['bullet', 'blitz', 'rapid']
 const PLAYER_PAGE_SIZE = 50
 const PLAYER_FETCH_LIMIT = 5000
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US')
-}
 
 const getDisplayName = (player) => {
   const fullName = String(player?.full_name || '').trim()
@@ -33,20 +28,10 @@ function MainCharactersCarousel() {
       setError('')
 
       try {
-        const response = await fetch(
-          `${API_BASE_URL}/players/main_characters/top?time_control=${encodeURIComponent(selectedMode)}&limit=${PLAYER_FETCH_LIMIT}`,
-          {
-            signal: controller.signal,
-            credentials: 'include',
-            headers: { Accept: 'application/json' }
-          }
+        const payload = await getJson(
+          `/players/main_characters/top?time_control=${encodeURIComponent(selectedMode)}&limit=${PLAYER_FETCH_LIMIT}`,
+          { signal: controller.signal }
         )
-        const payload = await response.json().catch(() => ({}))
-
-        if (!response.ok) {
-          throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-        }
-
         const sortedPlayers = Array.isArray(payload.players)
           ? [...payload.players].sort((a, b) => getPlayerRating(b) - getPlayerRating(a))
           : []

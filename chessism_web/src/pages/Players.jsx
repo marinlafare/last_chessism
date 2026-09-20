@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { requestJson as fetchJson } from '../services/apiClient'
+import { formatNumber } from '../utils/formatters'
 import {
   PLAYER_DELETE_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
@@ -19,26 +20,6 @@ const RESULT_BARS = [
   { key: 'losses', label: 'Losses', className: 'wl-fill-loss' },
   { key: 'draws', label: 'Draws', className: 'wl-fill-draw' }
 ]
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  return Number.isFinite(numeric) ? numeric.toLocaleString('en-US') : '0'
-}
-
-async function fetchJson(path, options = {}) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    credentials: 'include',
-    headers: { Accept: 'application/json', ...(options.headers || {}) }
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
 
 const fetchPlayerProfile = (playerName) => (
   fetchJson(`/players/${encodeURIComponent(playerName)}`)
@@ -367,6 +348,17 @@ function Players() {
         .replace(',', '')
         .toUpperCase()
     : null
+  const latestRating = Number(playerPositionStats?.latest_rating || 0)
+  const latestRatingMode = String(playerPositionStats?.latest_rating_mode || '').trim().toLowerCase()
+  const latestRatingDate = playerPositionStats?.latest_rating_at
+    ? new Date(playerPositionStats.latest_rating_at)
+        .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit', timeZone: 'UTC' })
+        .replace(',', '')
+        .toUpperCase()
+    : ''
+  const latestRatingDisplay = latestRating > 0
+    ? [formatNumber(latestRating), latestRatingMode, latestRatingDate].filter(Boolean).join(' · ')
+    : null
   const profileRows = profile
     ? [
         ['Player', profile.player_name],
@@ -375,6 +367,7 @@ function Players() {
         ['Country', profile.country],
         ['Location', profile.location],
         ['Followers', profile.followers],
+        ['Last rating', latestRatingDisplay],
         ['Joined', joinedDisplay],
         ['Status', profile.status]
       ].filter(([, value]) => value !== null && value !== undefined && value !== '')

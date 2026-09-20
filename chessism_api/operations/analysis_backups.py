@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
 
-from sqlalchemy import bindparam, delete, func, insert, select, update
+from sqlalchemy import bindparam, delete, func, insert, or_, select, update
 
 from chessism_api.database.ask_db import (
     refresh_database_summary_fen_counts,
@@ -137,18 +137,271 @@ def _append_continuation(record: dict[str, Any], row: dict[str, Any]) -> None:
     })
 
 
+def _analysis_export_statement(*filters: Any):
+    statement = (
+        select(
+            Fen.fen.label("fen"),
+            Fen.score.label("score"),
+            Fen.next_moves.label("next_moves"),
+            Fen.wdl_win.label("wdl_win"),
+            Fen.wdl_draw.label("wdl_draw"),
+            Fen.wdl_loss.label("wdl_loss"),
+            Fen.piece_count.label("piece_count"),
+            Fen.analysis_source.label("analysis_source"),
+            Fen.tablebase_wdl.label("tablebase_wdl"),
+            Fen.tablebase_dtz.label("tablebase_dtz"),
+            Fen.analyzed_at.label("analyzed_at"),
+            FenContinuation.rank.label("continuation_rank"),
+            FenContinuation.move.label("continuation_move"),
+            FenContinuation.score.label("continuation_score"),
+        )
+        .outerjoin(FenContinuation, FenContinuation.fen_fen == Fen.fen)
+        .where(Fen.score.is_not(None), *filters)
+        .order_by(Fen.fen, FenContinuation.rank)
+        .execution_options(yield_per=2_000)
+    )
+    return statement
+
+
+async def _collect_analysis_records(session: Any, statement: Any) -> dict[str, dict[str, Any]]:
+    records: dict[str, dict[str, Any]] = {}
+    stream = await session.stream(statement)
+    async for row in stream.mappings():
+        row_data = dict(row)
+        fen = str(row_data["fen"])
+        record = records.get(fen)
+        if record is None:
+            record = _analysis_record(row_data)
+            records[fen] = record
+        _append_continuation(record, row_data)
+    return records
+
+
+def _read_backup_metadata(backup_path: Path) -> dict[str, Any]:
+    metadata_path = _metadata_path(backup_path)
+    if not metadata_path.is_file():
+        return {}
+    try:
+        payload = json.loads(metadata_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _parse_backup_timestamp(value: Any) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _latest_incremental_backup() -> tuple[Path, dict[str, Any], datetime] | None:
+    candidates = sorted(
+        (
+            path for path in BACKUP_DIR.glob("fen-analysis-*.jsonl.gz")
+            if BACKUP_FILE_PATTERN.fullmatch(path.name)
+        ),
+        key=lambda path: path.name,
+        reverse=True,
+    )
+    for backup_path in candidates:
+        metadata = _read_backup_metadata(backup_path)
+        cutoff = _parse_backup_timestamp(
+            metadata.get("snapshot_cutoff")
+            or metadata.get("updated_at")
+            or metadata.get("created_at")
+        )
+        if metadata and cutoff is not None:
+            return backup_path, metadata, cutoff
+    return None
+
+
+async def _update_fen_analysis_backup(
+    ctx: dict,
+    backup_path: Path,
+    metadata: dict[str, Any],
+    previous_cutoff: datetime,
+    updated_at: datetime,
+) -> dict[str, Any]:
+    job_id = str(ctx.get("job_id") or "fen-analysis-backup")
+    expected_checksum = str(metadata.get("sha256") or "")
+    if expected_checksum and _sha256(backup_path) != expected_checksum:
+        raise ValueError("FEN-analysis backup checksum does not match")
+
+    await _write_progress(
+        ctx,
+        job_id,
+        kind="fen_analysis_backup",
+        total=0,
+        processed=0,
+        phase="loading_changes",
+        detail=f"Finding analysis changes since {previous_cutoff.isoformat()}.",
+    )
+
+    async with AsyncDBSession() as session:
+        changed_records = await _collect_analysis_records(
+            session,
+            _analysis_export_statement(
+                Fen.analyzed_at > previous_cutoff,
+                Fen.analyzed_at <= updated_at,
+            ),
+        )
+
+    if not changed_records:
+        result = {
+            **metadata,
+            "filename": backup_path.name,
+            "updated_at": updated_at.isoformat(),
+            "snapshot_cutoff": updated_at.isoformat(),
+            "added_records": 0,
+            "updated_records": 0,
+            "mode": "unchanged",
+        }
+        _atomic_write_json(_metadata_path(backup_path), result)
+        await _write_progress(
+            ctx,
+            job_id,
+            kind="fen_analysis_backup",
+            total=int(result.get("records") or 0),
+            processed=int(result.get("records") or 0),
+            phase="complete",
+            detail=f"{backup_path.name} is already up to date.",
+            result=result,
+        )
+        return result
+
+    header, existing_records = _backup_records(backup_path)
+    existing_count = 0
+    updated_count = 0
+    changed_fens = set(changed_records)
+    for record in existing_records:
+        existing_count += 1
+        if str(record.get("fen") or "") in changed_fens:
+            updated_count += 1
+
+    added_count = len(changed_records) - updated_count
+    final_count = existing_count + added_count
+    temporary_path = backup_path.with_name(f".{backup_path.name}.tmp")
+    processed = 0
+
+    await _write_progress(
+        ctx,
+        job_id,
+        kind="fen_analysis_backup",
+        total=final_count,
+        processed=0,
+        phase="merging",
+        detail=(
+            f"Updating {updated_count} and adding {added_count} analyzed positions "
+            f"to {backup_path.name}."
+        ),
+    )
+
+    try:
+        with gzip.open(temporary_path, "wt", encoding="utf-8", compresslevel=6) as output:
+            updated_header = {
+                **header,
+                "version": BACKUP_VERSION,
+                "records": final_count,
+                "updated_at": updated_at.isoformat(),
+                "snapshot_cutoff": updated_at.isoformat(),
+            }
+            output.write(json.dumps(updated_header, separators=(",", ":")) + "\n")
+
+            _, existing_records = _backup_records(backup_path)
+            for existing_record in existing_records:
+                fen = str(existing_record.get("fen") or "")
+                output.write(json.dumps(
+                    changed_records.pop(fen, existing_record),
+                    separators=(",", ":"),
+                ) + "\n")
+                processed += 1
+                if processed % PROGRESS_INTERVAL == 0:
+                    await _write_progress(
+                        ctx,
+                        job_id,
+                        kind="fen_analysis_backup",
+                        total=final_count,
+                        processed=processed,
+                        phase="merging",
+                        detail=f"Saved {processed}/{final_count} analyzed positions.",
+                    )
+
+            for fen in sorted(changed_records):
+                output.write(json.dumps(changed_records[fen], separators=(",", ":")) + "\n")
+                processed += 1
+
+        with temporary_path.open("rb") as backup_file:
+            os.fsync(backup_file.fileno())
+        os.replace(temporary_path, backup_path)
+    except Exception:
+        temporary_path.unlink(missing_ok=True)
+        raise
+
+    checksum = _sha256(backup_path)
+    result = {
+        "filename": backup_path.name,
+        "created_at": metadata.get("created_at") or header.get("created_at"),
+        "updated_at": updated_at.isoformat(),
+        "snapshot_cutoff": updated_at.isoformat(),
+        "records": processed,
+        "bytes": backup_path.stat().st_size,
+        "sha256": checksum,
+        "added_records": added_count,
+        "updated_records": updated_count,
+        "mode": "updated",
+    }
+    _atomic_write_json(_metadata_path(backup_path), result)
+
+    await _write_progress(
+        ctx,
+        job_id,
+        kind="fen_analysis_backup",
+        total=processed,
+        processed=processed,
+        phase="complete",
+        detail=(
+            f"Updated {backup_path.name}: {added_count} added, "
+            f"{updated_count} refreshed."
+        ),
+        result=result,
+    )
+    return result
+
+
 async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
-    """Write all committed Stockfish and tablebase results to a compressed JSONL file."""
+    """Create the first analysis snapshot, then incrementally update that snapshot."""
     job_id = str(ctx.get("job_id") or "fen-analysis-backup")
     created_at = datetime.now(timezone.utc)
-    filename = f"fen-analysis-{created_at.strftime('%Y%m%dT%H%M%S_%fZ')}.jsonl.gz"
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+
+    incremental_target = _latest_incremental_backup()
+    if incremental_target is not None:
+        backup_path, metadata, previous_cutoff = incremental_target
+        return await _update_fen_analysis_backup(
+            ctx,
+            backup_path,
+            metadata,
+            previous_cutoff,
+            created_at,
+        )
+
+    filename = f"fen-analysis-{created_at.strftime('%Y%m%dT%H%M%S_%fZ')}.jsonl.gz"
     final_path = _backup_path(filename)
     temporary_path = final_path.with_name(f".{filename}.tmp")
 
     async with AsyncDBSession() as session:
+        snapshot_filter = or_(Fen.analyzed_at.is_(None), Fen.analyzed_at <= created_at)
         total = int(await session.scalar(
-            select(func.count()).select_from(Fen).where(Fen.score.is_not(None))
+            select(func.count()).select_from(Fen).where(
+                Fen.score.is_not(None),
+                snapshot_filter,
+            )
         ) or 0)
 
         await _write_progress(
@@ -161,27 +414,8 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
             detail=f"Saving {total} analyzed positions.",
         )
 
-        statement = (
-            select(
-                Fen.fen.label("fen"),
-                Fen.score.label("score"),
-                Fen.next_moves.label("next_moves"),
-                Fen.wdl_win.label("wdl_win"),
-                Fen.wdl_draw.label("wdl_draw"),
-                Fen.wdl_loss.label("wdl_loss"),
-                Fen.piece_count.label("piece_count"),
-                Fen.analysis_source.label("analysis_source"),
-                Fen.tablebase_wdl.label("tablebase_wdl"),
-                Fen.tablebase_dtz.label("tablebase_dtz"),
-                Fen.analyzed_at.label("analyzed_at"),
-                FenContinuation.rank.label("continuation_rank"),
-                FenContinuation.move.label("continuation_move"),
-                FenContinuation.score.label("continuation_score"),
-            )
-            .outerjoin(FenContinuation, FenContinuation.fen_fen == Fen.fen)
-            .where(Fen.score.is_not(None))
-            .order_by(Fen.fen, FenContinuation.rank)
-            .execution_options(yield_per=2_000)
+        statement = _analysis_export_statement(
+            snapshot_filter,
         )
 
         processed = 0
@@ -198,6 +432,8 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
                     "format": BACKUP_FORMAT,
                     "version": BACKUP_VERSION,
                     "created_at": created_at.isoformat(),
+                    "updated_at": created_at.isoformat(),
+                    "snapshot_cutoff": created_at.isoformat(),
                     "records": total,
                 }
                 output.write(json.dumps(header, separators=(",", ":")) + "\n")
@@ -237,9 +473,14 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
     result = {
         "filename": filename,
         "created_at": created_at.isoformat(),
+        "updated_at": created_at.isoformat(),
+        "snapshot_cutoff": created_at.isoformat(),
         "records": processed,
         "bytes": final_path.stat().st_size,
         "sha256": checksum,
+        "added_records": processed,
+        "updated_records": 0,
+        "mode": "created",
     }
     metadata_path = _metadata_path(final_path)
     _atomic_write_json(metadata_path, result)
@@ -273,9 +514,14 @@ def list_fen_analysis_backups() -> list[dict[str, Any]]:
         backups.append({
             "filename": backup_path.name,
             "created_at": metadata.get("created_at"),
+            "updated_at": metadata.get("updated_at") or metadata.get("created_at"),
+            "snapshot_cutoff": metadata.get("snapshot_cutoff"),
             "records": metadata.get("records"),
             "bytes": int(metadata.get("bytes") or backup_path.stat().st_size),
             "sha256": metadata.get("sha256"),
+            "added_records": int(metadata.get("added_records") or 0),
+            "updated_records": int(metadata.get("updated_records") or 0),
+            "mode": metadata.get("mode"),
         })
     backups.sort(key=lambda item: item["filename"], reverse=True)
     return backups

@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { getJson, requestJson } from '../services/apiClient'
+import { formatNumber } from '../utils/formatters'
 
 const RATING_GROUP_OPTIONS = [
   { key: 'bad', label: 'bad' },
@@ -18,12 +19,6 @@ const RATING_GROUP_COLORS = {
 
 const BACKUP_JOB_STORAGE_KEY = 'chessism-fen-analysis-backup-job'
 const TERMINAL_JOB_PHASES = new Set(['complete', 'failed'])
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US')
-}
 
 const formatBytes = (value) => {
   const bytes = Number(value || 0)
@@ -66,37 +61,8 @@ const buildCountTicks = (maxValue, targetTickCount = 8) => {
   return ticks
 }
 
-async function fetchJson(path, signal) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    signal,
-    credentials: 'include',
-    headers: { Accept: 'application/json' }
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    const error = new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-    error.status = response.status
-    throw error
-  }
-
-  return payload
-}
-
-async function postJson(path) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    credentials: 'include',
-    headers: { Accept: 'application/json' }
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
+const fetchJson = (path, signal) => getJson(path, { signal })
+const postJson = (path) => requestJson(path, { method: 'POST' })
 
 function RatingScatterChart({ payload }) {
   const points = Array.isArray(payload?.ratings) ? payload.ratings : []
@@ -182,6 +148,16 @@ function ScoredPositions() {
   const [overview, setOverview] = useState(null)
   const [gameOverview, setGameOverview] = useState(null)
   const [advantageByRating, setAdvantageByRating] = useState(null)
+  const [repeatedPendingFens, setRepeatedPendingFens] = useState([])
+  const [repeatedPendingPage, setRepeatedPendingPage] = useState(1)
+  const [repeatedPendingPagination, setRepeatedPendingPagination] = useState({
+    page: 1,
+    pageSize: 5,
+    hasPrevious: false,
+    hasNext: false
+  })
+  const [repeatedPendingLoading, setRepeatedPendingLoading] = useState(false)
+  const [repeatedPendingError, setRepeatedPendingError] = useState('')
   const [selectedRatingGroup, setSelectedRatingGroup] = useState('medium')
   const [error, setError] = useState('')
   const [reloadToken, setReloadToken] = useState(0)
@@ -232,6 +208,33 @@ function ScoredPositions() {
     load()
     return () => controller.abort()
   }, [reloadToken])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    setRepeatedPendingLoading(true)
+    setRepeatedPendingError('')
+
+    fetchJson(`/fens/pending/repeated?page=${repeatedPendingPage}`, controller.signal)
+      .then((payload) => {
+        setRepeatedPendingFens(Array.isArray(payload?.rows) ? payload.rows : [])
+        setRepeatedPendingPagination({
+          page: Number(payload?.page || repeatedPendingPage),
+          pageSize: Number(payload?.page_size || 5),
+          hasPrevious: Boolean(payload?.has_previous),
+          hasNext: Boolean(payload?.has_next)
+        })
+      })
+      .catch((loadError) => {
+        if (loadError?.name !== 'AbortError') {
+          setRepeatedPendingError(loadError.message || 'Pending FENs unavailable.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setRepeatedPendingLoading(false)
+      })
+
+    return () => controller.abort()
+  }, [reloadToken, repeatedPendingPage])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -330,7 +333,7 @@ function ScoredPositions() {
         jobId: payload.job_id,
         kind: 'backup',
         phase: 'queued',
-        detail: payload.message || 'FEN-analysis backup queued.'
+        detail: payload.message || 'FEN-analysis backup update queued.'
       })
     } catch (saveError) {
       setBackupError(saveError.message || 'Unable to queue the FEN-analysis backup.')
@@ -384,7 +387,7 @@ function ScoredPositions() {
                 <div className="analysis-backup-head">
                   <div>
                     <h2 className="panel-title">FEN ANALYSIS BACKUPS</h2>
-                    <p>Save the expensive Stockfish results independently of the database.</p>
+                    <p>Create the first snapshot once, then merge only newly analyzed or refreshed FENs.</p>
                   </div>
                   <div className="analysis-backup-actions">
                     <button
@@ -393,7 +396,7 @@ function ScoredPositions() {
                       disabled={backupJobActive}
                       onClick={saveFenAnalysis}
                     >
-                      Save FEN analysis
+                      {latestBackup ? 'Update FEN analysis' : 'Save FEN analysis'}
                     </button>
                     <button
                       className="btn btn-secondary btn-inline"
@@ -414,6 +417,9 @@ function ScoredPositions() {
                     Latest: <strong>{latestBackup.filename}</strong>
                     {' · '}{formatNumber(latestBackup.records)} positions
                     {' · '}{formatBytes(latestBackup.bytes)}
+                    {latestBackup.updated_at
+                      ? ` · updated ${new Date(latestBackup.updated_at).toLocaleString()}`
+                      : ''}
                   </p>
                 ) : (
                   <p className="analysis-backup-latest">No saved FEN analysis yet.</p>
@@ -494,6 +500,73 @@ function ScoredPositions() {
                 <p className="result-line">No fully analyzed games with ratings yet.</p>
               )}
             </section>
+          </section>
+
+          <section className="scored-positions-panel repeated-pending-panel">
+            <div className="repeated-pending-heading">
+              <div>
+                <h2 className="panel-title">MOST REPEATED PENDING FENS</h2>
+                <p>Highest-frequency positions with no stored engine evaluation, ordered by repetitions.</p>
+              </div>
+              <span className="stat-chip">5 per page</span>
+            </div>
+            {repeatedPendingError ? <div className="status-banner warn">{repeatedPendingError}</div> : null}
+            {repeatedPendingFens.length ? (
+              <div
+                className="repeated-pending-list"
+                role="table"
+                aria-label="Most repeated unscored FENs"
+                aria-busy={repeatedPendingLoading}
+              >
+                <div className="repeated-pending-row repeated-pending-columns" role="row">
+                  <span role="columnheader">Rank</span>
+                  <span role="columnheader">FEN</span>
+                  <span role="columnheader">Repetitions</span>
+                </div>
+                {repeatedPendingFens.map((position, index) => (
+                  <div className="repeated-pending-row" role="row" key={position.fen}>
+                    <span className="repeated-pending-rank" role="cell">
+                      #{((repeatedPendingPagination.page - 1) * repeatedPendingPagination.pageSize) + index + 1}
+                    </span>
+                    <code className="repeated-pending-fen" role="cell">{position.fen}</code>
+                    <strong className="repeated-pending-count" role="cell">
+                      {formatNumber(position.repetitions)}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="result-line">
+                {repeatedPendingLoading ? 'Loading pending FENs…' : 'No pending FENs found.'}
+              </p>
+            )}
+            <div className="repeated-pending-pagination" aria-label="Pending FEN pages">
+              <button
+                className="repeated-pending-arrow"
+                type="button"
+                aria-label="Previous pending FEN page"
+                disabled={repeatedPendingLoading || !repeatedPendingPagination.hasPrevious}
+                onClick={() => {
+                  setRepeatedPendingLoading(true)
+                  setRepeatedPendingPage((current) => Math.max(1, current - 1))
+                }}
+              >
+                ←
+              </button>
+              <span>Page {formatNumber(repeatedPendingPagination.page)}</span>
+              <button
+                className="repeated-pending-arrow"
+                type="button"
+                aria-label="Next pending FEN page"
+                disabled={repeatedPendingLoading || !repeatedPendingPagination.hasNext}
+                onClick={() => {
+                  setRepeatedPendingLoading(true)
+                  setRepeatedPendingPage((current) => current + 1)
+                }}
+              >
+                →
+              </button>
+            </div>
           </section>
 
           <section className="scored-positions-panel scored-rating-scatter-panel">
