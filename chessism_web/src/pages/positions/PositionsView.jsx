@@ -11,6 +11,7 @@ import {
   formatNumber,
   getPlayerGameSelectionLabel,
   getScoreLabel,
+  isTrackedJobActive,
   moveToSan,
 } from './positionPageSupport'
 
