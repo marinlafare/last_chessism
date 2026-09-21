@@ -320,6 +320,7 @@ export {
   loadStoredJobState,
   moveToSan,
   pageHasAttention,
+  parseTimestampSeconds,
   playCompletionSound,
   postJson,
   storeJobState,

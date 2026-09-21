@@ -28,7 +28,7 @@ export default function PositionsView({ page }) {
     playerGameAnalysis, playerGamePreview, playerGamePreviewTotalSeconds,
     playerInspection, playerJob, remainingFenGames, result, scoredPositions,
     setFenInput, setGlobalJob, setLoopJob, setMultipv, setNodesLimit,
-    setPlayerGameAnalysis, setPlayerJob, turnLabel, validation,
+    setPlayerGameAnalysis, setPlayerInspection, setPlayerJob, turnLabel, validation,
   } = page
 
   return (

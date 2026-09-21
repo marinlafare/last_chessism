@@ -2,10 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   COMPLETED_JOB_FADE_MS, COMPLETED_JOB_VISIBLE_MS, DEFAULT_ANALYSIS_NODES,
   ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE, START_FEN, analyzeFen, deleteJson,
-  fetchJson, getAnalysisLines, getAnalysisProcessView, getPositionJobKey,
-  getProgressSnapshot, getTrackedJobPhase, isTrackedJobActive, isTrackedJobComplete,
-  loadStoredJobState, pageHasAttention, playCompletionSound, postJson, storeJobState,
-  unlockCompletionAudio, validateFen,
+  fetchJson, formatNumber, getAnalysisLines, getAnalysisProcessView, getPositionJobKey,
+  getProgressSnapshot, getTrackedJobPhase, isAnalysisJobKey, isTrackedJobActive,
+  isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
+  playCompletionSound, postJson, storeJobState, unlockCompletionAudio, validateFen,
 } from './positionPageSupport'
 
 export function usePositionsPage() {
@@ -930,7 +930,7 @@ export function usePositionsPage() {
     multipv, nodesLimit, pendingPositions, playerGameAnalysis, playerGamePreview,
     playerGamePreviewTotalSeconds, playerInspection, playerJob, remainingFenGames,
     result, scoredPositions, setFenInput, setGlobalJob, setJobCardRef, setLoopJob,
-    setMultipv, setNodesLimit, setPlayerGameAnalysis, setPlayerJob, turnLabel,
-    validation,
+    setMultipv, setNodesLimit, setPlayerGameAnalysis, setPlayerInspection,
+    setPlayerJob, turnLabel, validation,
   }
 }
