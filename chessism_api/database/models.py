@@ -2,8 +2,9 @@
 import enum
 from typing import Any, Dict
 from sqlalchemy import (
-    Column, ForeignKey, Integer, String, Float, BigInteger, Table,
-    DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON
+    Column, ForeignKey, Integer, String, Float, BigInteger,
+    DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
+    SmallInteger, text
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
@@ -39,6 +40,7 @@ class Player(Base):
     twitch_url = Column('twitch_url', String, nullable=True)
     verified = Column('verified', Boolean, nullable=True)
     league = Column('league', String, nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     
     stats = relationship(
         "PlayerStats", 
@@ -302,6 +304,11 @@ class Fen(Base):
     wdl_win = Column('wdl_win', Float, nullable=True)
     wdl_draw = Column('wdl_draw', Float, nullable=True)
     wdl_loss = Column('wdl_loss', Float, nullable=True)
+    piece_count = Column('piece_count', SmallInteger, nullable=True)
+    analysis_source = Column('analysis_source', String(32), nullable=True)
+    tablebase_wdl = Column('tablebase_wdl', SmallInteger, nullable=True)
+    tablebase_dtz = Column('tablebase_dtz', Integer, nullable=True)
+    analyzed_at = Column('analyzed_at', DateTime(timezone=True), nullable=True)
     
     # --- MODIFIED: Point to the new association class ---
     games = relationship(
@@ -318,6 +325,20 @@ class Fen(Base):
         "FenContinuation",
         back_populates="fen",
         cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_fen_pending_tablebase",
+            n_games.desc(),
+            fen,
+            postgresql_where=text(
+                "score IS NULL "
+                "AND COALESCE(analysis_source, '') <> 'tablebase_unavailable' "
+                "AND COALESCE(piece_count, "
+                "char_length(translate(split_part(fen, ' ', 1), '12345678/', ''))) <= 5"
+            ),
+        ),
     )
 
 

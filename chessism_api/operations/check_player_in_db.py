@@ -2,18 +2,12 @@
 
 import time
 from typing import Set, List
-import asyncio
-from math import ceil
 
-from sqlalchemy import Column, String, text, select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import Column, String, text
 from sqlalchemy.orm import declarative_base
 
-# --- FIXED IMPORTS ---
-from chessism_api.operations.models import PlayerCreateData
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.models import Player
-# ---
 
 # --- TEMPORARY TABLE MODEL ---
 TempBase = declarative_base()

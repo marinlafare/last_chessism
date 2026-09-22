@@ -1,18 +1,8 @@
-import { API_BASE_URL } from '../config'
+import { getJson } from './apiClient'
 
 const na = null
 
-const requestJson = async (path, signal) => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    signal,
-    credentials: 'include',
-    headers: { Accept: 'application/json' }
-  })
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status} on ${path}`)
-  }
-  return response.json()
-}
+const requestJson = (path, signal) => getJson(path, { signal })
 
 const normalizeFromStatus = (payload) => ({
   api: {

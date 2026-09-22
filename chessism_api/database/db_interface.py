@@ -4,7 +4,7 @@ from sqlalchemy import select, Integer, func, update, bindparam, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player, Month
+from chessism_api.database.models import Base, Fen, to_dict, GameFenAssociation, Player, Month
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 _ModelType = TypeVar("_ModelType", bound=Base)
@@ -138,6 +138,10 @@ class DBInterface:
                     index_elements=[self.db_class.fen],
                     set_={
                         'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
+                        'piece_count': func.coalesce(
+                            self.db_class.piece_count,
+                            pg_insert(self.db_class).excluded.piece_count,
+                        ),
                         
                         # --- THIS IS THE SYNTAX FIX ---
                         'moves_counter': func.concat(
@@ -186,99 +190,6 @@ class DBInterface:
     # --- END NEW METHOD ---
 
 
-    async def upsert_main_fens(self,
-                                        objects_to_insert: ListOfDataObjects,
-                                        objects_to_update: ListOfDataObjects) -> bool:
-        """
-        PERFORMANCE WARNING: The update logic (for item in objects_to_update)
-        runs session.get() inside a loop. This is an N+1 query problem
-        and will be very slow for large update lists.
-        ---
-        """
-        if not objects_to_insert and not objects_to_update:
-            return True
-
-        async with AsyncDBSession() as session:
-            try:
-                # --- Process Inserts ---
-                if objects_to_insert:
-                    # --- FIX: Pass data as second argument ---
-                    insert_stmt = pg_insert(Fen).on_conflict_do_nothing(
-                        index_elements=[Fen.fen]
-                    )
-                    await session.execute(insert_stmt, objects_to_insert)
-
-                # --- Process Updates (N+1 Query Problem) ---
-                if objects_to_update:
-                    for item_data in objects_to_update:
-                        fen_to_update = item_data['fen']
-                        new_moves_counter = item_data['moves_counter']
-                        
-                        # This session.get() is inside a loop, causing N+1 queries.
-                        db_item = await session.get(Fen, fen_to_update)
-                        
-                        if db_item:
-                            existing_moves_counter = db_item.moves_counter
-                            if new_moves_counter not in existing_moves_counter:
-                                updated_moves_counter = existing_moves_counter + new_moves_counter
-                            else:
-                                updated_moves_counter = existing_moves_counter
-                                
-                            db_item.n_games += item_data['n_games']
-                            db_item.moves_counter = updated_moves_counter
-                            db_item.next_moves = item_data['next_moves']
-                            db_item.score = item_data['score']
-
-                await session.commit()
-                return True
-            except Exception as e:
-                await session.rollback()
-                raise
-
-    # --- REMOVED: Old association functions ---
-
-    async def update_all(self, data: ListOfDataObjects) -> bool:
-        """
-        Updates multiple Game records to set 'fens_done' = True.
-        
-        Args:
-            data: A list of game links (Integers) to be updated.
-        """
-        if not data:
-            print(f"No data provided for bulk update of {self.db_class.__tablename__}.")
-            return True
-
-        primary_key_column = Game.link
-        links_to_update = data
-        BATCH_SIZE = 10000
-
-        chunks = [links_to_update[i:i + BATCH_SIZE] for i in range(0, len(links_to_update), BATCH_SIZE)]
-
-        async with AsyncDBSession() as session:
-            try:
-                total_updated_rows = 0
-                for i, chunk in enumerate(chunks):
-                    if not chunk:
-                        continue
-
-                    stmt = (
-                        update(Game)
-                        .where(primary_key_column.in_(chunk))
-                        .values(fens_done=True)
-                    )
-                    
-                    result = await session.execute(stmt)
-                    total_updated_rows += result.rowcount
-
-                await session.commit()
-                print(f"Successfully committed a total of {total_updated_rows} game updates for 'fens_done'.")
-                return True
-
-            except Exception as e:
-                await session.rollback()
-                print(f"An error occurred during bulk update of game 'fens_done': {e}")
-                raise
-                
     async def update_fen_analysis_data(self,
                                             session: AsyncSession, # <-- MODIFIED: Use existing session
                                             analysis_data: ListOfDataObjects) -> int:
@@ -303,6 +214,7 @@ class DBInterface:
             for item in analysis_data:
                 prepared_data.append({
                     'p_fen': item['fen'],
+                    'p_piece_count': item.get('piece_count'),
                     'p_score': item['score'],
                     'p_next_moves': item['next_moves'],
                     'p_wdl_win': item.get('wdl_win'),
@@ -317,15 +229,23 @@ class DBInterface:
                 update(Fen.__table__) # <-- Use Fen table
                 .where(Fen.fen == bindparam('p_fen'))
                 .values(
+                    piece_count=func.coalesce(
+                        Fen.piece_count,
+                        bindparam('p_piece_count'),
+                    ),
                     score=bindparam('p_score'),
                     next_moves=bindparam('p_next_moves'),
                     wdl_win=bindparam('p_wdl_win'),
                     wdl_draw=bindparam('p_wdl_draw'),
-                    wdl_loss=bindparam('p_wdl_loss')
+                    wdl_loss=bindparam('p_wdl_loss'),
+                    analysis_source='stockfish',
+                    tablebase_wdl=None,
+                    tablebase_dtz=None,
+                    analyzed_at=func.now(),
                 )
             )
             
-            result = await session.execute(
+            await session.execute(
                 stmt,
                 prepared_data,
                 execution_options={"synchronize_session": False}
@@ -341,24 +261,4 @@ class DBInterface:
         except Exception as e:
             # DO NOT ROLL BACK HERE. The caller will roll back.
             print(f"An error occurred during bulk update of FEN analysis data: {e}", flush=True)
-            raise
-            
-async def reset_all_game_fens_done_to_false() -> int:
-    """
-    Resets the 'fens_done' column to False for all Game records where it is currently True.
-    """
-    async with AsyncDBSession() as session:
-        try:
-            stmt = (
-                update(Game)
-                .where(Game.fens_done == True)
-                .values(fens_done=False)
-            )
-            result = await session.execute(stmt)
-            await session.commit()
-            print(f"Successfully reset 'fens_done' to False for {result.rowcount} game(s).")
-            return result.rowcount
-        except Exception as e:
-            await session.rollback()
-            print(f"An error occurred while resetting 'fens_done' status: {e}")
             raise

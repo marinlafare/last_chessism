@@ -2,20 +2,18 @@
 
 import asyncio
 import chess
+import json
 import time
 from typing import List, Dict, Any, Tuple
-from sqlalchemy import select, update, func, text
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime
 import os
 import math # Import math
 
 # --- NEW: arq imports for the "boss" job ---
-from arq import create_pool
 from arq.connections import ArqRedis
-from arq.jobs import Job
-from chessism_api.redis_client import redis_settings
-# ---
+from arq.jobs import Job, JobStatus
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Game, Move, Fen
@@ -29,6 +27,155 @@ from chessism_api.database.ask_db import (
     refresh_scored_position_summary,
     refresh_scored_rating_summary
 )
+from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
+
+
+FEN_PIPELINE_COORDINATION_KEY = "chessism:automatic_fen_pipeline"
+FEN_PIPELINE_PROGRESS_KIND = "fen_extraction"
+FEN_PIPELINE_BATCH_SIZE = 1_000
+FEN_PIPELINE_WORKERS = 3
+FEN_PIPELINE_LOCK_TTL_SECONDS = 60 * 60 * 24
+FEN_PIPELINE_RESERVATION_TTL_SECONDS = 60
+PROGRESS_TTL_SECONDS = 60 * 60 * 24
+ACTIVE_JOB_STATUSES = {
+    JobStatus.queued,
+    JobStatus.deferred,
+    JobStatus.in_progress,
+}
+
+
+def count_fen_pieces(fen: str) -> int:
+    """Count chessmen in a FEN without constructing another board object."""
+    board_field = str(fen or "").split(" ", 1)[0]
+    return sum(character.isalpha() for character in board_field)
+
+
+def _decode_redis_text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value or "")
+
+
+async def _write_fen_pipeline_progress(
+    redis: ArqRedis,
+    job_id: str,
+    *,
+    total: int,
+    processed: int,
+    phase: str,
+    detail: str,
+) -> None:
+    payload = {
+        "job_id": job_id,
+        "kind": FEN_PIPELINE_PROGRESS_KIND,
+        "total": max(0, int(total)),
+        "processed": max(0, int(processed)),
+        "failed": 0,
+        "phase": phase,
+        "detail": detail,
+        "updated_at": time.time(),
+    }
+    await redis.set(
+        f"chessism:job_progress:{job_id}",
+        json.dumps(payload),
+        ex=PROGRESS_TTL_SECONDS,
+    )
+
+
+async def ensure_fen_pipeline_enqueued(
+    redis: ArqRedis,
+    *,
+    total_games_to_process: int | None = None,
+    batch_size: int = FEN_PIPELINE_BATCH_SIZE,
+    num_workers: int = FEN_PIPELINE_WORKERS,
+) -> Dict[str, Any]:
+    """Ensure one automatic FEN pipeline is draining all pending games."""
+    pending_games = int(await _get_remaining_fens_count_committed() or 0)
+    if pending_games <= 0:
+        return {
+            "status": "up_to_date",
+            "job_id": None,
+            "pending_games": 0,
+        }
+
+    current_value = await redis.get(FEN_PIPELINE_COORDINATION_KEY)
+    current_job_id = _decode_redis_text(current_value)
+    if current_job_id and current_job_id != "reserving":
+        current_job = Job(current_job_id, redis, _queue_name="pipeline_queue")
+        current_status = await current_job.status()
+        if current_status in ACTIVE_JOB_STATUSES:
+            return {
+                "status": "already_active",
+                "job_id": current_job_id,
+                "pending_games": pending_games,
+            }
+        await redis.delete(FEN_PIPELINE_COORDINATION_KEY)
+    elif current_job_id == "reserving":
+        return {
+            "status": "already_active",
+            "job_id": None,
+            "pending_games": pending_games,
+        }
+
+    reserved = await redis.set(
+        FEN_PIPELINE_COORDINATION_KEY,
+        "reserving",
+        ex=FEN_PIPELINE_RESERVATION_TTL_SECONDS,
+        nx=True,
+    )
+    if not reserved:
+        active_value = await redis.get(FEN_PIPELINE_COORDINATION_KEY)
+        active_job_id = _decode_redis_text(active_value)
+        return {
+            "status": "already_active",
+            "job_id": active_job_id if active_job_id != "reserving" else None,
+            "pending_games": pending_games,
+        }
+
+    requested_games = min(
+        pending_games,
+        max(1, int(total_games_to_process or pending_games)),
+    )
+    try:
+        job = await redis.enqueue_job(
+            "run_fen_pipeline",
+            total_games_to_process=requested_games,
+            batch_size=max(1, int(batch_size)),
+            num_workers=max(1, int(num_workers)),
+            _queue_name="pipeline_queue",
+        )
+        if job is None:
+            raise RuntimeError("Redis did not create the FEN pipeline job.")
+
+        job_id = str(job.job_id)
+        await redis.set(
+            FEN_PIPELINE_COORDINATION_KEY,
+            job_id,
+            ex=FEN_PIPELINE_LOCK_TTL_SECONDS,
+        )
+        await _write_fen_pipeline_progress(
+            redis,
+            job_id,
+            total=requested_games,
+            processed=0,
+            phase="queued",
+            detail="Waiting for automatic FEN extraction.",
+        )
+        return {
+            "status": "queued",
+            "job_id": job_id,
+            "pending_games": pending_games,
+        }
+    except Exception:
+        if _decode_redis_text(await redis.get(FEN_PIPELINE_COORDINATION_KEY)) == "reserving":
+            await redis.delete(FEN_PIPELINE_COORDINATION_KEY)
+        raise
+
+
+async def _release_fen_pipeline_coordination(redis: ArqRedis, job_id: str) -> None:
+    current_job_id = _decode_redis_text(await redis.get(FEN_PIPELINE_COORDINATION_KEY))
+    if current_job_id == job_id:
+        await redis.delete(FEN_PIPELINE_COORDINATION_KEY)
 
 
 # ---
@@ -223,35 +370,45 @@ def _aggregate_fen_data_in_memory(all_associations: List[Dict[str, Any]]) -> Tup
         if fen_str not in fen_map:
             fen_map[fen_str] = {
                 'fen': fen_str,
+                'piece_count': count_fen_pieces(fen_str),
                 'n_games': 1,
                 'moves_counter': move_counter_str, # e.g., "#0_1"
+                '_move_counters': {move_counter_str},
                 'score': None,
                 'next_moves': None
             }
         else:
             fen_map[fen_str]['n_games'] += 1
-            # --- THIS IS THE FIX ---
-            # This logic now correctly checks for uniqueness
-            # e.g., if "#0_1" is not in "#0_1", this is False.
-            # e.g., if "#1_1" is not in "#0_1", this is True.
-            if move_counter_str not in fen_map[fen_str]['moves_counter']:
+            if move_counter_str not in fen_map[fen_str]['_move_counters']:
+                fen_map[fen_str]['_move_counters'].add(move_counter_str)
                 fen_map[fen_str]['moves_counter'] += move_counter_str # Appends "#1_1" -> "#0_1#1_1"
-            # --- END FIX ---
 
     # --- THIS IS THE FIX: Create the *correct* list for associations ---
     # The aggregated list (fen_map.values()) is for the 'fen' table.
     # The original 'all_associations' list is needed for the 'game_fen_association' table.
     # We just need to remove the temporary 'move_counter_string' key.
     
-    associations_for_db = []
+    unique_associations = []
+    seen_associations = set()
     for assoc in all_associations:
-        # Create a copy and remove the temp key
-        assoc_copy = assoc.copy()
-        assoc_copy.pop('move_counter_string', None)
-        associations_for_db.append(assoc_copy)
-    
-    # We deduplicate *this* list, not the original
-    unique_associations = list({tuple(d.items()): d for d in associations_for_db}.values())
+        key = (
+            assoc['game_link'],
+            assoc['fen_fen'],
+            assoc['n_move'],
+            assoc['move_color'],
+        )
+        if key in seen_associations:
+            continue
+        seen_associations.add(key)
+        unique_associations.append({
+            'game_link': assoc['game_link'],
+            'fen_fen': assoc['fen_fen'],
+            'n_move': assoc['n_move'],
+            'move_color': assoc['move_color'],
+        })
+
+    for fen_data in fen_map.values():
+        fen_data.pop('_move_counters')
 
     print(f"[FEN AGGREGATOR] Found {len(fen_map)} unique FENs.")
     print(f"[FEN AGGREGATOR] Found {len(unique_associations)} unique associations.")
@@ -261,13 +418,17 @@ def _aggregate_fen_data_in_memory(all_associations: List[Dict[str, Any]]) -> Tup
 
 # --- NEW: List splitter utility ---
 def split_list(data: List[Any], n_chunks: int) -> List[List[Any]]:
-    """Splits a list into n roughly equal chunks."""
+    """Split data into exactly ``n_chunks`` balanced chunks."""
     if n_chunks <= 0:
         return [data]
-    chunk_size = math.ceil(len(data) / n_chunks)
-    if chunk_size == 0:
-        return [[] for _ in range(n_chunks)]
-    return [data[i:i + chunk_size] for i in range(0, len(data), chunk_size)]
+    base_size, remainder = divmod(len(data), n_chunks)
+    chunks = []
+    start = 0
+    for index in range(n_chunks):
+        chunk_size = base_size + (1 if index < remainder else 0)
+        chunks.append(data[start:start + chunk_size])
+        start += chunk_size
+    return chunks
 
 # ---
 # 3. BACKGROUND JOBS (MODIFIED)
@@ -409,12 +570,8 @@ async def run_fen_insertion_job(
     
     print(f"{job_log_prefix} Inserting {total_fens} FENs in {num_batches} batches of {TRANSACTION_BATCH_SIZE}...", flush=True)
     
-    batches = [
-        fens_to_insert[i:i + TRANSACTION_BATCH_SIZE] 
-        for i in range(0, total_fens, TRANSACTION_BATCH_SIZE)
-    ]
-
-    for i, batch in enumerate(batches):
+    for i, start in enumerate(range(0, total_fens, TRANSACTION_BATCH_SIZE)):
+        batch = fens_to_insert[start:start + TRANSACTION_BATCH_SIZE]
         batch_start_time_inner = time.time()
         print(f"{job_log_prefix} Starting FEN batch {i+1}/{num_batches} ({len(batch)} records)...", flush=True)
         try:
@@ -462,12 +619,8 @@ async def run_association_insertion_job(
     
     print(f"{job_log_prefix} Inserting {total_assocs} associations in {num_batches} batches of {TRANSACTION_BATCH_SIZE}...", flush=True)
     
-    batches = [
-        associations_to_insert[i:i + TRANSACTION_BATCH_SIZE] 
-        for i in range(0, total_assocs, TRANSACTION_BATCH_SIZE)
-    ]
-
-    for i, batch in enumerate(batches):
+    for i, start in enumerate(range(0, total_assocs, TRANSACTION_BATCH_SIZE)):
+        batch = associations_to_insert[start:start + TRANSACTION_BATCH_SIZE]
         batch_start_time_inner = time.time()
         print(f"{job_log_prefix} Starting Association batch {i+1}/{num_batches} ({len(batch)} records)...", flush=True)
         try:
@@ -488,7 +641,7 @@ async def run_association_insertion_job(
 
 
 # --- STAGE 0 "Boss" Job ---
-async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: int, num_workers: int, **kwargs):
+async def _run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: int, num_workers: int, **kwargs):
     """
     STAGE 0: (BOSS "MapReduce" JOB)
     Orchestrates the entire FEN generation pipeline based on user's architecture.
@@ -513,19 +666,32 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
         return
         
     actual_games_to_process = min(total_games_to_process, games_remaining_in_db)
+    await _write_fen_pipeline_progress(
+        redis,
+        str(ctx.get("job_id") or "unknown"),
+        total=actual_games_to_process,
+        processed=0,
+        phase="extracting",
+        detail=f"Extracting positions from {actual_games_to_process} games.",
+    )
     
     print(f"{job_log_prefix} User requested {total_games_to_process}, DB has {games_remaining_in_db} remaining.", flush=True)
     print(f"{job_log_prefix} Will process {actual_games_to_process} total games. Distributing to {num_workers} workers.", flush=True)
 
     # --- 2. Enqueue "Generation" (Map) jobs ---
-    games_per_worker = math.ceil(actual_games_to_process / num_workers)
+    games_per_worker, extra_games = divmod(actual_games_to_process, num_workers)
+    generation_quotas = [
+        games_per_worker + (1 if index < extra_games else 0)
+        for index in range(num_workers)
+    ]
+    generation_quotas = [quota for quota in generation_quotas if quota > 0]
     
     gen_jobs: List[Job] = []
-    print(f"{job_log_prefix} Enqueuing {num_workers} generation jobs...", flush=True)
-    for i in range(num_workers):
+    print(f"{job_log_prefix} Enqueuing {len(generation_quotas)} generation jobs...", flush=True)
+    for quota in generation_quotas:
         job = await redis.enqueue_job(
             'run_fen_generation_job',
-            total_games_to_process=games_per_worker, 
+            total_games_to_process=quota,
             batch_size=batch_size, 
             _queue_name='fen_queue'
         )
@@ -537,7 +703,7 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
         try:
             result_list = await job.result(timeout=None) # Wait forever
             all_associations_from_workers.extend(result_list)
-            print(f"{job_log_prefix} Generation job {i+1}/{num_workers} (ID: {job.job_id}) finished. Got {len(result_list)} associations.", flush=True)
+            print(f"{job_log_prefix} Generation job {i+1}/{len(gen_jobs)} (ID: {job.job_id}) finished. Got {len(result_list)} associations.", flush=True)
         except Exception as e:
             print(f"CRITICAL: {job_log_prefix} Generation job {i+1} (ID: {job.job_id}) FAILED: {repr(e)}", flush=True)
     
@@ -546,6 +712,20 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
     if not all_associations_from_workers:
         print(f"{job_log_prefix} No associations were generated. Aborting.", flush=True)
         return
+
+    processed_game_links = {
+        int(association["game_link"])
+        for association in all_associations_from_workers
+        if association.get("game_link") is not None
+    }
+    await _write_fen_pipeline_progress(
+        redis,
+        str(ctx.get("job_id") or "unknown"),
+        total=actual_games_to_process,
+        processed=len(processed_game_links),
+        phase="saving_fens",
+        detail="Saving extracted positions.",
+    )
 
     # --- 4. Perform Central Aggregation (Reduce) ---
     fens_to_insert, associations_to_insert = _aggregate_fen_data_in_memory(all_associations_from_workers)
@@ -579,6 +759,14 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
             return
 
     print(f"{job_log_prefix} All FENs inserted. Proceeding to associations.", flush=True)
+    await _write_fen_pipeline_progress(
+        redis,
+        str(ctx.get("job_id") or "unknown"),
+        total=actual_games_to_process,
+        processed=len(processed_game_links),
+        phase="saving_games",
+        detail="Linking positions back to their games.",
+    )
 
     # --- 8. Enqueue "Association Insertion" (Write Assocs) jobs ---
     print(f"{job_log_prefix} Enqueuing {num_workers} Association insertion jobs...", flush=True)
@@ -620,4 +808,75 @@ async def run_fen_pipeline(ctx: dict, total_games_to_process: int, batch_size: i
         print(f"{job_log_prefix} Refreshed scored rating summary.", flush=True)
     except Exception as e:
         print(f"CRITICAL: {job_log_prefix} Failed to refresh game analysis summary: {repr(e)}", flush=True)
+    await _write_fen_pipeline_progress(
+        redis,
+        str(ctx.get("job_id") or "unknown"),
+        total=actual_games_to_process,
+        processed=actual_games_to_process,
+        phase="complete",
+        detail=f"Finished FEN extraction for {actual_games_to_process} games.",
+    )
     print(f"--- [END] {job_log_prefix} ---", flush=True)
+
+
+async def run_fen_pipeline(
+    ctx: dict,
+    total_games_to_process: int,
+    batch_size: int,
+    num_workers: int,
+    **kwargs,
+):
+    """Run one FEN pass, then automatically schedule another until caught up."""
+    redis: ArqRedis = ctx["redis"]
+    job_id = str(ctx.get("job_id") or "unknown")
+    completed_without_exception = False
+    try:
+        result = await _run_fen_pipeline(
+            ctx,
+            total_games_to_process=total_games_to_process,
+            batch_size=batch_size,
+            num_workers=num_workers,
+            **kwargs,
+        )
+        await _write_fen_pipeline_progress(
+            redis,
+            job_id,
+            total=max(0, int(total_games_to_process)),
+            processed=max(0, int(total_games_to_process)),
+            phase="complete",
+            detail="Automatic FEN extraction pass finished.",
+        )
+        completed_without_exception = True
+        return result
+    except Exception as error:
+        await _write_fen_pipeline_progress(
+            redis,
+            job_id,
+            total=max(0, int(total_games_to_process)),
+            processed=0,
+            phase="failed",
+            detail=f"Automatic FEN extraction failed: {error}",
+        )
+        raise
+    finally:
+        await _release_fen_pipeline_coordination(redis, job_id)
+        if completed_without_exception:
+            follow_up = await ensure_fen_pipeline_enqueued(
+                redis,
+                batch_size=batch_size,
+                num_workers=num_workers,
+            )
+            if follow_up["status"] == "queued":
+                print(
+                    f"[FEN PIPELINE {job_id[:6]}] Queued follow-up job "
+                    f"{follow_up['job_id']} for {follow_up['pending_games']} games.",
+                    flush=True,
+                )
+            elif follow_up["status"] == "up_to_date":
+                tablebase_job = await ensure_tablebase_analysis_enqueued(redis)
+                if tablebase_job["status"] == "queued":
+                    print(
+                        f"[FEN PIPELINE {job_id[:6]}] Queued Syzygy job "
+                        f"{tablebase_job['job_id']} for {tablebase_job['pending']} positions.",
+                        flush=True,
+                    )

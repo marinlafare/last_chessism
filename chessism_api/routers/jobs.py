@@ -3,7 +3,7 @@ import json
 from typing import Any
 
 from arq.jobs import Job, JobStatus
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from arq.connections import ArqRedis
 
@@ -12,6 +12,26 @@ from chessism_api.redis_client import get_redis_pool
 router = APIRouter()
 
 KNOWN_QUEUES = ("pipeline_queue", "fen_queue", "analysis_queue", "games_queue", "arq:queue")
+ANALYSIS_JOB_FUNCTIONS = {
+    "run_analysis_job",
+    "run_player_analysis_job",
+    "run_analysis_loop_job",
+    "run_player_games_analysis_job",
+}
+
+DELETE_QUEUED_JOB_SCRIPT = """
+if redis.call('EXISTS', KEYS[2]) == 1 then
+    return -1
+end
+if not redis.call('ZSCORE', KEYS[1], ARGV[1]) then
+    return 0
+end
+redis.call('ZREM', KEYS[1], ARGV[1])
+for index = 3, #KEYS do
+    redis.call('DEL', KEYS[index])
+end
+return 1
+"""
 
 
 def _serialize_value(value: Any) -> Any:
@@ -39,10 +59,15 @@ def _serialize_job_info(info: Any) -> dict[str, Any] | None:
     if info is None:
         return None
 
+    serialized_kwargs = _serialize_value(info.kwargs)
+    if info.function == "run_player_games_analysis_job" and isinstance(serialized_kwargs, dict):
+        game_links = serialized_kwargs.pop("game_links", [])
+        serialized_kwargs["game_count"] = len(game_links) if isinstance(game_links, list) else 0
+
     return {
         "function": info.function,
         "args": _serialize_value(info.args),
-        "kwargs": _serialize_value(info.kwargs),
+        "kwargs": serialized_kwargs,
         "job_try": info.job_try,
         "enqueue_time": _serialize_value(info.enqueue_time),
         "score": info.score,
@@ -120,6 +145,91 @@ async def api_get_active_jobs(redis: ArqRedis = Depends(get_redis_pool)) -> JSON
 
     jobs.sort(key=lambda item: item.get("progress", {}).get("updated_at", 0), reverse=True)
     return JSONResponse(content={"jobs": jobs})
+
+
+@router.get("/analysis")
+async def api_get_analysis_jobs(redis: ArqRedis = Depends(get_redis_pool)) -> JSONResponse:
+    """Return every running or queued job from the dedicated analysis queue."""
+    queue_name = "analysis_queue"
+    queued_rows = await redis.zrange(queue_name, 0, -1, withscores=True)
+    jobs = []
+
+    for raw_job_id, score in queued_rows:
+        job_id = raw_job_id.decode("utf-8") if isinstance(raw_job_id, bytes) else str(raw_job_id)
+        job = Job(job_id, redis, _queue_name=queue_name)
+        status = await job.status()
+        if status not in (JobStatus.queued, JobStatus.deferred, JobStatus.in_progress):
+            continue
+
+        info = await job.info()
+        if not info or info.function not in ANALYSIS_JOB_FUNCTIONS:
+            continue
+
+        serialized_info = _serialize_job_info(info)
+
+        jobs.append({
+            "job_id": job_id,
+            "queue_name": queue_name,
+            "status": status.value if isinstance(status, JobStatus) else str(status),
+            "score": score,
+            "info": serialized_info,
+            "progress": await _read_progress(redis, job_id),
+        })
+
+    jobs.sort(key=lambda item: (
+        0 if item["status"] == JobStatus.in_progress.value else 1,
+        float(item.get("score") or 0),
+    ))
+    return JSONResponse(content={"jobs": jobs})
+
+
+@router.delete("/{job_id}/queued")
+async def api_delete_queued_analysis_job(
+    job_id: str,
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Delete an analysis job only while it is still waiting in a queue."""
+    for queue_name in KNOWN_QUEUES:
+        job = Job(job_id, redis, _queue_name=queue_name)
+        status = await job.status()
+        if status == JobStatus.not_found:
+            continue
+        if status not in (JobStatus.queued, JobStatus.deferred):
+            raise HTTPException(
+                status_code=409,
+                detail="Only a queued analysis can be deleted; this job has already started.",
+            )
+
+        info = await job.info()
+        if not info or info.function not in ANALYSIS_JOB_FUNCTIONS:
+            raise HTTPException(status_code=400, detail="This is not an analysis job")
+
+        deleted = await redis.eval(
+            DELETE_QUEUED_JOB_SCRIPT,
+            8,
+            queue_name,
+            f"arq:in-progress:{job_id}",
+            f"arq:job:{job_id}",
+            f"arq:result:{job_id}",
+            f"arq:retry:{job_id}",
+            f"chessism:job_progress:{job_id}",
+            f"chessism:job_progress_fens:{job_id}",
+            f"chessism:job_progress_failed_fens:{job_id}",
+            job_id,
+        )
+        if int(deleted) != 1:
+            raise HTTPException(
+                status_code=409,
+                detail="The job started before it could be deleted.",
+            )
+
+        return JSONResponse(content={
+            "job_id": job_id,
+            "status": "deleted",
+            "message": "Queued analysis deleted.",
+        })
+
+    raise HTTPException(status_code=404, detail="Queued analysis not found")
 
 
 @router.get("/{job_id}")

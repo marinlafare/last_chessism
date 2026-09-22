@@ -7,12 +7,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from chessism_api.redis_client import get_redis_pool
-from chessism_api.operations.games import (
-    read_game,
-    get_time_control_result_color_matrix_payload,
-    get_time_control_game_length_analytics_payload,
-    get_time_control_activity_trend_payload
-)
+from chessism_api.operations.games import read_game
 from chessism_api.database.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
@@ -28,7 +23,10 @@ from chessism_api.database.ask_db import (
     get_time_control_mode_counts,
     get_rating_time_control_chart,
     get_time_control_top_moves,
-    get_time_control_top_openings
+    get_time_control_top_openings,
+    get_time_control_result_color_matrix,
+    get_time_control_game_length_analytics,
+    get_time_control_activity_trend,
 )
 
 router = APIRouter()
@@ -56,7 +54,7 @@ async def _has_active_game_job(redis: ArqRedis) -> bool:
         except Exception:
             continue
 
-        if payload.get("kind") != "game_update":
+        if payload.get("kind") not in ("game_update", "player_deletion"):
             continue
         if payload.get("phase") not in ("complete", "failed"):
             return True
@@ -180,7 +178,7 @@ async def api_get_time_control_result_color_matrix(
     """
     Returns white/black result matrix for mode and rating range.
     """
-    result = await get_time_control_result_color_matrix_payload(
+    result = await get_time_control_result_color_matrix(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
@@ -197,7 +195,7 @@ async def api_get_time_control_game_length_analytics(
     """
     Returns game-length summary and histograms for mode and rating range.
     """
-    result = await get_time_control_game_length_analytics_payload(
+    result = await get_time_control_game_length_analytics(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
@@ -214,7 +212,7 @@ async def api_get_time_control_activity_trend(
     """
     Returns activity heat data by month/day/hour for mode and rating range.
     """
-    result = await get_time_control_activity_trend_payload(
+    result = await get_time_control_activity_trend(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
