@@ -1,11 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import './analyze-times/analyzeTimes.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { getJson } from '../services/apiClient'
 import { formatNumber } from '../utils/formatters'
-
-const fetchSummary = () => getJson('/analysis_times/summary?limit=10')
+import { fetchAnalysisTimesSummary } from './analyze-times/analyzeTimesApi'
 
 function AnalyzeTimes() {
   const [data, setData] = useState(null)
@@ -15,7 +14,7 @@ function AnalyzeTimes() {
   const load = async () => {
     setLoading(true)
     try {
-      const payload = await fetchSummary()
+      const payload = await fetchAnalysisTimesSummary()
       setData(payload)
       setError('')
     } catch (err) {

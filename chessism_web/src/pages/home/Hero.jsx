@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getJson } from '../../services/apiClient'
 import { formatNumber } from '../../utils/formatters'
-
-const fetchJson = (path, signal) => getJson(path, { signal })
+import { fetchDashboardSummary } from './homeApi'
 
 export function DashboardSummaryPanel() {
   const [generalities, setGeneralities] = useState(null)
@@ -12,10 +10,7 @@ export function DashboardSummaryPanel() {
   useEffect(() => {
     const controller = new AbortController()
 
-    Promise.all([
-      fetchJson('/games/generalities', controller.signal),
-      fetchJson('/games/time_controls', controller.signal)
-    ])
+    fetchDashboardSummary({ signal: controller.signal })
       .then(([generalitiesPayload, timeControlsPayload]) => {
         setGeneralities(generalitiesPayload)
         setTimeControls(timeControlsPayload)

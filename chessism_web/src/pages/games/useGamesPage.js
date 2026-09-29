@@ -2,14 +2,22 @@ import { useEffect, useState } from 'react'
 import {
   CLUSTER_KEYS, DEFAULT_CLUSTER_KEY, MOVES_PAGE_SIZE, OPENINGS_PAGE_SIZE,
   OPENING_N_MOVES_DEFAULT, OPENING_N_MOVES_MAX, OPENING_N_MOVES_MIN,
-  TIME_CONTROLS_CACHE_VERSION, TOP_MOVE_LIMIT, fetchDatabaseGeneralities,
-  fetchGameSummary, fetchPlayerGameCount, fetchRecentGamesPage,
-  fetchTimeControlActivityTrend, fetchTimeControlCounts,
-  fetchTimeControlGameLengthAnalytics, fetchTimeControlRatingChart,
-  fetchTimeControlResultColorMatrix, fetchTimeControlTopMoves,
-  fetchTimeControlTopOpenings, getClusterRangeFromBins, hasAnyValidJenksBin,
+  TIME_CONTROLS_CACHE_VERSION, TOP_MOVE_LIMIT, getClusterRangeFromBins, hasAnyValidJenksBin,
   normalizeOpeningRows, readCached, writeCached,
 } from './gamesPageSupport'
+import {
+  fetchDatabaseGeneralities,
+  fetchGameSummary,
+  fetchPlayerGameCount,
+  fetchRecentGamesPage,
+  fetchTimeControlActivityTrend,
+  fetchTimeControlCounts,
+  fetchTimeControlGameLengthAnalytics,
+  fetchTimeControlRatingChart,
+  fetchTimeControlResultColorMatrix,
+  fetchTimeControlTopMoves,
+  fetchTimeControlTopOpenings,
+} from './gamesApi'
 
 export function useGamesPage() {
   const [countPlayer, setCountPlayer] = useState('')

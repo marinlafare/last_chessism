@@ -1,8 +1,5 @@
-import { Chess } from 'chess.js'
-import { deleteJson, getJson as fetchJson, postJson } from '../../services/apiClient'
 import { formatNumber } from '../../utils/formatters'
 
-const START_FEN = new Chess().fen()
 const DEFAULT_ANALYSIS_NODES = 1_000_000
 const MAX_ANALYSIS_BATCH_SIZE = 500
 const MAX_LOOP_ANALYSIS_BATCH_SIZE = 1000
@@ -54,59 +51,11 @@ const getProgressSnapshot = (progress) => {
   }
 }
 
-const normalizeFen = (value) => String(value || '').trim().replace(/\s+/g, ' ')
-
 const clampAnalysisBatchInput = (value, maximum = MAX_ANALYSIS_BATCH_SIZE) => {
   if (value === '') return ''
   const numeric = Number(value)
   if (!Number.isFinite(numeric)) return ''
   return Math.min(maximum, Math.max(1, Math.trunc(numeric)))
-}
-
-const validateFen = (value) => {
-  const fen = normalizeFen(value)
-  try {
-    const game = new Chess(fen)
-    return { isValid: true, fen: game.fen(), game }
-  } catch (err) {
-    return { isValid: false, fen, error: err.message || 'Invalid FEN' }
-  }
-}
-
-const getScoreLabel = (score) => {
-  const numeric = Number(score)
-  if (!Number.isFinite(numeric)) return '--'
-
-  if (Math.abs(numeric) >= 9000) {
-    const mateDistance = Math.abs(Math.round(Math.abs(numeric) - 10000))
-    return mateDistance > 0 ? `Mate ${mateDistance}` : 'Mate'
-  }
-
-  const pawns = numeric / 100
-  return `${pawns > 0 ? '+' : ''}${pawns.toFixed(2)}`
-}
-
-const moveToSan = (fen, move) => {
-  const text = String(move || '')
-  if (text.length < 4) return text || '--'
-
-  try {
-    const game = new Chess(fen)
-    const result = game.move({
-      from: text.slice(0, 2),
-      to: text.slice(2, 4),
-      promotion: text.slice(4, 5) || undefined
-    })
-    return result?.san || text
-  } catch {
-    return text
-  }
-}
-
-const getAnalysisLines = (result) => {
-  const analysis = result?.analysis
-  if (Array.isArray(analysis)) return analysis
-  return analysis && typeof analysis === 'object' ? [analysis] : []
 }
 
 const isTrackedJobActive = (state) => {
@@ -280,15 +229,6 @@ const playCompletionSound = (audioContextRef) => {
   })
 }
 
-async function analyzeFen({ fen, nodesLimit, multipv }) {
-  const payload = await postJson('/analysis/fen', {
-    fens: [fen],
-    nodes_limit: Number(nodesLimit),
-    multipv: Number(multipv)
-  })
-  return Array.isArray(payload) ? payload[0] : payload
-}
-
 export {
   COMPLETED_JOB_FADE_MS,
   COMPLETED_JOB_VISIBLE_MS,
@@ -297,33 +237,24 @@ export {
   MAX_ANALYSIS_BATCH_SIZE,
   MAX_LOOP_ANALYSIS_BATCH_SIZE,
   POSITION_JOBS_STORAGE_KEY,
-  START_FEN,
-  analyzeFen,
   clampAnalysisBatchInput,
-  deleteJson,
-  fetchJson,
   formatCountdown,
   formatDuration,
   formatNumber,
-  getAnalysisLines,
   getAnalysisProcessView,
   getLoopScopeLabel,
   getPlayerGameSelectionLabel,
   getPositionJobKey,
   getProgressSnapshot,
-  getScoreLabel,
   getTrackedJobPhase,
   isAnalysisJobKey,
   isLoopJobKey,
   isTrackedJobActive,
   isTrackedJobComplete,
   loadStoredJobState,
-  moveToSan,
   pageHasAttention,
   parseTimestampSeconds,
   playCompletionSound,
-  postJson,
   storeJobState,
   unlockCompletionAudio,
-  validateFen,
 }

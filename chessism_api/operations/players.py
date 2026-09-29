@@ -68,6 +68,12 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
     # main player. Merely opening the deleted shell in the UI does not call this.
     fetched_profile_dict["deleted_at"] = None
 
+    # Chess.com does not provide an IANA timezone. Never erase a manually
+    # curated timezone when the rest of the public profile is refreshed.
+    if existing_player and not fetched_profile_dict.get("timezone"):
+        fetched_profile_dict.pop("timezone", None)
+        fetched_profile_dict.pop("timezone_source", None)
+
     # Existing row: update directly and avoid intentional duplicate insert attempts.
     if existing_player:
         try:

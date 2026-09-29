@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { getJson } from '../../services/apiClient'
 import { formatNumber } from '../../utils/formatters'
+import { fetchTopMainCharacters } from './homeApi'
 
 const TIME_CONTROLS = ['bullet', 'blitz', 'rapid']
 const PLAYER_PAGE_SIZE = 50
@@ -28,9 +28,10 @@ function MainCharactersCarousel() {
       setError('')
 
       try {
-        const payload = await getJson(
-          `/players/main_characters/top?time_control=${encodeURIComponent(selectedMode)}&limit=${PLAYER_FETCH_LIMIT}`,
-          { signal: controller.signal }
+        const payload = await fetchTopMainCharacters(
+          selectedMode,
+          PLAYER_FETCH_LIMIT,
+          { signal: controller.signal },
         )
         const sortedPlayers = Array.isArray(payload.players)
           ? [...payload.players].sort((a, b) => getPlayerRating(b) - getPlayerRating(a))

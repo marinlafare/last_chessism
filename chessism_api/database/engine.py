@@ -20,7 +20,7 @@ async def _ensure_fen_analysis_schema(
     host: str,
     port: int,
     database: str,
-) -> None:
+) -> int:
     """Apply small, idempotent FEN schema additions without a migration service."""
     connection = await asyncpg.connect(
         user=user,
@@ -29,6 +29,7 @@ async def _ensure_fen_analysis_schema(
         port=port,
         database=database,
     )
+    migrated_no_move_games = 0
     try:
         await connection.execute("SELECT pg_advisory_lock($1)", FEN_SCHEMA_ADVISORY_LOCK)
         existing_columns = {
@@ -91,24 +92,117 @@ async def _ensure_fen_analysis_schema(
             ON fen (n_games DESC)
             WHERE score IS NULL
         """)
-        player_deleted_at_exists = await connection.fetchval("""
-            SELECT EXISTS (
-                SELECT 1
+        player_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
                 FROM information_schema.columns
                 WHERE table_schema = 'public'
                   AND table_name = 'player'
-                  AND column_name = 'deleted_at'
-            )
+                  AND column_name = ANY($1::text[])
+            """, ["deleted_at", "timezone", "timezone_source"])
+        }
+        for column_name, data_type in (
+            ("deleted_at", "TIMESTAMPTZ"),
+            ("timezone", "VARCHAR(64)"),
+            ("timezone_source", "VARCHAR(32)"),
+        ):
+            if column_name not in player_columns:
+                await connection.execute(
+                    f"ALTER TABLE player ADD COLUMN {column_name} {data_type}"
+                )
+
+        await connection.execute("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_game_fen_association_game_order
+            ON game_fen_association (game_link, n_move, move_color)
         """)
-        if not player_deleted_at_exists:
-            await connection.execute(
-                "ALTER TABLE player ADD COLUMN deleted_at TIMESTAMPTZ"
+
+        # Zero-move records are not chess games that can participate in any
+        # position analysis. Preserve only their stable ID and original start
+        # time so future archive downloads do not keep re-importing them.
+        async with connection.transaction():
+            await connection.execute("""
+                CREATE TEMPORARY TABLE migrated_no_move_scope (
+                    game_id BIGINT NOT NULL,
+                    player_name VARCHAR NOT NULL,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    PRIMARY KEY (game_id, player_name)
+                ) ON COMMIT DROP
+            """)
+            await connection.execute("""
+                INSERT INTO migrated_no_move_scope (game_id, player_name, year, month)
+                SELECT g.link, players.player_name, g.year, g.month
+                FROM game g
+                CROSS JOIN LATERAL (VALUES (g.white), (g.black)) players(player_name)
+                WHERE g.n_moves = 0
+                ON CONFLICT DO NOTHING
+            """)
+            await connection.execute("""
+                INSERT INTO no_moves_games (game_id, played_at)
+                SELECT
+                    g.link,
+                    COALESCE(
+                        g.played_at,
+                        make_timestamptz(
+                            g.year, g.month, g.day,
+                            g.hour, g.minute, g.second,
+                            'UTC'
+                        )
+                    )
+                FROM game g
+                WHERE g.n_moves = 0
+                ON CONFLICT (game_id) DO UPDATE
+                SET played_at = EXCLUDED.played_at
+            """)
+            await connection.execute("""
+                DELETE FROM game_fen_association association
+                USING game game_row
+                WHERE association.game_link = game_row.link
+                  AND game_row.n_moves = 0
+            """)
+            await connection.execute("""
+                DELETE FROM moves move_row
+                USING game game_row
+                WHERE move_row.link = game_row.link
+                  AND game_row.n_moves = 0
+            """)
+            delete_result = await connection.execute(
+                "DELETE FROM game WHERE n_moves = 0"
             )
+            migrated_no_move_games = int(delete_result.rsplit(" ", 1)[-1])
+            await connection.execute("""
+                UPDATE months ledger
+                SET n_games = counts.n_games
+                FROM (
+                    SELECT
+                        scope.player_name,
+                        scope.year,
+                        scope.month,
+                        COUNT(game_row.link)::int AS n_games
+                    FROM (
+                        SELECT DISTINCT player_name, year, month
+                        FROM migrated_no_move_scope
+                    ) scope
+                    LEFT JOIN game game_row
+                      ON game_row.year = scope.year
+                     AND game_row.month = scope.month
+                     AND (
+                         game_row.white = scope.player_name
+                         OR game_row.black = scope.player_name
+                     )
+                    GROUP BY scope.player_name, scope.year, scope.month
+                ) counts
+                WHERE ledger.player_name = counts.player_name
+                  AND ledger.year = counts.year
+                  AND ledger.month = counts.month
+            """)
     finally:
         try:
             await connection.execute("SELECT pg_advisory_unlock($1)", FEN_SCHEMA_ADVISORY_LOCK)
         finally:
             await connection.close()
+    return migrated_no_move_games
 
 async def init_db(connection_string: str):
     """
@@ -179,7 +273,7 @@ async def init_db(connection_string: str):
                 print("Ensuring database tables exist...")
                 await conn.run_sync(Base.metadata.create_all)
                 print("Database tables checked/created.")
-            await _ensure_fen_analysis_schema(
+            migrated_no_move_games = await _ensure_fen_analysis_schema(
                 user=db_user,
                 password=db_password,
                 host=db_host,
@@ -205,4 +299,16 @@ async def init_db(connection_string: str):
     else: # This 'else' block runs if the 'for' loop completes without 'break'
         raise RuntimeError("Database connection failed after all retries. The database may be down.")
     AsyncDBSession.configure(bind=async_engine)
+    if migrated_no_move_games:
+        # Refresh only projections whose game counts changed. FEN rows and
+        # scored-position summaries are deliberately untouched.
+        from chessism_api.database.ask_db import (
+            refresh_database_summary_game_counts,
+            refresh_main_character_mode_summary,
+        )
+        await refresh_database_summary_game_counts()
+        await refresh_main_character_mode_summary()
+        print(
+            f"Migrated {migrated_no_move_games} zero-move games to no_moves_games."
+        )
     print("Asynchronous database initialization complete.")

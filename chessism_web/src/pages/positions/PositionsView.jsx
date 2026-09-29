@@ -1,4 +1,3 @@
-import { Chessboard } from 'react-chessboard'
 import Header from '../../components/layout/Header'
 import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
@@ -10,25 +9,22 @@ import {
   formatDuration,
   formatNumber,
   getPlayerGameSelectionLabel,
-  getScoreLabel,
   isTrackedJobActive,
-  moveToSan,
 } from './positionPageSupport'
 
 export default function PositionsView({ page }) {
   const {
-    activeLoopJobCount, analysisCounts, analysisLines, analysisProcessViews,
-    analysisProcessesError, bestLine, boardWidth, boardWrapRef, coverage,
+    activeLoopJobCount, analysisCounts, analysisProcessViews,
+    analysisProcessesError, coverage,
     coverageBarItems, coverageError, deletingAnalysisJobIds, error, etaClockMs,
-    etaEstimatesRef, fenInput, globalJob, handleAnalysisLoop, handleAnalyze,
+    etaEstimatesRef, globalJob, handleAnalysisLoop,
     handleConfirmPlayerGameAnalysis, handleDeleteAnalysisProcess,
     handleGlobalAnalysis, handleInspectPlayer, handleInspectPlayerGameScope,
     handlePlayerAnalysis, handlePreviewPlayerGameAnalysis, jobState, loading,
-    loopJob, loopJobIsQueueing, multipv, nodesLimit, pendingPositions,
+    loopJob, loopJobIsQueueing, pendingPositions,
     playerGameAnalysis, playerGamePreview, playerGamePreviewTotalSeconds,
-    playerInspection, playerJob, remainingFenGames, result, scoredPositions,
-    setFenInput, setGlobalJob, setLoopJob, setMultipv, setNodesLimit,
-    setPlayerGameAnalysis, setPlayerInspection, setPlayerJob, turnLabel, validation,
+    playerInspection, playerJob, remainingFenGames, scoredPositions,
+    setGlobalJob, setLoopJob, setPlayerGameAnalysis, setPlayerInspection, setPlayerJob,
   } = page
 
   return (

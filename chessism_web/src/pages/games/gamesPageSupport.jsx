@@ -1,5 +1,4 @@
 import { Chess } from 'chess.js'
-import { getJson } from '../../services/apiClient'
 import { formatNumber } from '../../utils/formatters'
 
 const MOVES_PAGE_SIZE = 5
@@ -86,117 +85,6 @@ const writeCached = (key, value) => {
   } catch {
     // Ignore cache write failures (quota/private mode)
   }
-}
-
-async function fetchDatabaseGeneralities() {
-  return getJson('/games/database/generalities')
-}
-
-async function fetchPlayerGameCount(playerName) {
-  return getJson(`/games/${encodeURIComponent(playerName)}/count`)
-}
-
-async function fetchRecentGamesPage(playerName, page, pageSize = 10) {
-  return getJson(
-    `/games/${encodeURIComponent(playerName)}/recent?page=${page}&page_size=${pageSize}`
-  )
-}
-
-async function fetchGameSummary(playerName) {
-  return getJson(`/games/${encodeURIComponent(playerName)}/summary`)
-}
-
-async function fetchTimeControlCounts() {
-  return getJson('/games/time_controls')
-}
-
-async function fetchTimeControlTopMoves(
-  mode,
-  moveColor = 'white',
-  minRating = null,
-  maxRating = null,
-  page = 1,
-  pageSize = MOVES_PAGE_SIZE,
-  maxMove = TOP_MOVE_LIMIT
-) {
-  const params = new URLSearchParams({
-    player_color: moveColor,
-    page: String(page),
-    page_size: String(pageSize),
-    max_move: String(maxMove)
-  })
-  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
-    params.set('min_rating', String(minRating))
-    params.set('max_rating', String(maxRating))
-  }
-  return getJson(
-    `/games/time_controls/${encodeURIComponent(mode)}/top_moves?${params.toString()}`
-  )
-}
-
-async function fetchTimeControlTopOpenings(
-  mode,
-  minRating = null,
-  maxRating = null,
-  nMoves = OPENING_N_MOVES_DEFAULT,
-  page = 1,
-  pageSize = OPENINGS_PAGE_SIZE
-) {
-  const safeNMoves = Math.max(
-    OPENING_N_MOVES_MIN,
-    Math.min(OPENING_N_MOVES_MAX, Number.parseInt(nMoves, 10) || OPENING_N_MOVES_DEFAULT)
-  )
-  const params = new URLSearchParams({
-    page: String(page),
-    page_size: String(pageSize),
-    n_moves: String(safeNMoves)
-  })
-  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
-    params.set('min_rating', String(minRating))
-    params.set('max_rating', String(maxRating))
-  }
-  return getJson(
-    `/games/time_controls/${encodeURIComponent(mode)}/top_openings?${params.toString()}`
-  )
-}
-
-async function fetchTimeControlRatingChart(mode) {
-  return getJson(
-    `/games/rating_time_control_chart?time_control=${encodeURIComponent(mode)}`
-  )
-}
-
-async function fetchTimeControlResultColorMatrix(mode, minRating = null, maxRating = null) {
-  const params = new URLSearchParams()
-  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
-    params.set('min_rating', String(minRating))
-    params.set('max_rating', String(maxRating))
-  }
-  return getJson(
-    `/games/time_controls/${encodeURIComponent(mode)}/result_color_matrix?${params.toString()}`
-  )
-}
-
-async function fetchTimeControlGameLengthAnalytics(mode, minRating = null, maxRating = null) {
-  const params = new URLSearchParams()
-  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
-    params.set('min_rating', String(minRating))
-    params.set('max_rating', String(maxRating))
-  }
-  return getJson(
-    `/games/time_controls/${encodeURIComponent(mode)}/game_length_analytics?${params.toString()}`
-  )
-}
-
-async function fetchTimeControlActivityTrend(mode, minRating = null, maxRating = null) {
-  const params = new URLSearchParams()
-  if (Number.isFinite(minRating) && Number.isFinite(maxRating)) {
-    params.set('min_rating', String(minRating))
-    params.set('max_rating', String(maxRating))
-  }
-  return getJson(
-    `/games/time_controls/${encodeURIComponent(mode)}/activity_trend?${params.toString()}`
-  )
 }
 
 const moveWordToNumber = (value) => {
@@ -594,17 +482,6 @@ export {
   TIME_CONTROLS_CACHE_VERSION,
   TOP_MOVE_LIMIT,
   TimeControlRatingsScatterChart,
-  fetchDatabaseGeneralities,
-  fetchGameSummary,
-  fetchPlayerGameCount,
-  fetchRecentGamesPage,
-  fetchTimeControlActivityTrend,
-  fetchTimeControlCounts,
-  fetchTimeControlGameLengthAnalytics,
-  fetchTimeControlRatingChart,
-  fetchTimeControlResultColorMatrix,
-  fetchTimeControlTopMoves,
-  fetchTimeControlTopOpenings,
   formatNumber,
   formatPercent,
   formatSeconds,

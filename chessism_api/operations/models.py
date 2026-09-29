@@ -13,6 +13,8 @@ class PlayerCreateData(BaseModel):
     followers: Optional[int] = None
     country: Optional[str] = None
     location: Optional[str] = None
+    timezone: Optional[str] = None
+    timezone_source: Optional[str] = None
     joined: Optional[int] = 0 # Default to 0 for 'shell' players
     status: Optional[str] = None
     is_streamer: Optional[bool] = False

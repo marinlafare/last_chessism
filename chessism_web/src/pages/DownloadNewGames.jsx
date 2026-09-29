@@ -1,17 +1,21 @@
 import { useEffect, useState } from 'react'
+import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import {
   DOWNLOAD_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
-  fetchJobStatus,
   formatStatusMessage,
   isTerminalJobStatus,
   loadStoredJob,
-  sendPlayerAction,
   storeJob
 } from '../services/gameJobService'
+import {
+  downloadPlayerGames,
+  fetchGameJobStatus,
+  updatePlayerGames,
+} from './download-new-games/downloadNewGamesApi'
 
 function renderUpdateProgress(status) {
   const progress = status?.progress
@@ -58,7 +62,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(downloadJob.jobId)
+        const status = await fetchGameJobStatus(downloadJob.jobId)
         if (cancelled) return
         setDownloadJobStatus(status)
 
@@ -92,7 +96,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(updateJob.jobId)
+        const status = await fetchGameJobStatus(updateJob.jobId)
         if (cancelled) return
         setUpdateJobStatus(status)
 
@@ -130,7 +134,7 @@ function DownloadNewGames() {
     setDownloadLoading(true)
     setDownloadResult('')
     try {
-      const payload = await sendPlayerAction('/games', player)
+      const payload = await downloadPlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
@@ -158,7 +162,7 @@ function DownloadNewGames() {
     setUpdateResult('')
     setUpdateJobStatus(null)
     try {
-      const payload = await sendPlayerAction('/games/update', player)
+      const payload = await updatePlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(UPDATE_JOB_STORAGE_KEY, job)
@@ -175,7 +179,7 @@ function DownloadNewGames() {
   }
 
   return (
-    <div className="page-frame">
+    <div className="page-frame download-games-page">
       <SideRail />
       <div className="home-shell">
         <Header />

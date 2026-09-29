@@ -2266,11 +2266,17 @@ async def get_games_already_in_db(links_to_check: Tuple[int, ...]) -> Set[int]:
                     insert_sql = f"INSERT INTO {temp_table_name} (link_col) VALUES {values_clause} ON CONFLICT DO NOTHING;"
                     await session.execute(text(insert_sql))
 
-            # 3. Join game table with the temporary table
+            # 3. Check both playable games and zero-move tombstones. A game
+            # archived without moves must not be downloaded and discarded on
+            # every future player update.
             join_sql = f"""
-                SELECT g.link 
+                SELECT g.link
                 FROM game AS g
-                JOIN {temp_table_name} AS t ON g.link = t.link_col;
+                JOIN {temp_table_name} AS t ON g.link = t.link_col
+                UNION
+                SELECT empty_game.game_id AS link
+                FROM no_moves_games AS empty_game
+                JOIN {temp_table_name} AS t ON empty_game.game_id = t.link_col;
             """
             result = await session.execute(text(join_sql))
             links_found_in_db.update(result.scalars().all())
@@ -2899,6 +2905,14 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
             await session.rollback()
             raise
 
+    try:
+        from chessism_api.operations.player_hero_analytics import (
+            refresh_game_player_engine_summaries,
+        )
+        await refresh_game_player_engine_summaries(clean_links or None)
+    except Exception as error:
+        print(f"Failed to refresh player engine summaries: {error!r}")
+
     return {
         "games": len(rows),
         "scope": "links" if clean_links else "all"
@@ -3006,6 +3020,20 @@ async def increment_game_analysis_summary_for_scored_fens(
         except Exception:
             await session.rollback()
             raise
+
+    fully_analyzed_links = tuple(
+        int(row["link"])
+        for row in rows
+        if bool(row.get("is_fully_analyzed"))
+    )
+    if fully_analyzed_links:
+        try:
+            from chessism_api.operations.player_hero_analytics import (
+                refresh_game_player_engine_summaries,
+            )
+            await refresh_game_player_engine_summaries(fully_analyzed_links)
+        except Exception as error:
+            print(f"Failed to refresh completed player engine summaries: {error!r}")
 
     return {
         "games": len(rows),

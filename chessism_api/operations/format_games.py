@@ -14,7 +14,14 @@ from constants import DRAW_RESULTS, LOSE_RESULTS, WINING_RESULT
 from chessism_api.operations.models import GameCreateData, MoveCreateData
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Player, Game, Move, GamePlayer, GameOpening
+from chessism_api.database.models import (
+    Game,
+    GameOpening,
+    GamePlayer,
+    Move,
+    NoMovesGame,
+    Player,
+)
 
 # --- FIXED: Correct function name imported from ask_db ---
 from chessism_api.database.ask_db import (
@@ -109,6 +116,7 @@ async def insert_new_data(
     moves_list,
     game_players_list,
     game_openings_list,
+    no_move_games_list,
     player_name: str,
     affected_months: Set[Tuple[int, int]]
 ):
@@ -126,6 +134,7 @@ async def insert_new_data(
     move_interface = DBInterface(Move)
     game_player_interface = DBInterface(GamePlayer)
     game_opening_interface = DBInterface(GameOpening)
+    no_move_game_interface = DBInterface(NoMovesGame)
 
     async with AsyncDBSession() as session:
         try:
@@ -153,6 +162,15 @@ async def insert_new_data(
             else:
                 print("No new opening rows to insert.")
 
+            if no_move_games_list:
+                await no_move_game_interface.create_all_with_session(
+                    session,
+                    no_move_games_list,
+                )
+                print(
+                    f"Recorded {len(no_move_games_list)} zero-move game tombstones."
+                )
+
             await _sync_player_month_counts_with_session(session, player_name, affected_months)
             print(f"Synced {len(affected_months)} month ledger rows.")
 
@@ -161,7 +179,13 @@ async def insert_new_data(
             await session.rollback()
             raise
 
-    total_inserted_items = len(games_list) + len(moves_list) + len(game_players_list) + len(game_openings_list)
+    total_inserted_items = (
+        len(games_list)
+        + len(moves_list)
+        + len(game_players_list)
+        + len(game_openings_list)
+        + len(no_move_games_list)
+    )
     if total_inserted_items > 0:
         print(f"Overall database insertion completed for {len(games_list)} games, {len(moves_list)} moves, {len(game_players_list)} game-player rows, and {len(game_openings_list)} opening rows.")
     else:
@@ -376,7 +400,7 @@ def create_moves_table(
     return result
 # --- END EFFICIENT VERSION ---
 
-def get_moves_data(game: dict) -> tuple[int, dict]:
+def get_moves_data(game: dict) -> tuple[int, dict | None]:
     """Extracts and formats the moves of a game."""
     time_bonus = get_time_bonus(game)
 
@@ -396,6 +420,9 @@ def get_moves_data(game: dict) -> tuple[int, dict]:
     times = re.findall(r"\[%clk\s+([^\]]+)\]", raw_moves)
     just_moves = re.sub(r"{[^}]*}*", "", raw_moves)
     clean_moves = [x for x in just_moves.split() if x and "." not in x]
+
+    if n_moves == 0 and not clean_moves:
+        return 0, None
     
     moves_data = create_moves_table(game['url'], times, clean_moves, time_bonus)
     return n_moves, moves_data
@@ -638,6 +665,7 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
     moves_to_format = []
     game_players_list_for_db = []
     game_openings_list_for_db = []
+    no_move_games_list_for_db = []
     affected_months: Set[Tuple[int, int]] = set()
     affected_players: Set[str] = set()
     
@@ -658,6 +686,13 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
         # Prepare the game data for insertion
         try:
             game_payload = GameCreateData(**game_data).model_dump()
+            if int(game_payload["n_moves"]) == 0:
+                no_move_games_list_for_db.append({
+                    "game_id": game_payload["link"],
+                    "played_at": game_payload["played_at"],
+                })
+                continue
+
             game_player_rows = create_game_player_rows(game_payload)
             game_opening_rows = create_game_opening_rows(game_payload, moves_data)
 
@@ -700,9 +735,16 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
     print(f'{len(moves_list_for_db)} Moves ready to insert')
     print(f'{len(game_players_list_for_db)} Game-player rows ready to insert')
     print(f'{len(game_openings_list_for_db)} Opening rows ready to insert')
+    print(f'{len(no_move_games_list_for_db)} Zero-move tombstones ready to insert')
 
     # Step 4: Insert data into DB (I/O-bound, run concurrently)
-    if not games_list_for_db and not moves_list_for_db and not game_players_list_for_db and not game_openings_list_for_db:
+    if (
+        not games_list_for_db
+        and not moves_list_for_db
+        and not game_players_list_for_db
+        and not game_openings_list_for_db
+        and not no_move_games_list_for_db
+    ):
         print("No data to insert after formatting. Skipping database insertion.")
         return f"No new data to insert for {player_name}."
 
@@ -712,6 +754,7 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
         moves_list_for_db,
         game_players_list_for_db,
         game_openings_list_for_db,
+        no_move_games_list_for_db,
         player_name,
         affected_months
     )
@@ -726,7 +769,11 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
 
     print(f"Total time for insert_games_months_moves_and_players: {(time.time()-start_moves_format):.2f} seconds")
 
-    return f"Successfully processed and inserted {len(games_list_for_db)} games for {player_name}."
+    return (
+        f"Successfully processed and inserted {len(games_list_for_db)} games "
+        f"and recorded {len(no_move_games_list_for_db)} zero-move games for "
+        f"{player_name}."
+    )
 
 
 async def get_just_new_games(games: Dict[str, Dict[str, List[Dict[str, Any]]]]) -> Union[Dict[str, Dict[str, List[Dict[str, Any]]]], bool]:

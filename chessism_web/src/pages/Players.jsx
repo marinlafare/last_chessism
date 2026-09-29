@@ -1,45 +1,28 @@
 import { useEffect, useState } from 'react'
+import './players/players.css'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
 import PlayerAnalysisWorkspace from './players/PlayerAnalysisWorkspace'
-import { requestJson as fetchJson } from '../services/apiClient'
 import { formatNumber } from '../utils/formatters'
 import {
   PLAYER_DELETE_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
-  fetchJobStatus,
   formatStatusMessage,
   isTerminalJobStatus,
   loadStoredJob,
-  sendPlayerAction,
   storeJob
 } from '../services/gameJobService'
-
-const GAME_MODES = ['bullet', 'blitz', 'rapid']
-const RESULT_BARS = [
-  { key: 'wins', label: 'Wins', className: 'wl-fill-win' },
-  { key: 'losses', label: 'Losses', className: 'wl-fill-loss' },
-  { key: 'draws', label: 'Draws', className: 'wl-fill-draw' }
-]
-const fetchPlayerProfile = (playerName) => (
-  fetchJson(`/players/${encodeURIComponent(playerName)}`)
-)
-
-const fetchPlayerHours = (playerName) => (
-  fetchJson(`/games/${encodeURIComponent(playerName)}/hours_played`)
-)
-
-const fetchPlayerPositionStats = (playerName) => (
-  fetchJson(`/fens/players/${encodeURIComponent(playerName)}/analysis_counts`)
-)
-
-const fetchModesStats = (playerName) => (
-  fetchJson(`/players/${encodeURIComponent(playerName)}/modes_stats`)
-)
-
-const fetchPlayerNeighbors = (playerName) => (
-  fetchJson(`/players/${encodeURIComponent(playerName)}/neighbors`)
-)
+import {
+  deletePlayer,
+  downloadPlayerGames,
+  fetchPlayerDeletionPreview,
+  fetchPlayerHours,
+  fetchPlayerJobStatus,
+  fetchPlayerNeighbors,
+  fetchPlayerPositionStats,
+  fetchPlayerProfile,
+  updatePlayerGames,
+} from './players/playerApi'
 
 function GameUpdateProgress({ status, message }) {
   const progress = status?.progress
@@ -80,8 +63,6 @@ function Players() {
   const [playerHours, setPlayerHours] = useState(null)
   const [playerPositionStats, setPlayerPositionStats] = useState(null)
   const [playerNeighbors, setPlayerNeighbors] = useState(null)
-  const [modesStats, setModesStats] = useState({})
-  const [summaryMode, setSummaryMode] = useState('bullet')
   const [gamesUpdateLoading, setGamesUpdateLoading] = useState(false)
   const [gamesUpdateJob, setGamesUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
   const [gamesUpdateStatus, setGamesUpdateStatus] = useState(null)
@@ -110,7 +91,7 @@ function Players() {
       let playerProfile = await fetchPlayerProfile(name)
 
       if ((playerProfile?.joined === null || playerProfile?.joined === 0) && !playerProfile?.deleted_at) {
-        const download = await sendPlayerAction('/games', name)
+        const download = await downloadPlayerGames(name)
         setMessage(download.message || 'Downloading games and updating profile…')
         playerProfile = await fetchPlayerProfile(name)
       }
@@ -120,7 +101,6 @@ function Players() {
       setProfile(playerProfile)
 
       if (playerProfile?.deleted_at) {
-        setModesStats({})
         setPlayerHours(null)
         setPlayerPositionStats(null)
         setPlayerNeighbors(null)
@@ -128,25 +108,21 @@ function Players() {
         return
       }
 
-      const [modePayload, hoursPayload, positionPayload, neighborPayload] = await Promise.all([
-        fetchModesStats(normalizedPlayer),
+      const [hoursPayload, positionPayload, neighborPayload] = await Promise.all([
         fetchPlayerHours(normalizedPlayer),
         fetchPlayerPositionStats(normalizedPlayer),
         fetchPlayerNeighbors(normalizedPlayer)
       ])
 
-      setModesStats(modePayload || {})
       setPlayerHours(hoursPayload)
       setPlayerPositionStats(positionPayload)
       setPlayerNeighbors(neighborPayload)
-      setSummaryMode('bullet')
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : 'Unable to load player.')
       setProfile(null)
       setPlayerHours(null)
       setPlayerPositionStats(null)
       setPlayerNeighbors(null)
-      setModesStats({})
     } finally {
       setLoading(false)
     }
@@ -159,7 +135,7 @@ function Players() {
     setGamesUpdateMessage('')
     setGamesUpdateStatus(null)
     try {
-      const payload = await sendPlayerAction('/games/update', activePlayer)
+      const payload = await updatePlayerGames(activePlayer)
       if (payload.job_id) {
         const job = {
           jobId: payload.job_id,
@@ -189,9 +165,7 @@ function Players() {
     setDeleteError('')
     setDeleteConfirmation('')
     try {
-      const preview = await fetchJson(
-        `/players/${encodeURIComponent(activePlayer)}/deletion-preview`
-      )
+      const preview = await fetchPlayerDeletionPreview(activePlayer)
       setDeletePreview(preview)
     } catch (previewError) {
       setDeleteError(previewError instanceof Error ? previewError.message : 'Unable to preview player deletion.')
@@ -205,14 +179,10 @@ function Players() {
     setDeleteSubmitting(true)
     setDeleteError('')
     try {
-      const payload = await fetchJson(`/players/${encodeURIComponent(activePlayer)}`, {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          confirmation: deleteConfirmation,
-          expected_exclusive_games: Number(deletePreview.exclusive_games || 0),
-          expected_shared_games: Number(deletePreview.shared_games || 0)
-        })
+      const payload = await deletePlayer(activePlayer, {
+        confirmation: deleteConfirmation,
+        expected_exclusive_games: Number(deletePreview.exclusive_games || 0),
+        expected_shared_games: Number(deletePreview.shared_games || 0),
       })
       const redirectPlayer = [playerNeighbors?.next_player, playerNeighbors?.previous_player]
         .find((candidate) => candidate && candidate.toLowerCase() !== activePlayer.toLowerCase()) || ''
@@ -257,7 +227,7 @@ function Players() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(job.jobId)
+        const status = await fetchPlayerJobStatus(job.jobId)
         if (cancelled) return
         setGamesUpdateStatus(status)
 
@@ -303,7 +273,7 @@ function Players() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(job.jobId)
+        const status = await fetchPlayerJobStatus(job.jobId)
         if (cancelled) return
         setDeleteStatus(status)
         if (isTerminalJobStatus(status)) {
@@ -385,13 +355,6 @@ function Players() {
   const analyzedPlayerFenPercent = totalPlayerFens > 0
     ? Math.min(100, (analyzedPlayerFens / totalPlayerFens) * 100)
     : 0
-  const summaryStats = modesStats?.[summaryMode] || {}
-  const summaryCounts = {
-    wins: Number(summaryStats.wins || 0),
-    losses: Number(summaryStats.losses || 0),
-    draws: Number(summaryStats.draws || 0)
-  }
-  const summaryTotal = summaryCounts.wins + summaryCounts.losses + summaryCounts.draws
   const gamesUpdateActive = Boolean(gamesUpdateJob?.jobId && !isTerminalJobStatus(gamesUpdateStatus))
   const deleteActive = Boolean(deleteJob?.jobId && !isTerminalJobStatus(deleteStatus))
   const deleteConfirmationMatches = deleteConfirmation.trim().toLowerCase() === activePlayer.toLowerCase()
@@ -452,30 +415,6 @@ function Players() {
               </div>
               <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
-              {profileRows.length ? (
-                <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
-                  <div className="players-position-stat">
-                    <span>Total games</span>
-                    <strong>{formatNumber(totalPlayerGames)}</strong>
-                    <small>games in database</small>
-                  </div>
-                  <div className="players-position-stat players-position-stat-analyzed">
-                    <span>Games analyzed</span>
-                    <strong>{formatNumber(analyzedPlayerGames)}</strong>
-                    <small>{analyzedPlayerGamePercent.toFixed(1)}% fully analyzed</small>
-                  </div>
-                  <div className="players-position-stat">
-                    <span>FENs</span>
-                    <strong>{formatNumber(totalPlayerFens)}</strong>
-                    <small>positions across games</small>
-                  </div>
-                  <div className="players-position-stat players-position-stat-analyzed">
-                    <span>FENs analyzed</span>
-                    <strong>{formatNumber(analyzedPlayerFens)}</strong>
-                    <small>{analyzedPlayerFenPercent.toFixed(1)}% coverage</small>
-                  </div>
-                </div>
-              ) : null}
               <div className="players-profile-layout">
                 <div className="players-profile-avatar-box">
                   {profileAvatar ? (
@@ -486,19 +425,43 @@ function Players() {
                 </div>
                 {profileRows.length ? (
                   <>
-                    <div className="profile-grid">
-                      {profileRows.map(([label, value]) => (
-                        <div key={label} className="profile-item">
-                          <span>{label}</span>
-                          <strong>{String(value)}</strong>
-                        </div>
-                      ))}
+                    <div className="players-profile-details">
+                      <div className="profile-grid">
+                        {profileRows.map(([label, value]) => (
+                          <div key={label} className="profile-item">
+                            <span>{label}</span>
+                            <strong>{String(value)}</strong>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="players-hours-text">
+                        <p>total hours played: {Math.round(Number(playerHours?.total_hours || 0))}</p>
+                        <p>
+                          bullet: {Math.round(Number(playerHours?.bullet_hours || 0))} | blitz: {Math.round(Number(playerHours?.blitz_hours || 0))} | rapid: {Math.round(Number(playerHours?.rapid_hours || 0))}
+                        </p>
+                      </div>
                     </div>
-                    <div className="players-hours-text">
-                      <p>total hours played: {Math.round(Number(playerHours?.total_hours || 0))}</p>
-                      <p>
-                        bullet: {Math.round(Number(playerHours?.bullet_hours || 0))} | blitz: {Math.round(Number(playerHours?.blitz_hours || 0))} | rapid: {Math.round(Number(playerHours?.rapid_hours || 0))}
-                      </p>
+                    <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
+                      <div className="players-position-stat">
+                        <span>Total games</span>
+                        <strong>{formatNumber(totalPlayerGames)}</strong>
+                        <small>games in database</small>
+                      </div>
+                      <div className="players-position-stat players-position-stat-analyzed">
+                        <span>Games analyzed</span>
+                        <strong>{formatNumber(analyzedPlayerGames)}</strong>
+                        <small>{analyzedPlayerGamePercent.toFixed(1)}% fully analyzed</small>
+                      </div>
+                      <div className="players-position-stat">
+                        <span>FENs</span>
+                        <strong>{formatNumber(totalPlayerFens)}</strong>
+                        <small>positions across games</small>
+                      </div>
+                      <div className="players-position-stat players-position-stat-analyzed">
+                        <span>FENs analyzed</span>
+                        <strong>{formatNumber(analyzedPlayerFens)}</strong>
+                        <small>{analyzedPlayerFenPercent.toFixed(1)}% coverage</small>
+                      </div>
                     </div>
                   </>
                 ) : (
@@ -507,48 +470,6 @@ function Players() {
               </div>
             </div>
 
-            <div className="games-mode-detail players-result-summary">
-              <div className="section-head">
-                <h2 className="games-action-title">Results</h2>
-                <span className="stat-chip">{formatNumber(summaryTotal)} games</span>
-              </div>
-              <div className="players-summary-tabs" aria-label="Result mode filters">
-                {GAME_MODES.map((mode) => (
-                  <button
-                    key={mode}
-                    className={`players-summary-tab ${summaryMode === mode ? 'active' : ''}`}
-                    type="button"
-                    onClick={() => setSummaryMode(mode)}
-                    disabled={!activePlayer}
-                  >
-                    {mode}
-                  </button>
-                ))}
-              </div>
-              {profileRows.length ? (
-                <div className="players-result-chart">
-                  {RESULT_BARS.map((bar) => {
-                    const value = summaryCounts[bar.key]
-                    const percent = summaryTotal > 0 ? (value / summaryTotal) * 100 : 0
-                    const width = summaryTotal > 0 ? Math.max(2, percent) : 0
-                    return (
-                      <div className="players-result-bar-row" key={bar.key}>
-                        <div className="players-result-bar-head">
-                          <span>{bar.label}</span>
-                          <strong>{formatNumber(value)}</strong>
-                        </div>
-                        <div className="players-result-bar-track" aria-label={`${bar.label}: ${formatNumber(value)}`}>
-                          <div className={`players-result-bar-fill ${bar.className}`} style={{ width: `${width}%` }} />
-                        </div>
-                        <small>{percent.toFixed(1)}%</small>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <p className="result-line">{loading ? 'Loading results…' : 'No results loaded.'}</p>
-              )}
-            </div>
           </section>
 
           <PlayerAnalysisWorkspace

@@ -1,0 +1,143 @@
+.player-analysis-workspace {
+  display: grid;
+  gap: 18px;
+  margin-top: 18px;
+  padding: 18px;
+}
+
+.player-analysis-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 22px;
+}
+
+.player-analysis-heading h2,
+.player-analysis-heading p {
+  margin: 0;
+}
+
+.player-analysis-heading > div:first-child {
+  display: grid;
+  gap: 4px;
+  max-width: 620px;
+}
+
+.player-analysis-heading > div:first-child > p:last-child {
+  color: var(--muted);
+}
+
+.player-behavior-controls {
+  display: flex;
+  align-items: flex-end;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.player-analysis-mode-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.player-analysis-mode-filter button {
+  min-height: 34px;
+  padding: 7px 13px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #090e13;
+  color: var(--muted);
+  font-weight: 800;
+  text-transform: capitalize;
+  cursor: pointer;
+}
+
+.player-analysis-mode-filter button:hover,
+.player-analysis-mode-filter button.active {
+  border-color: var(--accent);
+  color: var(--text);
+}
+
+.player-analysis-mode-filter button.active {
+  background: rgba(21, 199, 128, 0.12);
+}
+
+.player-specific-date {
+  display: grid;
+  gap: 4px;
+}
+
+.player-specific-date span {
+  color: var(--subtle);
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.player-specific-date .text-input {
+  min-width: 158px;
+}
+
+.player-analysis-error,
+.player-analysis-loading {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #090e13;
+}
+
+.player-analysis-error {
+  border-color: rgba(226, 88, 88, 0.5);
+  color: #ff9b9b;
+}
+
+.player-analysis-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+}
+
+.player-analysis-loading span {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(21, 199, 128, 0.28);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: player-analysis-spin 700ms linear infinite;
+}
+
+@keyframes player-analysis-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (max-width: 980px) {
+  .player-analysis-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-behavior-controls {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 620px) {
+  .player-analysis-workspace {
+    padding: 14px;
+  }
+
+  .player-behavior-controls,
+  .player-analysis-mode-filter {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-specific-date .text-input,
+  .player-behavior-controls > button {
+    width: 100%;
+  }
+}

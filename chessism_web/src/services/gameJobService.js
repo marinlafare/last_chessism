@@ -1,16 +1,6 @@
-import { getJson, postJson } from './apiClient'
-
 export const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
 export const DOWNLOAD_JOB_STORAGE_KEY = 'chessism:download-new-games:download-job'
 export const PLAYER_DELETE_JOB_STORAGE_KEY = 'chessism:players:delete-job'
-
-export async function sendPlayerAction(path, playerName) {
-  return postJson(path, { player_name: playerName })
-}
-
-export async function fetchJobStatus(jobId) {
-  return getJson(`/jobs/${encodeURIComponent(jobId)}`)
-}
 
 export function loadStoredJob(storageKey) {
   if (typeof window === 'undefined') return null

@@ -24,8 +24,10 @@ from chessism_api.operations import (
     games,
     player_analytics,
     player_deletion,
+    player_hero_analytics,
     tablebase,
 )
+from chessism_api.operations.player_timezone import resolve_player_timezone
 from chessism_api.database.ask_db import (
     _player_fens_for_analysis_stmt,
     fair_sample_player_games_by_month,
@@ -104,6 +106,18 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
 
         with self.assertRaisesRegex(ValueError, "3 clocks for 4 moves"):
             get_moves_data(game)
+
+    def test_zero_move_game_is_returned_as_a_tombstone_candidate(self):
+        game = {
+            "url": "https://www.chess.com/game/live/987",
+            "time_control": "60",
+            "pgn": '[Date "2026.09.28"]\n\n1-0',
+        }
+
+        move_count, moves = get_moves_data(game)
+
+        self.assertEqual(move_count, 0)
+        self.assertIsNone(moves)
 
     def test_game_without_clock_annotations_is_discarded(self):
         pgn = "\n".join([
@@ -211,6 +225,57 @@ class FenAggregationTests(unittest.TestCase):
             fens.count_fen_pieces("8/8/8/3k4/8/8/3Q4/3K4 w - -"),
             3,
         )
+
+
+class PlayerHeroAnalyticsTests(unittest.TestCase):
+    def test_country_with_even_zone_count_uses_two_center_zones(self):
+        resolved = resolve_player_timezone({"country": "MX", "location": None})
+
+        self.assertEqual(resolved.source, "country_center")
+        self.assertTrue(resolved.estimated)
+        self.assertEqual(len(resolved.zones), 2)
+
+    def test_location_can_resolve_one_country_zone(self):
+        resolved = resolve_player_timezone({"country": "MX", "location": "Mexico City"})
+
+        self.assertEqual(resolved.zones, ("America/Mexico_City",))
+        self.assertEqual(resolved.source, "location")
+
+    def test_black_player_scores_and_signed_cp_change_are_inverted(self):
+        rows = [
+            {
+                "n_move": 1, "ply": 1, "move_color": "white", "move": "e4",
+                "reaction_time": 1.0, "time_left": 59.0, "fen": "fen-1",
+                "score": -20.0, "analysis_source": "stockfish",
+                "wdl_win": 200.0, "wdl_draw": 300.0, "wdl_loss": 500.0,
+            },
+            {
+                "n_move": 1, "ply": 2, "move_color": "black", "move": "e5",
+                "reaction_time": 1.0, "time_left": 59.0, "fen": "fen-2",
+                "score": -80.0, "analysis_source": "stockfish",
+                "wdl_win": 100.0, "wdl_draw": 200.0, "wdl_loss": 700.0,
+            },
+        ]
+
+        positions = player_hero_analytics._format_game_positions(rows, "black")
+
+        self.assertEqual(positions[0]["player_score"], 20.0)
+        self.assertEqual(positions[1]["player_score"], 80.0)
+        self.assertEqual(positions[1]["cp_change"], 60.0)
+        self.assertEqual(positions[1]["cp_gain"], 60.0)
+        self.assertEqual(positions[1]["cp_loss"], 0)
+
+    def test_empty_measure_bucket_uses_null_cp_values(self):
+        bucket = player_hero_analytics._finalize_measure(
+            player_hero_analytics._measure_bucket(hour=3)
+        )
+
+        self.assertFalse(bucket["has_cp_data"])
+        self.assertFalse(bucket["has_cp_transitions"])
+        self.assertIsNone(bucket["player_cp_sum"])
+        self.assertIsNone(bucket["total_cp_gain"])
+        self.assertIsNone(bucket["total_cp_loss"])
+        self.assertIsNone(bucket["net_cp_change"])
 
 
 class TablebaseAnalysisTests(unittest.TestCase):

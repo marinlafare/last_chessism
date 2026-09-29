@@ -1,9 +1,4 @@
 /* Ordered imports preserve the original cascade while keeping each concern navigable. */
 @import './styles/foundation.css';
 @import './styles/dashboard-shared.css';
-@import './styles/scored-positions.css';
-@import './styles/analysis-positions.css';
-@import './styles/games.css';
-@import './styles/players.css';
-@import './styles/player-analysis.css';
 @import './styles/responsive.css';

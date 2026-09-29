@@ -1,9 +1,19 @@
 import { useEffect, useMemo, useState } from 'react'
+import './scored-positions/scoredPositions.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { getJson, requestJson } from '../services/apiClient'
 import { formatNumber } from '../utils/formatters'
+import {
+  fetchAdvantageByRating,
+  fetchBackupJobStatus,
+  fetchFenAnalysisBackups,
+  fetchRepeatedPendingFens,
+  fetchScoredGamesOverview,
+  fetchScoredOverview,
+  queueFenAnalysisBackup,
+  queueFenAnalysisRestore,
+} from './scored-positions/scoredPositionsApi'
 
 const RATING_GROUP_OPTIONS = [
   { key: 'bad', label: 'bad' },
@@ -60,9 +70,6 @@ const buildCountTicks = (maxValue, targetTickCount = 8) => {
 
   return ticks
 }
-
-const fetchJson = (path, signal) => getJson(path, { signal })
-const postJson = (path) => requestJson(path, { method: 'POST' })
 
 function RatingScatterChart({ payload }) {
   const points = Array.isArray(payload?.ratings) ? payload.ratings : []
@@ -191,9 +198,9 @@ function ScoredPositions() {
       setError('')
       try {
         const [overviewPayload, gameOverviewPayload, advantageByRatingPayload] = await Promise.all([
-          fetchJson('/fens/scored/overview', controller.signal),
-          fetchJson('/fens/scored/games/overview', controller.signal),
-          fetchJson('/fens/scored/advantage_by_rating', controller.signal)
+          fetchScoredOverview({ signal: controller.signal }),
+          fetchScoredGamesOverview({ signal: controller.signal }),
+          fetchAdvantageByRating({ signal: controller.signal })
         ])
         setOverview(overviewPayload)
         setGameOverview(gameOverviewPayload)
@@ -214,7 +221,7 @@ function ScoredPositions() {
     setRepeatedPendingLoading(true)
     setRepeatedPendingError('')
 
-    fetchJson(`/fens/pending/repeated?page=${repeatedPendingPage}`, controller.signal)
+    fetchRepeatedPendingFens(repeatedPendingPage, { signal: controller.signal })
       .then((payload) => {
         setRepeatedPendingFens(Array.isArray(payload?.rows) ? payload.rows : [])
         setRepeatedPendingPagination({
@@ -239,7 +246,7 @@ function ScoredPositions() {
   useEffect(() => {
     const controller = new AbortController()
 
-    fetchJson('/analysis/backups', controller.signal)
+    fetchFenAnalysisBackups({ signal: controller.signal })
       .then((payload) => {
         setBackups(Array.isArray(payload.backups) ? payload.backups : [])
         if (payload.storage_location) setBackupLocation(payload.storage_location)
@@ -272,7 +279,7 @@ function ScoredPositions() {
 
     const poll = async () => {
       try {
-        const payload = await fetchJson(`/jobs/${encodeURIComponent(jobId)}`, controller.signal)
+        const payload = await fetchBackupJobStatus(jobId, { signal: controller.signal })
         const progress = payload.progress || {}
         const resultEnvelope = payload.result || null
         const result = progress.result || resultEnvelope?.result || null
@@ -328,7 +335,7 @@ function ScoredPositions() {
   const saveFenAnalysis = async () => {
     setBackupError('')
     try {
-      const payload = await postJson('/analysis/backups')
+      const payload = await queueFenAnalysisBackup()
       rememberBackupJob({
         jobId: payload.job_id,
         kind: 'backup',
@@ -349,8 +356,7 @@ function ScoredPositions() {
 
     setBackupError('')
     try {
-      const filename = encodeURIComponent(latestBackup.filename)
-      const payload = await postJson(`/analysis/backups/${filename}/restore`)
+      const payload = await queueFenAnalysisRestore(latestBackup.filename)
       rememberBackupJob({
         jobId: payload.job_id,
         kind: 'restore',
@@ -437,7 +443,7 @@ function ScoredPositions() {
                 {backupError ? <div className="status-banner warn">{backupError}</div> : null}
               </div>
 
-              <div className="position-coverage-grid">
+              <div className="scored-coverage-grid">
                 <article className="metric-card">
                   <span>Scored Positions</span>
                   <strong>{overview ? formatNumber(overview.scored_positions) : '-'}</strong>

@@ -4,7 +4,15 @@ from sqlalchemy import select, Integer, func, update, bindparam, case
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, GameFenAssociation, Player, Month
+from chessism_api.database.models import (
+    Base,
+    Fen,
+    GameFenAssociation,
+    Month,
+    NoMovesGame,
+    Player,
+    to_dict,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 _ModelType = TypeVar("_ModelType", bound=Base)
@@ -179,6 +187,13 @@ class DBInterface:
                 stmt = pg_insert(self.db_class).on_conflict_do_update(
                     index_elements=['player_name', 'year', 'month'],
                     set_={'n_games': pg_insert(self.db_class).excluded.n_games}
+                )
+                await session.execute(stmt, clean_chunk)
+
+            elif self.db_class == NoMovesGame:
+                stmt = pg_insert(self.db_class).on_conflict_do_update(
+                    index_elements=['game_id'],
+                    set_={'played_at': pg_insert(self.db_class).excluded.played_at}
                 )
                 await session.execute(stmt, clean_chunk)
             

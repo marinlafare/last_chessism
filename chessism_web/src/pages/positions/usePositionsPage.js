@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   COMPLETED_JOB_FADE_MS, COMPLETED_JOB_VISIBLE_MS, DEFAULT_ANALYSIS_NODES,
-  ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE, START_FEN, analyzeFen, deleteJson,
-  fetchJson, formatNumber, getAnalysisLines, getAnalysisProcessView, getPositionJobKey,
+  ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE,
+  formatNumber, getAnalysisProcessView, getPositionJobKey,
   getProgressSnapshot, getTrackedJobPhase, isAnalysisJobKey, isTrackedJobActive,
   isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
-  playCompletionSound, postJson, storeJobState, unlockCompletionAudio, validateFen,
+  playCompletionSound, storeJobState, unlockCompletionAudio,
 } from './positionPageSupport'
+import {
+  deleteQueuedAnalysisJob,
+  fetchActiveJobs,
+  fetchAnalysisCounts,
+  fetchAnalysisProcesses,
+  fetchCoverage,
+  fetchPlayerAnalysisCounts,
+  fetchPositionJobStatus,
+  fetchRemainingFenGames,
+  inspectPlayerGameScope,
+  previewPlayerGameAnalysis,
+  queueAnalysisLoop,
+  queueGlobalAnalysis,
+  queuePlayerAnalysis,
+  queuePlayerGameAnalysis,
+} from './positionsApi'
 
 export function usePositionsPage() {
-  const [fenInput, setFenInput] = useState(START_FEN)
-  const [nodesLimit, setNodesLimit] = useState(1_000_000)
-  const [multipv, setMultipv] = useState(4)
-  const [result, setResult] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [boardWidth, setBoardWidth] = useState(420)
   const [coverage, setCoverage] = useState(null)
   const [coverageError, setCoverageError] = useState('')
   const [analysisCounts, setAnalysisCounts] = useState(null)
@@ -57,7 +66,6 @@ export function usePositionsPage() {
   const [deletingAnalysisJobIds, setDeletingAnalysisJobIds] = useState(() => new Set())
   const [etaClockMs, setEtaClockMs] = useState(Date.now())
   const [, setEtaRevision] = useState(0)
-  const boardWrapRef = useRef(null)
   const audioContextRef = useRef(null)
   const completedSoundJobsRef = useRef(new Set())
   const completionTimersRef = useRef(new Map())
@@ -69,10 +77,6 @@ export function usePositionsPage() {
   const activeJobPollSignatureRef = useRef('')
   const etaEstimatesRef = useRef(new Map())
 
-  const validation = useMemo(() => validateFen(fenInput), [fenInput])
-  const analysisLines = useMemo(() => getAnalysisLines(result), [result])
-  const bestLine = analysisLines[0]
-  const turnLabel = validation.game?.turn() === 'b' ? 'Black' : 'White'
   const scoredPositions = Number(analysisCounts?.analyzed_fens || 0)
   const pendingPositions = Number(
     analysisCounts?.unscored_fens ?? Math.max(0, Number(coverage?.n_positions || 0) - scoredPositions)
@@ -197,23 +201,9 @@ export function usePositionsPage() {
     return () => window.clearInterval(timer)
   }, [hasRunningAnalysis])
 
-  useEffect(() => {
-    const node = boardWrapRef.current
-    if (!node) return undefined
-
-    const updateWidth = () => {
-      setBoardWidth(Math.max(260, Math.min(420, Math.floor(node.clientWidth))))
-    }
-
-    updateWidth()
-    const observer = new ResizeObserver(updateWidth)
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
-
   const loadCoverage = async () => {
     try {
-      const payload = await fetchJson('/games/generalities')
+      const payload = await fetchCoverage()
       setCoverage(payload)
       setCoverageError('')
       return payload
@@ -224,21 +214,21 @@ export function usePositionsPage() {
   }
 
   const loadFenRemaining = async () => {
-    const payload = await fetchJson('/fens/remaining_games')
+    const payload = await fetchRemainingFenGames()
     const remaining = Number(payload.remaining_games || 0)
     setRemainingFenGames(remaining)
     return remaining
   }
 
   const loadAnalysisCounts = async () => {
-    const payload = await fetchJson('/fens/analysis_counts')
+    const payload = await fetchAnalysisCounts()
     setAnalysisCounts(payload)
     return payload
   }
 
   const loadAnalysisProcesses = async () => {
     try {
-      const payload = await fetchJson('/jobs/analysis')
+      const payload = await fetchAnalysisProcesses()
       setAnalysisProcesses(Array.isArray(payload.jobs) ? payload.jobs : [])
       setAnalysisProcessesError('')
     } catch (err) {
@@ -247,7 +237,7 @@ export function usePositionsPage() {
   }
 
   const hydrateActiveJobs = async () => {
-    const payload = await fetchJson('/jobs/active')
+    const payload = await fetchActiveJobs()
     const jobs = Array.isArray(payload.jobs) ? payload.jobs : []
     jobs.forEach((job) => {
       const progress = job.progress || {}
@@ -550,7 +540,7 @@ export function usePositionsPage() {
       await Promise.all(
         activeJobs.map(async ([key, state]) => {
           try {
-            const status = await fetchJson(`/jobs/${encodeURIComponent(state.jobId)}`)
+            const status = await fetchPositionJobStatus(state.jobId)
             const patch = { status, error: '' }
 
             if (key === 'fen') {
@@ -621,11 +611,11 @@ export function usePositionsPage() {
     return () => window.clearInterval(timer)
   }, [jobState])
 
-  const enqueueJob = async ({ key, path, body, meta = {} }) => {
+  const enqueueJob = async ({ key, request, body, meta = {} }) => {
     cancelJobDismissTimers(key)
     updateJobState(key, { loading: true, error: '', payload: null, status: null, jobId: null, ...meta })
     try {
-      const payload = await postJson(path, body)
+      const payload = await request(body)
       updateJobState(key, { loading: false, payload, jobId: payload.job_id || null })
       await loadCoverage()
       await loadAnalysisCounts()
@@ -643,7 +633,7 @@ export function usePositionsPage() {
     const targetFens = Number(globalJob.totalFens)
     enqueueJob({
       key: 'global',
-      path: '/analysis/run_job',
+      request: queueGlobalAnalysis,
       body: {
         total_fens_to_process: Number(globalJob.totalFens),
         batch_size: Number(globalJob.batchSize),
@@ -672,7 +662,7 @@ export function usePositionsPage() {
 
     enqueueJob({
       key: 'player',
-      path: '/analysis/run_player_job',
+      request: queuePlayerAnalysis,
       body: {
         player_name: playerName,
         total_fens_to_process: Number(playerJob.totalFens),
@@ -706,7 +696,7 @@ export function usePositionsPage() {
     const targetFens = positionsPerRun * runs
     enqueueJob({
       key: queueKey,
-      path: '/analysis/run_loop_job',
+      request: queueAnalysisLoop,
       body: {
         scope: loopJob.scope,
         player_name: loopJob.scope === 'player' ? playerName : null,
@@ -759,7 +749,7 @@ export function usePositionsPage() {
       preview: null
     }))
     try {
-      const scope = await postJson('/analysis/player_games/scope', payload)
+      const scope = await inspectPlayerGameScope(payload)
       setPlayerGameAnalysis((current) => ({ ...current, loadingScope: false, scope, error: '' }))
     } catch (err) {
       setPlayerGameAnalysis((current) => ({
@@ -779,7 +769,7 @@ export function usePositionsPage() {
     const gameLimit = Math.max(1, Number(playerGameAnalysis.gameLimit) || 1)
     setPlayerGameAnalysis((current) => ({ ...current, loadingPreview: true, preview: null, error: '' }))
     try {
-      const preview = await postJson('/analysis/player_games/preview', {
+      const preview = await previewPlayerGameAnalysis({
         ...playerGameScopePayload(),
         game_limit: useAll ? null : gameLimit,
         use_all: useAll,
@@ -801,7 +791,7 @@ export function usePositionsPage() {
     unlockCompletionAudio(audioContextRef)
     const payload = await enqueueJob({
       key: 'gameCompletion',
-      path: '/analysis/player_games/run_job',
+      request: queuePlayerGameAnalysis,
       body: {
         plan_id: preview.plan_id,
         batch_size: Number(playerGameAnalysis.batchSize),
@@ -835,7 +825,7 @@ export function usePositionsPage() {
 
     setPlayerInspection({ loading: true, error: '', data: null })
     try {
-      const payload = await fetchJson(`/fens/players/${encodeURIComponent(playerName)}/analysis_counts`)
+      const payload = await fetchPlayerAnalysisCounts(playerName)
       setPlayerInspection({ loading: false, error: '', data: payload })
     } catch (err) {
       setPlayerInspection({
@@ -857,7 +847,7 @@ export function usePositionsPage() {
 
     updateJobState(key, { deleting: true, error: '' })
     try {
-      await deleteJson(`/jobs/${encodeURIComponent(jobId)}/queued`)
+      await deleteQueuedAnalysisJob(jobId)
       cancelJobDismissTimers(key)
       clearJobState(key)
       await loadAnalysisProcesses()
@@ -876,7 +866,7 @@ export function usePositionsPage() {
 
     setDeletingAnalysisJobIds((current) => new Set(current).add(process.job_id))
     try {
-      await deleteJson(`/jobs/${encodeURIComponent(process.job_id)}/queued`)
+      await deleteQueuedAnalysisJob(process.job_id)
       setJobState((current) => {
         const next = { ...current }
         Object.entries(next).forEach(([key, state]) => {
@@ -897,40 +887,17 @@ export function usePositionsPage() {
     }
   }
 
-  const handleAnalyze = async (event) => {
-    event.preventDefault()
-    if (!validation.isValid) {
-      setError(validation.error)
-      return
-    }
-
-    setLoading(true)
-    setError('')
-    setResult(null)
-
-    try {
-      const payload = await analyzeFen({ fen: validation.fen, nodesLimit, multipv })
-      setResult(payload)
-      if (payload && payload.is_valid === false) setError('Stockfish rejected this FEN.')
-    } catch (err) {
-      setError(err.message || 'Analysis failed')
-    } finally {
-      setLoading(false)
-    }
-  }
-
   return {
-    activeLoopJobCount, analysisLines, analysisProcessViews, analysisProcessesError,
-    analysisCounts, bestLine, boardWidth, boardWrapRef, coverage, coverageBarItems, coverageError,
-    deletingAnalysisJobIds, error, etaClockMs, etaEstimatesRef, fenInput, globalJob,
-    handleAnalysisLoop, handleAnalyze, handleConfirmPlayerGameAnalysis,
+    activeLoopJobCount, analysisProcessViews, analysisProcessesError,
+    analysisCounts, coverage, coverageBarItems, coverageError,
+    deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, globalJob,
+    handleAnalysisLoop, handleConfirmPlayerGameAnalysis,
     handleDeleteAnalysisProcess, handleDeleteQueuedAnalysis, handleGlobalAnalysis,
     handleInspectPlayer, handleInspectPlayerGameScope, handlePlayerAnalysis,
-    handlePreviewPlayerGameAnalysis, jobState, loading, loopJob, loopJobIsQueueing,
-    multipv, nodesLimit, pendingPositions, playerGameAnalysis, playerGamePreview,
+    handlePreviewPlayerGameAnalysis, jobState, loopJob, loopJobIsQueueing,
+    pendingPositions, playerGameAnalysis, playerGamePreview,
     playerGamePreviewTotalSeconds, playerInspection, playerJob, remainingFenGames,
-    result, scoredPositions, setFenInput, setGlobalJob, setJobCardRef, setLoopJob,
-    setMultipv, setNodesLimit, setPlayerGameAnalysis, setPlayerInspection,
-    setPlayerJob, turnLabel, validation,
+    scoredPositions, setGlobalJob, setJobCardRef, setLoopJob,
+    setPlayerGameAnalysis, setPlayerInspection, setPlayerJob,
   }
 }

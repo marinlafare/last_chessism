@@ -9,7 +9,14 @@ import Positions from './pages/Positions'
 import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
 import AnalyzeTimes from './pages/AnalyzeTimes'
-import { API_BASE_URL } from './config'
+import {
+  fetchAdmins,
+  fetchCurrentAccount,
+  logoutAdmin,
+  submitAdminLogin,
+  submitAdminSignup,
+  unlockSuperadmin,
+} from './services/authApi'
 
 const APP_PATHS = new Set([
   '/',
@@ -34,25 +41,6 @@ const getLocationKey = () => `${normalizePath(window.location.pathname)}${window
 const isAppPath = (pathname) => {
   const normalized = normalizePath(pathname)
   return APP_PATHS.has(normalized) || /^\/games\/[^/]+$/.test(normalized)
-}
-
-async function fetchCurrentAccount() {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    credentials: 'include'
-  })
-  if (!response.ok) return null
-  return response.json()
-}
-
-async function unlockSuperadmin(code) {
-  const response = await fetch(`${API_BASE_URL}/auth/gate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ code })
-  })
-  if (!response.ok) return null
-  return response.json()
 }
 
 function SuperadminGate({ onUnlock }) {
@@ -80,51 +68,6 @@ function SuperadminGate({ onUnlock }) {
       />
     </main>
   )
-}
-
-async function fetchAdmins() {
-  const response = await fetch(`${API_BASE_URL}/auth/admins`, {
-    credentials: 'include'
-  })
-  if (!response.ok) {
-    throw new Error('Gate access required.')
-  }
-  return response.json()
-}
-
-async function submitAdminSignup(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/admins/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || 'Could not create admin.')
-  }
-  return payload
-}
-
-async function submitAdminLogin(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/admins/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || 'Could not sign in.')
-  }
-  return payload
-}
-
-async function logoutAdmin() {
-  await fetch(`${API_BASE_URL}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include'
-  }).catch(() => {})
 }
 
 function AdminsPage({ onAuthenticated, onGateExpired }) {

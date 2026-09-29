@@ -35,6 +35,14 @@ from chessism_api.operations.player_analytics import (
     normalize_player_analytics_filters,
     player_analytics_cache_key,
 )
+from chessism_api.operations.player_hero_analytics import (
+    get_player_behavioural_activity,
+    get_player_behavioural_day,
+    get_player_behavioural_ratings,
+    get_player_game_measures,
+    get_player_hour_measures,
+    get_player_quality_calendar,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -92,6 +100,16 @@ def _analysis_filters(
         )
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+async def _hero_analytics_response(operation, *args, **kwargs) -> JSONResponse:
+    try:
+        payload = await operation(*args, **kwargs)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    return JSONResponse(content=payload)
 
 
 @router.get("/main_characters/time_controls")
@@ -188,6 +206,118 @@ async def api_get_player_playing_patterns(
     filters = _analysis_filters(player_name, mode, date_from, date_to)
     payload = await _get_cached_player_analysis(redis, "patterns", filters)
     return JSONResponse(content=payload)
+
+
+@router.get("/{player_name}/analysis/behavioural/activity")
+async def api_get_player_behavioural_activity(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return dense weekday/hour game and result distributions."""
+    return await _hero_analytics_response(
+        get_player_behavioural_activity,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/behavioural/ratings")
+async def api_get_player_behavioural_ratings(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return dense, mode-separated daily last-rating series."""
+    return await _hero_analytics_response(
+        get_player_behavioural_ratings,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/behavioural/days/{target_date}")
+async def api_get_player_behavioural_day(
+    player_name: str,
+    target_date: date,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return all rating observations and results for one local calendar day."""
+    return await _hero_analytics_response(
+        get_player_behavioural_day,
+        player_name,
+        target_date,
+        mode,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/measures/quality-calendar")
+async def api_get_player_quality_calendar(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return player-perspective CP gains/losses grouped by local play time."""
+    return await _hero_analytics_response(
+        get_player_quality_calendar,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/measures/games/{game_id}")
+async def api_get_player_game_measures(
+    player_name: str,
+    game_id: int,
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return the complete ordered, player-perspective score series for a game."""
+    return await _hero_analytics_response(
+        get_player_game_measures,
+        player_name,
+        game_id,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/measures/days/{target_date}/hours/{hour}")
+async def api_get_player_hour_measures(
+    player_name: str,
+    target_date: date,
+    hour: int,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+    limit_games: int = Query(20, ge=1, le=100),
+    cursor: str | None = Query(None, max_length=512),
+) -> JSONResponse:
+    """Return paginated score sequences for games started in one local hour."""
+    return await _hero_analytics_response(
+        get_player_hour_measures,
+        player_name,
+        target_date,
+        hour,
+        mode,
+        timezone,
+        limit_games,
+        cursor,
+    )
 
 
 @router.get("/{player_name}/deletion-preview")

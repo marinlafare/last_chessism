@@ -34,6 +34,8 @@ class Player(Base):
     followers = Column('followers', Integer,nullable=True)
     country = Column('country', String, nullable=True)
     location = Column('location', String, nullable=True)
+    timezone = Column('timezone', String(64), nullable=True)
+    timezone_source = Column('timezone_source', String(32), nullable=True)
     joined = Column('joined', BigInteger, nullable=True) # Use BigInteger for Unix timestamps
     status = Column('status', String, nullable=True)
     is_streamer = Column('is_streamer', Boolean, nullable=True)
@@ -101,6 +103,15 @@ class Game(Base):
         Index("ix_game_white_played_at", "white", "played_at"),
         Index("ix_game_black_played_at", "black", "played_at"),
     )
+
+
+class NoMovesGame(Base):
+    """Tombstone for a downloaded game that contains no played moves."""
+
+    __tablename__ = "no_moves_games"
+
+    game_id = Column(BigInteger, primary_key=True)
+    played_at = Column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class GamePlayer(Base):
@@ -195,6 +206,35 @@ class GameAnalysisSummary(Base):
             postgresql_where=total_positions > 0,
         ),
     )
+
+
+class GamePlayerEngineSummary(Base):
+    """Reusable player-perspective engine totals for one game and color."""
+
+    __tablename__ = "game_player_engine_summary"
+
+    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
+    color = Column(String(5), primary_key=True)
+    positions = Column(Integer, nullable=False, default=0, server_default="0")
+    positive_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    negative_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    equal_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    transitions = Column(Integer, nullable=False, default=0, server_default="0")
+    cp_gain_events = Column(Integer, nullable=False, default=0, server_default="0")
+    cp_loss_events = Column(Integer, nullable=False, default=0, server_default="0")
+    player_cp_sum = Column(Float, nullable=False, default=0, server_default="0")
+    total_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
+    total_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
+    own_move_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
+    own_move_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
+    opponent_move_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
+    opponent_move_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
+    mate_for = Column(Integer, nullable=False, default=0, server_default="0")
+    mate_against = Column(Integer, nullable=False, default=0, server_default="0")
+    tablebase_winning = Column(Integer, nullable=False, default=0, server_default="0")
+    tablebase_drawing = Column(Integer, nullable=False, default=0, server_default="0")
+    tablebase_losing = Column(Integer, nullable=False, default=0, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class ScoredPositionSummary(Base):
@@ -358,6 +398,12 @@ class GameFenAssociation(Base):
 
     __table_args__ = (
         UniqueConstraint('game_link', 'fen_fen', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
+        Index(
+            "ix_game_fen_association_game_order",
+            "game_link",
+            "n_move",
+            "move_color",
+        ),
     )
 
 
