@@ -6,6 +6,7 @@ export const fetchPlayerProfile = (playerName) => getJson(`/players/${playerPath
 export const fetchPlayerHours = (playerName) => getJson(`/games/${playerPath(playerName)}/hours_played`)
 export const fetchPlayerPositionStats = (playerName) => getJson(`/fens/players/${playerPath(playerName)}/analysis_counts`)
 export const fetchPlayerNeighbors = (playerName) => getJson(`/players/${playerPath(playerName)}/neighbors`)
+export const fetchPlayerNavigation = () => getJson('/players/navigation')
 export const fetchPlayerDeletionPreview = (playerName) => getJson(`/players/${playerPath(playerName)}/deletion-preview`)
 export const fetchPlayerJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
 export const downloadPlayerGames = (playerName) => postJson('/games', { player_name: playerName })

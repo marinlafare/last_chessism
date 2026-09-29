@@ -23,10 +23,6 @@
   max-width: 620px;
 }
 
-.player-analysis-heading > div:first-child > p:last-child {
-  color: var(--muted);
-}
-
 .player-behavior-controls {
   display: flex;
   align-items: flex-end;
@@ -61,23 +57,6 @@
 
 .player-analysis-mode-filter button.active {
   background: rgba(21, 199, 128, 0.12);
-}
-
-.player-specific-date {
-  display: grid;
-  gap: 4px;
-}
-
-.player-specific-date span {
-  color: var(--subtle);
-  font-size: 9px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.player-specific-date .text-input {
-  min-width: 158px;
 }
 
 .player-analysis-error,
@@ -136,8 +115,4 @@
     flex-direction: column;
   }
 
-  .player-specific-date .text-input,
-  .player-behavior-controls > button {
-    width: 100%;
-  }
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './players/players.css'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
@@ -18,6 +18,7 @@ import {
   fetchPlayerDeletionPreview,
   fetchPlayerHours,
   fetchPlayerJobStatus,
+  fetchPlayerNavigation,
   fetchPlayerNeighbors,
   fetchPlayerPositionStats,
   fetchPlayerProfile,
@@ -63,6 +64,10 @@ function Players() {
   const [playerHours, setPlayerHours] = useState(null)
   const [playerPositionStats, setPlayerPositionStats] = useState(null)
   const [playerNeighbors, setPlayerNeighbors] = useState(null)
+  const [playerMenuOpen, setPlayerMenuOpen] = useState(false)
+  const [playerMenuPlayers, setPlayerMenuPlayers] = useState([])
+  const [playerMenuLoading, setPlayerMenuLoading] = useState(false)
+  const [playerMenuError, setPlayerMenuError] = useState('')
   const [gamesUpdateLoading, setGamesUpdateLoading] = useState(false)
   const [gamesUpdateJob, setGamesUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
   const [gamesUpdateStatus, setGamesUpdateStatus] = useState(null)
@@ -75,6 +80,7 @@ function Players() {
   const [deleteJob, setDeleteJob] = useState(() => loadStoredJob(PLAYER_DELETE_JOB_STORAGE_KEY))
   const [deleteStatus, setDeleteStatus] = useState(null)
   const [deleteMessage, setDeleteMessage] = useState('')
+  const playerPickerRef = useRef(null)
 
   const loadPlayer = async (requestedName) => {
     const name = String(requestedName || '').trim().toLowerCase()
@@ -208,15 +214,60 @@ function Players() {
     const nextPlayer = String(playerName || '').trim().toLowerCase()
     if (!nextPlayer || nextPlayer === activePlayer.toLowerCase()) return
 
+    setPlayerMenuOpen(false)
     const nextUrl = `/players?player=${encodeURIComponent(nextPlayer)}`
     window.history.pushState(null, '', nextUrl)
     window.dispatchEvent(new PopStateEvent('popstate'))
+  }
+
+  const togglePlayerMenu = async () => {
+    if (playerMenuOpen) {
+      setPlayerMenuOpen(false)
+      return
+    }
+    setPlayerMenuOpen(true)
+    if (playerMenuPlayers.length || playerMenuLoading) return
+
+    setPlayerMenuLoading(true)
+    setPlayerMenuError('')
+    try {
+      const payload = await fetchPlayerNavigation()
+      setPlayerMenuPlayers(
+        (Array.isArray(payload?.players) ? payload.players : [])
+          .map((name) => String(name || '').trim().toLowerCase())
+          .filter(Boolean)
+          .sort((left, right) => left.localeCompare(right))
+      )
+    } catch (navigationError) {
+      setPlayerMenuError(
+        navigationError instanceof Error ? navigationError.message : 'Unable to load players.'
+      )
+    } finally {
+      setPlayerMenuLoading(false)
+    }
   }
 
   useEffect(() => {
     const playerFromQuery = new URLSearchParams(window.location.search).get('player')
     loadPlayer(playerFromQuery)
   }, [])
+
+  useEffect(() => {
+    if (!playerMenuOpen) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!playerPickerRef.current?.contains(event.target)) setPlayerMenuOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPlayerMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [playerMenuOpen])
 
   useEffect(() => {
     const job = gamesUpdateJob
@@ -331,16 +382,13 @@ function Players() {
     : null
   const profileRows = profile
     ? [
-        ['Player', profile.player_name],
-        ['Name', profile.name],
-        ['Title', profile.title],
-        ['Country', profile.country],
-        ['Location', profile.location],
-        ['Followers', profile.followers],
-        ['Last rating', latestRatingDisplay],
-        ['Joined', joinedDisplay],
-        ['Status', profile.status]
-      ].filter(([, value]) => value !== null && value !== undefined && value !== '')
+        ['Player', profile.player_name || 'N/A'],
+        ['Name', profile.name || 'N/A'],
+        ['Country', profile.country || 'N/A'],
+        ['Last rating', latestRatingDisplay || 'N/A'],
+        ['Joined', joinedDisplay || 'N/A'],
+        ['Status', profile.status || 'N/A']
+      ]
     : []
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
   const profileAvatar = String(profile?.avatar || '').trim()
@@ -358,6 +406,11 @@ function Players() {
   const gamesUpdateActive = Boolean(gamesUpdateJob?.jobId && !isTerminalJobStatus(gamesUpdateStatus))
   const deleteActive = Boolean(deleteJob?.jobId && !isTerminalJobStatus(deleteStatus))
   const deleteConfirmationMatches = deleteConfirmation.trim().toLowerCase() === activePlayer.toLowerCase()
+  const modeActivity = ['bullet', 'blitz', 'rapid'].map((mode) => ({
+    mode,
+    games: Number(playerHours?.[`${mode}_games`] || 0),
+    hours: Math.round(Number(playerHours?.[`${mode}_hours`] || 0)),
+  }))
   return (
     <div className="page-frame">
       <SideRail />
@@ -379,9 +432,44 @@ function Players() {
                     disabled={!playerNeighbors?.previous_player || loading}
                     onClick={() => navigateToPlayer(playerNeighbors?.previous_player)}
                   >
-                    ←
+                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M12.5 4.5 7 10l5.5 5.5" />
+                    </svg>
                   </button>
-                  <h2 className="games-action-title">{profileTitle}</h2>
+                  <div className="players-title-picker" ref={playerPickerRef}>
+                    <button
+                      className="games-action-title players-title-select"
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={playerMenuOpen}
+                      aria-controls="player-navigation-menu"
+                      disabled={loading}
+                      onClick={togglePlayerMenu}
+                    >
+                      <span>{profileTitle}</span>
+                    </button>
+                    {playerMenuOpen ? (
+                      <div className="players-title-menu" id="player-navigation-menu" role="menu">
+                        {playerMenuLoading ? <p>Loading players…</p> : null}
+                        {playerMenuError ? <p className="error">{playerMenuError}</p> : null}
+                        {!playerMenuLoading && !playerMenuError ? playerMenuPlayers
+                          .filter((name) => name !== activePlayer.toLowerCase())
+                          .map((name) => (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              key={name}
+                              onClick={() => navigateToPlayer(name)}
+                            >
+                              {name}
+                            </button>
+                          )) : null}
+                        {!playerMenuLoading && !playerMenuError && playerMenuPlayers.length <= 1 ? (
+                          <p>No other players available.</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
                   <button
                     className="players-title-arrow"
                     type="button"
@@ -390,7 +478,9 @@ function Players() {
                     disabled={!playerNeighbors?.next_player || loading}
                     onClick={() => navigateToPlayer(playerNeighbors?.next_player)}
                   >
-                    →
+                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="m7.5 4.5 5.5 5.5-5.5 5.5" />
+                    </svg>
                   </button>
                 </div>
                 <div className="players-profile-actions">
@@ -401,7 +491,7 @@ function Players() {
                     disabled={!activePlayer || loading || gamesUpdateLoading || gamesUpdateActive || deleteActive}
                     onClick={handleGamesUpdate}
                   >
-                    {gamesUpdateLoading ? 'Queueing…' : gamesUpdateActive ? 'Updating…' : 'Update'}
+                    {gamesUpdateLoading ? 'queueing…' : gamesUpdateActive ? 'updating…' : 'update'}
                   </button>
                   <button
                     className="btn btn-danger btn-inline players-delete-button"
@@ -409,7 +499,7 @@ function Players() {
                     disabled={!activePlayer || loading || deletePreviewLoading || deleteActive || gamesUpdateActive || Boolean(profile?.deleted_at)}
                     onClick={handleOpenDeletePreview}
                   >
-                    {deletePreviewLoading ? 'Checking…' : deleteActive ? 'Deleting…' : 'Delete player'}
+                    {deletePreviewLoading ? 'checking…' : deleteActive ? 'deleting…' : 'delete'}
                   </button>
                 </div>
               </div>
@@ -435,10 +525,11 @@ function Players() {
                         ))}
                       </div>
                       <div className="players-hours-text">
-                        <p>total hours played: {Math.round(Number(playerHours?.total_hours || 0))}</p>
-                        <p>
-                          bullet: {Math.round(Number(playerHours?.bullet_hours || 0))} | blitz: {Math.round(Number(playerHours?.blitz_hours || 0))} | rapid: {Math.round(Number(playerHours?.rapid_hours || 0))}
-                        </p>
+                        {modeActivity.map(({ mode, games, hours }) => (
+                          <p key={mode}>
+                            <strong>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs |
+                          </p>
+                        ))}
                       </div>
                     </div>
                     <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">

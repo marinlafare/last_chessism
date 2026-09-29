@@ -37,10 +37,99 @@
 }
 
 .players-title-navigation .games-action-title {
+  display: grid;
+  min-height: 31px;
   overflow: hidden;
   min-width: 0;
+  place-items: center;
+  padding: 4px 12px;
+  border: 1px solid #000;
+  border-radius: 5px;
+  background: #000;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.players-title-picker {
+  position: relative;
+  min-width: 0;
+}
+
+.players-title-select {
+  grid-template-columns: minmax(0, 1fr);
+  width: 100%;
+  color: var(--text);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.players-title-select:disabled {
+  cursor: default;
+}
+
+.players-title-select > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.players-title-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  left: 0;
+  z-index: 60;
+  display: grid;
+  gap: 3px;
+  max-height: min(360px, 55vh);
+  overflow-y: auto;
+  scrollbar-width: none;
+  padding: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #090e13;
+  box-shadow: 0 16px 38px rgba(0, 0, 0, 0.5);
+}
+
+.players-title-menu::-webkit-scrollbar {
+  display: none;
+}
+
+.players-title-menu button {
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--muted);
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 11px;
+  font-weight: 400;
+  text-align: center;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.players-title-menu button:hover,
+.players-title-menu button:focus-visible {
+  outline: none;
+  background: rgba(21, 199, 128, 0.12);
+  color: var(--text);
+}
+
+.players-title-menu p {
+  margin: 0;
+  padding: 9px 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.players-title-menu p.error {
+  color: var(--danger);
 }
 
 .players-profile-section > .section-head {
@@ -191,6 +280,17 @@
   transition: border-color 140ms ease, background 140ms ease, transform 140ms ease;
 }
 
+.players-title-arrow svg {
+  display: block;
+  width: 15px;
+  height: 15px;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2;
+}
+
 .players-title-arrow:hover:not(:disabled) {
   border-color: var(--accent);
   background: var(--surface-3);
@@ -254,7 +354,8 @@
 
 .players-hours-text {
   display: grid;
-  gap: 4px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px 12px;
   margin: 0;
   color: var(--muted);
   font-size: 13px;
@@ -262,6 +363,13 @@
 
 .players-hours-text p {
   margin: 0;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.players-hours-text strong {
+  color: var(--text);
+  font-weight: 800;
 }
 
 .players-profile-avatar-box,
@@ -298,17 +406,25 @@
   font-weight: 800;
 }
 
-.profile-grid {
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+.players-profile-details .profile-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .profile-item {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  min-width: 0;
   padding: 8px 10px;
+  text-align: center;
 }
 
 .profile-item strong {
   display: block;
+  max-width: 100%;
+  overflow: hidden;
   margin-top: 4px;
+  text-overflow: ellipsis;
 }
 
 .players-profile-details {

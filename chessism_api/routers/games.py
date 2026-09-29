@@ -381,7 +381,7 @@ async def api_get_player_mode_games(
 @router.get("/{player_name}/hours_played")
 async def api_get_player_hours_played(player_name: str) -> JSONResponse:
     """
-    Returns total played hours and per-mode played hours for a player.
+    Returns total played hours plus per-mode game counts and played hours for a player.
     """
     player_name_lower = player_name.lower()
     result = await get_player_hours_played(player_name_lower)

@@ -5,9 +5,11 @@ the player hero page. Their backend implementation lives in
 `chessism_api/operations/player_hero_analytics.py`; the page-owned API client
 lives in `chessism_web/src/pages/players/playerAnalysisApi.js`.
 
-All aggregate endpoints accept `mode=all|bullet|blitz|rapid`, optional
-`date_from` and `date_to`, and an optional IANA `timezone`. Without an explicit
-timezone, the backend resolves time in this order:
+All aggregate endpoints accept `mode=all|bullet|blitz|rapid` and optional
+`date_from` and `date_to`. Behavioral endpoints automatically resolve the
+player's local time. Engine-measure endpoints may additionally accept an
+explicit IANA `timezone`. Without an explicit timezone, the backend resolves
+time in this order:
 
 1. a stored player timezone;
 2. a confidently matched timezone from the player's location;
@@ -25,7 +27,7 @@ the result is estimated or UTC-based.
 | --- | --- |
 | `GET /players/{player}/analysis/behavioural/activity` | Dense weekday, hour, and weekday×hour game proportions plus absolute wins, draws, and losses. |
 | `GET /players/{player}/analysis/behavioural/ratings` | Dense daily last-rating series, kept separate for Bullet, Blitz, and Rapid. Days without games contain `last_rating: null`. |
-| `GET /players/{player}/analysis/behavioural/days/{date}` | All rating observations and absolute W/D/L totals in 24 hourly buckets for one resolved local date. |
+| `GET /players/{player}/analysis/behavioural/days/{date}` | All rating observations and absolute W/D/L totals in 24 resolved-local-time hourly buckets for one local date. |
 
 ## Engine Measures
 

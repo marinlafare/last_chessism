@@ -42,14 +42,6 @@ export function fetchBehaviouralRatings({ playerName, signal, ...filters }) {
   )
 }
 
-export function fetchBehaviouralDay({ playerName, date, signal, ...filters }) {
-  const search = analyticsSearch(filters)
-  return cachedRequest(
-    `/players/${playerPath(playerName)}/analysis/behavioural/days/${encodeURIComponent(date)}?${search}`,
-    { signal }
-  )
-}
-
 export function fetchQualityCalendar({ playerName, signal, ...filters }) {
   const search = analyticsSearch(filters)
   return cachedRequest(

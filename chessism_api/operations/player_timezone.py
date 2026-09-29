@@ -84,7 +84,10 @@ class ResolvedPlayerTimezone:
         return left + ((right - left) / 2)
 
     def payload(self) -> dict[str, Any]:
-        if self.is_utc_fallback:
+        if self.source == "database_utc":
+            message = "Hours and dates use stored UTC timestamps without timezone conversion."
+            time_basis = "utc"
+        elif self.is_utc_fallback:
             message = (
                 "The player's timezone could not be determined; results are "
                 "grouped in UTC."

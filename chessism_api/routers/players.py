@@ -10,6 +10,7 @@ from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     get_player_neighbors,
+    get_tracked_player_names,
     get_player_performance_summary,
     get_player_modes_stats,
     get_player_mode_chart
@@ -173,6 +174,12 @@ async def api_get_current_players_with_games():
     return JSONResponse(content=result)
 
 
+@router.get("/navigation")
+async def api_get_player_navigation() -> JSONResponse:
+    """Return the alphabetical active-player list used by hero navigation."""
+    return JSONResponse(content={"players": await get_tracked_player_names()})
+
+
 @router.get("/{player_name}/neighbors")
 async def api_get_player_neighbors(player_name: str) -> JSONResponse:
     """Return the previous and next full player profiles alphabetically."""
@@ -214,16 +221,14 @@ async def api_get_player_behavioural_activity(
     mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
-    timezone: str | None = Query(None, min_length=1, max_length=64),
 ) -> JSONResponse:
-    """Return dense weekday/hour game and result distributions."""
+    """Return dense weekday/hour distributions in the player's resolved timezone."""
     return await _hero_analytics_response(
         get_player_behavioural_activity,
         player_name,
         mode,
         date_from,
         date_to,
-        timezone,
     )
 
 
@@ -233,16 +238,14 @@ async def api_get_player_behavioural_ratings(
     mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
-    timezone: str | None = Query(None, min_length=1, max_length=64),
 ) -> JSONResponse:
-    """Return dense, mode-separated daily last-rating series."""
+    """Return dense daily last-rating series in the player's resolved timezone."""
     return await _hero_analytics_response(
         get_player_behavioural_ratings,
         player_name,
         mode,
         date_from,
         date_to,
-        timezone,
     )
 
 
@@ -251,15 +254,13 @@ async def api_get_player_behavioural_day(
     player_name: str,
     target_date: date,
     mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
-    timezone: str | None = Query(None, min_length=1, max_length=64),
 ) -> JSONResponse:
-    """Return all rating observations and results for one local calendar day."""
+    """Return rating observations and results for one resolved local calendar day."""
     return await _hero_analytics_response(
         get_player_behavioural_day,
         player_name,
         target_date,
         mode,
-        timezone,
     )
 
 

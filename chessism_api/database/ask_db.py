@@ -3682,6 +3682,20 @@ async def get_player_neighbors(player_name: str) -> Dict[str, Optional[str]]:
     }
 
 
+async def get_tracked_player_names() -> List[str]:
+    """Return active full-profile player names for lightweight UI navigation."""
+    query = """
+        SELECT player_name
+        FROM player
+        WHERE joined != 0
+          AND deleted_at IS NULL
+        ORDER BY player_name ASC;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        return [str(row[0]) for row in result.all()]
+
+
 # --- NEW: STATISTICAL ANALYSIS QUERIES ---
 
 async def get_player_performance_summary(player_name: str) -> Optional[Dict[str, Any]]:
@@ -3988,8 +4002,11 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     query = """
         SELECT
             ROUND((COALESCE(SUM(time_elapsed), 0) / 3600.0)::numeric, 2) AS total_hours,
+            COUNT(*) FILTER (WHERE mode = 'bullet') AS bullet_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'bullet' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS bullet_hours,
+            COUNT(*) FILTER (WHERE mode = 'blitz') AS blitz_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'blitz' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS blitz_hours,
+            COUNT(*) FILTER (WHERE mode = 'rapid') AS rapid_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'rapid' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS rapid_hours
         FROM game_player
         WHERE player_name = :player;
@@ -4002,8 +4019,11 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     return {
         "player_name": player_name,
         "total_hours": float(row.get("total_hours") or 0.0),
+        "bullet_games": int(row.get("bullet_games") or 0),
         "bullet_hours": float(row.get("bullet_hours") or 0.0),
+        "blitz_games": int(row.get("blitz_games") or 0),
         "blitz_hours": float(row.get("blitz_hours") or 0.0),
+        "rapid_games": int(row.get("rapid_games") or 0),
         "rapid_hours": float(row.get("rapid_hours") or 0.0)
     }
 

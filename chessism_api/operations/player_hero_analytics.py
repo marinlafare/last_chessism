@@ -23,6 +23,7 @@ VALID_MODES = {"all", "bullet", "blitz", "rapid"}
 WEEKDAY_NAMES = (
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
 )
+PLAYER_LOCAL_TIMESTAMP_SQL = player_local_timestamp_sql("gp")
 
 
 @dataclass(frozen=True)
@@ -112,13 +113,11 @@ async def get_player_behavioural_activity(
     mode: str = "all",
     date_from: date | None = None,
     date_to: date | None = None,
-    timezone_name: str | None = None,
 ) -> dict[str, Any]:
-    local_timestamp = player_local_timestamp_sql("gp")
     query = text(f"""
         SELECT
-            EXTRACT(ISODOW FROM {local_timestamp})::int AS weekday,
-            EXTRACT(HOUR FROM {local_timestamp})::int AS hour,
+            EXTRACT(ISODOW FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS weekday,
+            EXTRACT(HOUR FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS hour,
             COUNT(*)::bigint AS games,
             COUNT(*) FILTER (WHERE gp.result = 1)::bigint AS wins,
             COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
@@ -134,7 +133,7 @@ async def get_player_behavioural_activity(
     """)
     async with AsyncDBSession() as session:
         scope = await _analytics_scope(
-            session, player_name, mode, date_from, date_to, timezone_name
+            session, player_name, mode, date_from, date_to
         )
         result = await session.execute(query, scope.params())
         rows = result.mappings().all()
@@ -172,9 +171,7 @@ async def get_player_behavioural_ratings(
     mode: str = "all",
     date_from: date | None = None,
     date_to: date | None = None,
-    timezone_name: str | None = None,
 ) -> dict[str, Any]:
-    local_timestamp = player_local_timestamp_sql("gp")
     query = text(f"""
         WITH ranked AS (
             SELECT
@@ -182,9 +179,9 @@ async def get_player_behavioural_ratings(
                 gp.rating,
                 gp.link,
                 gp.played_at,
-                ({local_timestamp})::date AS local_date,
+                ({PLAYER_LOCAL_TIMESTAMP_SQL})::date AS local_date,
                 ROW_NUMBER() OVER (
-                    PARTITION BY gp.mode, ({local_timestamp})::date
+                    PARTITION BY gp.mode, ({PLAYER_LOCAL_TIMESTAMP_SQL})::date
                     ORDER BY gp.played_at DESC, gp.link DESC
                 ) AS day_rank
             FROM game_player gp
@@ -202,7 +199,7 @@ async def get_player_behavioural_ratings(
     """)
     async with AsyncDBSession() as session:
         scope = await _analytics_scope(
-            session, player_name, mode, date_from, date_to, timezone_name
+            session, player_name, mode, date_from, date_to
         )
         result = await session.execute(query, scope.params())
         rows = result.mappings().all()
@@ -241,11 +238,10 @@ async def get_player_behavioural_day(
     player_name: str,
     target_date: date,
     mode: str = "all",
-    timezone_name: str | None = None,
 ) -> dict[str, Any]:
     async with AsyncDBSession() as session:
         scope = await _analytics_scope(
-            session, player_name, mode, target_date, target_date, timezone_name
+            session, player_name, mode, target_date, target_date
         )
         result = await session.execute(text("""
             SELECT gp.link, gp.mode, gp.rating, gp.result, gp.played_at
@@ -260,10 +256,11 @@ async def get_player_behavioural_day(
 
     hours = [_activity_bucket(hour=hour) | {"ratings": [], "last_rating": None} for hour in range(24)]
     for row in rows:
-        local_played = scope.timezone.local_datetime(row["played_at"])
-        if local_played is None or local_played.date() != target_date:
+        played_at_local = scope.timezone.local_datetime(row["played_at"])
+        if played_at_local is None or played_at_local.date() != target_date:
             continue
-        bucket = hours[local_played.hour]
+        played_at_utc = row["played_at"].astimezone(timezone.utc)
+        bucket = hours[played_at_local.hour]
         wins, draws, losses = _result_counts(float(row["result"]))
         bucket["games"] += 1
         bucket["wins"] += wins
@@ -273,8 +270,8 @@ async def get_player_behavioural_day(
             "game_id": int(row["link"]),
             "mode": str(row["mode"] or "unknown"),
             "rating": int(row["rating"]),
-            "played_at_utc": row["played_at"].isoformat(),
-            "played_at_local": local_played.isoformat(),
+            "played_at_utc": played_at_utc.isoformat(),
+            "played_at_local": played_at_local.isoformat(),
         }
         bucket["ratings"].append(observation)
         bucket["last_rating"] = observation["rating"]
