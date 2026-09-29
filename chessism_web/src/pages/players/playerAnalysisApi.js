@@ -50,6 +50,22 @@ export function fetchQualityCalendar({ playerName, signal, bypassCache = false, 
   )
 }
 
+export function fetchDailyGameCp({ playerName, signal, bypassCache = false, ...filters }) {
+  const search = analyticsSearch(filters)
+  return cachedRequest(
+    `/players/${playerPath(playerName)}/analysis/measures/daily-game-cp?${search}`,
+    { signal, bypassCache }
+  )
+}
+
+export function fetchDailyEfficiency({ playerName, signal, bypassCache = false, ...filters }) {
+  const search = analyticsSearch(filters)
+  return cachedRequest(
+    `/players/${playerPath(playerName)}/analysis/measures/daily-efficiency?${search}`,
+    { signal, bypassCache }
+  )
+}
+
 export function fetchGameMeasures({ playerName, gameId, timezone, signal }) {
   const search = analyticsSearch({ timezone })
   return cachedRequest(

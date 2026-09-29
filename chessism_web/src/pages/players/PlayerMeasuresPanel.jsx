@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
+import PlayerDailyEfficiencyChart from './PlayerDailyEfficiencyChart'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 
 const MEASURE_FIELDS = [
@@ -363,7 +364,7 @@ function MeasuresInspector({ gameInspector, hourInspector }) {
   )
 }
 
-export default function PlayerMeasuresPanel({ quality, gameInspector, hourInspector }) {
+export default function PlayerMeasuresPanel({ playerName, quality, gameInspector, hourInspector }) {
   const [dayModes, setDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [hourModes, setHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const aggregate = useMemo(() => qualityForModes(quality, ALL_MODES), [quality])
@@ -397,6 +398,10 @@ export default function PlayerMeasuresPanel({ quality, gameInspector, hourInspec
         <div><span>Scored positions</span><strong>{formatNumber(coverage.scored_positions || 0)}</strong></div>
       </div>
       <article className="measure-chart-card">
+        <PlayerDailyEfficiencyChart
+          availableModes={availableModes}
+          playerName={playerName}
+        />
         <MeasureDaysChart
           quality={dayQuality}
           activeModes={dayModes}

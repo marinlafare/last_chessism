@@ -14,16 +14,40 @@ from chessism_api.database.engine import AsyncDBSession
 # https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
 LICHESS_WINNING_CHANCE_MULTIPLIER = -0.00368208
 LICHESS_BLUNDER_THRESHOLD = 0.30
+LICHESS_CP_CEILING = 1_000.0
+LICHESS_ACCURACY_SCALE = 103.1668100711649
+LICHESS_ACCURACY_DECAY = 0.04354415386753951
+LICHESS_ACCURACY_OFFSET = -3.166924740191411
+LICHESS_ACCURACY_UNCERTAINTY_BONUS = 1.0
 
 
 def lichess_winning_chances(centipawns: float) -> float:
     """Return Lichess winning chances on its published -1 to +1 scale."""
-    exponent = LICHESS_WINNING_CHANCE_MULTIPLIER * float(centipawns)
-    if exponent >= 700:
-        return -1.0
-    if exponent <= -700:
-        return 1.0
+    bounded_cp = max(-LICHESS_CP_CEILING, min(LICHESS_CP_CEILING, float(centipawns)))
+    exponent = LICHESS_WINNING_CHANCE_MULTIPLIER * bounded_cp
     return 2.0 / (1.0 + math.exp(exponent)) - 1.0
+
+
+def lichess_win_percent(centipawns: float) -> float:
+    """Convert a player-oriented CP score to Lichess's 0–100 WinPercent."""
+    return 50.0 + 50.0 * lichess_winning_chances(centipawns)
+
+
+def lichess_move_accuracy(before_cp: float, after_cp: float) -> float:
+    """Return current Lichess move accuracy for player-oriented evaluations."""
+    win_percent_loss = max(
+        0.0,
+        lichess_win_percent(before_cp) - lichess_win_percent(after_cp),
+    )
+    if win_percent_loss == 0:
+        return 100.0
+    raw_accuracy = (
+        LICHESS_ACCURACY_SCALE
+        * math.exp(-LICHESS_ACCURACY_DECAY * win_percent_loss)
+        + LICHESS_ACCURACY_OFFSET
+        + LICHESS_ACCURACY_UNCERTAINTY_BONUS
+    )
+    return max(0.0, min(100.0, raw_accuracy))
 
 
 def is_lichess_blunder(
@@ -66,10 +90,12 @@ async def refresh_game_player_engine_summaries(
                 AND coverage.total_positions > 0
           )
     """)
-    refresh_sql = text("""
+    refresh_sql = text(f"""
         INSERT INTO game_player_engine_summary (
             game_link, player_name, player_color, analyzed_player_moves,
-            own_move_cp_gain, own_move_cp_loss, blunder_count,
+            own_move_cp_gain, own_move_cp_loss,
+            game_efficiency, mean_win_percent_loss, median_win_percent_loss,
+            blunder_count,
             mate_for_positions, mate_against_positions,
             final_player_cp, result, end_by
         )
@@ -146,11 +172,16 @@ async def refresh_game_player_engine_summaries(
                 scored.*,
                 LAG(player_score) OVER game_order AS previous_player_score,
                 LAG(score_kind) OVER game_order AS previous_score_kind,
+                ROW_NUMBER() OVER game_order AS ply_index,
+                COUNT(*) OVER game_partition AS total_plies,
                 ROW_NUMBER() OVER reverse_game_order AS reverse_rank
             FROM scored
             WINDOW game_order AS (
                 PARTITION BY game_link, player_color
                 ORDER BY n_move, CASE WHEN move_color = 'white' THEN 0 ELSE 1 END
+            ),
+            game_partition AS (
+                PARTITION BY game_link, player_color
             ),
             reverse_game_order AS (
                 PARTITION BY game_link, player_color
@@ -165,86 +196,221 @@ async def refresh_game_player_engine_summaries(
                     WHEN player_color = 'white' THEN 15.0
                     ELSE -15.0
                 END AS effective_previous_player_score,
-                COALESCE(previous_score_kind, 'cp') AS effective_previous_score_kind
+                COALESCE(previous_score_kind, 'cp') AS effective_previous_score_kind,
+                GREATEST(
+                    -{LICHESS_CP_CEILING},
+                    LEAST({LICHESS_CP_CEILING}, player_score)
+                ) AS bounded_player_score,
+                GREATEST(
+                    -{LICHESS_CP_CEILING},
+                    LEAST(
+                        {LICHESS_CP_CEILING},
+                        CASE
+                            WHEN previous_player_score IS NOT NULL THEN previous_player_score
+                            WHEN player_color = 'white' THEN 15.0
+                            ELSE -15.0
+                        END
+                    )
+                ) AS bounded_previous_player_score
             FROM sequenced
         ),
-        measured AS MATERIALIZED (
+        evaluated AS MATERIALIZED (
             SELECT
                 prepared.*,
                 CASE
                     WHEN score_kind = 'cp' AND effective_previous_score_kind = 'cp'
                     THEN player_score - effective_previous_player_score
                 END AS cp_change,
-                CASE
-                    WHEN score_kind = 'cp' AND effective_previous_score_kind = 'cp'
-                    THEN
-                        (2.0 / (1.0 + EXP(
-                            -0.00368208 * effective_previous_player_score
-                        )) - 1.0)
-                        -
-                        (2.0 / (1.0 + EXP(
-                            -0.00368208 * player_score
-                        )) - 1.0)
-                END AS winning_chance_loss
+                50.0 + 50.0 * (
+                    2.0 / (1.0 + EXP(
+                        {LICHESS_WINNING_CHANCE_MULTIPLIER} * bounded_player_score
+                    )) - 1.0
+                ) AS win_percent,
+                50.0 + 50.0 * (
+                    2.0 / (1.0 + EXP(
+                        {LICHESS_WINNING_CHANCE_MULTIPLIER} * bounded_previous_player_score
+                    )) - 1.0
+                ) AS previous_win_percent
             FROM prepared
+        ),
+        game_series AS MATERIALIZED (
+            SELECT
+                game_link,
+                player_color,
+                ARRAY_PREPEND(
+                    CASE
+                        WHEN player_color = 'white' THEN {lichess_win_percent(15.0)}
+                        ELSE {lichess_win_percent(-15.0)}
+                    END,
+                    ARRAY_AGG(win_percent ORDER BY ply_index)
+                ) AS win_percents,
+                LEAST(8, GREATEST(2, MAX(total_plies) / 10))::int AS window_size
+            FROM evaluated
+            GROUP BY game_link, player_color
+        ),
+        measured AS MATERIALIZED (
+            SELECT
+                evaluated.*,
+                GREATEST(
+                    0.0,
+                    previous_win_percent - win_percent
+                ) AS win_percent_loss,
+                CASE
+                    WHEN win_percent >= previous_win_percent THEN 100.0
+                    ELSE GREATEST(
+                        0.0,
+                        LEAST(
+                            100.0,
+                            {LICHESS_ACCURACY_SCALE} * EXP(
+                                -{LICHESS_ACCURACY_DECAY}
+                                * (previous_win_percent - win_percent)
+                            )
+                            + {LICHESS_ACCURACY_OFFSET}
+                            + {LICHESS_ACCURACY_UNCERTAINTY_BONUS}
+                        )
+                    )
+                END AS move_accuracy,
+                volatility.weight AS volatility_weight
+            FROM evaluated
+            JOIN game_series
+              ON game_series.game_link = evaluated.game_link
+             AND game_series.player_color = evaluated.player_color
+            CROSS JOIN LATERAL (
+                SELECT GREATEST(
+                    0.5,
+                    LEAST(12.0, STDDEV_POP(sample.win_percent))
+                ) AS weight
+                FROM UNNEST(
+                    game_series.win_percents[
+                        GREATEST(
+                            1,
+                            evaluated.ply_index - game_series.window_size + 2
+                        ):
+                        GREATEST(
+                            1,
+                            evaluated.ply_index - game_series.window_size + 2
+                        ) + game_series.window_size - 1
+                    ]
+                ) AS sample(win_percent)
+            ) AS volatility
+        ),
+        aggregated AS MATERIALIZED (
+            SELECT
+                game_link,
+                player_name,
+                player_color,
+                COUNT(*) FILTER (WHERE move_color = player_color)::int
+                    AS analyzed_player_moves,
+                COALESCE(SUM(cp_change) FILTER (
+                    WHERE move_color = player_color AND cp_change > 0
+                ), 0)::double precision AS own_move_cp_gain,
+                COALESCE(SUM(-cp_change) FILTER (
+                    WHERE move_color = player_color AND cp_change < 0
+                ), 0)::double precision AS own_move_cp_loss,
+                AVG(win_percent_loss) FILTER (
+                    WHERE move_color = player_color
+                )::double precision AS mean_win_percent_loss,
+                PERCENTILE_CONT(0.5) WITHIN GROUP (
+                    ORDER BY win_percent_loss
+                ) FILTER (
+                    WHERE move_color = player_color
+                )::double precision AS median_win_percent_loss,
+                (
+                    SUM(move_accuracy * volatility_weight) FILTER (
+                        WHERE move_color = player_color
+                    )
+                    / NULLIF(
+                        SUM(volatility_weight) FILTER (
+                            WHERE move_color = player_color
+                        ),
+                        0
+                    )
+                )::double precision AS volatility_weighted_accuracy,
+                CASE
+                    WHEN COUNT(*) FILTER (WHERE move_color = player_color) = 0
+                        THEN NULL
+                    WHEN COUNT(*) FILTER (
+                        WHERE move_color = player_color AND move_accuracy = 0
+                    ) > 0
+                        THEN 0.0
+                    ELSE
+                        COUNT(*) FILTER (WHERE move_color = player_color)::double precision
+                        / NULLIF(
+                            SUM(1.0 / NULLIF(move_accuracy, 0)) FILTER (
+                                WHERE move_color = player_color
+                            ),
+                            0
+                        )
+                END AS harmonic_accuracy,
+                COUNT(*) FILTER (
+                    WHERE move_color = player_color
+                      AND (
+                        (
+                            effective_previous_score_kind = 'cp'
+                            AND score_kind = 'cp'
+                            AND win_percent_loss >= 15.0
+                        )
+                        OR (
+                            effective_previous_score_kind = 'cp'
+                            AND score_kind = 'mate'
+                            AND player_score < 0
+                            AND effective_previous_player_score >= -700
+                        )
+                        OR (
+                            effective_previous_score_kind = 'mate'
+                            AND effective_previous_player_score > 0
+                            AND score_kind = 'cp'
+                            AND player_score <= 700
+                        )
+                        OR (
+                            effective_previous_score_kind = 'mate'
+                            AND effective_previous_player_score > 0
+                            AND score_kind = 'mate'
+                            AND player_score < 0
+                        )
+                      )
+                )::int AS blunder_count,
+                COUNT(*) FILTER (
+                    WHERE score_kind = 'mate' AND player_score > 0
+                )::int AS mate_for_positions,
+                COUNT(*) FILTER (
+                    WHERE score_kind = 'mate' AND player_score < 0
+                )::int AS mate_against_positions,
+                MAX(player_score) FILTER (
+                    WHERE reverse_rank = 1 AND score_kind = 'cp'
+                )::double precision AS final_player_cp,
+                result,
+                end_by
+            FROM measured
+            GROUP BY game_link, player_name, player_color, result, end_by
         )
         SELECT
             game_link,
             player_name,
             player_color,
-            COUNT(*) FILTER (WHERE move_color = player_color)::int AS analyzed_player_moves,
-            COALESCE(SUM(cp_change) FILTER (
-                WHERE move_color = player_color AND cp_change > 0
-            ), 0)::double precision AS own_move_cp_gain,
-            COALESCE(SUM(-cp_change) FILTER (
-                WHERE move_color = player_color AND cp_change < 0
-            ), 0)::double precision AS own_move_cp_loss,
-            COUNT(*) FILTER (
-                WHERE move_color = player_color
-                  AND (
-                    (
-                        effective_previous_score_kind = 'cp'
-                        AND score_kind = 'cp'
-                        AND winning_chance_loss >= 0.30
-                    )
-                    OR (
-                        effective_previous_score_kind = 'cp'
-                        AND score_kind = 'mate'
-                        AND player_score < 0
-                        AND effective_previous_player_score >= -700
-                    )
-                    OR (
-                        effective_previous_score_kind = 'mate'
-                        AND effective_previous_player_score > 0
-                        AND score_kind = 'cp'
-                        AND player_score <= 700
-                    )
-                    OR (
-                        effective_previous_score_kind = 'mate'
-                        AND effective_previous_player_score > 0
-                        AND score_kind = 'mate'
-                        AND player_score < 0
-                    )
-                  )
-            )::int AS blunder_count,
-            COUNT(*) FILTER (
-                WHERE score_kind = 'mate' AND player_score > 0
-            )::int AS mate_for_positions,
-            COUNT(*) FILTER (
-                WHERE score_kind = 'mate' AND player_score < 0
-            )::int AS mate_against_positions,
-            MAX(player_score) FILTER (
-                WHERE reverse_rank = 1 AND score_kind = 'cp'
-            )::double precision AS final_player_cp,
+            analyzed_player_moves,
+            own_move_cp_gain,
+            own_move_cp_loss,
+            (
+                volatility_weighted_accuracy + harmonic_accuracy
+            ) / 2.0 AS game_efficiency,
+            mean_win_percent_loss,
+            median_win_percent_loss,
+            blunder_count,
+            mate_for_positions,
+            mate_against_positions,
+            final_player_cp,
             result,
             end_by
-        FROM measured
-        GROUP BY game_link, player_name, player_color, result, end_by
+        FROM aggregated
         ON CONFLICT (game_link, player_color) DO UPDATE SET
             player_name = EXCLUDED.player_name,
             analyzed_player_moves = EXCLUDED.analyzed_player_moves,
             own_move_cp_gain = EXCLUDED.own_move_cp_gain,
             own_move_cp_loss = EXCLUDED.own_move_cp_loss,
+            game_efficiency = EXCLUDED.game_efficiency,
+            mean_win_percent_loss = EXCLUDED.mean_win_percent_loss,
+            median_win_percent_loss = EXCLUDED.median_win_percent_loss,
             blunder_count = EXCLUDED.blunder_count,
             mate_for_positions = EXCLUDED.mate_for_positions,
             mate_against_positions = EXCLUDED.mate_against_positions,

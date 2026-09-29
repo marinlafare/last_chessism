@@ -25,7 +25,9 @@ from chessism_api.operations import (
     games,
     player_analytics,
     player_deletion,
+    player_game_scores,
     player_hero_analytics,
+    player_hero_efficiency,
     tablebase,
 )
 from chessism_api.operations.player_timezone import resolve_player_timezone
@@ -229,12 +231,34 @@ class FenAggregationTests(unittest.TestCase):
 
 
 class PlayerHeroAnalyticsTests(unittest.TestCase):
+    def test_daily_cp_points_have_only_date_and_summed_game_cp(self):
+        points = player_hero_analytics._daily_cp_points([
+            {"date_game_init": date(2026, 9, 20), "game_cp": -123.456},
+            {"date_game_init": date(2026, 9, 21), "game_cp": 45},
+        ])
+
+        self.assertEqual(points, [
+            ["2026-09-20", -123.46],
+            ["2026-09-21", 45.0],
+        ])
+        self.assertTrue(all(len(point) == 2 for point in points))
+
+    def test_daily_efficiency_points_have_only_date_and_mean_efficiency(self):
+        points = player_hero_efficiency.daily_efficiency_points([
+            {"date_game_init": date(2026, 9, 20), "game_efficiency": 87.456},
+            {"date_game_init": date(2026, 9, 21), "game_efficiency": None},
+        ])
+
+        self.assertEqual(points, [["2026-09-20", 87.46]])
+        self.assertTrue(all(len(point) == 2 for point in points))
+
     def test_game_player_engine_summary_keeps_only_player_game_score_fields(self):
         columns = set(models.GamePlayerEngineSummary.__table__.columns.keys())
 
         self.assertEqual(columns, {
             "game_link", "player_name", "player_color", "analyzed_player_moves",
-            "own_move_cp_gain", "own_move_cp_loss", "blunder_count",
+            "own_move_cp_gain", "own_move_cp_loss", "game_efficiency",
+            "mean_win_percent_loss", "median_win_percent_loss", "blunder_count",
             "mate_for_positions", "mate_against_positions", "final_player_cp",
             "result", "end_by",
         })
@@ -246,16 +270,40 @@ class PlayerHeroAnalyticsTests(unittest.TestCase):
         self.assertTrue(player_hero_analytics.is_lichess_blunder(100, -100))
         self.assertFalse(player_hero_analytics.is_lichess_blunder(50, -50))
 
-    def test_lichess_winning_chances_are_symmetric_and_approach_limits(self):
+    def test_lichess_winning_chances_are_symmetric_and_cap_at_1000_cp(self):
         positive = player_hero_analytics.lichess_winning_chances(250)
         negative = player_hero_analytics.lichess_winning_chances(-250)
 
         self.assertAlmostEqual(positive, -negative)
-        self.assertGreater(
+        self.assertEqual(
             player_hero_analytics.lichess_winning_chances(2_000),
             player_hero_analytics.lichess_winning_chances(1_000),
         )
-        self.assertEqual(player_hero_analytics.lichess_winning_chances(1_000_000), 1.0)
+        self.assertEqual(
+            player_hero_analytics.lichess_winning_chances(1_000_000),
+            player_hero_analytics.lichess_winning_chances(1_000),
+        )
+
+    def test_lichess_move_accuracy_is_player_oriented_and_bounded(self):
+        self.assertEqual(player_game_scores.lichess_move_accuracy(20, 80), 100.0)
+        small_error = player_game_scores.lichess_move_accuracy(20, -20)
+        major_error = player_game_scores.lichess_move_accuracy(200, -300)
+
+        self.assertGreater(small_error, major_error)
+        self.assertGreaterEqual(major_error, 0.0)
+        self.assertLessEqual(small_error, 100.0)
+
+    def test_efficiency_modes_accept_exact_mode_combinations(self):
+        self.assertEqual(
+            player_hero_efficiency.normalize_efficiency_modes("rapid,bullet"),
+            ("bullet", "rapid"),
+        )
+        self.assertEqual(
+            player_hero_efficiency.normalize_efficiency_modes("all"),
+            ("bullet", "blitz", "rapid"),
+        )
+        with self.assertRaises(ValueError):
+            player_hero_efficiency.normalize_efficiency_modes("daily")
 
     def test_lichess_blunder_copies_forced_mate_boundaries(self):
         self.assertTrue(

@@ -130,6 +130,7 @@ export default function PlayerMeasuresWorkspace({ playerName, disabled = false }
       {qualityLoading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating engine measures…</div> : null}
       {!qualityLoading && !qualityError && quality ? (
         <PlayerMeasuresPanel
+          playerName={playerName}
           quality={quality}
           gameInspector={{
             ...gameRequest,

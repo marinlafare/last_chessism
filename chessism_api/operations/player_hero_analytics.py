@@ -376,6 +376,47 @@ def _summarize_measure_coverage(rows: list[Any]) -> dict[str, int]:
     }
 
 
+async def _missing_player_engine_summary_links(
+    session: AsyncSession,
+    params: dict[str, Any],
+    modes: tuple[str, ...] | None = None,
+    require_efficiency: bool = False,
+) -> tuple[int, ...]:
+    mode_filter = (
+        "gp.mode = ANY(CAST(:selected_modes AS text[]))"
+        if modes else "(:mode = 'all' OR gp.mode = :mode)"
+    )
+    query_params = {
+        **params,
+        **({"selected_modes": list(modes)} if modes else {}),
+    }
+    result = await session.execute(text(f"""
+        SELECT gp.link
+        FROM game_player gp
+        JOIN game_analysis_summary coverage ON coverage.link = gp.link
+        LEFT JOIN game_player_engine_summary engine
+          ON engine.game_link = gp.link AND engine.player_color = gp.color
+        WHERE gp.player_name = :player
+          AND {mode_filter}
+          AND coverage.is_fully_analyzed
+          AND coverage.total_positions > 0
+          AND (
+            engine.game_link IS NULL
+            OR (:require_efficiency AND engine.game_efficiency IS NULL)
+          )
+          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
+          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
+    """), {**query_params, "require_efficiency": require_efficiency})
+    return tuple(int(link) for link in result.scalars().all())
+
+
+def _daily_cp_points(rows: list[Any]) -> list[list[str | float]]:
+    return [
+        [row["date_game_init"].isoformat(), round(float(row["game_cp"] or 0), 2)]
+        for row in rows
+    ]
+
+
 async def get_player_range_game_scores(
     player_name: str,
     *,
@@ -453,6 +494,7 @@ async def get_player_range_game_scores(
                 FROM game_player_engine_summary
                 WHERE player_name = :player
                   AND game_link = ANY(CAST(:page_game_ids AS bigint[]))
+                  AND game_efficiency IS NOT NULL
             """), {"player": scope.player, "page_game_ids": list(page_game_ids)})
             existing_ids = {int(link) for link in existing_result.scalars().all()}
         else:
@@ -476,6 +518,9 @@ async def get_player_range_game_scores(
                     summary.analyzed_player_moves,
                     summary.own_move_cp_gain,
                     summary.own_move_cp_loss,
+                    summary.game_efficiency,
+                    summary.mean_win_percent_loss,
+                    summary.median_win_percent_loss,
                     summary.blunder_count,
                     summary.mate_for_positions,
                     summary.mate_against_positions,
@@ -512,6 +557,18 @@ async def get_player_range_game_scores(
             "cp_gain": round(gain, 2),
             "cp_loss": round(loss, 2),
             "cp_net": round(gain - loss, 2),
+            "game_efficiency": (
+                round(float(row["game_efficiency"]), 2)
+                if row.get("game_efficiency") is not None else None
+            ),
+            "mean_win_percent_loss": (
+                round(float(row["mean_win_percent_loss"]), 4)
+                if row.get("mean_win_percent_loss") is not None else None
+            ),
+            "median_win_percent_loss": (
+                round(float(row["median_win_percent_loss"]), 4)
+                if row.get("median_win_percent_loss") is not None else None
+            ),
             "blunder_count": int(row["blunder_count"] or 0),
             "mate_for_positions": int(row["mate_for_positions"] or 0),
             "mate_against_positions": int(row["mate_against_positions"] or 0),
@@ -542,6 +599,54 @@ async def get_player_range_game_scores(
             "has_more": page * page_size < eligible_games,
         },
         "games": games,
+    }
+
+
+async def get_player_daily_game_cp(
+    player_name: str,
+    mode: str = "all",
+    date_from: date | None = None,
+    date_to: date | None = None,
+    timezone_name: str | None = None,
+) -> dict[str, Any]:
+    """Return one player-oriented total CP point per active local day."""
+    local_timestamp = player_local_timestamp_sql("gp")
+    daily_sql = text(f"""
+        SELECT
+            ({local_timestamp})::date AS date_game_init,
+            SUM(
+                engine.own_move_cp_gain - engine.own_move_cp_loss
+            )::double precision AS game_cp
+        FROM game_player_engine_summary engine
+        JOIN game_player gp
+          ON gp.link = engine.game_link
+         AND gp.color = engine.player_color
+         AND gp.player_name = engine.player_name
+        WHERE engine.player_name = :player
+          AND (:mode = 'all' OR gp.mode = :mode)
+          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
+          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
+        GROUP BY date_game_init
+        ORDER BY date_game_init
+    """)
+    async with AsyncDBSession() as session:
+        scope = await _analytics_scope(
+            session, player_name, mode, date_from, date_to, timezone_name
+        )
+        params = scope.params()
+        missing_links = await _missing_player_engine_summary_links(session, params)
+
+    if missing_links:
+        await refresh_game_player_engine_summaries(missing_links)
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(daily_sql, params)
+        rows = result.mappings().all()
+
+    return {
+        **scope.response_base(),
+        "columns": ["date_game_init", "game_cp"],
+        "points": _daily_cp_points(rows),
     }
 
 
@@ -587,20 +692,6 @@ async def get_player_quality_calendar(
         GROUP BY gp.mode, weekday, hour
         ORDER BY gp.mode, weekday, hour
     """)
-    missing_sql = text("""
-        SELECT gp.link
-        FROM game_player gp
-        JOIN game_analysis_summary coverage ON coverage.link = gp.link
-        LEFT JOIN game_player_engine_summary engine
-          ON engine.game_link = gp.link AND engine.player_color = gp.color
-        WHERE gp.player_name = :player
-          AND (:mode = 'all' OR gp.mode = :mode)
-          AND coverage.is_fully_analyzed
-          AND coverage.total_positions > 0
-          AND engine.game_link IS NULL
-          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
-          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-    """)
     coverage_sql = text("""
         SELECT
             gp.mode,
@@ -620,8 +711,7 @@ async def get_player_quality_calendar(
             session, player_name, mode, date_from, date_to, timezone_name
         )
         params = scope.params()
-        missing_result = await session.execute(missing_sql, params)
-        missing_links = tuple(int(link) for link in missing_result.scalars().all())
+        missing_links = await _missing_player_engine_summary_links(session, params)
 
     if missing_links:
         await refresh_game_player_engine_summaries(missing_links)

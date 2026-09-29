@@ -42,9 +42,11 @@ from chessism_api.operations.player_hero_analytics import (
     get_player_behavioural_ratings,
     get_player_game_measures,
     get_player_hour_measures,
+    get_player_daily_game_cp,
     get_player_quality_calendar,
     get_player_range_game_scores,
 )
+from chessism_api.operations.player_hero_efficiency import get_player_daily_efficiency
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -285,6 +287,44 @@ async def api_get_player_quality_calendar(
     """Return player-perspective CP gains/losses grouped by local play time."""
     return await _hero_analytics_response(
         get_player_quality_calendar,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/measures/daily-game-cp")
+async def api_get_player_daily_game_cp(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return the summed player-oriented game CP for every active local day."""
+    return await _hero_analytics_response(
+        get_player_daily_game_cp,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/measures/daily-efficiency")
+async def api_get_player_daily_efficiency(
+    player_name: str,
+    mode: str = Query("all", min_length=1, max_length=32),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return average Lichess-style game efficiency per active local day."""
+    return await _hero_analytics_response(
+        get_player_daily_efficiency,
         player_name,
         mode,
         date_from,

@@ -233,6 +233,85 @@
   height: auto;
 }
 
+.measure-daily-efficiency-heading {
+  grid-template-columns: minmax(130px, 1fr) auto minmax(130px, 1fr);
+}
+
+.measure-daily-years {
+  grid-column: 2;
+  display: flex !important;
+  justify-content: center;
+  gap: 4px;
+}
+
+.measure-daily-years button {
+  min-width: 34px;
+  min-height: 24px;
+  padding: 4px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #0b1117;
+  color: var(--subtle);
+  font: 700 9px "IBM Plex Mono", monospace;
+  cursor: pointer;
+}
+
+.measure-daily-years button.active {
+  border-color: #15c780;
+  background: rgba(21, 199, 128, 0.1);
+  color: #d9fff1;
+}
+
+.measure-daily-efficiency-graph {
+  display: block;
+  width: 100%;
+  min-width: 900px;
+  height: auto;
+}
+
+.measure-daily-efficiency-line {
+  fill: none;
+  stroke: #6e8ca4;
+  stroke-width: 1.25;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.measure-daily-efficiency-point {
+  stroke: #030609;
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.measure-daily-efficiency-point.excellent { fill: #15c780; }
+.measure-daily-efficiency-point.strong { fill: #4ea3c7; }
+.measure-daily-efficiency-point.mixed { fill: #c9a84c; }
+.measure-daily-efficiency-point.poor { fill: #d55c5c; }
+
+.measure-daily-x-tick,
+.measure-daily-axis-title {
+  font-family: "Courier New", "Lucida Console", monospace;
+  font-weight: 900;
+}
+
+.measure-daily-axis-title {
+  font-size: 11px;
+}
+
+.measure-chart-message {
+  display: grid;
+  place-items: center;
+  min-width: 900px;
+  min-height: 180px;
+  color: var(--subtle);
+  font: 700 10px "IBM Plex Mono", monospace;
+}
+
+.measure-chart-message.error {
+  color: #f08a8a;
+}
+
 .measure-zero-line {
   stroke: rgba(255, 255, 255, 0.5);
   stroke-width: 1;

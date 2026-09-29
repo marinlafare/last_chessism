@@ -54,6 +54,9 @@ async def _reshape_game_player_engine_summary(connection: asyncpg.Connection) ->
         "analyzed_player_moves": "INTEGER NOT NULL DEFAULT 0",
         "own_move_cp_gain": "DOUBLE PRECISION NOT NULL DEFAULT 0",
         "own_move_cp_loss": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "game_efficiency": "DOUBLE PRECISION",
+        "mean_win_percent_loss": "DOUBLE PRECISION",
+        "median_win_percent_loss": "DOUBLE PRECISION",
         "blunder_count": "INTEGER NOT NULL DEFAULT 0",
         "mate_for_positions": "INTEGER NOT NULL DEFAULT 0",
         "mate_against_positions": "INTEGER NOT NULL DEFAULT 0",
@@ -61,10 +64,18 @@ async def _reshape_game_player_engine_summary(connection: asyncpg.Connection) ->
         "result": "VARCHAR(8)",
         "end_by": "VARCHAR(40)",
     }
+    additive_score_columns = {
+        "game_efficiency",
+        "mean_win_percent_loss",
+        "median_win_percent_loss",
+    }
     requires_cache_reset = bool(
         {"link", "color", "mate_for", "mate_against", *ENGINE_SUMMARY_LEGACY_COLUMNS}
         & columns
-    ) or any(name not in columns for name in required_definitions)
+    ) or any(
+        name not in columns and name not in additive_score_columns
+        for name in required_definitions
+    )
 
     async with connection.transaction():
         for old_name, new_name in (

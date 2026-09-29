@@ -1,9 +1,10 @@
 # Player hero analytics API
 
 These authenticated endpoints exclusively support the analytics workspace on
-the player hero page. Their backend implementation lives in
-`chessism_api/operations/player_hero_analytics.py`; the page-owned API client
-lives in `chessism_web/src/pages/players/playerAnalysisApi.js`.
+the player hero page. Their backend implementation lives in the
+`player_hero_analytics.py` and `player_hero_efficiency.py` operation modules;
+the page-owned API client lives in
+`chessism_web/src/pages/players/playerAnalysisApi.js`.
 
 All aggregate endpoints accept `mode=all|bullet|blitz|rapid` and optional
 `date_from` and `date_to`. Behavioral endpoints automatically resolve the
@@ -43,7 +44,7 @@ Thus a player-perspective change from `+20` to `+80` is `cp_change: +60`,
 out of centipawn arithmetic and reported separately.
 
 Blunders copy Lichess's current classifier. Centipawns are converted to
-Lichess winning chances:
+Lichess winning chances after capping CP at `[-1000, 1000]`:
 
 `2 / (1 + exp(-0.00368208 * cp)) - 1`.
 
@@ -55,19 +56,28 @@ The implementation follows Lichess's
 [`Advice.scala`](https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala)
 and the winning-chance formula in
 [`eval.scala`](https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala).
+Game efficiency follows Lichess's
+[`AccuracyPercent.scala`](https://github.com/lichess-org/lila/blob/master/modules/analyse/src/main/AccuracyPercent.scala).
 
 | Endpoint | Purpose |
 | --- | --- |
-| `POST /players/{player}/analysis/measures/range-games-score` | One compact score per fully analyzed game selected by either `game_ids` or `date_from`/`date_to`. Results are paginated and include player CP gain/loss/net, blunders, final CP, result, and ending reason. |
+| `GET /players/{player}/analysis/measures/daily-efficiency` | Lightweight local-date series containing exactly `[date_game_init, game_efficiency]`. Each value is the mean 0–100 game efficiency for the selected comma-separated modes, so days remain comparable regardless of game volume. |
+| `GET /players/{player}/analysis/measures/daily-game-cp` | Lightweight local-date series containing exactly `[date_game_init, game_cp]` per active day. `game_cp` is the sum of `own_move_cp_gain - own_move_cp_loss` across all fully analyzed games initialized that day. |
+| `POST /players/{player}/analysis/measures/range-games-score` | One compact score per fully analyzed game selected by either `game_ids` or `date_from`/`date_to`. Results are paginated and include 0–100 efficiency, mean/median WinPercent loss, player CP gain/loss/net, blunders, final CP, result, and ending reason. |
 | `GET /players/{player}/analysis/measures/quality-calendar` | Compatibility aggregate of the selected player's own CP gain/loss grouped by weekday and hour. |
 | `GET /players/{player}/analysis/measures/games/{game_id}` | Complete ordered scored-position sequence for one game, including raw White score and player-oriented score/change/gain/loss. |
 | `GET /players/{player}/analysis/measures/days/{date}/hours/{hour}` | Cursor-paginated game sequences initialized in one resolved local hour. `hour` is 0–23. |
 
 `game_player_engine_summary` contains one compact row per fully analyzed game
-and player color. It stores player identity, analyzed player moves, own-move CP
-gain/loss, Lichess blunder count, mate-position counts, final player CP,
-result, and normalized ending reason. Stockfish and tablebase writes refresh
-newly complete games automatically.
+and player color. Its `game_efficiency` follows Lichess's current game-accuracy
+method: per-move WinPercent accuracy with the uncertainty bonus, a volatility
+weight taken from a 2–8-ply rolling window, and the mean of the weighted and
+harmonic accuracies. The row also stores mean/median WinPercent loss, analyzed
+player moves, own-move CP gain/loss, Lichess blunder count, mate-position
+counts, final player CP, result, and normalized ending reason. Stockfish and
+tablebase writes refresh newly complete games automatically. Existing rows are
+a rebuildable cache and receive efficiency lazily when their player is first
+requested after this schema addition.
 
 The range request must use exactly one selector:
 
