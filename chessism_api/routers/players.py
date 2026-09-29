@@ -43,6 +43,7 @@ from chessism_api.operations.player_hero_analytics import (
     get_player_game_measures,
     get_player_hour_measures,
     get_player_quality_calendar,
+    get_player_range_game_scores,
 )
 
 router = APIRouter()
@@ -53,6 +54,15 @@ class PlayerDeletionRequest(BaseModel):
     confirmation: str = Field(..., min_length=1)
     expected_exclusive_games: int = Field(..., ge=0)
     expected_shared_games: int = Field(..., ge=0)
+
+
+class RangeGamesScoreRequest(BaseModel):
+    game_ids: list[int] | None = Field(None, max_length=5_000)
+    date_from: date | None = None
+    date_to: date | None = None
+    mode: str = Field("all", pattern="^(all|bullet|blitz|rapid)$")
+    page: int = Field(1, ge=1)
+    page_size: int = Field(100, ge=1, le=500)
 
 
 async def _get_cached_player_analysis(
@@ -280,6 +290,24 @@ async def api_get_player_quality_calendar(
         date_from,
         date_to,
         timezone,
+    )
+
+
+@router.post("/{player_name}/analysis/measures/range-games-score")
+async def api_get_player_range_game_scores(
+    player_name: str,
+    request: RangeGamesScoreRequest,
+) -> JSONResponse:
+    """Return one compact player-perspective score for every selected game."""
+    return await _hero_analytics_response(
+        get_player_range_game_scores,
+        player_name,
+        game_ids=request.game_ids,
+        date_from=request.date_from,
+        date_to=request.date_to,
+        mode=request.mode,
+        page=request.page,
+        page_size=request.page_size,
     )
 
 

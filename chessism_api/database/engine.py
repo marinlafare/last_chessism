@@ -12,6 +12,150 @@ AsyncDBSession = sessionmaker(expire_on_commit=False, class_=AsyncSession)
 
 FEN_SCHEMA_ADVISORY_LOCK = 731_946_205
 
+ENGINE_SUMMARY_LEGACY_COLUMNS = (
+    "positions",
+    "positive_positions",
+    "negative_positions",
+    "equal_positions",
+    "transitions",
+    "cp_gain_events",
+    "cp_loss_events",
+    "player_cp_sum",
+    "total_cp_gain",
+    "total_cp_loss",
+    "opponent_move_cp_gain",
+    "opponent_move_cp_loss",
+    "tablebase_winning",
+    "tablebase_drawing",
+    "tablebase_losing",
+    "refreshed_at",
+)
+
+
+async def _reshape_game_player_engine_summary(connection: asyncpg.Connection) -> bool:
+    """Replace the legacy wide cache with one compact player-game score row."""
+    table_exists = await connection.fetchval(
+        "SELECT to_regclass('public.game_player_engine_summary') IS NOT NULL"
+    )
+    if not table_exists:
+        return False
+
+    columns = {
+        str(row["column_name"])
+        for row in await connection.fetch("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'game_player_engine_summary'
+        """)
+    }
+    required_definitions = {
+        "player_name": "VARCHAR",
+        "analyzed_player_moves": "INTEGER NOT NULL DEFAULT 0",
+        "own_move_cp_gain": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "own_move_cp_loss": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "blunder_count": "INTEGER NOT NULL DEFAULT 0",
+        "mate_for_positions": "INTEGER NOT NULL DEFAULT 0",
+        "mate_against_positions": "INTEGER NOT NULL DEFAULT 0",
+        "final_player_cp": "DOUBLE PRECISION",
+        "result": "VARCHAR(8)",
+        "end_by": "VARCHAR(40)",
+    }
+    requires_cache_reset = bool(
+        {"link", "color", "mate_for", "mate_against", *ENGINE_SUMMARY_LEGACY_COLUMNS}
+        & columns
+    ) or any(name not in columns for name in required_definitions)
+
+    async with connection.transaction():
+        for old_name, new_name in (
+            ("link", "game_link"),
+            ("color", "player_color"),
+            ("mate_for", "mate_for_positions"),
+            ("mate_against", "mate_against_positions"),
+        ):
+            if old_name in columns and new_name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary "
+                    f"RENAME COLUMN {old_name} TO {new_name}"
+                )
+                columns.remove(old_name)
+                columns.add(new_name)
+
+        for column_name, definition in required_definitions.items():
+            if column_name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary "
+                    f"ADD COLUMN {column_name} {definition}"
+                )
+                columns.add(column_name)
+
+        if requires_cache_reset:
+            # This relation is a rebuildable cache. Clearing it avoids mixing
+            # legacy formulas with the player-only Lichess classification.
+            await connection.execute("TRUNCATE TABLE game_player_engine_summary")
+
+        for column_name in ENGINE_SUMMARY_LEGACY_COLUMNS:
+            if column_name in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary DROP COLUMN {column_name}"
+                )
+
+        for column_name in ("player_name", "result", "end_by"):
+            await connection.execute(
+                f"ALTER TABLE game_player_engine_summary "
+                f"ALTER COLUMN {column_name} SET NOT NULL"
+            )
+
+        legacy_game_fks = await connection.fetch("""
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'game_player_engine_summary'::regclass
+              AND confrelid = 'game'::regclass
+              AND contype = 'f'
+        """)
+        for row in legacy_game_fks:
+            constraint_name = str(row["conname"]).replace('"', '""')
+            await connection.execute(
+                "ALTER TABLE game_player_engine_summary "
+                f'DROP CONSTRAINT "{constraint_name}"'
+            )
+
+        player_fk_exists = await connection.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'game_player_engine_summary'::regclass
+                  AND conname = 'fk_game_player_engine_summary_player'
+            )
+        """)
+        if not player_fk_exists:
+            await connection.execute("""
+                ALTER TABLE game_player_engine_summary
+                ADD CONSTRAINT fk_game_player_engine_summary_player
+                FOREIGN KEY (player_name) REFERENCES player(player_name)
+            """)
+
+        game_player_fk_exists = await connection.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'game_player_engine_summary'::regclass
+                  AND conname = 'fk_game_player_engine_summary_game_player'
+            )
+        """)
+        if not game_player_fk_exists:
+            await connection.execute("""
+                ALTER TABLE game_player_engine_summary
+                ADD CONSTRAINT fk_game_player_engine_summary_game_player
+                FOREIGN KEY (game_link, player_color)
+                REFERENCES game_player(link, color)
+                ON DELETE CASCADE
+            """)
+
+        await connection.execute("""
+            CREATE INDEX IF NOT EXISTS ix_game_player_engine_summary_player_game
+            ON game_player_engine_summary (player_name, game_link)
+        """)
+    return requires_cache_reset
+
 
 async def _ensure_fen_analysis_schema(
     *,
@@ -32,6 +176,9 @@ async def _ensure_fen_analysis_schema(
     migrated_no_move_games = 0
     try:
         await connection.execute("SELECT pg_advisory_lock($1)", FEN_SCHEMA_ADVISORY_LOCK)
+        reshaped_engine_summaries = await _reshape_game_player_engine_summary(connection)
+        if reshaped_engine_summaries:
+            print("Player engine summary cache reshaped; rows will rebuild on demand.")
         existing_columns = {
             str(row["column_name"])
             for row in await connection.fetch("""

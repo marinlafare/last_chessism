@@ -12,6 +12,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.operations.player_game_scores import (
+    is_lichess_blunder,
+    lichess_winning_chances,
+    refresh_game_player_engine_summaries,
+)
 from chessism_api.operations.player_timezone import (
     ResolvedPlayerTimezone,
     player_local_timestamp_sql,
@@ -20,6 +25,7 @@ from chessism_api.operations.player_timezone import (
 
 
 VALID_MODES = {"all", "bullet", "blitz", "rapid"}
+CHART_MODES = ("bullet", "blitz", "rapid")
 WEEKDAY_NAMES = (
     "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"
 )
@@ -108,36 +114,7 @@ def _activity_bucket(**identity: Any) -> dict[str, Any]:
     return {**identity, "games": 0, "proportion": 0.0, "wins": 0, "draws": 0, "losses": 0}
 
 
-async def get_player_behavioural_activity(
-    player_name: str,
-    mode: str = "all",
-    date_from: date | None = None,
-    date_to: date | None = None,
-) -> dict[str, Any]:
-    query = text(f"""
-        SELECT
-            EXTRACT(ISODOW FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS weekday,
-            EXTRACT(HOUR FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS hour,
-            COUNT(*)::bigint AS games,
-            COUNT(*) FILTER (WHERE gp.result = 1)::bigint AS wins,
-            COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
-            COUNT(*) FILTER (WHERE gp.result = 0)::bigint AS losses
-        FROM game_player gp
-        WHERE gp.player_name = :player
-          AND (:mode = 'all' OR gp.mode = :mode)
-          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
-          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-          AND gp.played_at IS NOT NULL
-        GROUP BY weekday, hour
-        ORDER BY weekday, hour
-    """)
-    async with AsyncDBSession() as session:
-        scope = await _analytics_scope(
-            session, player_name, mode, date_from, date_to
-        )
-        result = await session.execute(query, scope.params())
-        rows = result.mappings().all()
-
+def _summarize_activity_rows(rows: list[Any]) -> dict[str, Any]:
     weekdays = [
         _activity_bucket(weekday=index, label=WEEKDAY_NAMES[index - 1])
         for index in range(1, 8)
@@ -156,13 +133,57 @@ async def get_player_behavioural_activity(
                 target[key] += int(row[key] or 0)
     for bucket in [*weekdays, *hours, *cells.values()]:
         bucket["proportion"] = round(bucket["games"] / total_games, 8) if total_games else 0.0
-
     return {
-        **scope.response_base(),
         "total_games": total_games,
         "weekdays": weekdays,
         "hours": hours,
         "weekday_hours": list(cells.values()),
+    }
+
+
+async def get_player_behavioural_activity(
+    player_name: str,
+    mode: str = "all",
+    date_from: date | None = None,
+    date_to: date | None = None,
+) -> dict[str, Any]:
+    query = text(f"""
+        SELECT
+            gp.mode,
+            EXTRACT(ISODOW FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS weekday,
+            EXTRACT(HOUR FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS hour,
+            COUNT(*)::bigint AS games,
+            COUNT(*) FILTER (WHERE gp.result = 1)::bigint AS wins,
+            COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
+            COUNT(*) FILTER (WHERE gp.result = 0)::bigint AS losses
+        FROM game_player gp
+        WHERE gp.player_name = :player
+          AND (:mode = 'all' OR gp.mode = :mode)
+          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
+          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
+          AND gp.played_at IS NOT NULL
+        GROUP BY gp.mode, weekday, hour
+        ORDER BY gp.mode, weekday, hour
+    """)
+    async with AsyncDBSession() as session:
+        scope = await _analytics_scope(
+            session, player_name, mode, date_from, date_to
+        )
+        result = await session.execute(query, scope.params())
+        rows = result.mappings().all()
+
+    aggregate = _summarize_activity_rows(rows)
+    by_mode = {
+        chart_mode: _summarize_activity_rows([
+            row for row in rows if str(row["mode"] or "").lower() == chart_mode
+        ])
+        for chart_mode in CHART_MODES
+    }
+
+    return {
+        **scope.response_base(),
+        **aggregate,
+        "by_mode": by_mode,
     }
 
 
@@ -204,7 +225,7 @@ async def get_player_behavioural_ratings(
         result = await session.execute(query, scope.params())
         rows = result.mappings().all()
 
-    modes = [mode] if mode != "all" else ["bullet", "blitz", "rapid"]
+    modes = [mode] if mode != "all" else list(CHART_MODES)
     observed_dates = [row["local_date"] for row in rows]
     start_date = date_from or (min(observed_dates) if observed_dates else None)
     end_date = date_to or (max(observed_dates) if observed_dates else None)
@@ -325,137 +346,203 @@ def _finalize_measure(bucket: dict[str, Any]) -> dict[str, Any]:
     return bucket
 
 
-async def refresh_game_player_engine_summaries(
-    game_links: tuple[int, ...] | None = None,
-) -> dict[str, int]:
-    """Build stable per-game/per-color CP totals for fully analyzed games."""
-    links = sorted({int(link) for link in game_links or ()})
-    params = {"all_games": not links, "game_links": links}
-    delete_sql = text("""
-        DELETE FROM game_player_engine_summary engine_summary
-        WHERE (:all_games OR engine_summary.link = ANY(CAST(:game_links AS bigint[])))
-          AND NOT EXISTS (
-              SELECT 1
-              FROM game_analysis_summary coverage
-              WHERE coverage.link = engine_summary.link
-                AND coverage.is_fully_analyzed
-                AND coverage.total_positions > 0
-          )
-    """)
-    refresh_sql = text("""
-        INSERT INTO game_player_engine_summary (
-            link, color, positions, positive_positions, negative_positions,
-            equal_positions, transitions, cp_gain_events, cp_loss_events,
-            player_cp_sum, total_cp_gain, total_cp_loss,
-            own_move_cp_gain, own_move_cp_loss,
-            opponent_move_cp_gain, opponent_move_cp_loss,
-            mate_for, mate_against, tablebase_winning, tablebase_drawing,
-            tablebase_losing, refreshed_at
+def _summarize_measure_rows(rows: list[Any]) -> dict[str, Any]:
+    weekdays = [_measure_bucket(weekday=i, label=WEEKDAY_NAMES[i - 1]) for i in range(1, 8)]
+    hours = [_measure_bucket(hour=i) for i in range(24)]
+    cells = {
+        (day, hour): _measure_bucket(weekday=day, hour=hour)
+        for day in range(1, 8) for hour in range(24)
+    }
+    for row in rows:
+        day, hour = int(row["weekday"]), int(row["hour"])
+        for target in (weekdays[day - 1], hours[hour], cells[(day, hour)]):
+            for key in MEASURE_KEYS:
+                target[key] += row[key] or 0
+    return {
+        "weekdays": [_finalize_measure(bucket) for bucket in weekdays],
+        "hours": [_finalize_measure(bucket) for bucket in hours],
+        "weekday_hours": [_finalize_measure(bucket) for bucket in cells.values()],
+    }
+
+
+def _summarize_measure_coverage(rows: list[Any]) -> dict[str, int]:
+    total_games = sum(int(row["total_games"] or 0) for row in rows)
+    eligible_games = sum(int(row["eligible_games"] or 0) for row in rows)
+    return {
+        "total_games": total_games,
+        "eligible_games": eligible_games,
+        "excluded_games": total_games - eligible_games,
+        "scored_positions": sum(int(row["scored_positions"] or 0) for row in rows),
+    }
+
+
+async def get_player_range_game_scores(
+    player_name: str,
+    *,
+    game_ids: list[int] | None = None,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    mode: str = "all",
+    page: int = 1,
+    page_size: int = 100,
+) -> dict[str, Any]:
+    """Return one compact, player-perspective engine score per eligible game."""
+    clean_ids = sorted({int(game_id) for game_id in game_ids or []})
+    has_date_selection = date_from is not None or date_to is not None
+    if bool(clean_ids) == has_date_selection:
+        raise ValueError("Provide either game_ids or a complete date range, not both.")
+    if has_date_selection and (date_from is None or date_to is None):
+        raise ValueError("Both date_from and date_to are required for a date range.")
+    if len(clean_ids) > 5_000:
+        raise ValueError("At most 5,000 game IDs can be requested at once.")
+    if page < 1 or not 1 <= page_size <= 500:
+        raise ValueError("Page must be positive and page_size must be between 1 and 500.")
+
+    async with AsyncDBSession() as session:
+        scope = await _analytics_scope(
+            session,
+            player_name,
+            mode,
+            date_from if has_date_selection else None,
+            date_to if has_date_selection else None,
         )
-        WITH eligible AS MATERIALIZED (
-            SELECT gp.link, gp.color
+        params = {
+            **scope.params(),
+            "game_ids": clean_ids,
+            "limit": page_size,
+            "offset": (page - 1) * page_size,
+        }
+        selection_sql = (
+            "gp.link = ANY(CAST(:game_ids AS bigint[]))"
+            if clean_ids
+            else """
+                gp.played_at >= CAST(:date_from_utc AS timestamptz)
+                AND gp.played_at < CAST(:date_to_utc AS timestamptz)
+            """
+        )
+        count_result = await session.execute(text(f"""
+            SELECT
+                COUNT(*)::bigint AS selected_games,
+                COUNT(*) FILTER (
+                    WHERE coverage.is_fully_analyzed
+                      AND coverage.total_positions > 0
+                )::bigint AS eligible_games
+            FROM game_player gp
+            LEFT JOIN game_analysis_summary coverage ON coverage.link = gp.link
+            WHERE gp.player_name = :player
+              AND (:mode = 'all' OR gp.mode = :mode)
+              AND {selection_sql}
+        """), params)
+        coverage = dict(count_result.mappings().first() or {})
+        page_result = await session.execute(text(f"""
+            SELECT gp.link
             FROM game_player gp
             JOIN game_analysis_summary coverage ON coverage.link = gp.link
-            WHERE coverage.is_fully_analyzed
+            WHERE gp.player_name = :player
+              AND (:mode = 'all' OR gp.mode = :mode)
+              AND coverage.is_fully_analyzed
               AND coverage.total_positions > 0
-              AND (:all_games OR gp.link = ANY(CAST(:game_links AS bigint[])))
-        ),
-        scored AS MATERIALIZED (
-            SELECT
-                eligible.link,
-                eligible.color,
-                association.n_move,
-                association.move_color,
-                fen.analysis_source,
-                CASE WHEN eligible.color = 'white' THEN fen.score ELSE -fen.score END AS player_score,
-                CASE
-                    WHEN fen.analysis_source = 'tablebase' THEN 'tablebase'
-                    WHEN ABS(fen.score) >= 9000 THEN 'mate'
-                    ELSE 'cp'
-                END AS score_kind
-            FROM eligible
-            JOIN game_fen_association association ON association.game_link = eligible.link
-            JOIN fen ON fen.fen = association.fen_fen
-            WHERE fen.score IS NOT NULL
-        ),
-        sequenced AS MATERIALIZED (
-            SELECT
-                scored.*,
-                LAG(player_score) OVER game_order AS previous_player_score,
-                LAG(score_kind) OVER game_order AS previous_score_kind
-            FROM scored
-            WINDOW game_order AS (
-                PARTITION BY link, color
-                ORDER BY n_move, CASE WHEN move_color = 'white' THEN 0 ELSE 1 END
-            )
-        ),
-        measured AS (
-            SELECT
-                sequenced.*,
-                CASE
-                    WHEN score_kind = 'cp' AND previous_score_kind = 'cp'
-                    THEN player_score - previous_player_score
-                END AS cp_change
-            FROM sequenced
-        )
-        SELECT
-            link,
-            color,
-            COUNT(*) FILTER (WHERE score_kind = 'cp')::int,
-            COUNT(*) FILTER (WHERE score_kind = 'cp' AND player_score > 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'cp' AND player_score < 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'cp' AND player_score = 0)::int,
-            COUNT(cp_change)::int,
-            COUNT(*) FILTER (WHERE cp_change > 0)::int,
-            COUNT(*) FILTER (WHERE cp_change < 0)::int,
-            COALESCE(SUM(player_score) FILTER (WHERE score_kind = 'cp'), 0)::double precision,
-            COALESCE(SUM(cp_change) FILTER (WHERE cp_change > 0), 0)::double precision,
-            COALESCE(SUM(-cp_change) FILTER (WHERE cp_change < 0), 0)::double precision,
-            COALESCE(SUM(cp_change) FILTER (WHERE cp_change > 0 AND move_color = color), 0)::double precision,
-            COALESCE(SUM(-cp_change) FILTER (WHERE cp_change < 0 AND move_color = color), 0)::double precision,
-            COALESCE(SUM(cp_change) FILTER (WHERE cp_change > 0 AND move_color <> color), 0)::double precision,
-            COALESCE(SUM(-cp_change) FILTER (WHERE cp_change < 0 AND move_color <> color), 0)::double precision,
-            COUNT(*) FILTER (WHERE score_kind = 'mate' AND player_score > 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'mate' AND player_score < 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'tablebase' AND player_score > 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'tablebase' AND player_score = 0)::int,
-            COUNT(*) FILTER (WHERE score_kind = 'tablebase' AND player_score < 0)::int,
-            CURRENT_TIMESTAMP
-        FROM measured
-        GROUP BY link, color
-        ON CONFLICT (link, color) DO UPDATE SET
-            positions = EXCLUDED.positions,
-            positive_positions = EXCLUDED.positive_positions,
-            negative_positions = EXCLUDED.negative_positions,
-            equal_positions = EXCLUDED.equal_positions,
-            transitions = EXCLUDED.transitions,
-            cp_gain_events = EXCLUDED.cp_gain_events,
-            cp_loss_events = EXCLUDED.cp_loss_events,
-            player_cp_sum = EXCLUDED.player_cp_sum,
-            total_cp_gain = EXCLUDED.total_cp_gain,
-            total_cp_loss = EXCLUDED.total_cp_loss,
-            own_move_cp_gain = EXCLUDED.own_move_cp_gain,
-            own_move_cp_loss = EXCLUDED.own_move_cp_loss,
-            opponent_move_cp_gain = EXCLUDED.opponent_move_cp_gain,
-            opponent_move_cp_loss = EXCLUDED.opponent_move_cp_loss,
-            mate_for = EXCLUDED.mate_for,
-            mate_against = EXCLUDED.mate_against,
-            tablebase_winning = EXCLUDED.tablebase_winning,
-            tablebase_drawing = EXCLUDED.tablebase_drawing,
-            tablebase_losing = EXCLUDED.tablebase_losing,
-            refreshed_at = EXCLUDED.refreshed_at
-        RETURNING link
-    """)
-    async with AsyncDBSession() as session:
-        try:
-            await session.execute(delete_sql, params)
-            result = await session.execute(refresh_sql, params)
-            rows = result.mappings().all()
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
-    return {"game_players": len(rows), "games": len({int(row["link"]) for row in rows})}
+              AND {selection_sql}
+            ORDER BY gp.played_at DESC NULLS LAST, gp.link DESC
+            LIMIT :limit OFFSET :offset
+        """), params)
+        page_game_ids = tuple(int(link) for link in page_result.scalars().all())
+        if page_game_ids:
+            existing_result = await session.execute(text("""
+                SELECT game_link
+                FROM game_player_engine_summary
+                WHERE player_name = :player
+                  AND game_link = ANY(CAST(:page_game_ids AS bigint[]))
+            """), {"player": scope.player, "page_game_ids": list(page_game_ids)})
+            existing_ids = {int(link) for link in existing_result.scalars().all()}
+        else:
+            existing_ids = set()
+
+    missing_ids = tuple(link for link in page_game_ids if link not in existing_ids)
+    if missing_ids:
+        await refresh_game_player_engine_summaries(missing_ids)
+
+    rows: list[Any] = []
+    if page_game_ids:
+        async with AsyncDBSession() as session:
+            score_result = await session.execute(text("""
+                SELECT
+                    summary.game_link,
+                    summary.player_name,
+                    summary.player_color,
+                    gp.opponent_name,
+                    gp.played_at,
+                    gp.mode,
+                    summary.analyzed_player_moves,
+                    summary.own_move_cp_gain,
+                    summary.own_move_cp_loss,
+                    summary.blunder_count,
+                    summary.mate_for_positions,
+                    summary.mate_against_positions,
+                    summary.final_player_cp,
+                    summary.result,
+                    summary.end_by
+                FROM game_player_engine_summary summary
+                JOIN game_player gp
+                  ON gp.link = summary.game_link
+                 AND gp.color = summary.player_color
+                WHERE summary.player_name = :player
+                  AND summary.game_link = ANY(CAST(:page_game_ids AS bigint[]))
+                ORDER BY gp.played_at DESC NULLS LAST, summary.game_link DESC
+            """), {"player": scope.player, "page_game_ids": list(page_game_ids)})
+            rows = score_result.mappings().all()
+
+    games = []
+    for row in rows:
+        gain = float(row["own_move_cp_gain"] or 0)
+        loss = float(row["own_move_cp_loss"] or 0)
+        played_at = row.get("played_at")
+        games.append({
+            "game_id": int(row["game_link"]),
+            "player_name": str(row["player_name"]),
+            "player_color": str(row["player_color"]),
+            "opponent_name": str(row["opponent_name"]),
+            "played_at": (
+                played_at.astimezone(timezone.utc).isoformat() if played_at else None
+            ),
+            "mode": str(row["mode"] or "unknown"),
+            "result": str(row["result"]),
+            "end_by": str(row["end_by"]),
+            "analyzed_player_moves": int(row["analyzed_player_moves"] or 0),
+            "cp_gain": round(gain, 2),
+            "cp_loss": round(loss, 2),
+            "cp_net": round(gain - loss, 2),
+            "blunder_count": int(row["blunder_count"] or 0),
+            "mate_for_positions": int(row["mate_for_positions"] or 0),
+            "mate_against_positions": int(row["mate_against_positions"] or 0),
+            "final_player_cp": (
+                round(float(row["final_player_cp"]), 2)
+                if row.get("final_player_cp") is not None else None
+            ),
+        })
+
+    selected_games = int(coverage.get("selected_games") or 0)
+    eligible_games = int(coverage.get("eligible_games") or 0)
+    return {
+        **scope.response_base(),
+        "selection": {
+            "kind": "game_ids" if clean_ids else "date_range",
+            "requested_game_ids": len(clean_ids) if clean_ids else None,
+        },
+        "coverage": {
+            "selected_games": selected_games,
+            "eligible_games": eligible_games,
+            "excluded_games": selected_games - eligible_games,
+        },
+        "pagination": {
+            "page": page,
+            "page_size": page_size,
+            "total_items": eligible_games,
+            "total_pages": (eligible_games + page_size - 1) // page_size,
+            "has_more": page * page_size < eligible_games,
+        },
+        "games": games,
+    }
 
 
 async def get_player_quality_calendar(
@@ -468,53 +555,55 @@ async def get_player_quality_calendar(
     local_timestamp = player_local_timestamp_sql("gp")
     metrics_sql = text(f"""
         SELECT
+            gp.mode,
             EXTRACT(ISODOW FROM {local_timestamp})::int AS weekday,
             EXTRACT(HOUR FROM {local_timestamp})::int AS hour,
-            SUM(engine.positions)::bigint AS positions,
-            SUM(engine.positive_positions)::bigint AS positive_positions,
-            SUM(engine.negative_positions)::bigint AS negative_positions,
-            SUM(engine.equal_positions)::bigint AS equal_positions,
-            SUM(engine.player_cp_sum)::double precision AS player_cp_sum,
-            SUM(engine.transitions)::bigint AS transitions,
-            SUM(engine.cp_gain_events)::bigint AS cp_gain_events,
-            SUM(engine.cp_loss_events)::bigint AS cp_loss_events,
-            SUM(engine.total_cp_gain)::double precision AS total_cp_gain,
-            SUM(engine.total_cp_loss)::double precision AS total_cp_loss,
+            SUM(engine.analyzed_player_moves)::bigint AS positions,
+            0::bigint AS positive_positions,
+            0::bigint AS negative_positions,
+            0::bigint AS equal_positions,
+            0::double precision AS player_cp_sum,
+            SUM(engine.analyzed_player_moves)::bigint AS transitions,
+            0::bigint AS cp_gain_events,
+            0::bigint AS cp_loss_events,
+            SUM(engine.own_move_cp_gain)::double precision AS total_cp_gain,
+            SUM(engine.own_move_cp_loss)::double precision AS total_cp_loss,
             SUM(engine.own_move_cp_gain)::double precision AS own_move_cp_gain,
             SUM(engine.own_move_cp_loss)::double precision AS own_move_cp_loss,
-            SUM(engine.opponent_move_cp_gain)::double precision AS opponent_move_cp_gain,
-            SUM(engine.opponent_move_cp_loss)::double precision AS opponent_move_cp_loss,
-            SUM(engine.mate_for)::bigint AS mate_for,
-            SUM(engine.mate_against)::bigint AS mate_against,
-            SUM(engine.tablebase_winning)::bigint AS tablebase_winning,
-            SUM(engine.tablebase_drawing)::bigint AS tablebase_drawing,
-            SUM(engine.tablebase_losing)::bigint AS tablebase_losing
+            0::double precision AS opponent_move_cp_gain,
+            0::double precision AS opponent_move_cp_loss,
+            SUM(engine.mate_for_positions)::bigint AS mate_for,
+            SUM(engine.mate_against_positions)::bigint AS mate_against,
+            0::bigint AS tablebase_winning,
+            0::bigint AS tablebase_drawing,
+            0::bigint AS tablebase_losing
         FROM game_player gp
         JOIN game_player_engine_summary engine
-          ON engine.link = gp.link AND engine.color = gp.color
+          ON engine.game_link = gp.link AND engine.player_color = gp.color
         WHERE gp.player_name = :player
           AND (:mode = 'all' OR gp.mode = :mode)
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-        GROUP BY weekday, hour
-        ORDER BY weekday, hour
+        GROUP BY gp.mode, weekday, hour
+        ORDER BY gp.mode, weekday, hour
     """)
     missing_sql = text("""
         SELECT gp.link
         FROM game_player gp
         JOIN game_analysis_summary coverage ON coverage.link = gp.link
         LEFT JOIN game_player_engine_summary engine
-          ON engine.link = gp.link AND engine.color = gp.color
+          ON engine.game_link = gp.link AND engine.player_color = gp.color
         WHERE gp.player_name = :player
           AND (:mode = 'all' OR gp.mode = :mode)
           AND coverage.is_fully_analyzed
           AND coverage.total_positions > 0
-          AND engine.link IS NULL
+          AND engine.game_link IS NULL
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
     """)
     coverage_sql = text("""
         SELECT
+            gp.mode,
             COUNT(*)::bigint AS total_games,
             COUNT(*) FILTER (WHERE summary.is_fully_analyzed AND summary.total_positions > 0)::bigint AS eligible_games,
             COALESCE(SUM(summary.total_positions) FILTER (WHERE summary.is_fully_analyzed), 0)::bigint AS scored_positions
@@ -524,6 +613,7 @@ async def get_player_quality_calendar(
           AND (:mode = 'all' OR gp.mode = :mode)
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
+        GROUP BY gp.mode
     """)
     async with AsyncDBSession() as session:
         scope = await _analytics_scope(
@@ -540,27 +630,25 @@ async def get_player_quality_calendar(
         result = await session.execute(metrics_sql, params)
         rows = result.mappings().all()
         coverage_result = await session.execute(coverage_sql, params)
-        coverage = dict(coverage_result.mappings().first() or {})
+        coverage_rows = coverage_result.mappings().all()
 
-    weekdays = [_measure_bucket(weekday=i, label=WEEKDAY_NAMES[i - 1]) for i in range(1, 8)]
-    hours = [_measure_bucket(hour=i) for i in range(24)]
-    cells = {(day, hour): _measure_bucket(weekday=day, hour=hour) for day in range(1, 8) for hour in range(24)}
-    for row in rows:
-        day, hour = int(row["weekday"]), int(row["hour"])
-        for target in (weekdays[day - 1], hours[hour], cells[(day, hour)]):
-            for key in MEASURE_KEYS:
-                target[key] += row[key] or 0
+    aggregate = _summarize_measure_rows(rows)
+    coverage = _summarize_measure_coverage(coverage_rows)
+    by_mode = {}
+    for chart_mode in CHART_MODES:
+        mode_rows = [row for row in rows if str(row["mode"] or "").lower() == chart_mode]
+        mode_coverage = [
+            row for row in coverage_rows if str(row["mode"] or "").lower() == chart_mode
+        ]
+        by_mode[chart_mode] = {
+            "coverage": _summarize_measure_coverage(mode_coverage),
+            **_summarize_measure_rows(mode_rows),
+        }
     return {
         **scope.response_base(),
-        "coverage": {
-            "total_games": int(coverage.get("total_games") or 0),
-            "eligible_games": int(coverage.get("eligible_games") or 0),
-            "excluded_games": int(coverage.get("total_games") or 0) - int(coverage.get("eligible_games") or 0),
-            "scored_positions": int(coverage.get("scored_positions") or 0),
-        },
-        "weekdays": [_finalize_measure(bucket) for bucket in weekdays],
-        "hours": [_finalize_measure(bucket) for bucket in hours],
-        "weekday_hours": [_finalize_measure(bucket) for bucket in cells.values()],
+        "coverage": coverage,
+        **aggregate,
+        "by_mode": by_mode,
     }
 
 

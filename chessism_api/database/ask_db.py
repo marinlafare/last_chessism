@@ -2906,7 +2906,7 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
             raise
 
     try:
-        from chessism_api.operations.player_hero_analytics import (
+        from chessism_api.operations.player_game_scores import (
             refresh_game_player_engine_summaries,
         )
         await refresh_game_player_engine_summaries(clean_links or None)
@@ -3028,7 +3028,7 @@ async def increment_game_analysis_summary_for_scored_fens(
     )
     if fully_analyzed_links:
         try:
-            from chessism_api.operations.player_hero_analytics import (
+            from chessism_api.operations.player_game_scores import (
                 refresh_game_player_engine_summaries,
             )
             await refresh_game_player_engine_summaries(fully_analyzed_links)

@@ -4,7 +4,7 @@ from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger,
     DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
-    SmallInteger, text
+    SmallInteger, text, ForeignKeyConstraint
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
@@ -209,32 +209,40 @@ class GameAnalysisSummary(Base):
 
 
 class GamePlayerEngineSummary(Base):
-    """Reusable player-perspective engine totals for one game and color."""
+    """Compact player-perspective engine score for one fully analyzed game."""
 
     __tablename__ = "game_player_engine_summary"
 
-    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
-    color = Column(String(5), primary_key=True)
-    positions = Column(Integer, nullable=False, default=0, server_default="0")
-    positive_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    negative_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    equal_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    transitions = Column(Integer, nullable=False, default=0, server_default="0")
-    cp_gain_events = Column(Integer, nullable=False, default=0, server_default="0")
-    cp_loss_events = Column(Integer, nullable=False, default=0, server_default="0")
-    player_cp_sum = Column(Float, nullable=False, default=0, server_default="0")
-    total_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
-    total_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
+    game_link = Column(BigInteger, primary_key=True)
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", name="fk_game_player_engine_summary_player"),
+        nullable=False,
+    )
+    player_color = Column(String(5), primary_key=True)
+    analyzed_player_moves = Column(Integer, nullable=False, default=0, server_default="0")
     own_move_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
     own_move_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
-    opponent_move_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
-    opponent_move_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
-    mate_for = Column(Integer, nullable=False, default=0, server_default="0")
-    mate_against = Column(Integer, nullable=False, default=0, server_default="0")
-    tablebase_winning = Column(Integer, nullable=False, default=0, server_default="0")
-    tablebase_drawing = Column(Integer, nullable=False, default=0, server_default="0")
-    tablebase_losing = Column(Integer, nullable=False, default=0, server_default="0")
-    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    blunder_count = Column(Integer, nullable=False, default=0, server_default="0")
+    mate_for_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    mate_against_positions = Column(Integer, nullable=False, default=0, server_default="0")
+    final_player_cp = Column(Float, nullable=True)
+    result = Column(String(8), nullable=False)
+    end_by = Column(String(40), nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["game_link", "player_color"],
+            ["game_player.link", "game_player.color"],
+            ondelete="CASCADE",
+            name="fk_game_player_engine_summary_game_player",
+        ),
+        Index(
+            "ix_game_player_engine_summary_player_game",
+            "player_name",
+            "game_link",
+        ),
+    )
 
 
 class ScoredPositionSummary(Base):

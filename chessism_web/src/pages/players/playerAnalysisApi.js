@@ -1,4 +1,4 @@
-import { requestJson } from '../../services/apiClient'
+import { postJson, requestJson } from '../../services/apiClient'
 
 const responseCache = new Map()
 const RESPONSE_CACHE_LIMIT = 32
@@ -42,11 +42,11 @@ export function fetchBehaviouralRatings({ playerName, signal, ...filters }) {
   )
 }
 
-export function fetchQualityCalendar({ playerName, signal, ...filters }) {
+export function fetchQualityCalendar({ playerName, signal, bypassCache = false, ...filters }) {
   const search = analyticsSearch(filters)
   return cachedRequest(
     `/players/${playerPath(playerName)}/analysis/measures/quality-calendar?${search}`,
-    { signal }
+    { signal, bypassCache }
   )
 }
 
@@ -54,6 +54,14 @@ export function fetchGameMeasures({ playerName, gameId, timezone, signal }) {
   const search = analyticsSearch({ timezone })
   return cachedRequest(
     `/players/${playerPath(playerName)}/analysis/measures/games/${encodeURIComponent(gameId)}?${search}`,
+    { signal }
+  )
+}
+
+export function fetchRangeGameScores({ playerName, selection, signal }) {
+  return postJson(
+    `/players/${playerPath(playerName)}/analysis/measures/range-games-score`,
+    selection,
     { signal }
   )
 }

@@ -1,29 +1,27 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
+import PlayerModeToggles, {
+  PLAYER_ANALYSIS_MODES,
+  PLAYER_MODE_COLORS,
+} from './PlayerModeToggles'
 
 const WIDTH = 1200
-const HEIGHT = 405
+const RATING_SVG_HEIGHT = 156
+const HOURS_SVG_HEIGHT = 210
 const PLOT_LEFT = 120
 const PLOT_RIGHT = 1190
 const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT
 const HOUR_STEP = PLOT_WIDTH / 24
-const RATING_TITLE_Y = 18
-const RATING_TOP = 34
-const RATING_BOTTOM = 129
-const RATING_AXIS_Y = 157
-const GRAPH_DIVIDER_Y = 177
-const HOURLY_TITLE_Y = 199
-const HOURLY_TOP = 223
+const RATING_TOP = 8
+const RATING_BOTTOM = 118
+const RATING_AXIS_Y = 146
+const HOURLY_TOP = 8
 const HOURLY_HEIGHT = 139
 const HOURLY_BASELINE = HOURLY_TOP + HOURLY_HEIGHT
-const HOURLY_AXIS_Y = 383
-const MODE_COLORS = {
-  bullet: '#3aa7ff',
-  blitz: '#d3b66d',
-  rapid: '#f08ac0',
-  unknown: '#8da1b2',
-}
-const RATING_MODES = ['bullet', 'blitz', 'rapid']
+const HOURLY_AXIS_Y = 168
+const HOURLY_AXIS_TITLE_Y = 201
+const ALL_RATING_MODES = new Set(PLAYER_ANALYSIS_MODES)
+const RESULT_FIELDS = ['games', 'wins', 'draws', 'losses']
 const LOSS_COLOR = [213, 92, 92]
 const DRAW_COLOR = [141, 107, 180]
 const WIN_COLOR = [21, 199, 128]
@@ -73,10 +71,13 @@ function groupByMode(observations) {
   return Array.from(grouped.entries())
 }
 
-function buildRatingPlot(ratings) {
+function buildRatingPlot(ratings, selectedYear = 'all') {
   const observations = (ratings?.series || []).flatMap((series) => (
     (series.points || [])
-      .filter((point) => point.last_rating !== null)
+      .filter((point) => (
+        point.last_rating !== null
+        && (selectedYear === 'all' || String(point.date).startsWith(`${selectedYear}-`))
+      ))
       .map((point) => ({
         mode: series.mode || 'unknown',
         rating: numeric(point.last_rating),
@@ -85,6 +86,7 @@ function buildRatingPlot(ratings) {
       }))
   ))
   const groups = groupByMode(observations)
+  const observationDates = observations.map((item) => item.label).sort()
   const domainStart = observations.length ? Math.min(...observations.map((item) => item.position)) : 0
   const domainEnd = observations.length ? Math.max(...observations.map((item) => item.position)) : 1
 
@@ -98,7 +100,7 @@ function buildRatingPlot(ratings) {
 
   const lines = groups.map(([mode, points]) => ({
     mode,
-    color: MODE_COLORS[mode] || MODE_COLORS.unknown,
+    color: PLAYER_MODE_COLORS[mode] || PLAYER_MODE_COLORS.unknown,
     points: [...points]
       .sort((left, right) => left.position - right.position)
       .map((item) => ({
@@ -112,12 +114,63 @@ function buildRatingPlot(ratings) {
     lines,
     minimum,
     maximum,
-    startLabel: ratings?.date_from,
-    endLabel: ratings?.date_to,
+    startLabel: observationDates[0],
+    endLabel: observationDates.at(-1),
   }
 }
 
-function WeekdayStartChart({ weekdays = [], weekdayHours = [], timeContext }) {
+function getRatingYears(ratings) {
+  const years = (ratings?.series || []).flatMap((series) => (
+    (series.points || [])
+      .filter((point) => point.last_rating !== null)
+      .map((point) => String(point.date).slice(0, 4))
+      .filter((year) => /^\d{4}$/.test(year))
+  ))
+  return [...new Set(years)].sort((left, right) => Number(left) - Number(right))
+}
+
+function activityForModes(activity, activeModes) {
+  if (!activity?.by_mode) return activity || { weekdays: [], hours: [], weekday_hours: [] }
+  const selected = PLAYER_ANALYSIS_MODES
+    .filter((mode) => activeModes.has(mode))
+    .map((mode) => activity.by_mode[mode])
+    .filter(Boolean)
+  const totalGames = selected.reduce((total, mode) => total + numeric(mode.total_games), 0)
+  const combineRows = (key, identity) => {
+    const modeMaps = selected.map((mode) => new Map(
+      (mode[key] || []).map((row) => [identity(row), row])
+    ))
+    return (activity[key] || []).map((template) => {
+      const bucket = { ...template, games: 0, wins: 0, draws: 0, losses: 0 }
+      modeMaps.forEach((modeMap) => {
+        const row = modeMap.get(identity(template)) || {}
+        RESULT_FIELDS.forEach((field) => {
+          bucket[field] += numeric(row[field])
+        })
+      })
+      bucket.proportion = totalGames ? bucket.games / totalGames : 0
+      return bucket
+    })
+  }
+  return {
+    total_games: totalGames,
+    weekdays: combineRows('weekdays', (row) => numeric(row.weekday)),
+    hours: combineRows('hours', (row) => numeric(row.hour)),
+    weekday_hours: combineRows(
+      'weekday_hours',
+      (row) => `${numeric(row.weekday)}-${numeric(row.hour)}`
+    ),
+  }
+}
+
+function WeekdayStartChart({
+  availableModes,
+  onToggleMode,
+  timeContext,
+  visibleModes,
+  weekdayHours = [],
+  weekdays = [],
+}) {
   const [expandedWeekdays, setExpandedWeekdays] = useState(() => new Set())
   const timezoneLabel = timeContext?.timezone || 'UTC'
   const cellsByWeekday = useMemo(() => {
@@ -140,15 +193,21 @@ function WeekdayStartChart({ weekdays = [], weekdayHours = [], timeContext }) {
   }
 
   return (
-    <section className="behavior-weekday-chart" aria-label={`Usage by weekday and hour in ${timezoneLabel}`}>
+    <section className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
       <div className="behavior-subchart-heading">
         <div>
-          <strong>Usage</strong>
+          <strong>Days</strong>
         </div>
         <div className="behavior-score-scale" aria-label="Performance color scale from loss through draw to win">
           <div><span>Loss</span><span>Draw</span><span>Win</span></div>
           <i />
         </div>
+        <PlayerModeToggles
+          activeModes={visibleModes}
+          availableModes={availableModes}
+          label="Game types shown in Days"
+          onToggle={onToggleMode}
+        />
       </div>
       <div className="behavior-weekday-plot-scroll">
         <div className="behavior-weekday-plot-canvas">
@@ -217,8 +276,19 @@ export default function PlayerBehaviouralPanel({
   activity,
   ratings,
 }) {
-  const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(RATING_MODES))
-  const hourRows = activity?.hours || []
+  const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [visibleHourModes, setVisibleHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [visibleDayModes, setVisibleDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [selectedRatingYear, setSelectedRatingYear] = useState('all')
+  const hourActivity = useMemo(
+    () => activityForModes(activity, visibleHourModes),
+    [activity, visibleHourModes]
+  )
+  const dayActivity = useMemo(
+    () => activityForModes(activity, visibleDayModes),
+    [activity, visibleDayModes]
+  )
+  const hourRows = hourActivity.hours || []
   const hourMap = useMemo(
     () => new Map(hourRows.map((row) => [numeric(row.hour), row])),
     [hourRows]
@@ -227,22 +297,37 @@ export default function PlayerBehaviouralPanel({
     1,
     ...hourRows.flatMap((row) => [numeric(row.wins), numeric(row.draws), numeric(row.losses)])
   )
-  const totals = resultTotals(hourRows)
-  const ratingPlot = useMemo(() => buildRatingPlot(ratings), [ratings])
+  const totals = resultTotals(activityForModes(activity, ALL_RATING_MODES).hours)
+  const ratingYears = useMemo(() => getRatingYears(ratings), [ratings])
+  const ratingPlot = useMemo(
+    () => buildRatingPlot(ratings, selectedRatingYear),
+    [ratings, selectedRatingYear]
+  )
   const availableRatingModes = useMemo(
     () => new Set(ratingPlot.lines.map((line) => line.mode)),
     [ratingPlot.lines]
   )
+  const availableActivityModes = useMemo(
+    () => new Set(PLAYER_ANALYSIS_MODES.filter((mode) => (
+      !activity?.by_mode || numeric(activity.by_mode[mode]?.total_games) > 0
+    ))),
+    [activity]
+  )
   const visibleRatingLines = ratingPlot.lines.filter((line) => visibleRatingModes.has(line.mode))
   const timeContext = activity?.time_context || ratings?.time_context || {}
-  const timezoneLabel = timeContext.timezone || 'UTC'
 
   useEffect(() => {
-    setVisibleRatingModes(new Set(RATING_MODES))
+    setVisibleRatingModes(new Set(PLAYER_ANALYSIS_MODES))
+    setSelectedRatingYear('all')
   }, [ratings])
 
-  const toggleRatingMode = (mode) => {
-    setVisibleRatingModes((current) => {
+  useEffect(() => {
+    setVisibleHourModes(new Set(PLAYER_ANALYSIS_MODES))
+    setVisibleDayModes(new Set(PLAYER_ANALYSIS_MODES))
+  }, [activity])
+
+  const toggleMode = (setter, mode) => {
+    setter((current) => {
       const next = new Set(current)
       if (next.has(mode)) next.delete(mode)
       else next.add(mode)
@@ -268,133 +353,163 @@ export default function PlayerBehaviouralPanel({
 
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
-            <div className="behavior-rating-controls" aria-label="Visible rating series">
-              {RATING_MODES.map((mode) => {
-                const active = visibleRatingModes.has(mode)
-                return (
-                  <button
-                    type="button"
-                    className={active ? 'active' : ''}
-                    aria-pressed={active}
-                    disabled={!availableRatingModes.has(mode)}
-                    style={{ '--mode-color': MODE_COLORS[mode] }}
-                    onClick={() => toggleRatingMode(mode)}
-                    key={mode}
-                  >
-                    <i aria-hidden="true" />{mode}
-                  </button>
-                )
-              })}
-            </div>
-            <svg
-              className="behavior-graph"
-              viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
-              role="img"
-              aria-label="Daily ratings followed by hourly results for all recorded dates"
-            >
-            <text className="graph-section-title" x="0" y={RATING_TITLE_Y}>
-              DAILY LAST RATING
-            </text>
-            {[RATING_TOP, (RATING_TOP + RATING_BOTTOM) / 2, RATING_BOTTOM].map((y) => (
-              <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} key={`rating-grid-${y}`} />
-            ))}
-            {visibleRatingLines.map((line) => (
-              <g key={line.mode}>
-                <polyline
-                  className="behavior-rating-line"
-                  fill="none"
-                  stroke={line.color}
-                  points={line.points.map((point) => `${point.x},${point.y}`).join(' ')}
+            <section className="behavior-chart-section" aria-label="Rating chart">
+              <div className="behavior-subchart-heading behavior-rating-heading">
+                <div>
+                  <strong>Rating</strong>
+                </div>
+                <div className="behavior-rating-years" aria-label="Rating year">
+                  {['all', ...ratingYears].map((year) => (
+                    <button
+                      type="button"
+                      className={selectedRatingYear === year ? 'active' : ''}
+                      aria-pressed={selectedRatingYear === year}
+                      onClick={() => setSelectedRatingYear(year)}
+                      key={year}
+                    >
+                      {year}
+                    </button>
+                  ))}
+                </div>
+                <PlayerModeToggles
+                  activeModes={visibleRatingModes}
+                  availableModes={availableRatingModes}
+                  colored
+                  label="Game types shown in Rating"
+                  onToggle={(mode) => toggleMode(setVisibleRatingModes, mode)}
                 />
-              </g>
-            ))}
-            <text className="graph-rating-label" x="0" y={RATING_TOP + 6}>{ratingPlot.lines.length ? formatNumber(ratingPlot.maximum) : 'N/A'}</text>
-            <text className="graph-rating-label" x="0" y={RATING_BOTTOM}>{ratingPlot.lines.length ? formatNumber(ratingPlot.minimum) : 'N/A'}</text>
-            <text className="graph-axis-label" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
-            <text className="graph-axis-label" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>
-            {!ratingPlot.lines.length ? (
-              <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(RATING_TOP + RATING_BOTTOM) / 2} textAnchor="middle">No rating observations.</text>
-            ) : null}
+              </div>
+              <svg
+                className="behavior-graph"
+                viewBox={`0 0 ${WIDTH} ${RATING_SVG_HEIGHT}`}
+                role="img"
+                aria-label="Daily last ratings for the selected game types and year"
+              >
+                {[0, 1 / 3, 2 / 3, 1].map((ratio) => {
+                  const y = RATING_BOTTOM - ratio * (RATING_BOTTOM - RATING_TOP)
+                  const value = ratingPlot.minimum + ratio * (ratingPlot.maximum - ratingPlot.minimum)
+                  return (
+                    <g key={`rating-grid-${ratio}`}>
+                      <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} />
+                      <text className="graph-rating-label" x={PLOT_LEFT - 10} y={y + 3} textAnchor="end">
+                        {ratingPlot.lines.length ? formatNumber(Math.round(value)) : 'N/A'}
+                      </text>
+                    </g>
+                  )
+                })}
+                {visibleRatingLines.map((line) => (
+                  <g key={line.mode}>
+                    <polyline
+                      className="behavior-rating-line"
+                      fill="none"
+                      stroke={line.color}
+                      points={line.points.map((point) => `${point.x},${point.y}`).join(' ')}
+                    />
+                  </g>
+                ))}
+                <text className="graph-axis-label" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
+                <text className="graph-axis-label" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>
+                {!ratingPlot.lines.length ? (
+                  <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(RATING_TOP + RATING_BOTTOM) / 2} textAnchor="middle">No rating observations.</text>
+                ) : null}
+              </svg>
+            </section>
 
-            <line className="graph-divider" x1="0" x2={WIDTH} y1={GRAPH_DIVIDER_Y} y2={GRAPH_DIVIDER_Y} />
-            <text className="graph-section-title" x="0" y={HOURLY_TITLE_Y}>
-              HOURLY RESULTS
-            </text>
-            <g className="behavior-svg-result-legend" transform={`translate(${PLOT_RIGHT - 160} ${HOURLY_TITLE_Y})`}>
-              <rect className="wins" x="0" y="-8" width="8" height="8" rx="2" />
-              <text x="12" y="0">Wins</text>
-              <rect className="draws" x="52" y="-8" width="8" height="8" rx="2" />
-              <text x="64" y="0">Draws</text>
-              <rect className="losses" x="112" y="-8" width="8" height="8" rx="2" />
-              <text x="124" y="0">Losses</text>
-            </g>
-            {[0, 0.5, 1].map((ratio) => {
-              const y = HOURLY_BASELINE - ratio * HOURLY_HEIGHT
-              return (
-                <g key={`hour-grid-${ratio}`}>
-                  <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} />
-                  <text className="graph-axis-label hourly-y-tick" x={PLOT_LEFT - 10} y={y + 3} textAnchor="end">
-                    {formatNumber(Math.round(hourResultMaximum * ratio))}
+            <section className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
+              <div className="behavior-subchart-heading">
+                <div>
+                  <strong>Hours</strong>
+                </div>
+                <div className="behavior-result-legend" aria-label="Result colors">
+                  <span><i className="wins" />Wins</span>
+                  <span><i className="draws" />Draws</span>
+                  <span><i className="losses" />Losses</span>
+                </div>
+                <PlayerModeToggles
+                  activeModes={visibleHourModes}
+                  availableModes={availableActivityModes}
+                  label="Game types shown in Hours"
+                  onToggle={(mode) => toggleMode(setVisibleHourModes, mode)}
+                />
+              </div>
+              <svg
+                className="behavior-graph"
+                viewBox={`0 0 ${WIDTH} ${HOURS_SVG_HEIGHT}`}
+                role="img"
+                aria-label="Hourly results for the selected game types"
+              >
+                {[0, 0.5, 1].map((ratio) => {
+                  const y = HOURLY_BASELINE - ratio * HOURLY_HEIGHT
+                  return (
+                    <g key={`hour-grid-${ratio}`}>
+                      <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} />
+                      <text className="graph-axis-label hourly-y-tick" x={PLOT_LEFT - 10} y={y + 3} textAnchor="end">
+                        {formatNumber(Math.round(hourResultMaximum * ratio))}
+                      </text>
+                    </g>
+                  )
+                })}
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const row = hourMap.get(hour) || {}
+                  const binX = hourX(hour)
+                  const sideBarWidth = HOUR_STEP * 0.55
+                  const drawBarWidth = HOUR_STEP * 0.75
+                  const winX = binX + HOUR_STEP * 0.1
+                  const lossX = binX + HOUR_STEP * 0.9 - sideBarWidth
+                  const drawX = binX + (HOUR_STEP - drawBarWidth) / 2
+                  const scale = HOURLY_HEIGHT / hourResultMaximum
+                  const lossHeight = numeric(row.losses) * scale
+                  const drawHeight = numeric(row.draws) * scale
+                  const winHeight = numeric(row.wins) * scale
+                  return (
+                    <g key={`hour-bar-${hour}`}>
+                      <rect className="behavior-bar-win" x={winX} y={HOURLY_BASELINE - winHeight} width={sideBarWidth} height={winHeight} />
+                      <rect className="behavior-bar-loss" x={lossX} y={HOURLY_BASELINE - lossHeight} width={sideBarWidth} height={lossHeight} />
+                      <rect className="behavior-bar-draw" x={drawX} y={HOURLY_BASELINE - drawHeight} width={drawBarWidth} height={drawHeight} />
+                      <rect className="behavior-bar-hitbox" x={binX} y={HOURLY_TOP} width={HOUR_STEP} height={HOURLY_HEIGHT}>
+                        <title>{hourResultTooltip(hour, row)}</title>
+                      </rect>
+                      <text className="graph-axis-label hourly-axis-tick" x={binX + HOUR_STEP / 2} y={HOURLY_AXIS_Y} textAnchor="middle">
+                        {String(hour).padStart(2, '0')}
+                      </text>
+                    </g>
+                  )
+                })}
+                {Array.from({ length: 25 }, (_, boundary) => (
+                  <line
+                    className="hourly-bin-divider"
+                    x1={PLOT_LEFT + boundary * HOUR_STEP}
+                    x2={PLOT_LEFT + boundary * HOUR_STEP}
+                    y1={HOURLY_TOP}
+                    y2={HOURLY_BASELINE}
+                    key={`hour-boundary-${boundary}`}
+                  />
+                ))}
+                {!hourRows.some((row) => numeric(row.games)) ? (
+                  <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={HOURLY_TOP + HOURLY_HEIGHT / 2} textAnchor="middle">
+                    No games were initialized in this selection.
                   </text>
-                </g>
-              )
-            })}
-            {Array.from({ length: 24 }, (_, hour) => {
-              const row = hourMap.get(hour) || {}
-              const binX = hourX(hour)
-              const sideBarWidth = HOUR_STEP * 0.55
-              const drawBarWidth = HOUR_STEP * 0.75
-              const winX = binX + HOUR_STEP * 0.1
-              const lossX = binX + HOUR_STEP * 0.9 - sideBarWidth
-              const drawX = binX + (HOUR_STEP - drawBarWidth) / 2
-              const scale = HOURLY_HEIGHT / hourResultMaximum
-              const lossHeight = numeric(row.losses) * scale
-              const drawHeight = numeric(row.draws) * scale
-              const winHeight = numeric(row.wins) * scale
-              return (
-                <g key={`hour-bar-${hour}`}>
-                  <rect className="behavior-bar-win" x={winX} y={HOURLY_BASELINE - winHeight} width={sideBarWidth} height={winHeight} />
-                  <rect className="behavior-bar-loss" x={lossX} y={HOURLY_BASELINE - lossHeight} width={sideBarWidth} height={lossHeight} />
-                  <rect className="behavior-bar-draw" x={drawX} y={HOURLY_BASELINE - drawHeight} width={drawBarWidth} height={drawHeight} />
-                  <rect className="behavior-bar-hitbox" x={binX} y={HOURLY_TOP} width={HOUR_STEP} height={HOURLY_HEIGHT}>
-                    <title>{hourResultTooltip(hour, row)}</title>
-                  </rect>
-                  <text className="graph-axis-label hourly-axis-tick" x={binX + HOUR_STEP / 2} y={HOURLY_AXIS_Y} textAnchor="middle">
-                    {String(hour).padStart(2, '0')}
-                  </text>
-                </g>
-              )
-            })}
-            {Array.from({ length: 25 }, (_, boundary) => (
-              <line
-                className="hourly-bin-divider"
-                x1={PLOT_LEFT + boundary * HOUR_STEP}
-                x2={PLOT_LEFT + boundary * HOUR_STEP}
-                y1={HOURLY_TOP}
-                y2={HOURLY_BASELINE}
-                key={`hour-boundary-${boundary}`}
-              />
-            ))}
-            {!hourRows.some((row) => numeric(row.games)) ? (
-              <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={HOURLY_TOP + HOURLY_HEIGHT / 2} textAnchor="middle">
-                No games were initialized in this selection.
-              </text>
-            ) : null}
-            </svg>
+                ) : null}
+                <text
+                  className="graph-axis-label hourly-axis-title"
+                  x={(PLOT_LEFT + PLOT_RIGHT) / 2}
+                  y={HOURLY_AXIS_TITLE_Y}
+                  textAnchor="middle"
+                >
+                  HRS
+                </text>
+              </svg>
+            </section>
           </div>
         </div>
 
-        <footer className="behavior-time-note">
-          <small>
-            Hours use {timezoneLabel} ({timeContext.source || 'UTC fallback'}).
-            {timeContext.is_estimated ? ' Country-center estimate.' : ''}
-          </small>
-        </footer>
-
         <WeekdayStartChart
-          weekdays={activity?.weekdays}
-          weekdayHours={activity?.weekday_hours}
+          availableModes={availableActivityModes}
+          onToggleMode={(mode) => toggleMode(setVisibleDayModes, mode)}
           timeContext={timeContext}
+          visibleModes={visibleDayModes}
+          weekdays={dayActivity.weekdays}
+          weekdayHours={dayActivity.weekday_hours}
         />
       </article>
     </div>

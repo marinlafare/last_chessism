@@ -2,15 +2,13 @@ import { useEffect, useState } from 'react'
 import './player-analysis.css'
 import './player-hero-analytics.css'
 import PlayerBehaviouralPanel from './PlayerBehaviouralPanel'
+import PlayerMeasuresWorkspace from './PlayerMeasuresWorkspace'
 import {
   fetchBehaviouralActivity,
   fetchBehaviouralRatings,
 } from './playerAnalysisApi'
 
-const MODES = ['all', 'bullet', 'blitz', 'rapid']
-
 export default function PlayerAnalysisWorkspace({ playerName, disabled = false }) {
-  const [mode, setMode] = useState('all')
   const [activity, setActivity] = useState(null)
   const [ratings, setRatings] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -27,8 +25,8 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
     setLoading(true)
     setError('')
     Promise.all([
-      fetchBehaviouralActivity({ playerName, mode, signal: controller.signal }),
-      fetchBehaviouralRatings({ playerName, mode, signal: controller.signal }),
+      fetchBehaviouralActivity({ playerName, signal: controller.signal }),
+      fetchBehaviouralRatings({ playerName, signal: controller.signal }),
     ]).then(([nextActivity, nextRatings]) => {
       if (controller.signal.aborted) return
       setActivity(nextActivity)
@@ -41,40 +39,28 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
       if (!controller.signal.aborted) setLoading(false)
     })
     return () => controller.abort()
-  }, [playerName, disabled, mode])
+  }, [playerName, disabled])
 
   return (
-    <section className="games-mode-detail player-analysis-workspace">
-      <div className="player-analysis-heading">
-        <div>
-          <p className="eyebrow">BEHAVIORAL ANALYSIS</p>
-          <h2>Patterns</h2>
-        </div>
-        <div className="player-behavior-controls">
-          <div className="player-analysis-mode-filter" aria-label="Game type">
-            {MODES.map((item) => (
-              <button
-                className={mode === item ? 'active' : ''}
-                key={item}
-                type="button"
-                disabled={disabled}
-                onClick={() => setMode(item)}
-              >
-                {item}
-              </button>
-            ))}
+    <>
+      <section className="games-mode-detail player-analysis-workspace">
+        <div className="player-analysis-heading">
+          <div>
+            <p className="eyebrow">BEHAVIORAL ANALYSIS</p>
+            <h2>Patterns</h2>
           </div>
         </div>
-      </div>
 
-      {error ? <p className="player-analysis-error" role="alert">{error}</p> : null}
-      {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
-      {!loading && !error && activity && ratings ? (
-        <PlayerBehaviouralPanel
-          activity={activity}
-          ratings={ratings}
-        />
-      ) : null}
-    </section>
+        {error ? <p className="player-analysis-error" role="alert">{error}</p> : null}
+        {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
+        {!loading && !error && activity && ratings ? (
+          <PlayerBehaviouralPanel
+            activity={activity}
+            ratings={ratings}
+          />
+        ) : null}
+      </section>
+      <PlayerMeasuresWorkspace playerName={playerName} disabled={disabled} />
+    </>
   )
 }

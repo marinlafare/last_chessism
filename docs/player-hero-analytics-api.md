@@ -25,7 +25,7 @@ the result is estimated or UTC-based.
 
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /players/{player}/analysis/behavioural/activity` | Dense weekday, hour, and weekday×hour game proportions plus absolute wins, draws, and losses. |
+| `GET /players/{player}/analysis/behavioural/activity` | Dense weekday, hour, and weekday×hour game proportions plus absolute wins, draws, and losses. The response also includes `by_mode` breakdowns for independent Bullet, Blitz, and Rapid chart filters without additional requests. |
 | `GET /players/{player}/analysis/behavioural/ratings` | Dense daily last-rating series, kept separate for Bullet, Blitz, and Rapid. Days without games contain `last_rating: null`. |
 | `GET /players/{player}/analysis/behavioural/days/{date}` | All rating observations and absolute W/D/L totals in 24 resolved-local-time hourly buckets for one local date. |
 
@@ -42,13 +42,41 @@ Thus a player-perspective change from `+20` to `+80` is `cp_change: +60`,
 `cp_gain: 60`, and `cp_loss: 0`. Mate and tablebase sentinel values are kept
 out of centipawn arithmetic and reported separately.
 
+Blunders copy Lichess's current classifier. Centipawns are converted to
+Lichess winning chances:
+
+`2 / (1 + exp(-0.00368208 * cp)) - 1`.
+
+A CP-to-CP player move is a blunder when it loses at least `0.30` on that
+`[-1, 1]` scale. Forced-mate creation/loss uses Lichess's separate mate
+boundaries. Every comparison is made after orienting the score toward the
+player, so increasingly negative White scores are improvements for Black.
+The implementation follows Lichess's
+[`Advice.scala`](https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala)
+and the winning-chance formula in
+[`eval.scala`](https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala).
+
 | Endpoint | Purpose |
 | --- | --- |
-| `GET /players/{player}/analysis/measures/quality-calendar` | Weekday, hour, and weekday×hour CP sums, signed changes, gain/loss totals, mover split, mates, and tablebase outcomes. Empty CP buckets contain `null` CP measures. |
+| `POST /players/{player}/analysis/measures/range-games-score` | One compact score per fully analyzed game selected by either `game_ids` or `date_from`/`date_to`. Results are paginated and include player CP gain/loss/net, blunders, final CP, result, and ending reason. |
+| `GET /players/{player}/analysis/measures/quality-calendar` | Compatibility aggregate of the selected player's own CP gain/loss grouped by weekday and hour. |
 | `GET /players/{player}/analysis/measures/games/{game_id}` | Complete ordered scored-position sequence for one game, including raw White score and player-oriented score/change/gain/loss. |
 | `GET /players/{player}/analysis/measures/days/{date}/hours/{hour}` | Cursor-paginated game sequences initialized in one resolved local hour. `hour` is 0–23. |
 
-The quality-calendar endpoint reads `game_player_engine_summary`, one compact
-row per fully analyzed game and player color. Stockfish and tablebase writes
-refresh newly complete games automatically, so opening the hero page does not
-rescan every position appearance.
+`game_player_engine_summary` contains one compact row per fully analyzed game
+and player color. It stores player identity, analyzed player moves, own-move CP
+gain/loss, Lichess blunder count, mate-position counts, final player CP,
+result, and normalized ending reason. Stockfish and tablebase writes refresh
+newly complete games automatically.
+
+The range request must use exactly one selector:
+
+```json
+{"game_ids": [123, 456], "mode": "all", "page": 1, "page_size": 100}
+```
+
+or:
+
+```json
+{"date_from": "2026-01-01", "date_to": "2026-03-31", "mode": "blitz"}
+```

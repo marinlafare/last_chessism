@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stockfish-service"
 
 import chess
 import operations.engine as stockfish_engine
+from chessism_api.database import models
 from chessism_api.operations import (
     analysis,
     analysis_backups,
@@ -228,6 +229,102 @@ class FenAggregationTests(unittest.TestCase):
 
 
 class PlayerHeroAnalyticsTests(unittest.TestCase):
+    def test_game_player_engine_summary_keeps_only_player_game_score_fields(self):
+        columns = set(models.GamePlayerEngineSummary.__table__.columns.keys())
+
+        self.assertEqual(columns, {
+            "game_link", "player_name", "player_color", "analyzed_player_moves",
+            "own_move_cp_gain", "own_move_cp_loss", "blunder_count",
+            "mate_for_positions", "mate_against_positions", "final_player_cp",
+            "result", "end_by",
+        })
+        self.assertNotIn("player_cp_sum", columns)
+        self.assertNotIn("opponent_move_cp_gain", columns)
+        self.assertNotIn("tablebase_winning", columns)
+
+    def test_lichess_blunder_uses_winning_chance_loss_not_fixed_cp_loss(self):
+        self.assertTrue(player_hero_analytics.is_lichess_blunder(100, -100))
+        self.assertFalse(player_hero_analytics.is_lichess_blunder(50, -50))
+
+    def test_lichess_winning_chances_are_symmetric_and_approach_limits(self):
+        positive = player_hero_analytics.lichess_winning_chances(250)
+        negative = player_hero_analytics.lichess_winning_chances(-250)
+
+        self.assertAlmostEqual(positive, -negative)
+        self.assertGreater(
+            player_hero_analytics.lichess_winning_chances(2_000),
+            player_hero_analytics.lichess_winning_chances(1_000),
+        )
+        self.assertEqual(player_hero_analytics.lichess_winning_chances(1_000_000), 1.0)
+
+    def test_lichess_blunder_copies_forced_mate_boundaries(self):
+        self.assertTrue(
+            player_hero_analytics.is_lichess_blunder(-700, -9_000, "cp", "mate")
+        )
+        self.assertFalse(
+            player_hero_analytics.is_lichess_blunder(-701, -9_000, "cp", "mate")
+        )
+        self.assertTrue(
+            player_hero_analytics.is_lichess_blunder(9_000, 700, "mate", "cp")
+        )
+        self.assertFalse(
+            player_hero_analytics.is_lichess_blunder(9_000, 701, "mate", "cp")
+        )
+
+    def test_activity_rows_can_be_aggregated_after_grouping_by_mode(self):
+        rows = [
+            {
+                "mode": "bullet", "weekday": 1, "hour": 8,
+                "games": 3, "wins": 2, "draws": 0, "losses": 1,
+            },
+            {
+                "mode": "blitz", "weekday": 1, "hour": 8,
+                "games": 2, "wins": 0, "draws": 1, "losses": 1,
+            },
+        ]
+
+        summary = player_hero_analytics._summarize_activity_rows(rows)
+
+        self.assertEqual(summary["total_games"], 5)
+        self.assertEqual(summary["weekdays"][0]["games"], 5)
+        self.assertEqual(summary["hours"][8]["wins"], 2)
+        self.assertEqual(summary["weekday_hours"][8]["draws"], 1)
+        self.assertEqual(summary["hours"][8]["proportion"], 1.0)
+
+    def test_measure_rows_can_be_aggregated_after_grouping_by_mode(self):
+        base = {key: 0 for key in player_hero_analytics.MEASURE_KEYS}
+        rows = [
+            {
+                **base, "mode": "bullet", "weekday": 2, "hour": 9,
+                "positions": 3, "transitions": 2,
+                "player_cp_sum": 90, "total_cp_gain": 50, "total_cp_loss": 20,
+            },
+            {
+                **base, "mode": "rapid", "weekday": 2, "hour": 9,
+                "positions": 2, "transitions": 1,
+                "player_cp_sum": -10, "total_cp_gain": 5, "total_cp_loss": 15,
+            },
+        ]
+
+        summary = player_hero_analytics._summarize_measure_rows(rows)
+
+        self.assertEqual(summary["weekdays"][1]["positions"], 5)
+        self.assertEqual(summary["hours"][9]["player_cp_average"], 16.0)
+        self.assertEqual(summary["weekday_hours"][33]["net_cp_change"], 20.0)
+
+    def test_measure_coverage_sums_mode_rows(self):
+        coverage = player_hero_analytics._summarize_measure_coverage([
+            {"total_games": 10, "eligible_games": 7, "scored_positions": 210},
+            {"total_games": 4, "eligible_games": 3, "scored_positions": 80},
+        ])
+
+        self.assertEqual(coverage, {
+            "total_games": 14,
+            "eligible_games": 10,
+            "excluded_games": 4,
+            "scored_positions": 290,
+        })
+
     def test_country_with_even_zone_count_uses_two_center_zones(self):
         resolved = resolve_player_timezone({"country": "MX", "location": None})
 
