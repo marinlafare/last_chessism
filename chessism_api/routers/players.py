@@ -47,6 +47,7 @@ from chessism_api.operations.player_hero_analytics import (
     get_player_range_game_scores,
 )
 from chessism_api.operations.player_hero_efficiency import get_player_daily_efficiency
+from chessism_api.operations.player_game_explorer import explore_player_games
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -65,6 +66,17 @@ class RangeGamesScoreRequest(BaseModel):
     mode: str = Field("all", pattern="^(all|bullet|blitz|rapid)$")
     page: int = Field(1, ge=1)
     page_size: int = Field(100, ge=1, le=500)
+
+
+class ExploreGamesRequest(BaseModel):
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour)$")
+    modes: list[str] = Field(..., min_length=1, max_length=3)
+    date: str | None = Field(None, min_length=10, max_length=10)
+    weekday: int | None = Field(None, ge=1, le=7)
+    hour: int | None = Field(None, ge=0, le=23)
+    analyzed_only: bool = True
+    limit: int = Field(30, ge=1, le=100)
+    cursor: str | None = Field(None, max_length=512)
 
 
 async def _get_cached_player_analysis(
@@ -348,6 +360,26 @@ async def api_get_player_range_game_scores(
         mode=request.mode,
         page=request.page,
         page_size=request.page_size,
+    )
+
+
+@router.post("/{player_name}/analysis/measures/explore-games")
+async def api_explore_player_games(
+    player_name: str,
+    request: ExploreGamesRequest,
+) -> JSONResponse:
+    """Return compact analyzed games from one player chart bin."""
+    return await _hero_analytics_response(
+        explore_player_games,
+        player_name,
+        scope_kind=request.scope,
+        modes=request.modes,
+        target_date=request.date,
+        weekday=request.weekday,
+        hour=request.hour,
+        analyzed_only=request.analyzed_only,
+        limit=request.limit,
+        cursor=request.cursor,
     )
 
 

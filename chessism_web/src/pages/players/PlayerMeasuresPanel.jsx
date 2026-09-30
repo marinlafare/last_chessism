@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerDailyEfficiencyChart from './PlayerDailyEfficiencyChart'
+import PlayerGameExplorerModal from './PlayerGameExplorerModal'
+import PlayerGameReviewModal from './PlayerGameReviewModal'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 
 const MEASURE_FIELDS = [
@@ -110,7 +112,7 @@ function measureColor(value, maximum, metric) {
   return `rgba(${color}, ${0.2 + strength * 0.8})`
 }
 
-function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode }) {
+function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, onExplore }) {
   const [metric, setMetric] = useState('net_per_transition')
   const [expanded, setExpanded] = useState(() => new Set())
   const cellsByWeekday = useMemo(() => {
@@ -135,6 +137,7 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode }
       return next
     })
   }
+  const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => activeModes.has(mode))
 
   return (
     <section className="measure-chart-section">
@@ -154,34 +157,54 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode }
           const dayValue = metricValue(day, metric)
           const hourMap = new Map((cellsByWeekday.get(day.weekday) || []).map((cell) => [cell.hour, cell]))
           return (
-            <button
+            <div
               className={`measure-day-row ${isExpanded ? 'expanded' : ''}`}
-              type="button"
-              aria-expanded={isExpanded}
-              onClick={() => toggleDay(day.weekday)}
               key={day.weekday}
             >
-              <span className="measure-day-name">{String(day.label).toUpperCase()}</span>
+              <button
+                className="measure-day-name"
+                type="button"
+                aria-expanded={isExpanded}
+                onClick={() => toggleDay(day.weekday)}
+              >
+                {String(day.label).toUpperCase()}
+              </button>
               <span className="measure-day-stage">
-                <span className="measure-day-summary" title={`${day.label}\n${METRICS[metric].label}: ${cp(dayValue)}\n${formatNumber(day.positions)} scored positions`}>
+                <button
+                  className="measure-day-summary"
+                  type="button"
+                  disabled={!selectedModes.length}
+                  title={`${day.label}\n${METRICS[metric].label}: ${cp(dayValue)}\n${formatNumber(day.positions)} scored positions`}
+                  onClick={() => onExplore({ scope: 'weekday', weekday: day.weekday, label: day.label, modes: selectedModes })}
+                >
                   <i style={{ background: measureColor(dayValue, maximum, metric) }} />
                   <strong>{cp(dayValue)}</strong>
-                </span>
+                </button>
                 <span className="measure-day-hours">
                   {Array.from({ length: 24 }, (_, hour) => {
                     const cell = hourMap.get(hour) || {}
                     const value = metricValue(cell, metric)
                     return (
-                      <i
+                      <button
+                        type="button"
+                        disabled={!selectedModes.length}
                         style={{ background: measureColor(value, maximum, metric) }}
                         title={`${String(hour).padStart(2, '0')}:00\n${METRICS[metric].label}: ${cp(value)}\n${formatNumber(cell.positions || 0)} scored positions`}
+                        aria-label={`${day.label} at ${hour}:00. Explore games.`}
+                        onClick={() => onExplore({
+                          scope: 'weekday_hour',
+                          weekday: day.weekday,
+                          hour,
+                          label: day.label,
+                          modes: selectedModes,
+                        })}
                         key={hour}
                       />
                     )
                   })}
                 </span>
               </span>
-            </button>
+            </div>
           )
         })}
       </div>
@@ -193,7 +216,7 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode }
   )
 }
 
-function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode }) {
+function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode, onExplore }) {
   const [metric, setMetric] = useState('net_per_transition')
   const rows = quality.hours || []
   const values = rows.map((row) => metricValue(row, metric))
@@ -201,6 +224,7 @@ function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode 
   const signed = METRICS[metric].signed
   const zeroY = signed ? (HOURS_TOP + HOURS_BOTTOM) / 2 : HOURS_BOTTOM
   const rangeHeight = signed ? (HOURS_BOTTOM - HOURS_TOP) / 2 : HOURS_BOTTOM - HOURS_TOP
+  const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => activeModes.has(mode))
 
   return (
     <section className="measure-chart-section measure-hours-section">
@@ -238,6 +262,25 @@ function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode 
               >
                 <title>{`${String(hour).padStart(2, '0')}:00\n${METRICS[metric].label}: ${cp(value)}\n${formatNumber(row.positions || 0)} scored positions`}</title>
               </rect>
+              <rect
+                className="measure-hour-hitbox"
+                x={HOURS_LEFT + hour * HOURS_STEP}
+                y={HOURS_TOP}
+                width={HOURS_STEP}
+                height={HOURS_BOTTOM - HOURS_TOP}
+                role="button"
+                tabIndex="0"
+                aria-label={`${hour}:00. Explore games.`}
+                onClick={() => selectedModes.length && onExplore({ scope: 'hour', hour, label: `${hour}:00`, modes: selectedModes })}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault()
+                    if (selectedModes.length) onExplore({ scope: 'hour', hour, label: `${hour}:00`, modes: selectedModes })
+                  }
+                }}
+              >
+                <title>{`${String(hour).padStart(2, '0')}:00 · explore games`}</title>
+              </rect>
               <text className="hourly-axis-tick" x={x + HOURS_STEP * 0.35} y="174" textAnchor="middle">{String(hour).padStart(2, '0')}</text>
             </g>
           )
@@ -248,125 +291,11 @@ function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode 
   )
 }
 
-function GameSequenceChart({ positions = [] }) {
-  const points = positions.filter((position) => position.score_kind === 'cp')
-  if (points.length < 2) return null
-  const width = 1200
-  const height = 180
-  const left = 90
-  const right = 1180
-  const top = 12
-  const bottom = 150
-  const scores = points.map((point) => numeric(point.player_score))
-  const minimum = Math.min(...scores)
-  const maximum = Math.max(...scores)
-  const spread = Math.max(1, maximum - minimum)
-  const plotted = points.map((point, index) => ({
-    ...point,
-    x: left + (index / Math.max(1, points.length - 1)) * (right - left),
-    y: bottom - ((numeric(point.player_score) - minimum) / spread) * (bottom - top),
-  }))
-  return (
-    <div className="measure-game-sequence-scroll">
-      <svg className="measure-game-sequence" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Player-oriented evaluation through the game">
-        <line className="graph-grid-line" x1={left} x2={right} y1={top} y2={top} />
-        <line className="graph-grid-line" x1={left} x2={right} y1={bottom} y2={bottom} />
-        <text className="graph-rating-label" x={left - 10} y={top + 3} textAnchor="end">{cp(maximum, 0)}</text>
-        <text className="graph-rating-label" x={left - 10} y={bottom + 3} textAnchor="end">{cp(minimum, 0)}</text>
-        <polyline className="measure-game-line" points={plotted.map((point) => `${point.x},${point.y}`).join(' ')} />
-        {plotted.map((point) => (
-          <circle className="measure-game-point" cx={point.x} cy={point.y} r="3" key={point.ply}>
-            <title>{`Ply ${point.ply} · ${point.move || 'move'}\n${cp(point.player_score)}\nchange ${cp(point.cp_change)}`}</title>
-          </circle>
-        ))}
-        <text className="graph-axis-label" x={left} y="172">First scored ply</text>
-        <text className="graph-axis-label" x={right} y="172" textAnchor="end">Last scored ply</text>
-      </svg>
-    </div>
-  )
-}
-
-function positionScore(position) {
-  if (position.score_kind === 'cp') return cp(position.player_score)
-  if (position.score_kind === 'mate') return position.player_score > 0 ? 'Mate for player' : 'Mate against player'
-  if (position.score_kind === 'tablebase') {
-    if (position.player_score > 0) return 'Tablebase win'
-    if (position.player_score < 0) return 'Tablebase loss'
-    return 'Tablebase draw'
-  }
-  return 'N/A'
-}
-
-function MeasuresInspector({ gameInspector, hourInspector }) {
-  const games = hourInspector.data?.games || []
-  const game = gameInspector.data?.game
-  return (
-    <section className="measure-inspector">
-      <div className="behavior-subchart-heading measure-inspector-heading">
-        <div><strong>Explore</strong></div>
-        <small>Load a local hour, then select a game for its complete score sequence.</small>
-      </div>
-      <div className="measure-inspector-controls">
-        <label><span>Date</span><input type="date" value={hourInspector.date} onChange={(event) => hourInspector.setDate(event.target.value)} /></label>
-        <label><span>Hour</span><select value={hourInspector.hour} onChange={(event) => hourInspector.setHour(event.target.value)}>{Array.from({ length: 24 }, (_, hour) => <option value={hour} key={hour}>{String(hour).padStart(2, '0')}:00</option>)}</select></label>
-        <label><span>Game type</span><select value={hourInspector.mode} onChange={(event) => hourInspector.setMode(event.target.value)}><option value="all">All</option>{PLAYER_ANALYSIS_MODES.map((mode) => <option value={mode} key={mode}>{mode}</option>)}</select></label>
-        <button type="button" disabled={!hourInspector.date || hourInspector.loading} onClick={hourInspector.load}>{hourInspector.loading ? 'Loading…' : 'Inspect hour'}</button>
-        <label className="measure-game-id"><span>Game ID</span><input inputMode="numeric" value={gameInspector.gameId} onChange={(event) => gameInspector.setGameId(event.target.value)} /></label>
-        <button type="button" disabled={!gameInspector.gameId || gameInspector.loading} onClick={gameInspector.load}>{gameInspector.loading ? 'Loading…' : 'Inspect game'}</button>
-      </div>
-      {hourInspector.error ? <p className="player-analysis-error">{hourInspector.error}</p> : null}
-      {gameInspector.error ? <p className="player-analysis-error">{gameInspector.error}</p> : null}
-      {hourInspector.data ? (
-        <div className="measure-hour-results">
-          <div className="measure-hour-result-heading">
-            <strong>{hourInspector.data.date} · {String(hourInspector.data.hour).padStart(2, '0')}:00</strong>
-            <span>{formatNumber(games.length)} loaded games</span>
-          </div>
-          {games.length ? (
-            <div className="measure-game-list">
-              {games.map((item) => (
-                <button type="button" className={game?.game_id === item.game_id ? 'active' : ''} onClick={() => gameInspector.selectGame(item.game_id)} key={item.game_id}>
-                  <strong>{item.game_id}</strong>
-                  <span>{item.mode} · {item.color} · vs {item.opponent}</span>
-                  <small>{formatNumber(item.positions.length)} scored positions</small>
-                </button>
-              ))}
-              {hourInspector.data.pagination?.has_more ? <button className="measure-load-more" type="button" disabled={hourInspector.loading} onClick={hourInspector.loadMore}>Load more</button> : null}
-            </div>
-          ) : <p className="measure-empty">No games started during this hour.</p>}
-        </div>
-      ) : null}
-      {game ? (
-        <div className="measure-game-detail">
-          <div className="measure-game-meta">
-            <strong>Game {game.game_id}</strong>
-            <span>{game.mode}</span><span>{game.color}</span><span>vs {game.opponent}</span>
-            <span>{formatNumber(game.analyzed_positions)} / {formatNumber(game.total_positions)} positions</span>
-          </div>
-          <GameSequenceChart positions={game.positions} />
-          <div className="measure-position-table-wrap">
-            <table>
-              <thead><tr><th>Ply</th><th>Move</th><th>Player score</th><th>Change</th><th>Gain</th><th>Loss</th><th>Source</th></tr></thead>
-              <tbody>
-                {game.positions.map((position) => (
-                  <tr className={position.mover_is_player ? 'player-move' : ''} key={position.ply}>
-                    <td>{position.ply}</td><td>{position.move || '—'}</td><td>{positionScore(position)}</td>
-                    <td>{cp(position.cp_change)}</td><td>{cp(position.cp_gain)}</td><td>{cp(position.cp_loss)}</td>
-                    <td>{position.analysis_source || 'stockfish'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
-    </section>
-  )
-}
-
-export default function PlayerMeasuresPanel({ playerName, quality, gameInspector, hourInspector }) {
+export default function PlayerMeasuresPanel({ playerName, quality }) {
   const [dayModes, setDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [hourModes, setHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [explorerSelection, setExplorerSelection] = useState(null)
+  const [reviewGameId, setReviewGameId] = useState(null)
   const aggregate = useMemo(() => qualityForModes(quality, ALL_MODES), [quality])
   const dayQuality = useMemo(() => qualityForModes(quality, dayModes), [quality, dayModes])
   const hourQuality = useMemo(() => qualityForModes(quality, hourModes), [quality, hourModes])
@@ -387,10 +316,13 @@ export default function PlayerMeasuresPanel({ playerName, quality, gameInspector
   useEffect(() => {
     setDayModes(new Set(PLAYER_ANALYSIS_MODES))
     setHourModes(new Set(PLAYER_ANALYSIS_MODES))
+    setExplorerSelection(null)
+    setReviewGameId(null)
   }, [quality])
 
   return (
-    <div className="measure-dashboard">
+    <>
+      <div className="measure-dashboard">
       <div className="measure-coverage" aria-label="Stockfish analysis coverage">
         <div><span>Total games</span><strong>{formatNumber(coverage.total_games || 0)}</strong></div>
         <div><span>Complete games</span><strong>{formatNumber(coverage.eligible_games || 0)}</strong><small>{coveragePercent.toFixed(1)}%</small></div>
@@ -401,21 +333,41 @@ export default function PlayerMeasuresPanel({ playerName, quality, gameInspector
         <PlayerDailyEfficiencyChart
           availableModes={availableModes}
           playerName={playerName}
+          onSelectPoint={setExplorerSelection}
         />
         <MeasureDaysChart
           quality={dayQuality}
           activeModes={dayModes}
           availableModes={availableModes}
           onToggleMode={(mode) => toggleMode(setDayModes, mode)}
+          onExplore={setExplorerSelection}
         />
         <MeasureHoursChart
           quality={hourQuality}
           activeModes={hourModes}
           availableModes={availableModes}
           onToggleMode={(mode) => toggleMode(setHourModes, mode)}
+          onExplore={setExplorerSelection}
         />
-        <MeasuresInspector gameInspector={gameInspector} hourInspector={hourInspector} />
       </article>
-    </div>
+      </div>
+      {!reviewGameId ? (
+        <PlayerGameExplorerModal
+          playerName={playerName}
+          selection={explorerSelection}
+          onClose={() => setExplorerSelection(null)}
+          onOpenGame={setReviewGameId}
+        />
+      ) : null}
+      <PlayerGameReviewModal
+        gameId={reviewGameId}
+        playerName={playerName}
+        onBack={() => setReviewGameId(null)}
+        onClose={() => {
+          setReviewGameId(null)
+          setExplorerSelection(null)
+        }}
+      />
+    </>
   )
 }

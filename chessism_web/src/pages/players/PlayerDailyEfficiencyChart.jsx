@@ -39,11 +39,45 @@ function axisDate(timestamp, span) {
   return `${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`
 }
 
+function niceTickStep(range, targetIntervals = 5) {
+  const roughStep = Math.max(Number.EPSILON, range / targetIntervals)
+  const magnitude = 10 ** Math.floor(Math.log10(roughStep))
+  const fraction = roughStep / magnitude
+  const niceFraction = fraction <= 1 ? 1 : fraction <= 2 ? 2 : fraction <= 5 ? 5 : 10
+  return niceFraction * magnitude
+}
+
+function efficiencyScale(points) {
+  if (!points.length) return { minimum: 0, maximum: 100, step: 25 }
+  const values = points.map((point) => point.gameEfficiency)
+  const dataMinimum = Math.min(...values)
+  const dataMaximum = Math.max(...values)
+  const dataRange = dataMaximum - dataMinimum
+  const padding = dataRange > 0 ? Math.min(2, Math.max(0.5, dataRange * 0.08)) : 5
+  const paddedMinimum = Math.max(0, dataMinimum - padding)
+  const paddedMaximum = Math.min(100, dataMaximum + padding)
+  const step = niceTickStep(Math.max(1, paddedMaximum - paddedMinimum))
+  let minimum = Math.max(0, Math.floor(paddedMinimum / step) * step)
+  let maximum = Math.min(100, Math.ceil(paddedMaximum / step) * step)
+
+  if (maximum <= minimum) {
+    minimum = Math.max(0, minimum - step)
+    maximum = Math.min(100, maximum + step)
+  }
+  return { minimum, maximum, step }
+}
+
 function buildPlot(points) {
-  const yTicks = Array.from({ length: 5 }, (_, index) => ({
-    value: 100 - index * 25,
-    y: PLOT_TOP + (index / 4) * (PLOT_BOTTOM - PLOT_TOP),
-  }))
+  const scale = efficiencyScale(points)
+  const valueRange = Math.max(1, scale.maximum - scale.minimum)
+  const yTicks = []
+  for (let value = scale.maximum; value >= scale.minimum - Number.EPSILON; value -= scale.step) {
+    const normalizedValue = Number(value.toFixed(scale.step < 1 ? 1 : 0))
+    yTicks.push({
+      value: normalizedValue,
+      y: PLOT_TOP + ((scale.maximum - value) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
+    })
+  }
   if (!points.length) return { points: [], xTicks: [], yTicks }
 
   const start = points[0].timestamp
@@ -54,7 +88,8 @@ function buildPlot(points) {
     x: points.length === 1
       ? (PLOT_LEFT + PLOT_RIGHT) / 2
       : PLOT_LEFT + ((point.timestamp - start) / timeSpread) * (PLOT_RIGHT - PLOT_LEFT),
-    y: PLOT_BOTTOM - (point.gameEfficiency / 100) * (PLOT_BOTTOM - PLOT_TOP),
+    y: PLOT_BOTTOM
+      - ((point.gameEfficiency - scale.minimum) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
   }))
   const xTicks = points.length === 1
     ? [{ label: axisDate(start, 0), x: (PLOT_LEFT + PLOT_RIGHT) / 2 }]
@@ -76,7 +111,7 @@ function efficiencyBand(value) {
   return 'poor'
 }
 
-export default function PlayerDailyEfficiencyChart({ availableModes, playerName }) {
+export default function PlayerDailyEfficiencyChart({ availableModes, playerName, onSelectPoint }) {
   const [activeModes, setActiveModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [selectedYear, setSelectedYear] = useState('all')
   const [request, setRequest] = useState(emptyRequest)
@@ -118,7 +153,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName 
       })
       .catch((error) => {
         if (error.name !== 'AbortError') {
-          setRequest({ data: null, error: error.message || 'Unable to load daily efficiency.', loading: false })
+          setRequest({ data: null, error: error.message || 'Unable to load daily accuracy.', loading: false })
         }
       })
     return () => controller.abort()
@@ -134,10 +169,10 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName 
   }
 
   return (
-    <section className="measure-chart-section measure-daily-efficiency-section" aria-label="Daily game efficiency chart">
+    <section className="measure-chart-section measure-daily-efficiency-section" aria-label="Daily game accuracy chart">
       <div className="behavior-subchart-heading measure-chart-heading measure-daily-efficiency-heading">
-        <div><strong>Efficiency</strong></div>
-        <div className="measure-daily-years" aria-label="Efficiency year">
+        <div><strong>Accuracy</strong></div>
+        <div className="measure-daily-years" aria-label="Accuracy year">
           {['all', ...years].map((year) => (
             <button
               type="button"
@@ -153,15 +188,15 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName 
         <PlayerModeToggles
           activeModes={activeModes}
           availableModes={availableModes}
-          label="Game types shown in efficiency"
+          label="Game types shown in accuracy"
           onToggle={toggleMode}
         />
       </div>
 
-      {request.loading ? <div className="measure-chart-message">Calculating daily efficiency…</div> : null}
+      {request.loading ? <div className="measure-chart-message">Calculating daily accuracy…</div> : null}
       {!request.loading && request.error ? <div className="measure-chart-message error" role="alert">{request.error}</div> : null}
       {!request.loading && !request.error ? (
-        <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Average game efficiency by local date">
+        <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Average game accuracy by local date">
           {plot.yTicks.map((tick) => (
             <g key={`daily-efficiency-y-${tick.value}`}>
               <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={tick.y} y2={tick.y} />
@@ -170,16 +205,35 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName 
           ))}
           {plot.points.length ? (
             <>
-              <polyline className="measure-daily-efficiency-line" points={plot.points.map((point) => `${point.x},${point.y}`).join(' ')} />
               {plot.points.map((point) => (
                 <circle
                   className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
                   cx={point.x}
                   cy={point.y}
-                  r="2.8"
+                  r="4"
+                  role="button"
+                  tabIndex="0"
+                  aria-label={`${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`}
+                  onClick={() => onSelectPoint?.({
+                    scope: 'date',
+                    date: point.date,
+                    label: point.date,
+                    modes: selectedModes,
+                  })}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault()
+                      onSelectPoint?.({
+                        scope: 'date',
+                        date: point.date,
+                        label: point.date,
+                        modes: selectedModes,
+                      })
+                    }
+                  }}
                   key={point.date}
                 >
-                  <title>{`${point.date}\n${point.gameEfficiency.toFixed(2)} efficiency`}</title>
+                  <title>{`${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy`}</title>
                 </circle>
               ))}
             </>

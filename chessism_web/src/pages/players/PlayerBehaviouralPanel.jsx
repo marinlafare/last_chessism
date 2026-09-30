@@ -4,6 +4,8 @@ import PlayerModeToggles, {
   PLAYER_ANALYSIS_MODES,
   PLAYER_MODE_COLORS,
 } from './PlayerModeToggles'
+import PlayerGameExplorerModal from './PlayerGameExplorerModal'
+import PlayerGameReviewModal from './PlayerGameReviewModal'
 
 const WIDTH = 1200
 const RATING_SVG_HEIGHT = 156
@@ -166,6 +168,7 @@ function activityForModes(activity, activeModes) {
 function WeekdayStartChart({
   availableModes,
   onToggleMode,
+  onExplore,
   timeContext,
   visibleModes,
   weekdayHours = [],
@@ -191,6 +194,7 @@ function WeekdayStartChart({
       return next
     })
   }
+  const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleModes.has(mode))
 
   return (
     <section className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
@@ -219,36 +223,64 @@ function WeekdayStartChart({
               const noteId = `weekday-usage-note-${weekday.weekday}`
               return (
                 <div className={`behavior-weekday-row ${isExpanded ? 'expanded' : ''}`} key={weekday.weekday}>
-                  <button
+                  <div
                     className="behavior-weekday-summary"
-                    type="button"
-                    aria-expanded={isExpanded}
-                    aria-describedby={noteId}
-                    onClick={() => toggleWeekday(weekday.weekday)}
                   >
-                    <span className="behavior-weekday-badge">{String(weekday.label).toUpperCase()}</span>
+                    <button
+                      className="behavior-weekday-badge"
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-describedby={noteId}
+                      title={isExpanded ? 'Collapse hourly bins' : 'Expand hourly bins'}
+                      onClick={() => toggleWeekday(weekday.weekday)}
+                    >
+                      {String(weekday.label).toUpperCase()}
+                    </button>
                     <span className="behavior-weekday-stage">
                       <span className="behavior-weekday-hours" aria-hidden={!isExpanded}>
                         {Array.from({ length: 24 }, (_, hour) => {
                           const cell = cellMap.get(hour) || {}
                           return (
-                            <span
+                            <button
                               className="behavior-weekday-hour"
+                              type="button"
+                              disabled={!isExpanded || !selectedModes.length}
                               key={hour}
                               title={hourResultTooltip(hour, cell)}
+                              aria-label={`${weekday.label} at ${hour}:00. Explore games.`}
+                              onClick={() => onExplore({
+                                scope: 'weekday_hour',
+                                weekday: weekday.weekday,
+                                hour,
+                                label: weekday.label,
+                                modes: selectedModes,
+                                analyzed_only: false,
+                              })}
                             >
                               <i style={{ backgroundColor: scoreColor(cell) }} />
-                            </span>
+                            </button>
                           )
                         })}
                       </span>
-                      <span className="behavior-weekday-curtain" aria-hidden="true">
+                      <button
+                        className="behavior-weekday-curtain"
+                        type="button"
+                        disabled={isExpanded || !selectedModes.length}
+                        aria-label={`${weekday.label}. Explore games.`}
+                        onClick={() => onExplore({
+                          scope: 'weekday',
+                          weekday: weekday.weekday,
+                          label: weekday.label,
+                          modes: selectedModes,
+                          analyzed_only: false,
+                        })}
+                      >
                         <span className="behavior-weekday-wide-bar">
                           <i style={{ backgroundColor: scoreColor(weekday) }} />
                         </span>
-                      </span>
+                      </button>
                     </span>
-                  </button>
+                  </div>
                   <span className="behavior-weekday-note" id={noteId} role="tooltip">
                     {formatNumber(weekday.games)} games · {formatNumber(weekday.wins)}W, {formatNumber(weekday.draws)}D, {formatNumber(weekday.losses)}L · {(numeric(weekday.proportion) * 100).toFixed(1)}%
                   </span>
@@ -274,12 +306,15 @@ function WeekdayStartChart({
 
 export default function PlayerBehaviouralPanel({
   activity,
+  playerName,
   ratings,
 }) {
   const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleHourModes, setVisibleHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleDayModes, setVisibleDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [selectedRatingYear, setSelectedRatingYear] = useState('all')
+  const [explorerSelection, setExplorerSelection] = useState(null)
+  const [reviewGameId, setReviewGameId] = useState(null)
   const hourActivity = useMemo(
     () => activityForModes(activity, visibleHourModes),
     [activity, visibleHourModes]
@@ -314,6 +349,7 @@ export default function PlayerBehaviouralPanel({
     [activity]
   )
   const visibleRatingLines = ratingPlot.lines.filter((line) => visibleRatingModes.has(line.mode))
+  const selectedHourModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleHourModes.has(mode))
   const timeContext = activity?.time_context || ratings?.time_context || {}
 
   useEffect(() => {
@@ -326,6 +362,11 @@ export default function PlayerBehaviouralPanel({
     setVisibleDayModes(new Set(PLAYER_ANALYSIS_MODES))
   }, [activity])
 
+  useEffect(() => {
+    setExplorerSelection(null)
+    setReviewGameId(null)
+  }, [playerName])
+
   const toggleMode = (setter, mode) => {
     setter((current) => {
       const next = new Set(current)
@@ -336,7 +377,8 @@ export default function PlayerBehaviouralPanel({
   }
 
   return (
-    <div className="behavior-dashboard">
+    <>
+      <div className="behavior-dashboard">
       <div className="behavior-summary" aria-label="Behavioral selection summary">
         <div><span>Games</span><strong>{formatNumber(totals.games)}</strong></div>
         <div><span>Results</span><strong>{formatNumber(totals.wins)}W · {formatNumber(totals.draws)}D · {formatNumber(totals.losses)}L</strong></div>
@@ -466,7 +508,35 @@ export default function PlayerBehaviouralPanel({
                       <rect className="behavior-bar-win" x={winX} y={HOURLY_BASELINE - winHeight} width={sideBarWidth} height={winHeight} />
                       <rect className="behavior-bar-loss" x={lossX} y={HOURLY_BASELINE - lossHeight} width={sideBarWidth} height={lossHeight} />
                       <rect className="behavior-bar-draw" x={drawX} y={HOURLY_BASELINE - drawHeight} width={drawBarWidth} height={drawHeight} />
-                      <rect className="behavior-bar-hitbox" x={binX} y={HOURLY_TOP} width={HOUR_STEP} height={HOURLY_HEIGHT}>
+                      <rect
+                        className="behavior-bar-hitbox"
+                        x={binX}
+                        y={HOURLY_TOP}
+                        width={HOUR_STEP}
+                        height={HOURLY_HEIGHT}
+                        role="button"
+                        tabIndex="0"
+                        aria-label={`${hour}:00. Explore games.`}
+                        onClick={() => selectedHourModes.length && setExplorerSelection({
+                          scope: 'hour',
+                          hour,
+                          label: `${hour}:00`,
+                          modes: selectedHourModes,
+                          analyzed_only: false,
+                        })}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            if (selectedHourModes.length) setExplorerSelection({
+                              scope: 'hour',
+                              hour,
+                              label: `${hour}:00`,
+                              modes: selectedHourModes,
+                              analyzed_only: false,
+                            })
+                          }
+                        }}
+                      >
                         <title>{hourResultTooltip(hour, row)}</title>
                       </rect>
                       <text className="graph-axis-label hourly-axis-tick" x={binX + HOUR_STEP / 2} y={HOURLY_AXIS_Y} textAnchor="middle">
@@ -505,6 +575,7 @@ export default function PlayerBehaviouralPanel({
 
         <WeekdayStartChart
           availableModes={availableActivityModes}
+          onExplore={setExplorerSelection}
           onToggleMode={(mode) => toggleMode(setVisibleDayModes, mode)}
           timeContext={timeContext}
           visibleModes={visibleDayModes}
@@ -512,6 +583,24 @@ export default function PlayerBehaviouralPanel({
           weekdayHours={dayActivity.weekday_hours}
         />
       </article>
-    </div>
+      </div>
+      {!reviewGameId ? (
+        <PlayerGameExplorerModal
+          playerName={playerName}
+          selection={explorerSelection}
+          onClose={() => setExplorerSelection(null)}
+          onOpenGame={setReviewGameId}
+        />
+      ) : null}
+      <PlayerGameReviewModal
+        gameId={reviewGameId}
+        playerName={playerName}
+        onBack={() => setReviewGameId(null)}
+        onClose={() => {
+          setReviewGameId(null)
+          setExplorerSelection(null)
+        }}
+      />
+    </>
   )
 }

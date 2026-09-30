@@ -8,6 +8,7 @@ from fastapi.responses import JSONResponse
 
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.games import read_game
+from chessism_api.operations.player_game_explorer import get_game_score
 from chessism_api.database.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
@@ -230,6 +231,16 @@ async def api_read_game(link: str) -> JSONResponse:
     if not game:
         raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
     return JSONResponse(content=game[0])
+
+
+@router.get("/{game_id}/score")
+async def api_get_game_score(game_id: int) -> JSONResponse:
+    """Return the canonical move-by-move engine and clock record for one game."""
+    try:
+        payload = await get_game_score(game_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return JSONResponse(content=payload)
 
 @router.post("")
 async def api_create_game(

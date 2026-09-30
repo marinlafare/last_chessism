@@ -49,20 +49,17 @@
   background: #090e13;
 }
 
-.measure-chart-section,
-.measure-inspector {
+.measure-chart-section {
   min-width: 0;
   padding: 14px 16px 16px;
   overflow-x: auto;
 }
 
-.measure-chart-section + .measure-chart-section,
-.measure-inspector {
+.measure-chart-section + .measure-chart-section {
   border-top: 1px solid var(--border-soft);
 }
 
-.measure-chart-heading,
-.measure-inspector-heading {
+.measure-chart-heading {
   min-width: 900px;
   min-height: 28px;
   align-items: center;
@@ -85,9 +82,7 @@
   clip: rect(0, 0, 0, 0);
 }
 
-.measure-metric-selector select,
-.measure-inspector-controls input,
-.measure-inspector-controls select {
+.measure-metric-selector select {
   min-height: 28px;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
@@ -122,7 +117,6 @@
   border: 0;
   background: transparent;
   color: var(--text);
-  cursor: pointer;
 }
 
 .measure-day-name {
@@ -138,6 +132,7 @@
   color: #000;
   font: 800 9px "IBM Plex Mono", monospace;
   letter-spacing: 0.045em;
+  cursor: pointer;
 }
 
 .measure-day-stage {
@@ -162,6 +157,18 @@
   border-radius: 4px;
   opacity: 1;
   transition: opacity 180ms ease;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.measure-day-summary:disabled,
+.measure-day-hours button:disabled {
+  cursor: default;
+  opacity: 0.45;
 }
 
 .measure-day-summary i {
@@ -186,10 +193,12 @@
   transition: opacity 180ms ease;
 }
 
-.measure-day-hours i {
+.measure-day-hours button {
   min-width: 0;
+  padding: 0;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 2px;
+  cursor: pointer;
 }
 
 .measure-day-row.expanded .measure-day-summary {
@@ -269,19 +278,18 @@
   height: auto;
 }
 
-.measure-daily-efficiency-line {
-  fill: none;
-  stroke: #6e8ca4;
-  stroke-width: 1.25;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
 .measure-daily-efficiency-point {
   stroke: #030609;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
+  cursor: pointer;
+}
+
+.measure-daily-efficiency-point:focus,
+.measure-hour-hitbox:focus {
+  outline: none;
+  stroke: #fff;
+  stroke-width: 2.5;
 }
 
 .measure-daily-efficiency-point.excellent { fill: #15c780; }
@@ -324,188 +332,18 @@
   vector-effect: non-scaling-stroke;
 }
 
+.measure-hour-hitbox {
+  fill: transparent;
+  pointer-events: all;
+  cursor: pointer;
+}
+
 .measure-hour-bar.negative {
   fill: #d55c5c;
 }
 
-.measure-inspector-heading {
-  grid-template-columns: minmax(130px, 1fr) minmax(0, 2fr);
-}
-
-.measure-inspector-heading small {
-  grid-column: 2;
-  color: var(--subtle);
-  text-align: right;
-}
-
-.measure-inspector-controls {
-  display: grid;
-  grid-template-columns: minmax(150px, 1fr) 90px 120px auto minmax(170px, 1fr) auto;
-  align-items: end;
-  gap: 8px;
-}
-
-.measure-inspector-controls label {
-  display: grid;
-  gap: 4px;
-}
-
-.measure-inspector-controls label span {
-  color: var(--subtle);
-  font-size: 8px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-}
-
-.measure-inspector-controls input,
-.measure-inspector-controls select {
-  width: 100%;
-  padding: 5px 8px;
-}
-
-.measure-inspector-controls button,
-.measure-load-more {
-  min-height: 28px;
-  padding: 5px 10px;
-  border: 1px solid rgba(21, 199, 128, 0.6);
-  border-radius: 5px;
-  background: rgba(21, 199, 128, 0.12);
-  color: var(--text);
-  font: 800 9px "IBM Plex Mono", monospace;
-  cursor: pointer;
-  text-transform: uppercase;
-}
-
-.measure-inspector-controls button:disabled,
-.measure-load-more:disabled {
-  cursor: default;
-  opacity: 0.45;
-}
-
-.measure-hour-results,
-.measure-game-detail {
-  display: grid;
-  gap: 10px;
-  margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px solid rgba(91, 112, 130, 0.28);
-}
-
-.measure-hour-result-heading,
-.measure-game-meta {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
-}
-
-.measure-hour-result-heading span,
-.measure-game-meta span {
-  color: var(--subtle);
-  font: 700 9px "IBM Plex Mono", monospace;
-  text-transform: uppercase;
-}
-
-.measure-game-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
-  gap: 7px;
-}
-
-.measure-game-list button {
-  display: grid;
-  gap: 4px;
-  padding: 9px;
-  border: 1px solid var(--border-soft);
-  border-radius: 6px;
-  background: #0b1117;
-  color: var(--text);
-  text-align: left;
-  cursor: pointer;
-}
-
-.measure-game-list button.active {
-  border-color: var(--accent);
-}
-
-.measure-game-list span,
-.measure-game-list small,
-.measure-empty {
-  color: var(--subtle);
-  font-size: 9px;
-}
-
-.measure-game-list .measure-load-more {
-  place-items: center;
-  text-align: center;
-}
-
-.measure-game-sequence-scroll,
-.measure-position-table-wrap {
-  overflow-x: auto;
-}
-
-.measure-game-sequence {
-  display: block;
-  width: 100%;
-  min-width: 900px;
-  height: auto;
-}
-
-.measure-game-line {
-  fill: none;
-  stroke: #3aa7ff;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-  vector-effect: non-scaling-stroke;
-}
-
-.measure-game-point {
-  fill: #3aa7ff;
-  stroke: #030609;
-  stroke-width: 1;
-  vector-effect: non-scaling-stroke;
-}
-
-.measure-position-table-wrap table {
-  width: 100%;
-  min-width: 760px;
-  border-collapse: collapse;
-  font: 700 9px "IBM Plex Mono", monospace;
-}
-
-.measure-position-table-wrap th,
-.measure-position-table-wrap td {
-  padding: 7px 8px;
-  border-bottom: 1px solid rgba(91, 112, 130, 0.2);
-  text-align: right;
-  white-space: nowrap;
-}
-
-.measure-position-table-wrap th:nth-child(2),
-.measure-position-table-wrap td:nth-child(2),
-.measure-position-table-wrap th:last-child,
-.measure-position-table-wrap td:last-child {
-  text-align: left;
-}
-
-.measure-position-table-wrap th {
-  color: var(--subtle);
-  text-transform: uppercase;
-}
-
-.measure-position-table-wrap tr.player-move {
-  background: rgba(58, 167, 255, 0.05);
-}
-
 @media (max-width: 900px) {
   .measure-coverage {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .measure-inspector-controls {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -515,8 +353,7 @@
     padding: 14px;
   }
 
-  .measure-coverage,
-  .measure-inspector-controls {
+  .measure-coverage {
     grid-template-columns: 1fr;
   }
 }

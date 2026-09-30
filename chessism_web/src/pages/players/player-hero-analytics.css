@@ -209,16 +209,6 @@
   background: transparent;
   color: var(--text);
   text-align: left;
-  cursor: pointer;
-}
-
-.behavior-weekday-summary:hover {
-  background: rgba(21, 199, 128, 0.04);
-}
-
-.behavior-weekday-summary:focus-visible {
-  outline: 2px solid #3aa7ff;
-  outline-offset: 2px;
 }
 
 .behavior-weekday-badge {
@@ -235,6 +225,15 @@
   font: 800 9px "IBM Plex Mono", monospace;
   letter-spacing: 0.045em;
   white-space: nowrap;
+  padding: 0;
+  cursor: pointer;
+}
+
+.behavior-weekday-badge:focus-visible,
+.behavior-weekday-hour:focus-visible,
+.behavior-weekday-curtain:focus-visible {
+  outline: 2px solid #3aa7ff;
+  outline-offset: -2px;
 }
 
 .behavior-weekday-stage {
@@ -259,6 +258,10 @@
   transform-origin: left center;
   transition: transform 480ms cubic-bezier(0.65, 0, 0.35, 1);
   will-change: transform;
+  width: 100%;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
 }
 
 .behavior-weekday-row.expanded .behavior-weekday-curtain {
@@ -295,6 +298,10 @@
   display: block;
   min-width: 0;
   height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
 }
 
 .behavior-weekday-hour i {
@@ -326,7 +333,7 @@
 }
 
 .behavior-weekday-row:has(.behavior-weekday-badge:hover) .behavior-weekday-note,
-.behavior-weekday-summary:focus-visible + .behavior-weekday-note {
+.behavior-weekday-row:has(.behavior-weekday-badge:focus-visible) .behavior-weekday-note {
   opacity: 1;
   transform: translateY(0);
 }
@@ -565,6 +572,13 @@
 .behavior-bar-hitbox {
   fill: transparent;
   pointer-events: all;
+  cursor: pointer;
+}
+
+.behavior-bar-hitbox:focus {
+  outline: none;
+  stroke: #fff;
+  stroke-width: 2;
 }
 
 .behavior-rating-line {

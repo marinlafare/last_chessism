@@ -56,6 +56,7 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
         {!loading && !error && activity && ratings ? (
           <PlayerBehaviouralPanel
             activity={activity}
+            playerName={playerName}
             ratings={ratings}
           />
         ) : null}

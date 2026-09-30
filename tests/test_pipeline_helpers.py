@@ -26,6 +26,7 @@ from chessism_api.operations import (
     player_analytics,
     player_deletion,
     player_game_scores,
+    player_game_explorer,
     player_hero_analytics,
     player_hero_efficiency,
     tablebase,
@@ -231,6 +232,43 @@ class FenAggregationTests(unittest.TestCase):
 
 
 class PlayerHeroAnalyticsTests(unittest.TestCase):
+    def test_game_explorer_validates_and_labels_chart_bins(self):
+        clause, params, label = player_game_explorer._selection_clause(
+            "weekday_hour", None, 1, 9
+        )
+
+        self.assertIn("ISODOW", clause)
+        self.assertIn("HOUR", clause)
+        self.assertEqual(params, {"weekday": 1, "hour": 9})
+        self.assertEqual(label, "Monday · 09:00")
+        _, date_params, _ = player_game_explorer._selection_clause(
+            "date", "2026-09-20", None, None
+        )
+        self.assertEqual(date_params["target_date"], date(2026, 9, 20))
+        with self.assertRaises(ValueError):
+            player_game_explorer._selection_clause("hour", None, None, 24)
+
+    def test_game_score_formats_board_positions_clocks_and_mover_accuracy(self):
+        rows = [
+            {
+                "n_move": 1, "ply": 1, "move_color": "white", "move": "e4",
+                "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                "score": 40.0, "analysis_source": "stockfish", "next_moves": "e7e5 g1f3",
+                "white_time_left": 299.0, "black_time_left": 300.0,
+                "white_reaction_time": 1.0, "black_reaction_time": 0.0,
+                "tablebase_wdl": None, "tablebase_dtz": None,
+            },
+        ]
+
+        moves = player_game_explorer._format_moves(rows)
+
+        self.assertEqual(moves[0]["uci"], "e2e4")
+        self.assertEqual(moves[0]["fen_before"], chess.STARTING_FEN)
+        self.assertEqual(len(moves[0]["fen_after"].split()), 6)
+        self.assertEqual(moves[0]["clock"]["white_time_left"], 299.0)
+        self.assertEqual(moves[0]["evaluation_after"]["white_cp"], 40.0)
+        self.assertEqual(moves[0]["move_accuracy"], 100.0)
+
     def test_daily_cp_points_have_only_date_and_summed_game_cp(self):
         points = player_hero_analytics._daily_cp_points([
             {"date_game_init": date(2026, 9, 20), "game_cp": -123.456},

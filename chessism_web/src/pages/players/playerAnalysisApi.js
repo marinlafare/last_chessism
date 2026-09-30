@@ -89,3 +89,15 @@ export function fetchHourMeasures({ playerName, date, hour, signal, ...filters }
     { signal, bypassCache: Boolean(filters.cursor) }
   )
 }
+
+export function explorePlayerGames({ playerName, selection, signal }) {
+  return postJson(
+    `/players/${playerPath(playerName)}/analysis/measures/explore-games`,
+    selection,
+    { signal }
+  )
+}
+
+export function fetchGameScore({ gameId, signal }) {
+  return requestJson(`/games/${encodeURIComponent(gameId)}/score`, { signal })
+}
