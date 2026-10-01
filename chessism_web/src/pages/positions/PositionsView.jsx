@@ -8,6 +8,7 @@ import {
   clampAnalysisBatchInput,
   formatDuration,
   formatNumber,
+  formatTruncatedMillions,
   getPlayerGameSelectionLabel,
   isTrackedJobActive,
 } from './positionPageSupport'
@@ -37,10 +38,16 @@ export default function PositionsView({ page }) {
             {coverageError ? <div className="status-banner warn">{coverageError}</div> : null}
 
             {coverageBarItems.map((item) => (
-              <div className={`coverage-bar-row ${item.capped ? 'is-capped' : ''}`} key={item.key}>
+              <div className={`coverage-bar-row coverage-bar-row-${item.key}`} key={item.key}>
                 <div className="coverage-bar-meta">
                   <span>{item.label}</span>
-                  <strong>{item.ready ? formatNumber(item.value) : '-'}</strong>
+                  <strong>
+                    {item.ready
+                      ? item.displayInMillions
+                        ? formatTruncatedMillions(item.value)
+                        : formatNumber(item.value)
+                      : '-'}
+                  </strong>
                 </div>
                 <div className="coverage-bar-track" aria-hidden="true">
                   <div

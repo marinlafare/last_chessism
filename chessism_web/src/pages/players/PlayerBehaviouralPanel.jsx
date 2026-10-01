@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerModeToggles, {
   PLAYER_ANALYSIS_MODES,
@@ -27,6 +27,8 @@ const RESULT_FIELDS = ['games', 'wins', 'draws', 'losses']
 const LOSS_COLOR = [213, 92, 92]
 const DRAW_COLOR = [141, 107, 180]
 const WIN_COLOR = [21, 199, 128]
+const WEEKDAY_CURTAIN_DURATION_MS = 480
+const WEEKDAY_BIN_UNLOCK_DELAY_MS = 3000
 
 const numeric = (value) => Number(value || 0)
 const hourX = (hour) => PLOT_LEFT + numeric(hour) * HOUR_STEP
@@ -175,6 +177,8 @@ function WeekdayStartChart({
   weekdays = [],
 }) {
   const [expandedWeekdays, setExpandedWeekdays] = useState(() => new Set())
+  const [interactiveWeekdays, setInteractiveWeekdays] = useState(() => new Set())
+  const weekdayUnlockTimers = useRef(new Map())
   const timezoneLabel = timeContext?.timezone || 'UTC'
   const cellsByWeekday = useMemo(() => {
     const grouped = new Map()
@@ -186,15 +190,58 @@ function WeekdayStartChart({
     })
     return grouped
   }, [weekdayHours])
-  const toggleWeekday = (weekday) => {
-    setExpandedWeekdays((current) => {
+  useEffect(() => () => {
+    weekdayUnlockTimers.current.forEach((timer) => window.clearTimeout(timer))
+    weekdayUnlockTimers.current.clear()
+  }, [])
+
+  const clearWeekdayUnlockTimer = (weekday) => {
+    const timer = weekdayUnlockTimers.current.get(weekday)
+    if (timer !== undefined) window.clearTimeout(timer)
+    weekdayUnlockTimers.current.delete(weekday)
+  }
+
+  const lockWeekdayBins = (weekday) => {
+    setInteractiveWeekdays((current) => {
+      if (!current.has(weekday)) return current
       const next = new Set(current)
-      if (next.has(weekday)) next.delete(weekday)
-      else next.add(weekday)
+      next.delete(weekday)
       return next
     })
   }
+
+  const collapseWeekday = (weekday) => {
+    clearWeekdayUnlockTimer(weekday)
+    lockWeekdayBins(weekday)
+    setExpandedWeekdays((current) => {
+      const next = new Set(current)
+      next.delete(weekday)
+      return next
+    })
+  }
+
   const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleModes.has(mode))
+  const expandWeekday = (weekday) => {
+    if (!selectedModes.length) return
+    clearWeekdayUnlockTimer(weekday)
+    lockWeekdayBins(weekday)
+    setExpandedWeekdays((current) => {
+      const next = new Set(current)
+      next.add(weekday)
+      return next
+    })
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const animationDuration = reducedMotion ? 0 : WEEKDAY_CURTAIN_DURATION_MS
+    const timer = window.setTimeout(() => {
+      weekdayUnlockTimers.current.delete(weekday)
+      setInteractiveWeekdays((current) => {
+        const next = new Set(current)
+        next.add(weekday)
+        return next
+      })
+    }, animationDuration + WEEKDAY_BIN_UNLOCK_DELAY_MS)
+    weekdayUnlockTimers.current.set(weekday, timer)
+  }
 
   return (
     <section className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
@@ -218,6 +265,7 @@ function WeekdayStartChart({
           <div className="behavior-weekday-rows">
             {weekdays.map((weekday) => {
               const isExpanded = expandedWeekdays.has(weekday.weekday)
+              const binsAreInteractive = interactiveWeekdays.has(weekday.weekday)
               const cells = cellsByWeekday.get(weekday.weekday) || []
               const cellMap = new Map(cells.map((cell) => [numeric(cell.hour), cell]))
               const noteId = `weekday-usage-note-${weekday.weekday}`
@@ -232,7 +280,11 @@ function WeekdayStartChart({
                       aria-expanded={isExpanded}
                       aria-describedby={noteId}
                       title={isExpanded ? 'Collapse hourly bins' : 'Expand hourly bins'}
-                      onClick={() => toggleWeekday(weekday.weekday)}
+                      onClick={() => (
+                        isExpanded
+                          ? collapseWeekday(weekday.weekday)
+                          : expandWeekday(weekday.weekday)
+                      )}
                     >
                       {String(weekday.label).toUpperCase()}
                     </button>
@@ -244,7 +296,7 @@ function WeekdayStartChart({
                             <button
                               className="behavior-weekday-hour"
                               type="button"
-                              disabled={!isExpanded || !selectedModes.length}
+                              disabled={!isExpanded || !binsAreInteractive || !selectedModes.length}
                               key={hour}
                               title={hourResultTooltip(hour, cell)}
                               aria-label={`${weekday.label} at ${hour}:00. Explore games.`}
@@ -266,14 +318,8 @@ function WeekdayStartChart({
                         className="behavior-weekday-curtain"
                         type="button"
                         disabled={isExpanded || !selectedModes.length}
-                        aria-label={`${weekday.label}. Explore games.`}
-                        onClick={() => onExplore({
-                          scope: 'weekday',
-                          weekday: weekday.weekday,
-                          label: weekday.label,
-                          modes: selectedModes,
-                          analyzed_only: false,
-                        })}
+                        aria-label={`${weekday.label}. Expand hourly bins.`}
+                        onClick={() => expandWeekday(weekday.weekday)}
                       >
                         <span className="behavior-weekday-wide-bar">
                           <i style={{ backgroundColor: scoreColor(weekday) }} />

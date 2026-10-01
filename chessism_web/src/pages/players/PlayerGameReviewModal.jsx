@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Chessboard } from 'react-chessboard'
-import { fetchGameScore } from './playerAnalysisApi'
+import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '—'

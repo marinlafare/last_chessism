@@ -578,3 +578,40 @@ class AuthSession(Base):
     user_agent = Column(String, nullable=True)
 
     account = relationship("Account", back_populates="sessions")
+
+
+class CoefficientResearchExperiment(Base):
+    """A reproducible, non-production fit of CP-to-outcome coefficients."""
+
+    __tablename__ = "coefficient_research_experiment"
+
+    id = Column(String(36), primary_key=True)
+    status = Column(String(16), nullable=False, default="queued", index=True)
+    job_id = Column(String(64), nullable=True, index=True)
+    created_by = Column(
+        String(36),
+        ForeignKey("account.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    config = Column(JSON, nullable=False)
+    dataset_summary = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)
+    error = Column(String, nullable=True)
+    decision = Column(String(32), nullable=True)
+    decision_config = Column(JSON, nullable=True)
+    decision_notes = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    decided_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'complete', 'failed')",
+            name="coefficient_research_experiment_status",
+        ),
+        CheckConstraint(
+            "decision IS NULL OR decision IN ('keep_lichess', 'alongside', 'replace')",
+            name="coefficient_research_experiment_decision",
+        ),
+    )

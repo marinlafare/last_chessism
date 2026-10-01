@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatNumber } from '../../utils/formatters'
-import { explorePlayerGames } from './playerAnalysisApi'
+import { explorePlayerGames } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 
 const emptyRequest = { data: null, error: '', loading: false }
 

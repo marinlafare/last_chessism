@@ -1,6 +1,7 @@
 import { deleteJson, getJson, postJson } from '../../services/apiClient'
 
 export const fetchCoverage = () => getJson('/games/generalities')
+export const fetchGameAnalysisOverview = () => getJson('/fens/scored/games/overview')
 export const fetchRemainingFenGames = () => getJson('/fens/remaining_games')
 export const fetchAnalysisCounts = () => getJson('/fens/analysis_counts')
 export const fetchAnalysisProcesses = () => getJson('/jobs/analysis')

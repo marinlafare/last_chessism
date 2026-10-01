@@ -25,6 +25,7 @@ from chessism_api.operations.fens import (
 from chessism_api.operations.games import run_create_player_games_job, run_update_player_games_job
 from chessism_api.operations.tablebase import run_tablebase_analysis_job
 from chessism_api.operations.player_deletion import run_delete_player_job
+from chessism_api.operations.coefficient_research import run_chessism_coefficient_experiment
 
 # --- NEW: Import the database initializer ---
 from chessism_api.database.engine import init_db
@@ -91,6 +92,7 @@ class WorkerSettings:
         run_fen_analysis_restore_job,
         run_tablebase_analysis_job,
         run_delete_player_job,
+        run_chessism_coefficient_experiment,
     ]
     
     redis_settings = redis_settings

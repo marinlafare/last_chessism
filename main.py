@@ -10,7 +10,7 @@ import httpx
 import constants
 
 # --- MODIFIED: Import the fens and new analysis router ---
-from chessism_api.routers import auth, players, games, fens, analysis, jobs, analysis_times
+from chessism_api.routers import auth, players, games, fens, analysis, jobs, analysis_times, research
 from chessism_api.auth import require_superuser
 
 # --- NEW: Import the init_db function ---
@@ -202,3 +202,5 @@ app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"], depen
 app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"], dependencies=[Depends(require_superuser)])
 
 app.include_router(analysis_times.router, prefix="/analysis_times", tags=["Analysis Times"], dependencies=[Depends(require_superuser)])
+
+app.include_router(research.router, prefix="/research", tags=["Research"], dependencies=[Depends(require_superuser)])

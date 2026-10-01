@@ -9,6 +9,7 @@ import Positions from './pages/Positions'
 import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
 import AnalyzeTimes from './pages/AnalyzeTimes'
+import Research from './pages/Research'
 import {
   fetchAdmins,
   fetchCurrentAccount,
@@ -31,7 +32,9 @@ const APP_PATHS = new Set([
   '/live_analysis',
   '/live_analyzis',
   '/scored_positions',
-  '/analyze_times'
+  '/analyze_times',
+  '/research',
+  '/research/chessism-coefficient'
 ])
 
 const normalizePath = (pathname) => pathname.replace(/\/+$/, '') || '/'
@@ -196,6 +199,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <ScoredPositions />
   } else if (path === '/analyze_times') {
     page = <AnalyzeTimes />
+  } else if (path === '/research' || path === '/research/chessism-coefficient') {
+    page = <Research />
   }
 
   return (

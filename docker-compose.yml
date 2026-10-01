@@ -138,6 +138,28 @@ services:
       db:
         condition: service_healthy
 
+  worker-research:
+    build: .
+    image: chessism-api:latest
+    command: arq worker.WorkerSettings
+    cpus: "1.00"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=research_queue
+      - FEN_ANALYSIS_BACKUP_DIR=/backups
+      - COEFFICIENT_RESEARCH_DIR=/backups/research
+      - COEFFICIENT_RESEARCH_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism/research
+    volumes:
+      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
   fen-worker-1:
     build: .
     image: chessism-api:latest

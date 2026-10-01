@@ -11,7 +11,10 @@ from chessism_api.redis_client import get_redis_pool
 
 router = APIRouter()
 
-KNOWN_QUEUES = ("pipeline_queue", "fen_queue", "analysis_queue", "games_queue", "arq:queue")
+KNOWN_QUEUES = (
+    "pipeline_queue", "fen_queue", "analysis_queue", "games_queue",
+    "research_queue", "arq:queue",
+)
 ANALYSIS_JOB_FUNCTIONS = {
     "run_analysis_job",
     "run_player_analysis_job",

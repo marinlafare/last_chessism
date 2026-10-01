@@ -8,6 +8,11 @@ const COMPLETED_JOB_VISIBLE_MS = 5000
 const COMPLETED_JOB_FADE_MS = 700
 const ETA_RATE_SMOOTHING = 0.35
 
+const formatTruncatedMillions = (value) => {
+  const millions = Math.floor(Math.max(0, Number(value) || 0) / 10_000) / 100
+  return `${millions.toFixed(2)}M`
+}
+
 const formatDuration = (seconds) => {
   const totalMinutes = Math.max(0, Math.ceil(Number(seconds || 0) / 60))
   const hours = Math.floor(totalMinutes / 60)
@@ -241,6 +246,7 @@ export {
   formatCountdown,
   formatDuration,
   formatNumber,
+  formatTruncatedMillions,
   getAnalysisProcessView,
   getLoopScopeLabel,
   getPlayerGameSelectionLabel,

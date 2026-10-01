@@ -683,14 +683,12 @@
 }
 
 .coverage-bar-fill-games { background: var(--info); }
+.coverage-bar-fill-games-analyzed { background: #9270c7; }
 .coverage-bar-fill-positions { background: var(--accent-2); }
 .coverage-bar-fill-analyzed { background: var(--accent); }
 
-.coverage-bar-row.is-capped .coverage-bar-fill-positions {
-  background: linear-gradient(90deg, var(--accent-2) 0%, var(--accent-2) 74%, rgba(211, 182, 109, 0.58) 100%);
-}
-
-.coverage-bar-row.is-capped .coverage-bar-track::after {
+.coverage-bar-row-games .coverage-bar-track::after,
+.coverage-bar-row-positions .coverage-bar-track::after {
   content: "";
   position: absolute;
   top: 50%;

@@ -13,6 +13,7 @@ import {
   fetchAnalysisCounts,
   fetchAnalysisProcesses,
   fetchCoverage,
+  fetchGameAnalysisOverview,
   fetchPlayerAnalysisCounts,
   fetchPositionJobStatus,
   fetchRemainingFenGames,
@@ -27,6 +28,7 @@ import {
 export function usePositionsPage() {
   const [coverage, setCoverage] = useState(null)
   const [coverageError, setCoverageError] = useState('')
+  const [gameAnalysisOverview, setGameAnalysisOverview] = useState(null)
   const [analysisCounts, setAnalysisCounts] = useState(null)
   const [remainingFenGames, setRemainingFenGames] = useState(null)
   const [globalJob, setGlobalJob] = useState({ totalFens: 100, batchSize: MAX_ANALYSIS_BATCH_SIZE })
@@ -83,25 +85,56 @@ export function usePositionsPage() {
   )
   const coverageBarItems = useMemo(() => {
     const gamesValue = Number(coverage?.n_games_in_db || 0)
+    const analyzedGamesValue = Number(gameAnalysisOverview?.fully_analyzed_games || 0)
+    const positionsValue = Number(coverage?.n_positions || 0)
     const analyzedValue = scoredPositions
-    const visualLimit = Math.max(1, gamesValue, analyzedValue) * 2
     const items = [
       { key: 'games', label: 'Games', value: gamesValue, ready: Boolean(coverage) },
-      { key: 'positions', label: 'Positions', value: Number(coverage?.n_positions || 0), ready: Boolean(coverage) },
-      { key: 'analyzed', label: 'Scored Positions', value: analyzedValue, ready: Boolean(analysisCounts) }
+      {
+        key: 'games-analyzed',
+        label: 'Games analyzed',
+        value: analyzedGamesValue,
+        ready: Boolean(gameAnalysisOverview),
+      },
+      {
+        key: 'positions',
+        label: 'Positions',
+        value: positionsValue,
+        ready: Boolean(coverage),
+        displayInMillions: true,
+      },
+      {
+        key: 'analyzed',
+        label: 'Scored Positions',
+        value: analyzedValue,
+        ready: Boolean(analysisCounts),
+        displayInMillions: true,
+      }
     ]
 
     return items.map((item) => {
-      const capped = item.key === 'positions' && item.ready && item.value > visualLimit
-      const visualValue = capped ? visualLimit : item.value
+      let percent = 0
+
+      if (item.key === 'games') {
+        percent = item.ready && gamesValue > 0 ? 100 : 0
+      } else if (item.key === 'games-analyzed') {
+        percent = item.ready && gamesValue > 0
+          ? Math.min(100, (item.value / gamesValue) * 100)
+          : 0
+      } else if (item.key === 'positions') {
+        percent = item.ready && positionsValue > 0 ? 100 : 0
+      } else if (item.key === 'analyzed') {
+        percent = item.ready && positionsValue > 0
+          ? Math.min(100, (item.value / positionsValue) * 100)
+          : 0
+      }
 
       return {
         ...item,
-        capped,
-        percent: item.ready && visualValue > 0 ? Math.max(2, (visualValue / visualLimit) * 100) : 0
+        percent,
       }
     })
-  }, [analysisCounts, coverage, scoredPositions])
+  }, [analysisCounts, coverage, gameAnalysisOverview, scoredPositions])
   const activeLoopJobCount = [jobState.loop, jobState.loopNext].filter(isTrackedJobActive).length
   const loopJobIsQueueing = Boolean(jobState.loop?.loading || jobState.loopNext?.loading)
   const analysisProcessViews = useMemo(
@@ -226,6 +259,12 @@ export function usePositionsPage() {
     return payload
   }
 
+  const loadGameAnalysisOverview = async () => {
+    const payload = await fetchGameAnalysisOverview()
+    setGameAnalysisOverview(payload)
+    return payload
+  }
+
   const loadAnalysisProcesses = async () => {
     try {
       const payload = await fetchAnalysisProcesses()
@@ -297,6 +336,7 @@ export function usePositionsPage() {
 
   useEffect(() => {
     loadCoverage()
+    loadGameAnalysisOverview().catch(() => {})
     loadFenRemaining().catch(() => {})
     loadAnalysisCounts().catch(() => {})
     hydrateActiveJobs().catch(() => {})
@@ -588,6 +628,7 @@ export function usePositionsPage() {
             if (phase === 'complete') {
               await loadCoverage()
               await loadAnalysisCounts()
+              await loadGameAnalysisOverview().catch(() => {})
               handleCompletedJob(key, state, status, patch)
             }
             updateJobState(key, patch)
