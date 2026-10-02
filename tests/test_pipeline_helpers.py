@@ -24,8 +24,6 @@ from chessism_api.operations import (
     analysis_backups,
     database_backups,
     database_restore_tests,
-    fens,
-    games,
     player_analytics,
     player_deletion,
     player_game_scores,
@@ -35,6 +33,8 @@ from chessism_api.operations import (
     player_salience,
     tablebase,
 )
+from chessism_api.operations.ingestion_pipeline import fen_orchestrator as fens
+from chessism_api.operations.ingestion_pipeline import jobs as games
 from chessism_api.operations.player_timezone import resolve_player_timezone
 from chessism_api.database.ask_db import (
     _player_fens_for_analysis_stmt,
@@ -42,13 +42,20 @@ from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     get_top_fens_unscored,
 )
-from chessism_api.operations.fens import _aggregate_fen_data_in_memory, split_list
-from chessism_api.operations.format_games import (
+from chessism_api.operations.ingestion_pipeline.fen_core import (
+    aggregate_fen_data,
+    count_expected_fen_positions,
+    count_fen_pieces,
+    split_balanced,
+)
+from chessism_api.operations.ingestion_pipeline.game_importer import (
+    insert_games_months_moves_and_players,
+)
+from chessism_api.operations.ingestion_pipeline.pgn import (
     create_game_dict,
     create_moves_table,
     get_moves_data,
     get_pgn_item,
-    insert_games_months_moves_and_players,
 )
 from operations.engine import EnginePool, clean_engine_result, convert_to_serializable
 from chessism_api.routers.analysis import (
@@ -149,6 +156,21 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertFalse(result)
 
+    def test_game_without_a_valid_date_is_discarded_without_crashing_import(self):
+        raw_game = {
+            "url": "https://www.chess.com/game/live/125",
+            "time_control": "600",
+            "white": {"username": "White", "rating": 1500, "result": "win"},
+            "black": {
+                "username": "Black",
+                "rating": 1400,
+                "result": "checkmated",
+            },
+            "pgn": "1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} 1-0",
+        }
+
+        self.assertFalse(create_game_dict(raw_game))
+
     def test_game_with_clock_annotation_for_every_move_is_kept(self):
         pgn = "\n".join([
             '[Date "2024.07.02"]',
@@ -219,17 +241,83 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
         }
 
         with patch(
-            "chessism_api.operations.format_games.insert_new_data",
+            "chessism_api.operations.ingestion_pipeline.game_importer.insert_game_bundle",
             new_callable=AsyncMock,
-        ) as insert_new_data:
+        ) as insert_game_bundle:
             result = await insert_games_months_moves_and_players(
                 [formatted_game],
                 "white",
             )
 
-        insert_new_data.assert_not_awaited()
+        insert_game_bundle.assert_not_awaited()
         self.assertIn("moves_data", formatted_game)
         self.assertIn("No new data", result)
+
+    async def test_successful_empty_archives_are_recorded(self):
+        progress = AsyncMock()
+        with (
+            patch.object(
+                games,
+                "download_months",
+                new_callable=AsyncMock,
+                return_value={2026: {1: []}},
+            ),
+            patch.object(
+                games,
+                "sync_player_months",
+                new_callable=AsyncMock,
+            ) as sync_months,
+        ):
+            result = await games._download_format_and_insert(
+                "hikaru",
+                ["2026-1"],
+                progress,
+                no_games_message="no games",
+            )
+
+        self.assertEqual(result, "no games")
+        sync_months.assert_awaited_once_with("hikaru", {(2026, 1)})
+
+    async def test_import_progress_finishes_at_total_after_persistence(self):
+        progress = AsyncMock()
+        with (
+            patch.object(
+                games,
+                "download_months",
+                new_callable=AsyncMock,
+                return_value={2026: {1: [{"url": "game"}]}},
+            ),
+            patch.object(
+                games,
+                "format_games",
+                new_callable=AsyncMock,
+                return_value=[{"link": 1}],
+            ),
+            patch.object(
+                games,
+                "insert_games_months_moves_and_players",
+                new_callable=AsyncMock,
+                return_value="saved",
+            ),
+            patch.object(
+                games,
+                "sync_player_months",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await games._download_format_and_insert(
+                "hikaru",
+                ["2026-1"],
+                progress,
+                no_games_message="no games",
+            )
+
+        progress.assert_awaited_with(
+            "complete",
+            3,
+            3,
+            "Saved 1 games and queued position extraction.",
+        )
 
 
 class FenAggregationTests(unittest.TestCase):
@@ -242,7 +330,7 @@ class FenAggregationTests(unittest.TestCase):
 
     def test_expected_fen_positions_counts_only_played_half_moves(self):
         self.assertEqual(
-            fens.count_expected_fen_positions([
+            count_expected_fen_positions([
                 {"white_move": "e4", "black_move": "e5"},
                 {"white_move": "Nf3", "black_move": "--"},
                 {"white_move": None, "black_move": "Nc6"},
@@ -250,8 +338,8 @@ class FenAggregationTests(unittest.TestCase):
             4,
         )
 
-    def test_split_list_always_returns_requested_chunk_count(self):
-        self.assertEqual(split_list([1, 2], 4), [[1], [2], [], []])
+    def test_split_balanced_always_returns_requested_chunk_count(self):
+        self.assertEqual(split_balanced([1, 2], 4), [[1], [2], [], []])
 
     def test_aggregation_deduplicates_associations_and_exact_counters(self):
         base = {
@@ -266,7 +354,7 @@ class FenAggregationTests(unittest.TestCase):
             {**base, "n_move": 2, "move_counter_string": "#1_1"},
         ]
 
-        fens, unique_associations = _aggregate_fen_data_in_memory(associations)
+        fens, unique_associations = aggregate_fen_data(associations)
 
         self.assertEqual(fens[0]["moves_counter"], "#1_10#1_1")
         self.assertEqual(len(unique_associations), 2)
@@ -275,7 +363,7 @@ class FenAggregationTests(unittest.TestCase):
 
     def test_piece_count_ignores_fen_digits_and_metadata(self):
         self.assertEqual(
-            fens.count_fen_pieces("8/8/8/3k4/8/8/3Q4/3K4 w - -"),
+            count_fen_pieces("8/8/8/3k4/8/8/3Q4/3K4 w - -"),
             3,
         )
 
@@ -866,6 +954,21 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
 
 
 class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
+    def test_ingestion_modules_stay_below_one_thousand_lines(self):
+        pipeline_root = (
+            Path(__file__).resolve().parents[1]
+            / "chessism_api"
+            / "operations"
+            / "ingestion_pipeline"
+        )
+        oversized = {
+            path.name: len(path.read_text(encoding="utf-8").splitlines())
+            for path in pipeline_root.glob("*.py")
+            if len(path.read_text(encoding="utf-8").splitlines()) > 1_000
+        }
+
+        self.assertEqual(oversized, {})
+
     async def test_pending_games_queue_one_automatic_pipeline(self):
         redis = MagicMock()
         redis.get = AsyncMock(return_value=None)
@@ -882,7 +985,7 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
             ),
             patch.object(
                 fens,
-                "_release_fen_processing_claims",
+                "release_fen_processing_claims",
                 new_callable=AsyncMock,
                 return_value=0,
             ),

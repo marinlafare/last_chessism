@@ -18,7 +18,7 @@ from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     _get_remaining_fens_count_committed
 )
-from chessism_api.operations.fens import ensure_fen_pipeline_enqueued
+from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
 
 router = APIRouter()

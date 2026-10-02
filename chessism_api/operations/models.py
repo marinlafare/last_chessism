@@ -26,7 +26,7 @@ class PlayerCreateData(BaseModel):
         # Allows Pydantic to read from ORM models (e.g., Player)
         from_attributes = True 
 
-# --- Pydantic model for creating a Game (used in operations/format_games.py) ---
+# Game ingestion models used by ingestion_pipeline/pgn.py.
 class GameCreateData(BaseModel):
     link: int
     white: str
@@ -54,7 +54,7 @@ class GameCreateData(BaseModel):
     rules: str = "chess"
     initial_setup: Optional[str] = None
 
-# --- Pydantic model for creating a Move (used in operations/format_games.py) ---
+# Move rows created from clock-annotated PGNs.
 class MoveCreateData(BaseModel):
     link: int
     n_move: int
@@ -65,14 +65,13 @@ class MoveCreateData(BaseModel):
     white_time_left: float
     black_time_left: float
 
-# --- Pydantic model for creating a Month (used in operations/format_games.py) ---
+# Month ledger input/output models.
 class MonthCreateData(BaseModel):
     player_name: str
     year: int
     month: int
     n_games: int
 
-# --- Pydantic model for returning a Month (used in operations/months.py) ---
 class MonthResult(MonthCreateData):
     id: int # Include the 'id' from the database
     

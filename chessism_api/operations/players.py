@@ -10,7 +10,7 @@ from chessism_api.database.ask_db import (
     get_top_main_characters_by_time_control
 )
 from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData
-from chessism_api.operations.chess_com_api import get_profile, get_player_stats
+from chessism_api.operations.ingestion_pipeline.chesscom import get_profile, get_player_stats
 
 async def read_player(player_name: str) -> Optional[Dict[str, Any]]:
     """

@@ -263,12 +263,30 @@ async def refresh_database_summary_game_counts() -> Dict[str, int]:
             refreshed_at = CURRENT_TIMESTAMP
         FROM (
             SELECT
-                (SELECT COUNT(*)::bigint FROM game) AS n_games_in_db,
-                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NOT NULL AND joined <> 0) AS main_characters,
-                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NULL OR joined = 0) AS secondary_characters,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'bullet') AS bullet_games,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'blitz') AS blitz_games,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'rapid') AS rapid_games
+                game_counts.n_games_in_db,
+                player_counts.main_characters,
+                player_counts.secondary_characters,
+                game_counts.bullet_games,
+                game_counts.blitz_games,
+                game_counts.rapid_games
+            FROM (
+                SELECT
+                    COUNT(*)::bigint AS n_games_in_db,
+                    COUNT(*) FILTER (WHERE mode = 'bullet')::bigint AS bullet_games,
+                    COUNT(*) FILTER (WHERE mode = 'blitz')::bigint AS blitz_games,
+                    COUNT(*) FILTER (WHERE mode = 'rapid')::bigint AS rapid_games
+                FROM game
+            ) AS game_counts
+            CROSS JOIN (
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE joined IS NOT NULL AND joined <> 0
+                    )::bigint AS main_characters,
+                    COUNT(*) FILTER (
+                        WHERE joined IS NULL OR joined = 0
+                    )::bigint AS secondary_characters
+                FROM player
+            ) AS player_counts
         ) counts
         WHERE database_summary.id = 1
         RETURNING {DATABASE_SUMMARY_RETURNING_COLUMNS};

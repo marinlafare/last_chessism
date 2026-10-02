@@ -14,7 +14,6 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
     """
     player_url = constants.PLAYER.replace("{player}", player_name)
     
-    # --- FIX: Force HTTP/1.1 ---
     async with httpx.AsyncClient(timeout=5, http2=False) as client:
         try:
             response = await client.get(
@@ -25,7 +24,6 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             
             raw_data = response.json()
 
-            # --- Transformation to match PlayerCreateData Pydantic model ---
             processed_data = {} 
             processed_data['player_name'] = player_name.lower()
 
@@ -59,7 +57,6 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             processed_data['verified'] = raw_data.get('verified')
             processed_data['league'] = raw_data.get('league')
             
-            # Use Pydantic to validate and create the data object
             player_data = PlayerCreateData(**processed_data)
             return player_data # Return the Pydantic model instance
 
@@ -70,7 +67,6 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             print(f"HTTP error for profile {player_name}: {e.response.status_code} - {e.response.text}")
             return None
         except httpx.RequestError as e:
-            # --- UPDATED: Use repr(e) for better error details ---
             print(f"Request error for profile {player_name}: {repr(e)}")
             return None
         except Exception as e:
@@ -78,7 +74,6 @@ async def get_profile(player_name: str) -> Optional[PlayerCreateData]:
             return None
 
 
-# --- NEW FUNCTION: get_player_stats ---
 async def get_player_stats(player_name: str) -> Optional[Dict[str, Any]]:
     """
     Fetches a player's stats from the Chess.com API.
