@@ -194,47 +194,6 @@ const storeJobState = (state) => {
   window.localStorage.setItem(POSITION_JOBS_STORAGE_KEY, JSON.stringify(trackedState))
 }
 
-const getAudioContext = () => {
-  const AudioContextClass = window.AudioContext || window.webkitAudioContext
-  return AudioContextClass ? new AudioContextClass() : null
-}
-
-const unlockCompletionAudio = (audioContextRef) => {
-  if (typeof window === 'undefined') return
-  const context = audioContextRef.current || getAudioContext()
-  if (!context) return
-  audioContextRef.current = context
-  context.resume?.()
-}
-
-const playCompletionSound = (audioContextRef) => {
-  if (typeof window === 'undefined') return
-  const context = audioContextRef.current || getAudioContext()
-  if (!context) return
-  audioContextRef.current = context
-
-  const now = context.currentTime
-  const notes = [
-    { frequency: 246.94, start: 0, duration: 0.16 },
-    { frequency: 277.18, start: 0.17, duration: 0.16 },
-    { frequency: 293.66, start: 0.34, duration: 0.22 }
-  ]
-
-  notes.forEach((note) => {
-    const oscillator = context.createOscillator()
-    const gain = context.createGain()
-    oscillator.type = 'triangle'
-    oscillator.frequency.setValueAtTime(note.frequency, now + note.start)
-    gain.gain.setValueAtTime(0.0001, now + note.start)
-    gain.gain.exponentialRampToValueAtTime(0.12, now + note.start + 0.02)
-    gain.gain.exponentialRampToValueAtTime(0.0001, now + note.start + note.duration)
-    oscillator.connect(gain)
-    gain.connect(context.destination)
-    oscillator.start(now + note.start)
-    oscillator.stop(now + note.start + note.duration + 0.03)
-  })
-}
-
 export {
   COMPLETED_JOB_FADE_MS,
   COMPLETED_JOB_VISIBLE_MS,
@@ -261,7 +220,5 @@ export {
   loadStoredJobState,
   pageHasAttention,
   parseTimestampSeconds,
-  playCompletionSound,
   storeJobState,
-  unlockCompletionAudio,
 }

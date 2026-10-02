@@ -224,11 +224,17 @@ services:
       - BACKUP_FREE_FLOOR_BYTES=150000000000
       - PGBACKREST_STANZA=chessism
       - CHESSISM_ARCHIVE_GAP_PATH=/var/spool/pgbackrest/chessism-archive-gap
+      - DATABASE_RESTORE_TEST_ROOT=/restore-test
+      - DATABASE_RESTORE_TEST_HEADROOM_BYTES=15000000000
+      - DATABASE_RESTORE_TEST_TIMEOUT_SECONDS=21600
+      - RESTORE_TEST_DB_USER=${POSTGRES_USER}
+      - RESTORE_TEST_DB_NAME=${POSTGRES_DB}
     volumes:
       - ./db_data:/var/lib/postgresql/data:ro
       - /main-monitor-db-backups:/backup-volume
       - pgbackrest_spool:/var/spool/pgbackrest
       - postgres_socket:/var/run/postgresql
+      - database_restore_test:/restore-test
     networks:
       - chessism_net
     depends_on:
@@ -325,3 +331,4 @@ volumes:
   chessism_web_node_modules:
   pgbackrest_spool:
   postgres_socket:
+  database_restore_test:

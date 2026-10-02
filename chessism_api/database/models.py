@@ -423,7 +423,10 @@ class Move(Base):
 
 class Fen(Base):
     __tablename__ = "fen"
-    fen = Column('fen',String, primary_key = True, index = True, unique = True)
+    # The primary key already provides the unique btree lookup used by every
+    # FEN query. Adding index=True/unique=True here creates a duplicate 5 GB
+    # index (ix_fen_fen) with the same key and ordering as fen_pkey.
+    fen = Column('fen', String, primary_key=True)
     n_games = Column('n_games',BigInteger, nullable = False)
     moves_counter = Column('moves_counter',String, nullable = False)
     next_moves = Column('next_moves',String, nullable = True)

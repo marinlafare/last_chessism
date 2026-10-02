@@ -6,7 +6,8 @@ RUN apt-get update \
     && install -d -o postgres -g postgres -m 0750 \
         /var/spool/pgbackrest \
         /var/spool/pgbackrest/lock \
-        /var/spool/pgbackrest/log
+        /var/spool/pgbackrest/log \
+        /restore-test
 
 COPY postgres-backup/pgbackrest.conf /etc/pgbackrest/pgbackrest.conf
 COPY postgres-backup/archive-push.sh /usr/local/bin/pgbackrest-chessism-archive-push

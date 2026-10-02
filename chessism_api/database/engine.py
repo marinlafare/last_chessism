@@ -191,6 +191,17 @@ async def _ensure_fen_analysis_schema(
         reshaped_engine_summaries = await _reshape_game_player_engine_summary(connection)
         if reshaped_engine_summaries:
             print("Player engine summary cache reshaped; rows will rebuild on demand.")
+        redundant_fen_index_exists = await connection.fetchval(
+            "SELECT to_regclass('public.ix_fen_fen') IS NOT NULL"
+        )
+        if redundant_fen_index_exists:
+            # fen_pkey is an equivalent unique btree on fen(fen). Run outside
+            # an explicit transaction so normal reads and writes remain
+            # available while PostgreSQL invalidates the redundant index.
+            await connection.execute(
+                "DROP INDEX CONCURRENTLY IF EXISTS public.ix_fen_fen"
+            )
+            print("Removed redundant ix_fen_fen; fen_pkey remains authoritative.")
         existing_columns = {
             str(row["column_name"])
             for row in await connection.fetch("""

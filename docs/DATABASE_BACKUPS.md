@@ -16,13 +16,30 @@ Timeshift. Chessism never creates, edits, moves, or removes anything inside it.
 - Chessism allocation: 200 GB.
 - Protected filesystem free-space floor: 150 GB.
 - First database backup: full.
-- Normal subsequent backup: incremental.
+- Storage format: pgBackRest bundled block-incremental backups.
+- Normal subsequent backup: block incremental.
 - New full chain: after 30 incrementals, after 30 days, or after interrupted
   WAL archiving.
 - Retention: two complete full-backup chains.
 - Trigger: manual only, from the Backups page.
 - Validation: pgBackRest verifies the selected recovery point and required WAL
   before Chessism publishes a successful status.
+- Restore rehearsal: manual only, from the superuser-only `Test backup` button.
+
+## Block-incremental migration
+
+Repositories created before block-incremental storage was enabled remain intact
+while Chessism creates and verifies one new full backup containing the block
+maps needed by future incrementals. Only after that verification succeeds does
+Chessism expire the superseded legacy full and all incrementals that depend on
+it. Later button presses return to incremental backups and store changed blocks
+instead of recopied multi-gigabyte relation files.
+
+The catalog records the storage mode per backup. If the block-enabled full fails,
+the legacy chain remains available and the next manual attempt still requests a
+full backup. Superseded chains are expired through pgBackRest, never by deleting
+repository files directly. Normal block-enabled chains continue to use the
+two-full-chain retention policy.
 
 If the external volume marker is absent, the API reports the repository as
 unavailable and does not fall back to the system disk.
@@ -45,6 +62,27 @@ Full database restoration is intentionally not exposed in the UI. It must be
 performed while the database is stopped and should first be rehearsed in an
 isolated PostgreSQL 15 container.
 
+## Disposable restore test
+
+`Test backup` does not replace the live database. It serializes through the
+same backup queue, selects the latest verified recovery point, and restores it
+into the local Docker volume `database_restore_test`. The worker is limited to
+one CPU, starts the restored PostgreSQL 15 cluster only on a private Unix
+socket, validates the required schema, durable summary rows, and FEN primary
+key, then stops PostgreSQL and removes the restored files.
+
+The backup worker also removes any leftover `rehearsal-*` workspace when it
+starts. This recovers the temporary disk space if Docker or the host was
+stopped before the job's normal success/failure cleanup could run. Unrelated
+files in the restore volume are never selected by startup cleanup.
+
+The test requires the uncompressed database size plus 15 GB of free local
+space. It never runs on a timer or as a side effect of creating a backup; a
+superuser must click the button. The pgBackRest repository is used only as the
+restore source. Test status is recorded independently in
+`restore-test-status.json`, and the exact catalog row and manifest are marked
+passed or failed. A failed rehearsal does not delete its backup.
+
 ## Restore procedure
 
 Restoration replaces the PostgreSQL cluster, so first preserve the current
@@ -63,6 +101,6 @@ the repository mounted at `/main-monitor-db-backups`, use the same
 6. Start only PostgreSQL, run `pg_isready`, then compare critical row counts
    and application migrations before starting the API and workers.
 
-The Backups page intentionally reports `Restore tested: not yet` until a
-separate disposable-cluster rehearsal has been completed. A successful backup
-or repository verification is not falsely presented as a restore test.
+The Backups page reports `Restore tested: not yet` until this disposable
+cluster rehearsal passes. A successful backup or repository verification is
+not falsely presented as a restore test.

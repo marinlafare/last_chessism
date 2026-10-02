@@ -1,4 +1,5 @@
 import gzip
+import inspect
 import json
 import os
 import sys
@@ -22,6 +23,7 @@ from chessism_api.operations import (
     analysis,
     analysis_backups,
     database_backups,
+    database_restore_tests,
     fens,
     games,
     player_analytics,
@@ -231,6 +233,13 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
 
 
 class FenAggregationTests(unittest.TestCase):
+    def test_fen_primary_key_does_not_declare_a_duplicate_index(self):
+        fen_column = models.Fen.__table__.c.fen
+        index_names = {index.name for index in models.Fen.__table__.indexes}
+
+        self.assertTrue(fen_column.primary_key)
+        self.assertNotIn("ix_fen_fen", index_names)
+
     def test_expected_fen_positions_counts_only_played_half_moves(self):
         self.assertEqual(
             fens.count_expected_fen_positions([
@@ -304,6 +313,25 @@ class PlayerSalienceTests(unittest.TestCase):
 
 
 class DatabaseBackupPolicyTests(unittest.TestCase):
+    def test_restore_server_preserves_recovery_sensitive_limits(self):
+        options = database_restore_tests._postgres_start_options(Path("/tmp/socket"))
+
+        self.assertNotIn("max_connections", options)
+        self.assertNotIn("max_worker_processes", options)
+        self.assertNotIn("max_wal_senders", options)
+        self.assertNotIn("max_prepared_transactions", options)
+        self.assertNotIn("max_locks_per_transaction", options)
+
+    def test_restore_worker_accepts_arq_job_metadata(self):
+        signature = inspect.signature(
+            database_restore_tests.run_database_restore_test_job
+        )
+
+        self.assertTrue(any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        ))
+
     def test_first_database_backup_is_full(self):
         backup_type, _reason = database_backups.choose_backup_type(
             [],
@@ -323,6 +351,71 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
             now=now,
         )
         self.assertEqual(backup_type, "incr")
+
+    def test_legacy_full_forces_one_block_enabled_full_backup(self):
+        backups = [{
+            "type": "full",
+            "timestamp": {"stop": int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp())},
+        }]
+        backup_type, reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=False,
+            active_full_storage_mode=None,
+            now=datetime(2026, 10, 2, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(backup_type, "full")
+        self.assertIn("Block-incremental", reason)
+
+    def test_active_full_mode_is_matched_by_backup_id(self):
+        repository_rows = [
+            {
+                "label": "20261001-010101F",
+                "type": "full",
+                "timestamp": {"stop": 100},
+            },
+            {
+                "label": "20261002-010101F",
+                "type": "full",
+                "timestamp": {"stop": 200},
+            },
+        ]
+        catalog_rows = [
+            {
+                "backup_id": "20261001-010101F",
+                "type": "full",
+                "storage_mode": database_backups.LEGACY_STORAGE_MODE,
+            },
+            {
+                "backup_id": "20261002-010101F",
+                "type": "full",
+                "storage_mode": database_backups.BACKUP_STORAGE_MODE,
+            },
+        ]
+
+        self.assertEqual(
+            database_backups._active_full_storage_mode(repository_rows, catalog_rows),
+            database_backups.BACKUP_STORAGE_MODE,
+        )
+
+    def test_legacy_cleanup_targets_only_old_full_chains(self):
+        rows = [
+            {
+                "backup_id": "new-block-full",
+                "type": "full",
+                "storage_mode": database_backups.BACKUP_STORAGE_MODE,
+            },
+            {"backup_id": "old-incremental", "type": "incr"},
+            {"backup_id": "old-legacy-full", "type": "full"},
+        ]
+
+        self.assertEqual(
+            database_backups._legacy_full_backup_ids(
+                rows,
+                protected_backup_id="new-block-full",
+            ),
+            ["old-legacy-full"],
+        )
 
     def test_thirty_incrementals_start_a_new_full_chain(self):
         full_stop = int(datetime(2026, 9, 28, tzinfo=timezone.utc).timestamp())
@@ -360,6 +453,88 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
             now=datetime(2026, 10, 2, tzinfo=timezone.utc),
         )
         self.assertEqual(backup_type, "full")
+
+    def test_restore_probe_accepts_a_complete_postgres_15_database(self):
+        database_restore_tests._validate_probe({
+            "database": "chessism_db",
+            "server_version_num": 150015,
+            "missing_relations": [],
+            "fen_primary_key_valid": True,
+            "redundant_fen_index_present": False,
+            "database_summary": {"games": 10, "positions": 100},
+            "pipeline_summary": {
+                "parsed_games": 10,
+                "fen_extracted_games": 9,
+                "tablebase_marked_games": 8,
+            },
+            "scored_summary": {"total_positions": 100},
+        })
+
+    def test_restore_probe_rejects_an_incomplete_schema(self):
+        with self.assertRaisesRegex(RuntimeError, "missing"):
+            database_restore_tests._validate_probe({
+                "database": "chessism_db",
+                "server_version_num": 150015,
+                "missing_relations": ["fen"],
+                "fen_primary_key_valid": True,
+            })
+
+    def test_restore_result_is_persisted_on_the_exact_catalog_row(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog_path = Path(temporary) / "catalog.json"
+            catalog_path.write_text(json.dumps({
+                "schema_version": 2,
+                "backups": [
+                    {"backup_id": "latest", "restore_tested": False},
+                    {"backup_id": "older", "restore_tested": False},
+                ],
+            }), encoding="utf-8")
+
+            with patch.object(
+                database_restore_tests,
+                "BACKUP_CATALOG_PATH",
+                catalog_path,
+            ):
+                rows = database_restore_tests._catalog_with_restore_result(
+                    backup_id="latest",
+                    status="success",
+                    completed_at="2026-10-02T22:00:00+00:00",
+                    elapsed_seconds=12.34,
+                    error_message=None,
+                )
+
+            self.assertTrue(rows[0]["restore_tested"])
+            self.assertEqual(rows[0]["restore_test_status"], "success")
+            self.assertFalse(rows[1]["restore_tested"])
+
+    def test_restore_startup_cleanup_removes_only_rehearsal_workspaces(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stale_directory = root / "rehearsal-interrupted-job"
+            stale_directory.mkdir()
+            (stale_directory / "large-restored-file").write_text(
+                "temporary",
+                encoding="utf-8",
+            )
+            stale_file = root / "rehearsal-incomplete-marker"
+            stale_file.write_text("temporary", encoding="utf-8")
+            preserved = root / "keep-this-file"
+            preserved.write_text("important", encoding="utf-8")
+
+            with patch.object(
+                database_restore_tests,
+                "RESTORE_TEST_ROOT",
+                root,
+            ):
+                removed = database_restore_tests.cleanup_stale_restore_workspaces()
+
+            self.assertEqual(
+                removed,
+                ["rehearsal-incomplete-marker", "rehearsal-interrupted-job"],
+            )
+            self.assertFalse(stale_directory.exists())
+            self.assertFalse(stale_file.exists())
+            self.assertEqual(preserved.read_text(encoding="utf-8"), "important")
 
 
 class PlayerHeroAnalyticsTests(unittest.TestCase):

@@ -1,481 +1,660 @@
-REAL BUTLER DATABASE BACKUP HANDOFF
+REAL BUTLER DATABASE BACKUP AND RESTORE-TEST HANDOFF
 
-Status recorded: 2026-10-02
-Destination host: the same Linux host currently running Chessism and Real Butler
-Stable application ID to use: real-butler
+Status updated: 2026-10-02
+Destination host: the Linux host currently running Chessism and Real Butler
+Stable application ID: real-butler
 
 
-1. PURPOSE AND NON-NEGOTIABLE BOUNDARIES
+1. PURPOSE
 
 Implement a manual, engine-native, verifiable backup system for Real Butler on
-the recovery disk already prepared for application backups. The implementation
-must make it possible to reconstruct Real Butler on this machine or another
-compatible host. It must not copy live database files directly, must not put a
-backup on the system disk when the recovery disk is unavailable, and must never
-read, write, rename, prune, or otherwise alter Timeshift's directory.
+the recovery disk already used by Chessism. A backup is not considered proven
+only because the backup command and repository verification succeeded. The
+superuser must also be able to click a separate "Test backup" button that
+restores the latest verified recovery point into disposable local storage,
+starts the restored services in isolation, validates them, and deletes the
+temporary copy.
 
-This document describes the host changes already made for Chessism, the exact
-state of the disk, lessons learned while deploying pgBackRest, and a staged plan
-for Real Butler. Inspect the Real Butler repository before choosing tools: do
-not assume that PostgreSQL is its only authoritative persistent store.
+Both operations are manual-only:
+
+  - "Backup Real Butler" creates or updates the protected recovery set.
+  - "Test backup" performs a restore rehearsal of the latest verified set.
+
+Neither action runs on a timer, at application startup, after a certain number
+of days, or automatically after another backup. A worker timeout is only the
+maximum permitted runtime after the user clicks a button; it is not a schedule.
+
+The implementation must never copy a live database directory directly, write a
+fallback backup onto the system disk when the recovery disk is absent, touch
+Timeshift, or delete the previous recoverable chain before its replacement is
+verified.
 
 
-2. VERIFIED DISK AND PARTITION STATE
+2. VERIFIED HOST STORAGE BOUNDARY
 
 Physical recovery disk:
 
   Model:              ST1000DM010-2EP102
-  Device today:       /dev/sda
-  Advertised size:    931.5 GiB
+  Device observed:    /dev/sda (do not use this unstable name in configuration)
+  Advertised size:    approximately 931.5 GiB
 
-Partitions on that disk:
+Partitions observed on the disk:
 
   /dev/sda1   1 GiB      vfat    label MAINMON_EFI
   /dev/sda2   128 GiB    btrfs   label main-monitor-rescue
   /dev/sda3   802.5 GiB  ext4    label timeshift
 
-Application backups use only /dev/sda3. Never identify it by /dev/sda3 in
-application code or durable configuration because /dev/sdX names can change.
-Identify it by this immutable filesystem UUID:
+The shared ext4 filesystem is mounted persistently by immutable UUID:
 
-  1ebffac6-4b7a-4906-9e07-9586060d3825
+  UUID:        1ebffac6-4b7a-4906-9e07-9586060d3825
+  Mount point: /main-monitor-db-backups
 
-Persistent host mount:
-
-  /main-monitor-db-backups
-
-The installed /etc/fstab entry is:
+Installed /etc/fstab entry:
 
   UUID=1ebffac6-4b7a-4906-9e07-9586060d3825 /main-monitor-db-backups ext4 defaults,nofail,x-systemd.automount,x-systemd.device-timeout=10s 0 2
 
-The original fstab was preserved before this entry was installed:
+The pre-change fstab was preserved at:
 
   /etc/fstab.before-chessism-20261002T170509Z
 
-Baseline ext4 filesystem measurements captured immediately before Chessism's
-first full database backup began, in exact decimal bytes:
+No repartitioning was performed. Real Butler and Chessism share the ext4
+filesystem through isolated top-level directories and application-enforced
+budgets. Do not resize /dev/sda3 or create another partition for this feature.
 
-  Total:       847,015,223,296
-  Used:         33,583,304,704
-  Available:   813,415,141,376
-  Utilization: approximately 4%
-
-Top-level application usage at that same pre-backup moment:
-
-  /main-monitor-db-backups/timeshift     29,659,805,856 bytes
-  /main-monitor-db-backups/chessism       3,942,053,169 bytes
-  /main-monitor-db-backups/real-butler            4,096 bytes
-
-Chessism's first full database backup was running when this handoff was
-finished, so the Chessism usage and filesystem free-space figures above are now
-expected to change. They are a dated baseline, not live capacity readings. The
-Real Butler agent must remeasure before making any allocation decision or
-starting its own backup, and must not compete with the running Chessism backup.
-
-The Real Butler directory is an empty placeholder. It is currently owned by
-UID:GID 1000:1000 with mode 0750. Do not assume this is the correct ownership
-for a backup container. Determine the database/tool process UID and GID first,
-then give only the Real Butler subtree the required ownership.
-
-Important mount-observation detail: a restricted development sandbox may show
-the mount's VFS view as read-only even while the ext4 filesystem options are
-read-write. Chessism's production containers have already passed an actual
-write probe in their own application directory. Real Butler must independently
-validate UUID, marker, filesystem free space, and writability from the service
-context that will perform its backups. A probe may write only under
-/main-monitor-db-backups/real-butler and must clean up its own probe file.
-
-
-3. DIRECTORY OWNERSHIP AND SAFETY BOUNDARIES
-
-The recovery filesystem currently has these separate top-level areas:
+Top-level ownership boundaries:
 
   /main-monitor-db-backups/timeshift
-      Existing Timeshift data. It is outside the scope of both applications.
-      Do not change its permissions or traverse it during quota scans.
+      Existing Timeshift state. Never write, rename, prune, chmod, chown, hash,
+      or recursively scan this directory from either application.
 
   /main-monitor-db-backups/chessism
-      Chessism database, FEN-analysis exports, research artifacts, and status.
-      Real Butler must not write here or reuse any Chessism repository.
+      Chessism-only backup data. Real Butler must not reuse or modify it.
 
   /main-monitor-db-backups/real-butler
-      Reserved for Real Butler. All Real Butler artifacts and status belong
-      below this directory.
+      The only permitted Real Butler backup subtree.
 
-Chessism uses this private volume marker:
+Chessism uses its own marker:
 
   /main-monitor-db-backups/.chessism-backup-volume
 
-It contains the expected UUID. Do not rename or remove it. Real Butler should
-create a separate read-only marker after revalidating the mounted UUID:
+Real Butler must use a distinct read-only marker:
 
   /main-monitor-db-backups/.real-butler-backup-volume
 
-The Real Butler marker should contain only:
+The Real Butler marker must contain only the expected filesystem UUID. An
+absent or mismatched marker means "backup destination unavailable." Do not
+create the repository under an unmounted host directory with the same path.
 
-  1ebffac6-4b7a-4906-9e07-9586060d3825
-
-An absent or mismatched marker means "backup destination unavailable." The app
-must not silently create a substitute repository in an unmounted host directory
-or on the operating-system disk.
-
-No physical repartitioning was performed for Chessism or Real Butler. This is
-intentional. The two projects share the ext4 filesystem through isolated
-top-level directories and application-enforced limits. Do not resize /dev/sda3
-or create a new physical partition as part of this feature.
+The Real Butler directory began as an empty placeholder owned by UID:GID
+1000:1000 with mode 0750. Inspect the Real Butler service users before changing
+ownership. Change only the application subtree and use the actual backup-tool
+UID/GID; never recursively chown the mount root.
 
 
-4. STORAGE BUDGET
+3. STORAGE POLICY
 
-Use these soft allocations:
+Application policies, not physical partitions:
 
-  Chessism:                  200,000,000,000 bytes
-  Real Butler:               350,000,000,000 bytes
+  Chessism allocation:       200,000,000,000 bytes
+  Real Butler allocation:    350,000,000,000 bytes
   Protected global free:     150,000,000,000 bytes
 
-These are application policies, not filesystem partitions or hard reservations.
-The Real Butler backup worker must refuse to begin if the projected operation
-would exceed its 350 GB allocation or cross the filesystem-wide 150 GB free
-space floor. Recheck both conditions during a long backup and preserve a stop
-margin; Chessism uses 2 GB. Failure must leave the last verified backup intact.
+The Real Butler worker must refuse to start if its projected write would exceed
+350 GB or cross the filesystem-wide 150 GB free-space floor. It must recheck
+free space while writing and retain an emergency stop margin; Chessism uses
+2 GB. A capacity failure must preserve every previously verified recovery set.
 
-At the time the disk layout was planned, Real Butler's Docker persistent data
-was measured at approximately 105.9 GB in total, including approximately
-70.46 GB for PostgreSQL. Those are historical planning measurements, not a
-current guarantee. Remeasure every authoritative Real Butler volume before
-designing retention or starting the first full backup.
+Historical planning measurements placed all Real Butler Docker persistence at
+approximately 105.9 GB, including about 70.46 GB of PostgreSQL. These figures
+are not current guarantees. Remeasure every authoritative volume before tool,
+retention, and temporary-space decisions.
 
-The proposed allocations fit the current disk:
+Chessism's final reference snapshot on 2026-10-02 was:
 
-  current Timeshift       approximately 29.66 GB
-  Chessism ceiling                    200 GB
-  Real Butler ceiling                 350 GB
-  protected free floor                150 GB
+  Protected PostgreSQL size:       53,190,858,747 bytes
+  Chessism backup subtree usage:   18,853,966,321 bytes
+  Filesystem free bytes:          798,501,269,504 bytes
 
-This still leaves additional headroom, but that headroom must not be treated as
-permission to ignore growth, temporary staging space, WAL, manifests, or object
-storage. Quota checks must scan only Real Butler's directory. Never calculate
-the application's quota by recursively scanning the Timeshift directory.
+Those numbers demonstrate compression and deduplication; they are not a Real
+Butler capacity estimate. Always distinguish:
 
+  - uncompressed protected database size;
+  - compressed repository size;
+  - bytes newly written by the latest backup;
+  - total application-subtree usage; and
+  - free local space required for a restore rehearsal.
 
-5. CHESSISM CHANGES ALREADY MADE
-
-The following work has already been completed for Chessism and explains the
-host state Real Butler inherits:
-
-  - Mounted the recovery filesystem persistently by UUID at
-    /main-monitor-db-backups with nofail and systemd automount behavior.
-  - Preserved Timeshift at its existing top-level /timeshift directory.
-  - Created isolated /chessism and /real-butler top-level directories.
-  - Moved Chessism's portable FEN-analysis backups onto the same UUID while
-    preserving them as a separate format from full database recovery.
-  - Added a manual-only Backups page and API/worker path for Chessism.
-  - Added a PostgreSQL 15 pgBackRest 2.59.2 repository under:
-      /main-monitor-db-backups/chessism/database/pgbackrest
-  - Configured the first database backup as full and later backups as standard
-    file-level incremental backups.
-  - Configured a new full chain after 30 incrementals, after 30 days, or after
-    an intentional WAL-continuity gap.
-  - Configured retention of two complete full-backup chains.
-  - Enabled zstd compression, repository bundles, and process-max=1.
-  - Added a 200 GB Chessism quota, 150 GB global free-space floor, and 2 GB
-    stop margin.
-  - Added atomic backup-status.json and backup-usage.json files for monitoring.
-  - Added a Redis lock so Chessism's database and FEN exports cannot overlap.
-  - Required pgBackRest verification of a recovery point before publishing
-    success.
-  - Documented restore but deliberately did not expose destructive restore in
-    the web UI.
-
-Chessism's database backup repository has been initialized and WAL archiving
-has been checked. At the last deployment check, no first full database backup
-had yet been requested, so its database status was correctly "stale." That
-does not affect Real Butler's directory, but Real Butler must not reuse the
-Chessism stanza, WAL spool, socket volume, queue, Redis keys, image, markers,
-or status files.
+Persist a controlled exact usage measurement after write operations. Do not
+recursively measure a large repository or Timeshift on every UI poll.
 
 
-6. FIRST TASK: INVENTORY REAL BUTLER'S AUTHORITATIVE STATE
+4. INVENTORY REAL BUTLER BEFORE IMPLEMENTATION
 
-Before editing code, inspect Real Butler's compose files, environment, models,
-and volumes and make an explicit inventory containing:
+Do not assume PostgreSQL is Real Butler's only authoritative store. Inspect its
+Compose files, environment, models, workers, migrations, and named volumes and
+write an explicit recovery-boundary inventory containing:
 
-  - Relational database engine and exact version.
-  - Database names, roles, extensions, schemas, and migration system.
-  - Whether large objects are stored in PostgreSQL.
-  - Object/blob storage such as MinIO, S3-compatible storage, or filesystem
-    uploads.
-  - Search/vector stores and whether they are authoritative or rebuildable.
-  - Encryption keys, application secrets, and configuration needed to decrypt
-    or interpret restored data. Secrets must not be copied into status files.
-  - Docker named volumes and bind mounts, with current exact byte counts.
-  - Services that can be reconstructed from the database versus services whose
-    data must be included in the recovery set.
-  - Consistency relationships between database rows and external blobs.
+  - every database engine and exact version;
+  - database names, roles, schemas, extensions, and migration version;
+  - PostgreSQL large objects, if any;
+  - object/blob storage such as MinIO or filesystem uploads;
+  - vector/search stores and whether they are authoritative or rebuildable;
+  - queues/caches that can be discarded and rebuilt;
+  - encryption keys and configuration required to interpret restored data;
+  - every named volume and bind mount with exact current byte counts;
+  - relationships between relational rows and external documents/blobs; and
+  - the startup order required to validate an isolated restore.
 
-A PostgreSQL-only backup is not a complete Real Butler backup if database rows
-reference documents held only by MinIO or a host volume. Define the recovery
-boundary in writing before implementation. If multiple stores are authoritative,
-create one backup set with a manifest that names and validates every component.
-Choose a consistency strategy so a restored database does not refer to missing
-or newer blobs.
+If rows refer to documents held only in object storage, a PostgreSQL recovery
+point alone is not a Real Butler backup. Define one backup set whose manifest
+identifies every authoritative component and the consistency boundary between
+them. Secrets must remain outside Git, logs, status JSON, and manifests.
 
 
-7. IMPLEMENTATION PLAN
+5. FINAL CHESSISM REFERENCE ARCHITECTURE
 
-Phase A: measure and decide the native backup mechanism
+Chessism now provides a working reference with these properties:
 
-  1. Remeasure all authoritative volumes and record tool/engine versions.
-  2. Estimate the first full backup size, temporary working space, expected
-     daily change, and the cost of retaining two recoverable chains.
-  3. Confirm the estimate fits both the 350 GB Real Butler policy and the
-     150 GB global free-space floor.
-  4. Use the database engine's supported online backup mechanism. If the main
-     store is PostgreSQL and its size/change rate resembles the previous
-     measurement, pgBackRest is preferred over repeatedly creating full
-     pg_dump archives. If another engine is in use, select its equivalent
-     physical/incremental backup tool.
-  5. Decide repository encryption before the first backup. The ext4 recovery
-     filesystem itself was not encrypted by the Chessism work, and Chessism's
-     pgBackRest repository currently uses no cipher. Real Butler may contain
-     sensitive documents; if repository encryption is required, keep its key
-     outside this disk and outside source control. Changing this choice later
-     may require a new repository.
+  - manual-only database backups from a superuser page;
+  - PostgreSQL 15 and pgBackRest 2.59.2;
+  - an isolated application directory and stanza;
+  - bundled block-incremental storage with zstd level 3 compression;
+  - one backup process at a time;
+  - a new full chain after 30 incrementals, 30 days, an interrupted WAL chain,
+    or a storage-format migration;
+  - two retained complete full chains;
+  - a 200 GB application budget and 150 GB global free-space floor;
+  - a 2 GB emergency stop margin;
+  - an owner-token Redis lock shared by Chessism backup writers;
+  - atomic status, usage, catalog, and per-backup manifest files;
+  - exact recovery-point verification before success is published;
+  - a separate portable FEN-analysis export on the same UUID; and
+  - a manual, isolated, disposable restore rehearsal.
 
-Phase B: create only the Real Butler namespace
+Chessism's current pgBackRest settings include:
 
-Recommended layout, adapted after the inventory:
+  repo1-retention-full=2
+  repo1-retention-full-type=count
+  repo1-bundle=y
+  repo1-block=y
+  compress-type=zst
+  compress-level=3
+  process-max=1
+  start-fast=y
+  archive-async=y
+  archive-push-queue-max=5GiB
+  archive-timeout=2m
+
+Real Butler must have its own stanza, repository, spool, lock directory, WAL-gap
+marker, queue, Redis key, status files, manifest directory, Docker volume, and
+container image. Never share Chessism's namespace.
+
+Chessism also demonstrates why recovery scopes must be named clearly:
+
+  - "Backup database" protects the complete PostgreSQL database, including all
+    FEN rows and Stockfish results together with games, moves, players,
+    associations, summaries, and every other database table.
+  - "Update FEN analysis" updates a separate portable analysis-only JSONL gzip
+    export and its metadata. It is not another complete database backup.
+
+The expensive FEN analysis is therefore present in both recovery formats, but
+only the FEN button updates the independent portable dataset. Real Butler should
+make equivalent distinctions if it offers component exports in addition to a
+complete application recovery set.
+
+
+6. PROBLEMS ENCOUNTERED AND THE SOLUTIONS
+
+6.1 Compressed size looked "too small"
+
+The source Chessism database was roughly 57 GB while its first pgBackRest
+repository occupied roughly 14.9 GB. This was not missing data: zstd compression,
+repository bundling, and repeated database-page content made the physical
+repository much smaller than PostgreSQL's uncompressed size.
+
+Solution:
+
+  - Show "database protected" separately from "backup storage used."
+  - Record and explain both values in manifests and the UI.
+  - Do not use repository bytes as the expected restored database size.
+
+6.2 Small logical updates produced very large legacy incrementals
+
+A few player updates grew PostgreSQL by hundreds of MB, but a normal file-level
+incremental made the repository jump by many GB. A small change to a very large
+relation or index causes a file-level incremental to copy the entire changed
+file. This made a tiny logical update appear to cost almost another full backup.
+
+Solution:
+
+  - Enable pgBackRest repository bundling and block incrementals.
+  - Treat the change as a repository format migration requiring a new full with
+    block maps.
+  - Preserve the legacy chain until the new block-enabled full verifies.
+  - Expire superseded chains with pgBackRest commands only after verification;
+    never delete repository files manually.
+  - Continue subsequent backups as block incrementals. One verified Chessism
+    incremental later added approximately 235.6 MB to the repository rather
+    than recopying every changed multi-GB relation file.
+
+Real Butler should enable block incrementals before its first full if its
+installed pgBackRest version supports the feature and restore testing confirms
+it. Avoid an avoidable legacy-to-block migration.
+
+6.3 A redundant database index inflated both source and backup storage
+
+Chessism had both the FEN primary key and an equivalent ix_fen_fen index. The
+duplicate index consumed several GB and was repeatedly copied by file-level
+incrementals.
+
+Solution:
+
+  - Remove the redundant index from the model/schema and live database.
+  - Ensure startup schema code does not recreate it.
+  - Make restore validation explicitly require the primary key to be valid and
+    the redundant index to be absent.
+
+Before Real Butler's first backup, audit very large indexes for exact duplicates.
+Do not drop merely similar indexes without query-plan and constraint analysis.
+
+6.4 WAL archiving was interrupted
+
+An external backup disk or uninitialized stanza can make archive-push fail. An
+early Chessism configuration let pgBackRest archive activity begin before the
+stanza was ready, which caused failures and database restarts. Once WAL
+continuity is uncertain, an incremental chain cannot be trusted blindly.
+
+Solution:
+
+  - Use a guarded archive wrapper that validates the UUID marker and initialized
+    stanza before invoking pgBackRest.
+  - If archiving cannot safely continue, preserve database availability and
+    write a durable WAL-gap marker.
+  - The next manual backup must detect the gap and require a new full chain.
+  - Initialize the stanza while the guard is active, then run pgBackRest check.
+  - Name the wrapper so its command contains "pgbackrest" because pgBackRest
+    validates archive_command text.
+  - Use application-prefixed variables such as REAL_BUTLER_ARCHIVE_GAP_PATH;
+    pgBackRest treats PGBACKREST_* names as native configuration options.
+
+6.5 Failed or superseded writes occupied storage
+
+Interrupted attempts and the legacy repository can leave data that should not
+be counted as a valid recovery point.
+
+Solution:
+
+  - Publish a catalog row only after native verification succeeds.
+  - Keep the previous verified chain until replacement success.
+  - Clean failed attempt artifacts with the native repository tool when
+    possible.
+  - Never use a broad recursive deletion against the mount or repository root.
+  - Verify the exact labels selected for expiration and confirm the protected
+    replacement still exists afterward.
+
+6.6 The first restore-test click falsely appeared to complete immediately
+
+The installed ARQ version did not support _job_timeout as an enqueue_job option.
+It forwarded that name to the task as an ordinary keyword, so the worker raised
+TypeError before entering the restore function. ARQ itself reached a terminal
+"complete" state even though its result contained success=false, and the UI
+incorrectly displayed success and played the completion sound. The worker never
+entered its cleanup/finally block, so its owner lock also needed reconciliation.
+
+Solution:
+
+  - Do not pass _job_timeout to enqueue_job on this ARQ version.
+  - Register long jobs with arq.worker.func(coroutine, timeout=604800).
+  - Keep **_kwargs on the task as defensive compatibility, but do not rely on
+    it to implement the timeout.
+  - In the UI, result.success=false must override a queue-level terminal status
+    and must be rendered as FAILED.
+  - Play the sound only after application-level success.
+  - Reserve the lock before enqueue, release it if enqueue fails, and always
+    release it in the worker's finally block.
+  - Add startup/stale-owner reconciliation so a crash before task entry cannot
+    permanently block future manual operations.
+
+6.7 The first real restore failed to start PostgreSQL
+
+The 53 GB backup restored successfully, but the disposable server was forced to
+max_connections=10. WAL had been generated by the production server with
+max_connections=100, so PostgreSQL correctly refused recovery:
+
+  recovery aborted because of insufficient parameter settings
+  max_connections = 10 is lower than on the primary server, where it was 100
+
+PostgreSQL recovery is also sensitive to max_worker_processes,
+max_wal_senders, max_prepared_transactions, and max_locks_per_transaction.
+
+Solution:
+
+  - Do not lower recovery-sensitive PostgreSQL parameters on the command line.
+  - Inherit them from the restored postgresql.conf/WAL-compatible backup.
+  - Limit resource impact through container CPU limits, serialized workers,
+    private networking/sockets, and no application consumers instead.
+  - Preserve capacity fields in a failure report so the UI remains diagnostic.
+
+The production Chessism values at the time were 100 connections, 8 worker
+processes, 10 WAL senders, 0 prepared transactions, and 64 locks per transaction.
+These are observations, not values to hard-code for Real Butler.
+
+6.8 pgBackRest reported an ownership warning
+
+During restore pgBackRest warned that manifest group root was mapped to the
+current group. The restore worker runs as the restricted postgres user, which
+cannot preserve root-group ownership for such entries.
+
+Solution:
+
+  - Run the restore as the database OS user.
+  - Allow pgBackRest to map inaccessible manifest ownership to that user/group.
+  - Verify that restored database files have the expected database ownership.
+  - Treat the warning as acceptable only if PostgreSQL starts and validation
+    succeeds; do not suppress ownership failures blindly.
+
+6.9 Temporary restore data must not survive completion or a crash
+
+A complete Chessism restore needs approximately 53 GB of local temporary space.
+Leaving it behind would silently consume the system disk.
+
+Solution:
+
+  - Use a dedicated Docker restore-test volume, not the live database volume.
+  - Name every workspace rehearsal-<job-id> under a fixed restore root.
+  - Stop disposable PostgreSQL and delete that exact workspace in finally on
+    both success and failure.
+  - On backup-worker startup, remove only stale rehearsal-* workspaces to cover
+    Docker/host termination before finally runs.
+  - Never select unrelated files for startup cleanup.
+  - Require uncompressed database bytes plus explicit headroom before starting;
+    Chessism uses 15 GB of headroom.
+
+6.10 Active UI state should not remain permanently SUCCESS or FAILED
+
+Persistent catalog history is useful, but an active-status card showing an old
+outcome makes the page look busy or broken indefinitely.
+
+Solution:
+
+  - Blink the green activity light only while queued/running.
+  - Show terminal SUCCESS or FAILED for two minutes.
+  - Return the active card to READY / waiting afterward.
+  - Keep the permanent result, error, timestamp, duration, and restore-tested
+    flag in the recovery-chain catalog and manifest.
+
+
+7. VERIFIED CHESSISM RESTORE REHEARSAL
+
+The corrected manual rehearsal successfully restored and validated:
+
+  Backup ID:          20261002-210620F_20261002-215105I
+  Started:            2026-10-02T22:45:57.150441Z
+  Completed:          2026-10-02T22:48:59.510654Z
+  Worker duration:    182.36 seconds
+  Protected bytes:    53,190,858,747
+  Restored DB bytes:  53,167,783,271
+  PostgreSQL:         15.18
+
+Validation proved:
+
+  - the restored database name was chessism_db;
+  - every required relation existed;
+  - the FEN primary key was present, unique, and valid;
+  - the redundant ix_fen_fen index was absent;
+  - durable database, ingestion-pipeline, and scored-position summaries existed
+    and satisfied their invariants;
+  - 799,003 games and 51,364,738 position appearances were represented;
+  - the catalog and exact manifest were marked restore_tested=true;
+  - the temporary restore volume returned to 0 bytes; and
+  - the owner lock was released.
+
+This is the standard Real Butler must reach for its own authoritative recovery
+set. Repository verification alone is not equivalent to this evidence.
+
+
+8. REAL BUTLER IMPLEMENTATION PLAN
+
+Phase A: measure and select native tools
+
+  1. Complete the authoritative-state inventory in section 4.
+  2. Measure current source bytes, expected daily change, first-full size,
+     retained-chain cost, and local restore-test requirement.
+  3. Confirm the 350 GB allocation and 150 GB protected free floor remain safe.
+  4. Select each engine's supported online backup mechanism. Use pgBackRest for
+     a large PostgreSQL store when appropriate; use native snapshot/export tools
+     for other authoritative stores.
+  5. Decide repository encryption before the first full. The shared ext4 disk
+     and Chessism repository are not themselves encrypted. Store any encryption
+     key outside this disk and outside source control.
+  6. Define the consistency procedure for multi-store backup sets.
+
+Phase B: create the isolated namespace
+
+Recommended layout, adjusted after inventory:
 
   /main-monitor-db-backups/real-butler/
       database/
-          <native repository>
+          pgbackrest/             if PostgreSQL uses pgBackRest
           manifests/
-      object-storage/          only if object/blob data is authoritative
-      backup-sets/             manifests joining multi-store recovery points
+      object-storage/             only for authoritative blobs
+      vector-or-search/           only if not safely rebuildable
+      backup-sets/                cross-store manifests
       backup-status.json
       backup-usage.json
+      restore-test-status.json
 
-Create or change ownership only inside /real-butler. Determine the container's
-real backup-user UID/GID instead of copying Chessism's PostgreSQL UID/GID 999.
-Mount the recovery root into containers as /backup-volume if convenient, but
-hard-code/validate the host UUID and use only /backup-volume/real-butler.
+Mount the recovery root into the relevant containers read-only except for the
+smallest Real Butler paths each writer needs. Validate the external UUID/marker
+from both API preflight and the actual worker service context.
 
-Phase C: backend job and coordination
+Phase C: manual backup job
 
-  1. Add a dedicated backup queue and a single-concurrency worker, separate
-     from normal ingestion/analysis/document workers.
-  2. Add an application-level lock with a unique Real Butler key and a safe
-     owner token so duplicate clicks cannot start two jobs.
-  3. Trigger backups only from an explicit manual UI action. Do not schedule a
-     backup at every startup.
-  4. Validate UUID marker, destination writability, quota, global free floor,
-     and estimated temporary-space requirement before starting.
-  5. Write status "running" atomically before the expensive operation.
-  6. Produce transactionally consistent native backup artifacts. Stage files
-     when the selected engine/tool requires promotion; never overwrite the last
-     verified recovery point with partial output.
-  7. Hash the manifest and any standalone artifacts. For native repositories,
-     use the tool's own repository/checksum verification too.
-  8. Run native verification for the exact created backup/recovery point. A
-     successful process exit alone is not enough to publish success.
-  9. Atomically update the catalog, usage, and status only after validation.
- 10. On cancellation or failure, record a sanitized error while retaining all
-     previously verified recovery points.
- 11. Retain at least two complete, verified recovery chains. Never expire the
-     previous good chain before the replacement has passed verification.
+  1. Add a dedicated single-concurrency backup queue and worker.
+  2. Add a Real Butler-specific owner-token lock.
+  3. Expose only a superuser POST endpoint and explicit UI button.
+  4. Preflight marker, writability, allocation, global floor, source health,
+     repository health, and projected space.
+  5. Atomically persist RUNNING before expensive work.
+  6. Create a transactionally consistent recovery set using native tools.
+  7. Verify the exact recovery point and every cross-store manifest component.
+  8. Publish catalog/manifest/status/usage atomically only after verification.
+  9. On failure, retain the last verified chain and sanitized diagnostics.
+ 10. Use native expiration and retain two complete verified full chains.
+ 11. Closing the browser must not stop the worker.
 
-Phase D: monitoring files
+Phase D: manual "Test backup" job (required)
 
-Write these files with a temporary sibling, fsync where appropriate, and atomic
-rename so Main Monitor never reads partially written JSON:
+  1. Add a second superuser button named "Test backup."
+  2. Never schedule it and never run it automatically after a backup.
+  3. Serialize it through the same backup lock/queue so repository writes and
+     restore reads do not overlap.
+  4. Select the exact latest verified complete recovery set and record its ID.
+  5. Preflight local free space using uncompressed restore size plus headroom.
+  6. Restore into dedicated disposable Docker volumes/directories, never the
+     live Real Butler volumes.
+  7. Start restored services only on private sockets/networks with no production
+     consumers and no externally exposed ports.
+  8. Preserve recovery-sensitive engine settings. Restrict CPU/concurrency at
+     the container/worker level rather than making the restore invalid.
+  9. Validate engine versions, schemas/migrations, required extensions, row
+     counts/invariants, object counts/hashes, relational-to-blob references,
+     authentication prerequisites, and representative application reads.
+ 10. Mark only the tested backup-set ID restore_tested=true.
+ 11. Stop disposable services and delete all temporary restored data in finally.
+ 12. Add narrowly scoped startup cleanup for interrupted rehearsal workspaces.
+ 13. Release the owner lock on success, failure, cancellation, enqueue failure,
+     and worker restart reconciliation.
 
-  /main-monitor-db-backups/real-butler/backup-status.json
-  /main-monitor-db-backups/real-butler/backup-usage.json
+Do not expose a button that replaces the live production database. The test
+button restores only into disposable storage. A real disaster recovery remains
+a documented, deliberate maintenance operation.
 
-Recommended status fields:
+Phase E: superuser UI
 
-  schema_version
-  app_id                         always "real-butler"
-  database_engine
-  status                         running|success|failed|unavailable|stale
-  trigger                        manual
-  backup_id
-  backup_type                    full|incremental|differential as applicable
-  started_at
-  completed_at
-  last_verified_at
-  restore_tested
-  artifact_count
-  total_bytes
-  bytes_added
-  destination_uuid
-  relative_path
-  manifest_sha256
-  error_code
-  error_message                  sanitized; no credentials or connection URL
-  detail
-
-The read-only status endpoint should read the persisted usage snapshot instead
-of recursively measuring 100+ GB on every UI poll. Perform an exact directory
-scan in the worker at controlled points during an on-demand backup, then persist
-the result to backup-usage.json.
-
-Phase E: UI
-
-Create a superuser-only Backups page showing:
+Show:
 
   - destination availability and UUID match;
-  - last verified backup ID, type, start/end time, and bytes added;
-  - current Real Butler usage versus 350 GB;
-  - current filesystem free bytes versus the 150 GB protected floor;
-  - restore-tested state;
-  - current job phase/progress and sanitized error information;
-  - one explicit "Backup database" or "Back up Real Butler" button.
+  - uncompressed protected size and compressed backup-subtree usage separately;
+  - Real Butler usage versus 350 GB;
+  - filesystem free bytes versus the 150 GB floor;
+  - latest verified backup ID/type/time/bytes added/storage mode;
+  - durable per-recovery-point restore-tested status;
+  - current backup or restore-test phase and sanitized detail;
+  - "Backup Real Butler" and "Test backup" buttons.
 
-The UI should enqueue work and poll lightweight job/status endpoints. It must
-not keep the HTTP request open for the duration of a large backup. Closing the
-browser must not stop the worker.
+UI lifecycle:
 
-Phase F: restore rehearsal
-
-Do not add a restore button to the production UI. Write a runbook and rehearse
-the newest backup in a disposable environment:
-
-  1. Select and verify the exact recovery point/backup set.
-  2. Stop disposable consumers and create empty destination stores.
-  3. Restore every authoritative component with the correct native tool.
-  4. Start dependencies before the app.
-  5. Run migrations only when the documented restored-version workflow calls
-     for them.
-  6. Validate critical row counts, object counts/hashes, referential integrity,
-     authentication, and representative application reads.
-  7. Record restore_tested=true only for the backup/version actually rehearsed.
-
-For a future Windows recovery host, plan to access this ext4 disk through a
-Linux environment such as WSL or a Linux recovery system. Do not assume native
-Windows applications can directly and safely consume the ext4 repository.
+  - disable both buttons while either operation owns the shared lock;
+  - show a blinking green light only while queued/running;
+  - poll lightweight Redis/status endpoints rather than scanning storage;
+  - regard application result.success=false as failure even when the queue job
+    itself has reached a terminal state;
+  - play the completion sound only on verified application-level success;
+  - show SUCCESS/FAILED briefly, then return the card to READY;
+  - retain permanent outcome details in the recovery history.
 
 
-8. POSTGRESQL/PGBACKREST RULES IF REAL BUTLER USES POSTGRESQL
+9. POSTGRESQL/PGBACKREST DETAILS IF APPLICABLE
 
-If inventory confirms PostgreSQL, adapt the Chessism architecture but create an
-entirely separate repository and stanza, for example:
+Suggested distinct namespace:
 
   stanza:       real-butler
   repository:   /backup-volume/real-butler/database/pgbackrest
   manifests:    /backup-volume/real-butler/database/manifests
 
-Recommended starting policy:
+Suggested initial policy after checking the installed version:
 
-  first backup:              full
-  normal backup:             standard file-level incremental
-  new full chain:            after 30 incrementals or 30 days
+  first backup:              full with block maps enabled
+  normal backup:             block incremental
+  new full chain:            30 incrementals, 30 days, or WAL gap
   retention:                 2 complete full chains
   compression:               zstd level 3
   repository bundles:        enabled
   process-max:               1 initially
 
-Do not advertise this as row-level incremental backup. Standard pgBackRest
-incrementals copy changed files/blocks according to its supported repository
-format. Chessism deliberately did not enable pgBackRest repo-block because that
-feature is marked beta in the installed 2.59.2 release.
+Use the valid global options compress-type=zst and compress-level=3. Do not
+invent repo1-compress-* settings. Do not invent application environment names
+beginning PGBACKREST_.
 
-Critical pgBackRest deployment lessons:
+The database and backup worker must agree on:
 
-  1. Do not let PostgreSQL invoke asynchronous archive-push before the stanza
-     and archive metadata exist. During Chessism deployment, doing so caused
-     pgBackRest 2.59.2 to quit/core-dump and PostgreSQL repeatedly restarted.
-  2. Use a guarded archive wrapper. It must validate the external UUID marker
-     and initialized stanza before calling pgBackRest. If the disk/stanza is
-     absent or archive-push fails, record a durable WAL-gap marker and preserve
-     database availability. The next manual backup must detect that gap and
-     force a new full chain.
-  3. Initialize the stanza while the guarded wrapper is active, then run
-     pgBackRest check before considering the repository healthy.
-  4. pgBackRest validates that archive_command text contains "pgbackrest".
-     Name the wrapper accordingly, as Chessism did with
-     /usr/local/bin/pgbackrest-chessism-archive-push.
-  5. Do not invent application environment variables beginning PGBACKREST_.
-     pgBackRest interprets that prefix as native options. Chessism therefore
-     uses CHESSISM_ARCHIVE_GAP_PATH rather than PGBACKREST_GAP_PATH. Use a
-     REAL_BUTLER_ prefix for Real Butler-specific settings.
-  6. With the installed pgBackRest version, the valid compression settings are
-     global compress-type=zst and compress-level=3. The attempted
-     repo1-compress-* names were invalid.
-  7. Give the backup worker read-only access to PostgreSQL PGDATA, shared access
-     to PostgreSQL's Unix socket, its own spool/lock/log volume, and write access
-     only to the Real Butler repository. Run it as the actual database OS user.
-  8. Validate the exact new recovery point after backup (for Chessism this is
-     pgbackrest verify --set=<backup-id>) before marking success.
-  9. The pgBackRest repository, stanza, spool, socket, WAL-gap marker, image,
-     status files, and Redis keys must all be distinct from Chessism's.
+  - pgBackRest version and config;
+  - stanza and pg1-path;
+  - PostgreSQL Unix socket access;
+  - repository and spool paths;
+  - guarded archive-push wrapper;
+  - the WAL-gap marker; and
+  - database OS ownership.
+
+Verify the exact created set, not merely the repository generally. A backup
+process exit of zero is necessary but not sufficient. A successful disposable
+restore remains separately required.
 
 
-9. CROSS-APPLICATION CONCURRENCY
+10. STATUS AND MANIFEST DATA
 
-Chessism currently has a Redis lock that coordinates its own database backup
-and FEN-analysis export. That lock does not coordinate with Real Butler because
-the applications do not share a lock namespace or necessarily a Redis server.
+Write status/usage/catalog files through a temporary sibling, flush, and atomic
+rename. Recommended status fields:
 
-Real Butler must implement its own one-job lock immediately. Until both projects
-support a shared host-level lock, do not intentionally run a large Chessism and
-Real Butler backup at the same time. Concurrent writers could cause disk I/O
-contention and make free-space projections stale.
+  schema_version
+  app_id                         always "real-butler"
+  database_engine
+  status                         ready|queued|running|success|failed|unavailable
+  trigger                        manual
+  operation                      backup|restore_test
+  job_id
+  backup_id
+  backup_type
+  storage_mode
+  started_at
+  completed_at
+  last_verified_at
+  restore_tested
+  restore_tested_at
+  restore_test_elapsed_seconds
+  database_bytes                 uncompressed protected size
+  repository_bytes
+  repository_delta_bytes
+  application_bytes
+  required_local_bytes           restore rehearsal
+  local_free_bytes
+  destination_uuid
+  relative_path
+  manifest_sha256
+  validation                     safe summary only
+  error_code
+  error_message                  sanitized
+  detail
 
-Recommended follow-up for both projects is a shared advisory filesystem lock,
-for example:
+Do not store passwords, tokens, full connection strings, encryption keys, or
+sensitive document data. Main Monitor must be able to read health without any
+database credentials.
+
+
+11. CROSS-APPLICATION CONCURRENCY
+
+Chessism's Redis lock coordinates only Chessism writers. Real Butler requires
+its own lock immediately. Until both applications implement a shared host-level
+advisory lock, do not intentionally run large Chessism and Real Butler backups
+or restore rehearsals at the same time. Shared disk I/O can make free-space
+projections stale and significantly slow both operations.
+
+A future shared lock could live at:
 
   /main-monitor-db-backups/.backup-write.lock
 
-Both backup workers would have to acquire it with flock for the entire write
-operation. Implementing that only in Real Butler is not sufficient; Chessism
-must also honor it. The shared lock has not been added yet, so do not document
-it as an existing guarantee.
+Both applications must honor it with flock for the entire write/read-intensive
+operation. Implementing it in only one project does not provide coordination.
 
 
-10. ACCEPTANCE CHECKLIST
+12. ACCEPTANCE CHECKLIST
 
-Do not consider the Real Butler feature complete until all of these pass:
+  [ ] The authoritative-state inventory is complete and reviewed.
+  [ ] Current byte usage is measured rather than copied from this handoff.
+  [ ] The mounted UUID and Real Butler marker match the expected UUID.
+  [ ] Missing/read-only/wrong storage reports unavailable without downtime or
+      a fallback write to the operating-system disk.
+  [ ] Timeshift and Chessism contents remain byte-for-byte outside scope.
+  [ ] Backup and restore-test operations are both manual-only.
+  [ ] Only one Real Butler backup-related operation can run at once.
+  [ ] Both jobs survive browser closure.
+  [ ] The 350 GB allocation, 150 GB free floor, and stop margin are enforced.
+  [ ] Failure cannot replace or expire the last verified recovery set.
+  [ ] Status, usage, catalogs, and manifests are atomic and contain no secrets.
+  [ ] Block-incremental behavior is verified if enabled.
+  [ ] WAL-gap detection forces a full chain.
+  [ ] Retention preserves two complete verified chains.
+  [ ] The UI never confuses a queue terminal state with application success.
+  [ ] Completion sound occurs only after verified success.
+  [ ] "Test backup" restores every authoritative component in isolation.
+  [ ] Recovery starts with WAL-compatible engine settings.
+  [ ] Critical schema/data/blob/application validations pass.
+  [ ] The exact recovery set is marked restore-tested with timestamp/duration.
+  [ ] Temporary restored data is 0 bytes after success and failure.
+  [ ] Startup removes only abandoned, narrowly named rehearsal workspaces.
+  [ ] All owner locks are released after every terminal path.
+  [ ] Main Monitor reads health without database credentials.
+  [ ] A separate disaster-recovery runbook documents replacing production.
 
-  [ ] The authoritative-state inventory is written and reviewed.
-  [ ] Current byte usage is measured, not copied from this historical note.
-  [ ] The mounted filesystem UUID matches the expected UUID.
-  [ ] An absent/unmounted/read-only disk produces "unavailable" without app or
-      database downtime and without writing a fallback backup to the OS disk.
-  [ ] Nothing under /main-monitor-db-backups/timeshift changes during tests.
-  [ ] Nothing under /main-monitor-db-backups/chessism changes during tests.
-  [ ] Only one Real Butler backup can run at once.
-  [ ] The operation is manual-only and survives browser closure.
-  [ ] The 350 GB app allocation and 150 GB global free floor are enforced.
-  [ ] A failed or canceled operation cannot replace the last verified backup.
-  [ ] Status and usage JSON are atomic, parseable, and contain no secrets.
-  [ ] Native artifact/repository verification passes for the created backup.
-  [ ] Retention preserves two complete verified recovery chains.
-  [ ] A disposable restore rehearsal succeeds for every authoritative store.
-  [ ] The restore runbook records exact commands, versions, ownership, ordering,
-      validation checks, and rollback/preservation steps.
-  [ ] Main Monitor can read backup health without database credentials.
 
+13. SAFE OPERATING RULES FOR THE IMPLEMENTING AGENT
 
-11. SAFE OPERATING RULES FOR THE IMPLEMENTING AGENT
+  - Inspect queues, locks, mounts, UUIDs, free space, and service state first.
+  - Never use recursive deletion/chown against the mount root, Timeshift,
+    Chessism, a device root, or an unresolved path.
+  - Never copy a live engine data directory as the backup mechanism.
+  - Never delete a verified recovery point to make room for an unverified one.
+  - Prefer targeted image builds and service recreation; avoid broad Compose
+    shutdowns while either application has active work.
+  - Keep production database and normal workers running during a disposable
+    restore rehearsal unless the selected engine explicitly requires otherwise.
+  - Validate cleanup by measuring the dedicated temporary volume afterward.
+  - Preserve the durable failure record even though the active UI later returns
+    to READY.
+  - Test the restored system, not only archive checksums.
 
-  - Inspect before changing permissions, Compose volumes, database startup
-    flags, or archive settings.
-  - Never run a recursive ownership or deletion command against
-    /main-monitor-db-backups, /timeshift, a device root, or an unresolved path.
-  - Never copy a live database data directory as the backup method.
-  - Never delete the previous verified recovery point to make room for an
-    unverified replacement.
-  - Avoid docker compose down when unrelated Real Butler or Chessism work is
-    active. Prefer targeted image builds and service recreation.
-  - Check live queues/jobs before restarting workers or databases.
-  - Keep credentials and encryption material out of Git, logs, manifests,
-    backup-status.json, and backup-usage.json.
-  - Recheck the disk UUID and Timeshift boundary before every host-level setup
-    action.
-
-The disk and directory are ready for Real Butler, but the implementation must
-begin with the Real Butler storage inventory. Do not copy Chessism's PostgreSQL
-configuration blindly: reuse its safety model and verified lessons while
-selecting native backup tools and recovery boundaries from Real Butler's actual
-architecture.
+The host storage boundary and a proven Chessism reference now exist. Real Butler
+implementation must begin with its own authoritative-state inventory and end
+only after a manually triggered, disposable restore test succeeds and cleans up
+all temporary data.

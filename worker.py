@@ -1,7 +1,8 @@
 # worker.py
 import os
 import constants
-from arq import create_pool 
+from arq import create_pool
+from arq.worker import func
 
 # --- Import the actual job functions from your operations ---
 # These are the tasks the worker is allowed to run.
@@ -28,6 +29,10 @@ from chessism_api.operations.player_deletion import run_delete_player_job
 from chessism_api.operations.coefficient_research import run_chessism_coefficient_experiment
 from chessism_api.operations.player_salience import run_player_salience_job
 from chessism_api.operations.database_backups import run_database_backup_job
+from chessism_api.operations.database_restore_tests import (
+    cleanup_stale_restore_workspaces,
+    run_database_restore_test_job,
+)
 
 # --- NEW: Import the database initializer ---
 from chessism_api.database.engine import init_db
@@ -48,6 +53,15 @@ async def startup(ctx):
     It initializes the database connection for this process.
     """
     print(f"--- [WORKER] Initializing database connection... ---", flush=True)
+    if WORKER_QUEUE == "backup_queue":
+        removed = cleanup_stale_restore_workspaces()
+        if removed:
+            print(
+                "--- [WORKER] Removed interrupted restore workspaces: "
+                + ", ".join(removed)
+                + " ---",
+                flush=True,
+            )
     if not constants.CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set for worker.")
     await init_db(constants.CONN_STRING)
@@ -96,7 +110,8 @@ class WorkerSettings:
         run_delete_player_job,
         run_chessism_coefficient_experiment,
         run_player_salience_job,
-        run_database_backup_job,
+        func(run_database_backup_job, timeout=7 * 24 * 60 * 60),
+        func(run_database_restore_test_job, timeout=7 * 24 * 60 * 60),
     ]
     
     redis_settings = redis_settings

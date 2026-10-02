@@ -5,8 +5,9 @@ import {
   formatNumber, getAnalysisProcessView, getPositionJobKey,
   getProgressSnapshot, getTrackedJobPhase, isAnalysisJobKey, isTrackedJobActive,
   isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
-  playCompletionSound, storeJobState, unlockCompletionAudio,
+  storeJobState,
 } from './positionPageSupport'
+import { playCompletionSound, unlockCompletionAudio } from '../../utils/completionAudio'
 import {
   deleteQueuedAnalysisJob,
   fetchActiveJobs,
@@ -72,6 +73,7 @@ export function usePositionsPage() {
   const [, setEtaRevision] = useState(0)
   const audioContextRef = useRef(null)
   const completedSoundJobsRef = useRef(new Set())
+  const ingestionSoundStateRef = useRef({ initialized: false, runId: null, status: null })
   const completionTimersRef = useRef(new Map())
   const fadeTimersRef = useRef(new Map())
   const jobStateRef = useRef(jobState)
@@ -507,11 +509,38 @@ export function usePositionsPage() {
     patch.completedAt = patch.completedAt || state.completedAt || Date.now()
     patch.fading = false
 
-    if (succeeded && jobId && !completedSoundJobsRef.current.has(jobId)) {
+    const isAutomaticIngestionStage = AUTOMATIC_PIPELINE_JOB_KEYS.has(key)
+    if (
+      succeeded && !isAutomaticIngestionStage && jobId &&
+      !completedSoundJobsRef.current.has(jobId)
+    ) {
       completedSoundJobsRef.current.add(jobId)
       playCompletionSound(audioContextRef)
     }
   }
+
+  useEffect(() => {
+    const runId = ingestionTiming?.run_id || null
+    const status = String(ingestionTiming?.status || '').toLowerCase() || null
+    if (!runId) return
+
+    const previous = ingestionSoundStateRef.current
+    if (!previous.initialized) {
+      ingestionSoundStateRef.current = { initialized: true, runId, status }
+      return
+    }
+
+    const completedNow = status === 'complete' && (
+      previous.runId !== runId || previous.status !== 'complete'
+    )
+    const completionKey = `ingestion:${runId}`
+    if (completedNow && !completedSoundJobsRef.current.has(completionKey)) {
+      completedSoundJobsRef.current.add(completionKey)
+      playCompletionSound(audioContextRef)
+    }
+
+    ingestionSoundStateRef.current = { initialized: true, runId, status }
+  }, [ingestionTiming?.run_id, ingestionTiming?.status])
 
   useEffect(() => {
     jobStateRef.current = jobState
