@@ -23,8 +23,11 @@
     --rail-width: 84px;
   }
 
-  .superadmin-logout {
+  .superadmin-account-controls {
     width: 56px;
+  }
+
+  .superadmin-logout {
     font-size: 11px;
   }
 
@@ -91,17 +94,11 @@
     padding: 10px;
   }
 
-  .superadmin-logout {
+  .superadmin-account-controls {
     left: 12px;
     right: 12px;
     bottom: 12px;
     width: auto;
-  }
-
-  .admin-online-status {
-    top: 10px;
-    right: 10px;
-    max-width: calc(100vw - 20px);
   }
 
   .rail-nav {
@@ -147,7 +144,7 @@
     flex-direction: column;
   }
 
-  .players-profile-section > .section-head {
+  .players-profile-navigation-section > .section-head {
     align-items: stretch;
     flex-direction: column;
   }

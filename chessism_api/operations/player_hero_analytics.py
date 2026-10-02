@@ -381,6 +381,7 @@ async def _missing_player_engine_summary_links(
     params: dict[str, Any],
     modes: tuple[str, ...] | None = None,
     require_efficiency: bool = False,
+    minimum_game_moves: int | None = None,
 ) -> tuple[int, ...]:
     mode_filter = (
         "gp.mode = ANY(CAST(:selected_modes AS text[]))"
@@ -389,7 +390,12 @@ async def _missing_player_engine_summary_links(
     query_params = {
         **params,
         **({"selected_modes": list(modes)} if modes else {}),
+        **({"minimum_game_moves": minimum_game_moves} if minimum_game_moves is not None else {}),
     }
+    minimum_moves_filter = (
+        "AND gp.n_moves > :minimum_game_moves"
+        if minimum_game_moves is not None else ""
+    )
     result = await session.execute(text(f"""
         SELECT gp.link
         FROM game_player gp
@@ -398,6 +404,7 @@ async def _missing_player_engine_summary_links(
           ON engine.game_link = gp.link AND engine.player_color = gp.color
         WHERE gp.player_name = :player
           AND {mode_filter}
+          {minimum_moves_filter}
           AND coverage.is_fully_analyzed
           AND coverage.total_positions > 0
           AND (

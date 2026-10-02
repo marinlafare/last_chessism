@@ -19,6 +19,9 @@ from chessism_api.operations.player_hero_analytics import (
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
 
 
+MINIMUM_ACCURACY_GAME_MOVES_EXCLUSIVE = 10
+
+
 def daily_efficiency_points(rows: list[Any]) -> list[list[str | float]]:
     return [
         [
@@ -64,6 +67,7 @@ async def get_player_daily_efficiency(
          AND gp.player_name = engine.player_name
         WHERE engine.player_name = :player
           AND gp.mode = ANY(CAST(:selected_modes AS text[]))
+          AND gp.n_moves > :minimum_game_moves
           AND engine.game_efficiency IS NOT NULL
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
@@ -74,12 +78,17 @@ async def get_player_daily_efficiency(
         scope = await _analytics_scope(
             session, player_name, "all", date_from, date_to, timezone_name
         )
-        params = {**scope.params(), "selected_modes": list(selected_modes)}
+        params = {
+            **scope.params(),
+            "selected_modes": list(selected_modes),
+            "minimum_game_moves": MINIMUM_ACCURACY_GAME_MOVES_EXCLUSIVE,
+        }
         missing_links = await _missing_player_engine_summary_links(
             session,
             params,
             selected_modes,
             require_efficiency=True,
+            minimum_game_moves=MINIMUM_ACCURACY_GAME_MOVES_EXCLUSIVE,
         )
 
     if missing_links:
@@ -94,6 +103,9 @@ async def get_player_daily_efficiency(
         "all" if selected_modes == CHART_MODES else ",".join(selected_modes)
     )
     payload["filters"]["modes"] = list(selected_modes)
+    payload["filters"]["minimum_game_moves_exclusive"] = (
+        MINIMUM_ACCURACY_GAME_MOVES_EXCLUSIVE
+    )
     return {
         **payload,
         "columns": ["date_game_init", "game_efficiency"],

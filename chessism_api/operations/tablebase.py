@@ -17,6 +17,7 @@ from chessism_api.database.ask_db import (
     refresh_scored_position_summary,
     refresh_scored_rating_summary,
 )
+from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Fen
 
@@ -498,6 +499,20 @@ async def run_tablebase_analysis_job(
             phase="complete",
             detail=f"Cached {result['solved']} exact Syzygy positions.",
         )
+        try:
+            salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+            if salience_jobs:
+                print(
+                    f"[TABLEBASE {job_id[:6]}] Queued {len(salience_jobs)} "
+                    "player salience refreshes.",
+                    flush=True,
+                )
+        except Exception as error:
+            print(
+                f"[TABLEBASE {job_id[:6]}] Could not queue player salience "
+                f"refreshes: {error!r}",
+                flush=True,
+            )
         return result
     except Exception as error:
         await _write_progress(

@@ -347,6 +347,12 @@ async def _demote_player(player_name: str) -> None:
             await session.execute(text(
                 "DELETE FROM main_character_mode_summary WHERE player_name = :player;"
             ), {"player": player_name})
+            await session.execute(text(
+                "DELETE FROM game_player_salience WHERE player_name = :player;"
+            ), {"player": player_name})
+            await session.execute(text(
+                "DELETE FROM player_salience_summary WHERE player_name = :player;"
+            ), {"player": player_name})
             updated = await session.execute(text("""
                 UPDATE player
                 SET

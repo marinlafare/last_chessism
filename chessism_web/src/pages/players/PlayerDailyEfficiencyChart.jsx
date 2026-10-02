@@ -219,6 +219,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
                     date: point.date,
                     label: point.date,
                     modes: selectedModes,
+                    minimum_game_moves_exclusive: 10,
                   })}
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' || event.key === ' ') {
@@ -228,6 +229,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
                         date: point.date,
                         label: point.date,
                         modes: selectedModes,
+                        minimum_game_moves_exclusive: 10,
                       })
                     }
                   }}

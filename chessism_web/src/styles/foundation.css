@@ -185,12 +185,18 @@ code {
   padding: 0 16px;
 }
 
-.superadmin-logout {
+.superadmin-account-controls {
   position: fixed;
   left: 14px;
   bottom: 18px;
   z-index: 50;
+  display: grid;
+  gap: 8px;
   width: calc(var(--rail-width) - 28px);
+}
+
+.superadmin-logout {
+  width: 100%;
   min-height: 40px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
@@ -206,14 +212,12 @@ code {
 }
 
 .admin-online-status {
-  position: fixed;
-  top: 16px;
-  right: 18px;
-  z-index: 60;
-  display: inline-flex;
+  display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
-  max-width: min(280px, calc(100vw - var(--rail-width) - 36px));
+  width: 100%;
+  max-width: 100%;
   min-height: 34px;
   padding: 7px 11px;
   border: 1px solid rgba(63, 208, 137, 0.32);

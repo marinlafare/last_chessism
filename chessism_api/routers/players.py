@@ -48,6 +48,7 @@ from chessism_api.operations.player_hero_analytics import (
 )
 from chessism_api.operations.player_hero_efficiency import get_player_daily_efficiency
 from chessism_api.operations.player_game_explorer import explore_player_games
+from chessism_api.operations.player_salience import get_player_daily_salience_accuracy
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -75,6 +76,7 @@ class ExploreGamesRequest(BaseModel):
     weekday: int | None = Field(None, ge=1, le=7)
     hour: int | None = Field(None, ge=0, le=23)
     analyzed_only: bool = True
+    minimum_game_moves_exclusive: int | None = Field(None, ge=0, le=1_000)
     limit: int = Field(30, ge=1, le=100)
     cursor: str | None = Field(None, max_length=512)
 
@@ -345,6 +347,25 @@ async def api_get_player_daily_efficiency(
     )
 
 
+@router.get("/{player_name}/analysis/measures/daily-salience-accuracy")
+async def api_get_player_daily_salience_accuracy(
+    player_name: str,
+    mode: str = Query("all", min_length=1, max_length=32),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    """Return salience-weighted Accuracy and effective games per local day."""
+    return await _hero_analytics_response(
+        get_player_daily_salience_accuracy,
+        player_name,
+        mode,
+        date_from,
+        date_to,
+        timezone,
+    )
+
+
 @router.post("/{player_name}/analysis/measures/range-games-score")
 async def api_get_player_range_game_scores(
     player_name: str,
@@ -378,6 +399,7 @@ async def api_explore_player_games(
         weekday=request.weekday,
         hour=request.hour,
         analyzed_only=request.analyzed_only,
+        minimum_game_moves_exclusive=request.minimum_game_moves_exclusive,
         limit=request.limit,
         cursor=request.cursor,
     )

@@ -248,6 +248,65 @@ class GamePlayerEngineSummary(Base):
     )
 
 
+class PlayerSalienceSummary(Base):
+    """State and corpus totals for one tracked player's salience projection."""
+
+    __tablename__ = "player_salience_summary"
+
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    status = Column(String(16), nullable=False, default="stale", server_default="stale")
+    source_game_count = Column(BigInteger, nullable=False, default=0, server_default="0")
+    source_position_count = Column(BigInteger, nullable=False, default=0, server_default="0")
+    effective_game_count = Column(Float, nullable=False, default=0, server_default="0")
+    error = Column(String, nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('stale', 'queued', 'running', 'ready', 'failed')",
+            name="player_salience_summary_status",
+        ),
+        Index("ix_player_salience_summary_status", "status", "player_name"),
+    )
+
+
+class GamePlayerSalience(Base):
+    """Corpus-relative information weight for one player in one game."""
+
+    __tablename__ = "game_player_salience"
+
+    game_link = Column(BigInteger, primary_key=True)
+    player_color = Column(String(5), primary_key=True)
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", ondelete="CASCADE"),
+        nullable=False,
+    )
+    salience = Column(Float, nullable=False)
+    position_count = Column(Integer, nullable=False)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["game_link", "player_color"],
+            ["game_player.link", "game_player.color"],
+            ondelete="CASCADE",
+            name="fk_game_player_salience_game_player",
+        ),
+        CheckConstraint(
+            "salience > 0 AND salience <= 1",
+            name="game_player_salience_range",
+        ),
+        CheckConstraint(
+            "position_count > 0",
+            name="game_player_salience_position_count",
+        ),
+        Index("ix_game_player_salience_player_game", "player_name", "game_link"),
+    )
+
+
 class ScoredPositionSummary(Base):
     __tablename__ = "scored_position_summary"
 

@@ -21,6 +21,13 @@ from chessism_api.operations.coefficient_research import (
     normalized_config,
     utc_now,
 )
+from chessism_api.operations.player_salience import (
+    enqueue_player_salience,
+    enqueue_stale_player_salience_jobs,
+    get_player_salience_report,
+    get_salience_overview,
+    seed_player_salience_summaries,
+)
 from chessism_api.redis_client import get_redis_pool
 
 
@@ -88,6 +95,59 @@ async def coefficient_overview(
         "safe_to_start": not analysis_active,
     }
     return payload
+
+
+@router.get("/salience")
+async def salience_overview(
+    limit: int = Query(100, ge=1, le=1_000),
+) -> dict:
+    """Return persistent projection state for tracked players."""
+    return await get_salience_overview(limit)
+
+
+@router.post("/salience/backfill", status_code=202)
+async def start_salience_backfill(
+    limit: int = Query(25, ge=1, le=100),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> dict:
+    """Seed tracked players and queue a bounded first salience pass."""
+    if await _analysis_jobs_active(redis):
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for the Stockfish analysis queue to become idle before starting salience backfill.",
+        )
+    seeded = await seed_player_salience_summaries()
+    jobs = await enqueue_stale_player_salience_jobs(redis, limit=limit)
+    return {"seeded_players": seeded, "queued": jobs}
+
+
+@router.get("/salience/players/{player_name}")
+async def salience_player_report(
+    player_name: str,
+    game_limit: int = Query(10, ge=1, le=50),
+) -> dict:
+    """Return one player's corpus and salience distribution report."""
+    try:
+        return await get_player_salience_report(player_name, game_limit=game_limit)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/salience/players/{player_name}", status_code=202)
+async def start_player_salience(
+    player_name: str,
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> dict:
+    """Queue a forced corpus refresh for one tracked player."""
+    if await _analysis_jobs_active(redis):
+        raise HTTPException(
+            status_code=409,
+            detail="Wait for the Stockfish analysis queue to become idle before calculating salience.",
+        )
+    try:
+        return await enqueue_player_salience(redis, player_name, force=True)
+    except ValueError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 @router.get("/coefficient/experiments")

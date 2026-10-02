@@ -28,6 +28,7 @@ from chessism_api.database.ask_db import (
     refresh_scored_rating_summary
 )
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
+from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
 
 
 FEN_PIPELINE_COORDINATION_KEY = "chessism:automatic_fen_pipeline"
@@ -880,3 +881,18 @@ async def run_fen_pipeline(
                         f"{tablebase_job['job_id']} for {tablebase_job['pending']} positions.",
                         flush=True,
                     )
+                elif tablebase_job["status"] == "up_to_date":
+                    try:
+                        salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+                        if salience_jobs:
+                            print(
+                                f"[FEN PIPELINE {job_id[:6]}] Queued "
+                                f"{len(salience_jobs)} player salience refreshes.",
+                                flush=True,
+                            )
+                    except Exception as error:
+                        print(
+                            f"[FEN PIPELINE {job_id[:6]}] Could not queue player "
+                            f"salience refreshes: {error!r}",
+                            flush=True,
+                        )

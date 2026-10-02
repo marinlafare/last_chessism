@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
 import './players/players.css'
-import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
 import PlayerAnalysisWorkspace from './players/PlayerAnalysisWorkspace'
 import { formatNumber } from '../utils/formatters'
@@ -369,30 +368,13 @@ function Players() {
         .replace(',', '')
         .toUpperCase()
     : null
-  const latestRating = Number(playerPositionStats?.latest_rating || 0)
-  const latestRatingMode = String(playerPositionStats?.latest_rating_mode || '').trim().toLowerCase()
-  const latestRatingDate = playerPositionStats?.latest_rating_at
-    ? new Date(playerPositionStats.latest_rating_at)
-        .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit', timeZone: 'UTC' })
-        .replace(',', '')
-        .toUpperCase()
-    : ''
-  const latestRatingDisplay = latestRating > 0
-    ? [formatNumber(latestRating), latestRatingMode, latestRatingDate].filter(Boolean).join(' · ')
-    : null
-  const profileRows = profile
-    ? [
-        ['Player', profile.player_name || 'N/A'],
-        ['Name', profile.name || 'N/A'],
-        ['Country', profile.country || 'N/A'],
-        ['Last rating', latestRatingDisplay || 'N/A'],
-        ['Joined', joinedDisplay || 'N/A'],
-        ['Status', profile.status || 'N/A']
-      ]
-    : []
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
   const profileAvatar = String(profile?.avatar || '').trim()
   const profileInitial = String(profile?.player_name || '?').trim().charAt(0).toUpperCase() || '?'
+  const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'
+  const followersDisplay = profile?.followers === null || profile?.followers === undefined
+    ? 'N/A'
+    : formatNumber(profile.followers)
   const totalPlayerGames = Number(playerPositionStats?.total_games || 0)
   const analyzedPlayerGames = Number(playerPositionStats?.analyzed_games || 0)
   const totalPlayerFens = Number(playerPositionStats?.total_fens ?? playerPositionStats?.total_positions ?? 0)
@@ -415,13 +397,12 @@ function Players() {
     <div className="page-frame">
       <SideRail />
       <div className="home-shell">
-        <Header />
         <main className="games-main players-starting-point">
           {message ? <p className="result-line">{message}</p> : null}
           {error ? <p className="result-line">{error}</p> : null}
 
           <section className="players-top-grid">
-            <div className="games-mode-detail players-profile-section">
+            <div className="games-mode-detail players-profile-navigation-section">
               <div className="section-head">
                 <div className="players-title-navigation">
                   <button
@@ -503,6 +484,9 @@ function Players() {
                   </button>
                 </div>
               </div>
+            </div>
+
+            <div className="games-mode-detail players-profile-section">
               <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
               <div className="players-profile-layout">
@@ -513,23 +497,32 @@ function Players() {
                     <span className="players-profile-avatar-fallback">{profileInitial}</span>
                   )}
                 </div>
-                {profileRows.length ? (
+                {profile ? (
                   <>
                     <div className="players-profile-details">
-                      <div className="profile-grid">
-                        {profileRows.map(([label, value]) => (
-                          <div key={label} className="profile-item">
+                      <div className="players-profile-metadata">
+                        {[
+                          ['Player', profile.player_name || 'N/A'],
+                          ['Country', countryCode],
+                          ['Name', profile.name || 'N/A'],
+                          ['Joined', joinedDisplay || 'N/A'],
+                        ].map(([label, value]) => (
+                          <div className="profile-item" key={label}>
                             <span>{label}</span>
                             <strong>{String(value)}</strong>
                           </div>
                         ))}
-                      </div>
-                      <div className="players-hours-text">
-                        {modeActivity.map(({ mode, games, hours }) => (
-                          <p key={mode}>
-                            <strong>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs |
-                          </p>
-                        ))}
+                        <div className="players-followers-card">
+                          <span>Followers</span>
+                          <strong>{followersDisplay}</strong>
+                        </div>
+                        <div className="players-mode-activity-row">
+                          {modeActivity.map(({ mode, games, hours }) => (
+                            <p className="players-mode-activity" key={mode}>
+                              <strong>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs
+                            </p>
+                          ))}
+                        </div>
                       </div>
                     </div>
                     <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
@@ -565,7 +558,7 @@ function Players() {
 
           <PlayerAnalysisWorkspace
             playerName={activePlayer}
-            disabled={!profileRows.length || loading || Boolean(profile?.deleted_at)}
+            disabled={!profile || loading || Boolean(profile?.deleted_at)}
           />
           {deletePreview ? (
             <div className="player-delete-backdrop" onClick={closeDeletePreview}>

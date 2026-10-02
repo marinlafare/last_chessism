@@ -160,6 +160,23 @@ services:
       db:
         condition: service_healthy
 
+  worker-salience:
+    build: .
+    image: chessism-api:latest
+    command: arq worker.WorkerSettings
+    cpus: "0.50"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=salience_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
   fen-worker-1:
     build: .
     image: chessism-api:latest

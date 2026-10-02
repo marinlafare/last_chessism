@@ -146,6 +146,7 @@ async def explore_player_games(
     weekday: int | None = None,
     hour: int | None = None,
     analyzed_only: bool = True,
+    minimum_game_moves_exclusive: int | None = None,
     limit: int = 30,
     cursor: str | None = None,
 ) -> dict[str, Any]:
@@ -167,13 +168,19 @@ async def explore_player_games(
             "cursor_time": cursor_time,
             "cursor_game_id": cursor_game_id,
             "analyzed_only": analyzed_only,
+            "minimum_game_moves_exclusive": minimum_game_moves_exclusive,
             "limit": limit + 1,
         }
+        minimum_moves_filter = (
+            "AND gp.n_moves > :minimum_game_moves_exclusive"
+            if minimum_game_moves_exclusive is not None else ""
+        )
         base_where = f"""
             gp.player_name = :player
             AND gp.mode = ANY(CAST(:modes AS text[]))
             AND gp.played_at IS NOT NULL
             AND (NOT :analyzed_only OR engine.game_efficiency IS NOT NULL)
+            {minimum_moves_filter}
             AND {selection_sql}
         """
         summary_result = await session.execute(text(f"""
@@ -236,6 +243,7 @@ async def explore_player_games(
             "label": label,
             "modes": selected_modes,
             "analyzed_only": analyzed_only,
+            "minimum_game_moves_exclusive": minimum_game_moves_exclusive,
         },
         "summary": {
             "games": int(summary["games"] or 0),

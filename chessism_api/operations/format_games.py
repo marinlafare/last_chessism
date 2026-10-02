@@ -34,6 +34,7 @@ from chessism_api.database.ask_db import (
 from chessism_api.operations.check_player_in_db import (
     get_only_players_not_in_db
 )
+from chessism_api.operations.player_salience import mark_player_salience_stale
 # ---
 
 FORMAT_CHUNK_SIZE = 500
@@ -118,7 +119,8 @@ async def insert_new_data(
     game_openings_list,
     no_move_games_list,
     player_name: str,
-    affected_months: Set[Tuple[int, int]]
+    affected_months: Set[Tuple[int, int]],
+    affected_players: Set[str],
 ):
     """
     Inserts formatted game, move, and month data into the database in the correct order
@@ -173,6 +175,13 @@ async def insert_new_data(
 
             await _sync_player_month_counts_with_session(session, player_name, affected_months)
             print(f"Synced {len(affected_months)} month ledger rows.")
+
+            if games_list:
+                stale_players = await mark_player_salience_stale(
+                    affected_players,
+                    session=session,
+                )
+                print(f"Marked {stale_players} tracked player salience projections stale.")
 
             await session.commit()
         except Exception:
@@ -756,7 +765,8 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
         game_openings_list_for_db,
         no_move_games_list_for_db,
         player_name,
-        affected_months
+        affected_months,
+        affected_players,
     )
     print(f'Inserted games, moves, and months for {len(games_list_for_db)} games in: {time.time()-start_insert:.2f} seconds')
     if games_list_for_db:

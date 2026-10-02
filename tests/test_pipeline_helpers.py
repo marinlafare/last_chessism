@@ -29,6 +29,7 @@ from chessism_api.operations import (
     player_game_explorer,
     player_hero_analytics,
     player_hero_efficiency,
+    player_salience,
     tablebase,
 )
 from chessism_api.operations.player_timezone import resolve_player_timezone
@@ -228,6 +229,38 @@ class FenAggregationTests(unittest.TestCase):
         self.assertEqual(
             fens.count_fen_pieces("8/8/8/3k4/8/8/3Q4/3K4 w - -"),
             3,
+        )
+
+
+class PlayerSalienceTests(unittest.TestCase):
+    def test_depth_weight_reaches_full_strength_at_ply_sixteen(self):
+        self.assertEqual(player_salience.position_depth_weight(0), 0.25)
+        self.assertAlmostEqual(player_salience.position_depth_weight(8), 0.625)
+        self.assertEqual(player_salience.position_depth_weight(16), 1.0)
+        self.assertEqual(player_salience.position_depth_weight(80), 1.0)
+
+    def test_weighted_accuracy_deduplicates_repeated_game_mass(self):
+        rows = [
+            *({"accuracy": 100.0, "salience": 0.05} for _ in range(20)),
+            {"accuracy": 60.0, "salience": 1.0},
+        ]
+
+        self.assertAlmostEqual(player_salience.salience_weighted_accuracy(rows), 80.0)
+
+    def test_salience_schema_separates_player_state_from_game_values(self):
+        summary_columns = set(models.PlayerSalienceSummary.__table__.columns.keys())
+        game_columns = set(models.GamePlayerSalience.__table__.columns.keys())
+
+        self.assertEqual(
+            summary_columns,
+            {
+                "player_name", "status", "source_game_count",
+                "source_position_count", "effective_game_count", "error",
+            },
+        )
+        self.assertEqual(
+            game_columns,
+            {"game_link", "player_color", "player_name", "salience", "position_count"},
         )
 
 
@@ -608,6 +641,46 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
             batch_size=1_000,
             num_workers=3,
         )
+
+    async def test_drained_fen_and_tablebase_pipeline_queues_salience(self):
+        redis = MagicMock()
+        context = {"redis": redis, "job_id": "fen-job"}
+
+        with (
+            patch.object(fens, "_run_fen_pipeline", new_callable=AsyncMock),
+            patch.object(fens, "_write_fen_pipeline_progress", new_callable=AsyncMock),
+            patch.object(fens, "_release_fen_pipeline_coordination", new_callable=AsyncMock),
+            patch.object(
+                fens,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "up_to_date",
+                    "job_id": None,
+                    "pending_games": 0,
+                },
+            ),
+            patch.object(
+                fens,
+                "ensure_tablebase_analysis_enqueued",
+                new_callable=AsyncMock,
+                return_value={"status": "up_to_date", "job_id": None, "pending": 0},
+            ),
+            patch.object(
+                fens,
+                "enqueue_stale_player_salience_jobs",
+                new_callable=AsyncMock,
+                return_value=[{"player_name": "hikaru", "status": "queued"}],
+            ) as enqueue_salience,
+        ):
+            await fens.run_fen_pipeline(
+                context,
+                total_games_to_process=10,
+                batch_size=1_000,
+                num_workers=3,
+            )
+
+        enqueue_salience.assert_awaited_once_with(redis)
 
 
 class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
@@ -1559,6 +1632,8 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
             mutation_result,
             mutation_result,
             mutation_result,
+            mutation_result,
+            mutation_result,
             updated_result,
         ]
 
@@ -1573,6 +1648,8 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("UPDATE player", sql)
         self.assertIn("joined = 0", sql)
         self.assertIn("deleted_at = CURRENT_TIMESTAMP", sql)
+        self.assertIn("DELETE FROM game_player_salience", sql)
+        self.assertIn("DELETE FROM player_salience_summary", sql)
         self.assertNotIn("DELETE FROM player WHERE", sql)
         session.commit.assert_awaited_once()
 

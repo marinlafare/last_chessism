@@ -208,10 +208,12 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
       <div className="app-route-transition" key={locationKey}>
         {page}
       </div>
-      <AdminOnlineStatus account={account} />
-      <button className="superadmin-logout" type="button" onClick={onLogout}>
-        Log out
-      </button>
+      <div className="superadmin-account-controls">
+        <AdminOnlineStatus account={account} />
+        <button className="superadmin-logout" type="button" onClick={onLogout}>
+          Log out
+        </button>
+      </div>
     </>
   )
 }

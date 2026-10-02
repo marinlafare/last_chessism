@@ -13,7 +13,7 @@ router = APIRouter()
 
 KNOWN_QUEUES = (
     "pipeline_queue", "fen_queue", "analysis_queue", "games_queue",
-    "research_queue", "arq:queue",
+    "research_queue", "salience_queue", "arq:queue",
 )
 ANALYSIS_JOB_FUNCTIONS = {
     "run_analysis_job",

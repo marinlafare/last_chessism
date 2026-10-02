@@ -132,9 +132,10 @@
   color: var(--danger);
 }
 
-.players-profile-section > .section-head {
+.players-profile-navigation-section > .section-head {
   align-items: center;
   flex-flow: row nowrap;
+  margin-bottom: 0;
 }
 
 .players-profile-actions {
@@ -352,24 +353,64 @@
   color: var(--accent);
 }
 
-.players-hours-text {
+.players-profile-metadata {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-height: 100%;
+}
+
+.players-mode-activity-row {
+  display: grid;
+  grid-column: 1 / -1;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 4px 12px;
+  gap: 12px;
+}
+
+.players-mode-activity {
   margin: 0;
   color: var(--muted);
   font-size: 13px;
-}
-
-.players-hours-text p {
-  margin: 0;
   text-align: center;
   white-space: nowrap;
 }
 
-.players-hours-text strong {
+.players-mode-activity strong {
   color: var(--text);
   font-weight: 800;
+}
+
+.players-followers-card {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: auto auto;
+  place-content: center;
+  align-items: baseline;
+  gap: 12px;
+  min-width: 0;
+  min-height: 74px;
+  padding: 12px 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  text-align: center;
+}
+
+.players-followers-card span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.players-followers-card > strong {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 28px;
+  text-overflow: ellipsis;
 }
 
 .players-profile-avatar-box,
@@ -406,10 +447,6 @@
   font-weight: 800;
 }
 
-.players-profile-details .profile-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
 .profile-item {
   display: grid;
   align-content: center;
@@ -429,8 +466,7 @@
 
 .players-profile-details {
   display: grid;
-  align-content: start;
-  gap: 10px;
+  align-content: stretch;
   min-width: 0;
 }
 
