@@ -14,9 +14,9 @@ import {
   fetchAnalysisProcesses,
   fetchCoverage,
   fetchGameAnalysisOverview,
+  fetchLatestIngestionTiming,
   fetchPlayerAnalysisCounts,
   fetchPositionJobStatus,
-  fetchRemainingFenGames,
   inspectPlayerGameScope,
   previewPlayerGameAnalysis,
   queueAnalysisLoop,
@@ -25,12 +25,14 @@ import {
   queuePlayerGameAnalysis,
 } from './positionsApi'
 
+const AUTOMATIC_PIPELINE_JOB_KEYS = new Set(['gameParsing', 'fen', 'tablebase'])
+
 export function usePositionsPage() {
   const [coverage, setCoverage] = useState(null)
   const [coverageError, setCoverageError] = useState('')
   const [gameAnalysisOverview, setGameAnalysisOverview] = useState(null)
   const [analysisCounts, setAnalysisCounts] = useState(null)
-  const [remainingFenGames, setRemainingFenGames] = useState(null)
+  const [ingestionTiming, setIngestionTiming] = useState(null)
   const [globalJob, setGlobalJob] = useState({ totalFens: 100, batchSize: MAX_ANALYSIS_BATCH_SIZE })
   const [playerJob, setPlayerJob] = useState({
     playerName: '',
@@ -246,13 +248,6 @@ export function usePositionsPage() {
     }
   }
 
-  const loadFenRemaining = async () => {
-    const payload = await fetchRemainingFenGames()
-    const remaining = Number(payload.remaining_games || 0)
-    setRemainingFenGames(remaining)
-    return remaining
-  }
-
   const loadAnalysisCounts = async () => {
     const payload = await fetchAnalysisCounts()
     setAnalysisCounts(payload)
@@ -263,6 +258,11 @@ export function usePositionsPage() {
     const payload = await fetchGameAnalysisOverview()
     setGameAnalysisOverview(payload)
     return payload
+  }
+
+  const loadIngestionTiming = async () => {
+    const payload = await fetchLatestIngestionTiming()
+    setIngestionTiming(payload?.run || null)
   }
 
   const loadAnalysisProcesses = async () => {
@@ -292,8 +292,18 @@ export function usePositionsPage() {
         })
 
         if (isTrackedJobActive(next[key]) && next[key]?.jobId !== job.job_id) {
-          storeJobState(next)
-          return next
+          const incomingUpdatedAt = Number(progress.updated_at || 0)
+          const trackedProgress = next[key]?.status?.progress || next[key]?.progress || {}
+          const trackedUpdatedAt = Number(trackedProgress.updated_at || 0)
+          const newerAutomaticJob = (
+            AUTOMATIC_PIPELINE_JOB_KEYS.has(key) &&
+            incomingUpdatedAt > trackedUpdatedAt
+          )
+
+          if (!newerAutomaticJob) {
+            storeJobState(next)
+            return next
+          }
         }
 
         const target = Math.max(1, Number(progress.total || 1))
@@ -337,8 +347,8 @@ export function usePositionsPage() {
   useEffect(() => {
     loadCoverage()
     loadGameAnalysisOverview().catch(() => {})
-    loadFenRemaining().catch(() => {})
     loadAnalysisCounts().catch(() => {})
+    loadIngestionTiming().catch(() => {})
     hydrateActiveJobs().catch(() => {})
     loadAnalysisProcesses().catch(() => {})
   }, [])
@@ -346,8 +356,8 @@ export function usePositionsPage() {
   useEffect(() => {
     const timer = window.setInterval(() => {
       loadAnalysisProcesses().catch(() => {})
-      loadFenRemaining().catch(() => {})
       hydrateActiveJobs().catch(() => {})
+      loadIngestionTiming().catch(() => {})
     }, 3000)
     return () => window.clearInterval(timer)
   }, [])
@@ -584,13 +594,11 @@ export function usePositionsPage() {
             const patch = { status, error: '' }
 
             if (key === 'fen') {
-              const remaining = await loadFenRemaining()
               const serverProgress = status.progress
               if (serverProgress) {
                 const targetGames = Math.max(1, Number(serverProgress.total || 1))
                 const extracted = Math.min(targetGames, Math.max(0, Number(serverProgress.processed || 0)))
                 patch.progress = {
-                  remaining,
                   extracted,
                   target: targetGames,
                   percent: Math.min(100, Math.round((extracted / targetGames) * 100)),
@@ -629,7 +637,14 @@ export function usePositionsPage() {
               await loadCoverage()
               await loadAnalysisCounts()
               await loadGameAnalysisOverview().catch(() => {})
+              if (key === 'gameParsing') {
+                clearJobState(key)
+                return
+              }
               handleCompletedJob(key, state, status, patch)
+            } else if (phase === 'failed' || phase === 'unavailable') {
+              patch.error = status.progress?.detail || 'Automatic pipeline stage failed.'
+              patch.fading = false
             }
             updateJobState(key, patch)
           } catch (err) {
@@ -936,8 +951,9 @@ export function usePositionsPage() {
     handleDeleteAnalysisProcess, handleDeleteQueuedAnalysis, handleGlobalAnalysis,
     handleInspectPlayer, handleInspectPlayerGameScope, handlePlayerAnalysis,
     handlePreviewPlayerGameAnalysis, jobState, loopJob, loopJobIsQueueing,
+    ingestionTiming,
     pendingPositions, playerGameAnalysis, playerGamePreview,
-    playerGamePreviewTotalSeconds, playerInspection, playerJob, remainingFenGames,
+    playerGamePreviewTotalSeconds, playerInspection, playerJob,
     scoredPositions, setGlobalJob, setJobCardRef, setLoopJob,
     setPlayerGameAnalysis, setPlayerInspection, setPlayerJob,
   }

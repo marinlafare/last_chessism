@@ -51,6 +51,8 @@ class GameCreateData(BaseModel):
     time_elapsed: float # Matches the Float in models.py
     n_moves: int
     fens_done: bool
+    rules: str = "chess"
+    initial_setup: Optional[str] = None
 
 # --- Pydantic model for creating a Move (used in operations/format_games.py) ---
 class MoveCreateData(BaseModel):

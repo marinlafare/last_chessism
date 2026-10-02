@@ -80,6 +80,23 @@ class Game(Base):
     
     n_moves = Column("n_moves", Integer, nullable=False)
     fens_done = Column('fens_done', Boolean, nullable = False)
+    rules = Column(
+        "rules",
+        String(32),
+        nullable=False,
+        default="chess",
+        server_default="chess",
+    )
+    initial_setup = Column("initial_setup", String(128), nullable=True)
+    # A separate claim flag keeps concurrent extraction workers from selecting
+    # the same game without treating an uncommitted extraction as complete.
+    fens_processing = Column(
+        "fens_processing",
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+    )
     
     white_player = relationship(Player, foreign_keys=[white])
     black_player = relationship(Player, foreign_keys=[black])
@@ -505,6 +522,52 @@ class AnalysisTime(Base):
     elapsed_ms = Column(Float, nullable=False)
 
 
+class IngestionPipelineRun(Base):
+    """One complete player/manual ingestion from parsing through tablebase."""
+
+    __tablename__ = "ingestion_pipeline_run"
+
+    run_id = Column(String(36), primary_key=True)
+    player_name = Column(String, nullable=True, index=True)
+    trigger = Column(String(32), nullable=False, index=True)
+    status = Column(String(16), nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    elapsed_ms = Column(Float, nullable=True)
+    last_error = Column(String, nullable=True)
+
+
+class IngestionPipelineStageTiming(Base):
+    """Measured execution of one stage; stages may repeat in follow-up passes."""
+
+    __tablename__ = "ingestion_pipeline_stage_timing"
+
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    run_id = Column(
+        String(36),
+        ForeignKey("ingestion_pipeline_run.run_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    stage = Column(String(32), nullable=False, index=True)
+    status = Column(String(16), nullable=False, index=True)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    elapsed_ms = Column(Float, nullable=True)
+    processed = Column(BigInteger, nullable=False, default=0, server_default="0")
+    total = Column(BigInteger, nullable=False, default=0, server_default="0")
+    detail = Column(String, nullable=True)
+
+    __table_args__ = (
+        Index(
+            "ix_ingestion_stage_run_stage_started",
+            "run_id",
+            "stage",
+            "started_at",
+        ),
+    )
+
+
 class PlayerStats(Base):
     __tablename__ = "player_stats"
     
@@ -604,6 +667,36 @@ class DatabaseSummary(Base):
 
     __table_args__ = (
         CheckConstraint("id = 1", name="database_summary_singleton"),
+    )
+
+
+class FenPipelineSummary(Base):
+    """Cheap durable coverage counters for the automatic FEN pipeline UI."""
+
+    __tablename__ = "fen_pipeline_summary"
+
+    id = Column(Integer, primary_key=True, default=1, server_default="1")
+    parsed_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    analyzable_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    excluded_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    fen_extracted_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    tablebase_marked_games = Column(BigInteger, nullable=False, default=0, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("id = 1", name="fen_pipeline_summary_singleton"),
+        CheckConstraint(
+            "parsed_games >= 0 AND fen_extracted_games >= 0 AND tablebase_marked_games >= 0",
+            name="fen_pipeline_summary_nonnegative",
+        ),
+        CheckConstraint(
+            "fen_extracted_games <= parsed_games",
+            name="fen_pipeline_summary_extracted_lte_parsed",
+        ),
+        CheckConstraint(
+            "tablebase_marked_games <= fen_extracted_games",
+            name="fen_pipeline_summary_tablebase_lte_extracted",
+        ),
     )
 
 

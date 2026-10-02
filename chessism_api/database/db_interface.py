@@ -145,7 +145,10 @@ class DBInterface:
                 stmt = pg_insert(self.db_class).on_conflict_do_update(
                     index_elements=[self.db_class.fen],
                     set_={
-                        'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
+                        # Game/FEN associations are the source of truth for this
+                        # counter. The extraction coordinator refreshes affected
+                        # rows after association commits, making retries safe.
+                        'n_games': self.db_class.n_games,
                         'piece_count': func.coalesce(
                             self.db_class.piece_count,
                             pg_insert(self.db_class).excluded.piece_count,

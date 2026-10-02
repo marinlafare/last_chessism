@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
-sqlalchemy
+sqlalchemy[asyncio]
 asyncpg
 pydantic
 httpx

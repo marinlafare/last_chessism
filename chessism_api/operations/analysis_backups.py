@@ -17,6 +17,15 @@ from chessism_api.database.ask_db import (
 )
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Fen, FenContinuation
+from chessism_api.operations.backup_coordination import (
+    ensure_backup_reservation,
+    release_backup,
+)
+from chessism_api.operations.database_backups import (
+    record_application_usage,
+    require_storage,
+    storage_snapshot,
+)
 
 
 BACKUP_FORMAT = "chessism-fen-analysis"
@@ -24,11 +33,11 @@ BACKUP_VERSION = 2
 SUPPORTED_BACKUP_VERSIONS = {1, 2}
 BACKUP_DIR = Path(os.getenv(
     "FEN_ANALYSIS_BACKUP_DIR",
-    "/home/jon/Desktop/workshop/db_backups/chessism",
+    "/backup-volume/chessism/fen-analysis",
 ))
 BACKUP_DISPLAY_DIR = os.getenv(
     "FEN_ANALYSIS_BACKUP_DISPLAY_DIR",
-    "/home/jon/Desktop/workshop/db_backups/chessism",
+    "/main-monitor-db-backups/chessism/fen-analysis",
 )
 BACKUP_FILE_PATTERN = re.compile(
     r"^fen-analysis-\d{8}T\d{6}_\d{6}Z\.jsonl\.gz$"
@@ -36,6 +45,18 @@ BACKUP_FILE_PATTERN = re.compile(
 RESTORE_BATCH_SIZE = 1_000
 PROGRESS_INTERVAL = 1_000
 PROGRESS_TTL_SECONDS = 60 * 60 * 24
+
+
+def _require_external_backup_volume(*, for_write: bool = False) -> None:
+    if for_write:
+        try:
+            require_storage(include_app_usage=True)
+        except RuntimeError as error:
+            raise OSError(str(error)) from error
+        return
+    storage = storage_snapshot(include_app_usage=False)
+    if not storage.get("available"):
+        raise OSError(str(storage.get("error") or "External backup storage is unavailable."))
 
 
 async def _write_progress(
@@ -357,6 +378,7 @@ async def _update_fen_analysis_backup(
         "mode": "updated",
     }
     _atomic_write_json(_metadata_path(backup_path), result)
+    record_application_usage()
 
     await _write_progress(
         ctx,
@@ -378,6 +400,7 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
     """Create the first analysis snapshot, then incrementally update that snapshot."""
     job_id = str(ctx.get("job_id") or "fen-analysis-backup")
     created_at = datetime.now(timezone.utc)
+    _require_external_backup_volume(for_write=True)
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
 
     incremental_target = _latest_incremental_backup()
@@ -484,6 +507,7 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
     }
     metadata_path = _metadata_path(final_path)
     _atomic_write_json(metadata_path, result)
+    record_application_usage()
 
     await _write_progress(
         ctx,
@@ -499,6 +523,7 @@ async def create_fen_analysis_backup(ctx: dict) -> dict[str, Any]:
 
 
 def list_fen_analysis_backups() -> list[dict[str, Any]]:
+    _require_external_backup_volume()
     BACKUP_DIR.mkdir(parents=True, exist_ok=True)
     backups = []
     for backup_path in BACKUP_DIR.glob("fen-analysis-*.jsonl.gz"):
@@ -634,6 +659,7 @@ async def _restore_batch(records: list[dict[str, Any]]) -> tuple[int, int]:
 async def restore_fen_analysis_backup(ctx: dict, filename: str) -> dict[str, Any]:
     """Reapply saved analysis to FEN rows regenerated in the current database."""
     job_id = str(ctx.get("job_id") or "fen-analysis-restore")
+    _require_external_backup_volume()
     backup_path = _backup_path(filename)
     if not backup_path.is_file():
         raise FileNotFoundError(f"FEN-analysis backup not found: {filename}")
@@ -709,7 +735,10 @@ async def restore_fen_analysis_backup(ctx: dict, filename: str) -> dict[str, Any
 
 
 async def run_fen_analysis_backup_job(ctx: dict, **kwargs) -> dict[str, Any]:
+    job_id = str(ctx.get("job_id") or "fen-analysis-backup")
+    redis = ctx.get("redis")
     try:
+        await ensure_backup_reservation(redis, job_id)
         return await create_fen_analysis_backup(ctx)
     except Exception as error:
         await _write_progress(
@@ -723,6 +752,8 @@ async def run_fen_analysis_backup_job(ctx: dict, **kwargs) -> dict[str, Any]:
             detail=str(error),
         )
         raise
+    finally:
+        await release_backup(redis, job_id)
 
 
 async def run_fen_analysis_restore_job(
@@ -730,7 +761,10 @@ async def run_fen_analysis_restore_job(
     filename: str,
     **kwargs,
 ) -> dict[str, Any]:
+    job_id = str(ctx.get("job_id") or "fen-analysis-restore")
+    redis = ctx.get("redis")
     try:
+        await ensure_backup_reservation(redis, job_id)
         return await restore_fen_analysis_backup(ctx, filename)
     except Exception as error:
         await _write_progress(
@@ -744,3 +778,5 @@ async def run_fen_analysis_restore_job(
             detail=str(error),
         )
         raise
+    finally:
+        await release_backup(redis, job_id)

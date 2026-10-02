@@ -372,6 +372,144 @@ async def increment_database_summary_fen_counts(
     return _database_summary_from_row(row or existing)
 
 
+FEN_INGESTION_APPEARANCE_FIELDS = (
+    "equal_appearances",
+    "small_appearances",
+    "clear_appearances",
+    "decisive_appearances",
+    "mate_appearances",
+)
+
+
+async def get_fen_ingestion_summary(fen_values: List[str]) -> Dict[str, int]:
+    """Read summary inputs only for FENs touched by one ingestion pass."""
+    unique_fens = list(dict.fromkeys(str(fen) for fen in fen_values if fen))
+    summary = {
+        "positions": 0,
+        **{field: 0 for field in FEN_INGESTION_APPEARANCE_FIELDS},
+    }
+    if not unique_fens:
+        return summary
+
+    query = text("""
+        SELECT
+            COUNT(*)::bigint AS positions,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) < 50
+            ), 0)::bigint AS equal_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 50 AND ABS(score) < 150
+            ), 0)::bigint AS small_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 150 AND ABS(score) < 300
+            ), 0)::bigint AS clear_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 300 AND ABS(score) < 9000
+            ), 0)::bigint AS decisive_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 9000
+            ), 0)::bigint AS mate_appearances
+        FROM fen
+        WHERE fen = ANY(CAST(:fen_values AS VARCHAR[]));
+    """)
+    async with AsyncDBSession() as session:
+        for start in range(0, len(unique_fens), 5_000):
+            result = await session.execute(
+                query,
+                {"fen_values": unique_fens[start:start + 5_000]},
+            )
+            row = result.mappings().first() or {}
+            summary["positions"] += int(row.get("positions") or 0)
+            for field in FEN_INGESTION_APPEARANCE_FIELDS:
+                summary[field] += int(row.get(field) or 0)
+
+    return summary
+
+
+def fen_ingestion_summary_delta(
+    before: Dict[str, int],
+    after: Dict[str, int],
+) -> Dict[str, int]:
+    """Calculate idempotent cache deltas from affected-FEN snapshots."""
+    return {
+        "new_positions": max(
+            0,
+            int(after.get("positions") or 0) - int(before.get("positions") or 0),
+        ),
+        **{
+            field: int(after.get(field) or 0) - int(before.get(field) or 0)
+            for field in FEN_INGESTION_APPEARANCE_FIELDS
+        },
+    }
+
+
+async def increment_fen_ingestion_summaries(
+    before: Dict[str, int],
+    after: Dict[str, int],
+) -> Dict[str, int]:
+    """Apply one ingestion pass without rescanning the complete FEN table."""
+    delta = fen_ingestion_summary_delta(before, after)
+
+    database_summary = await _read_database_summary()
+    scored_summary = await _read_scored_position_summary()
+    if database_summary is None or scored_summary is None:
+        # First-run recovery is intentionally exhaustive; normal ingestion uses
+        # the O(affected FENs) update below.
+        await refresh_database_summary_fen_counts()
+        await refresh_scored_position_summary()
+        return {**delta, "reconciled": 1}
+
+    if not any(delta.values()):
+        return {**delta, "reconciled": 0}
+
+    params = {
+        "new_positions": delta["new_positions"],
+        **{
+            f"{field}_delta": delta[field]
+            for field in FEN_INGESTION_APPEARANCE_FIELDS
+        },
+    }
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text("""
+                UPDATE database_summary
+                SET
+                    n_positions = n_positions + :new_positions,
+                    unscored_fens = unscored_fens + :new_positions,
+                    refreshed_at = CURRENT_TIMESTAMP
+                WHERE id = 1;
+            """), params)
+            await session.execute(text("""
+                UPDATE scored_position_summary
+                SET
+                    total_positions = total_positions + :new_positions,
+                    unscored_fens = unscored_fens + :new_positions,
+                    equal_appearances = GREATEST(
+                        0, equal_appearances + :equal_appearances_delta
+                    ),
+                    small_appearances = GREATEST(
+                        0, small_appearances + :small_appearances_delta
+                    ),
+                    clear_appearances = GREATEST(
+                        0, clear_appearances + :clear_appearances_delta
+                    ),
+                    decisive_appearances = GREATEST(
+                        0, decisive_appearances + :decisive_appearances_delta
+                    ),
+                    mate_appearances = GREATEST(
+                        0, mate_appearances + :mate_appearances_delta
+                    ),
+                    refreshed_at = CURRENT_TIMESTAMP
+                WHERE id = 1;
+            """), params)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {**delta, "reconciled": 0}
+
+
 async def ensure_database_summary() -> Dict[str, int]:
     """
     Returns the precomputed summary, building it only if the row does not exist.
@@ -380,6 +518,113 @@ async def ensure_database_summary() -> Dict[str, int]:
     if summary is not None:
         return summary
     return await refresh_database_summary()
+
+
+def _fen_pipeline_summary_from_row(row: Any) -> Dict[str, Any]:
+    return {
+        "parsed_games": int(row.get("parsed_games") or 0),
+        "analyzable_games": int(row.get("analyzable_games") or 0),
+        "excluded_games": int(row.get("excluded_games") or 0),
+        "fen_extracted_games": int(row.get("fen_extracted_games") or 0),
+        "tablebase_marked_games": int(row.get("tablebase_marked_games") or 0),
+        "refreshed_at": row.get("refreshed_at").isoformat()
+        if row.get("refreshed_at") else None,
+    }
+
+
+async def refresh_fen_pipeline_summary(
+    *,
+    mark_tablebase_current: bool = False,
+) -> Dict[str, Any]:
+    """Refresh stage totals once after pipeline writes, never during UI polling."""
+    tablebase_insert = "counts.fen_extracted_games" if mark_tablebase_current else "0"
+    tablebase_update = (
+        "EXCLUDED.fen_extracted_games"
+        if mark_tablebase_current
+        else "LEAST(fen_pipeline_summary.tablebase_marked_games, EXCLUDED.fen_extracted_games)"
+    )
+    query = f"""
+        INSERT INTO fen_pipeline_summary (
+            id,
+            parsed_games,
+            analyzable_games,
+            excluded_games,
+            fen_extracted_games,
+            tablebase_marked_games,
+            refreshed_at
+        )
+        SELECT
+            1,
+            counts.parsed_games,
+            counts.analyzable_games,
+            counts.excluded_games,
+            counts.fen_extracted_games,
+            {tablebase_insert},
+            CURRENT_TIMESTAMP
+        FROM (
+            SELECT
+                (SELECT COUNT(*)::bigint FROM game) AS parsed_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game
+                    WHERE rules = 'chess'
+                ) AS analyzable_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game
+                    WHERE rules <> 'chess'
+                ) AS excluded_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game_analysis_summary summary
+                    JOIN game game_row ON game_row.link = summary.link
+                    WHERE summary.total_positions > 0
+                      AND game_row.rules = 'chess'
+                ) AS fen_extracted_games
+        ) counts
+        ON CONFLICT (id) DO UPDATE SET
+            parsed_games = EXCLUDED.parsed_games,
+            analyzable_games = EXCLUDED.analyzable_games,
+            excluded_games = EXCLUDED.excluded_games,
+            fen_extracted_games = EXCLUDED.fen_extracted_games,
+            tablebase_marked_games = {tablebase_update},
+            refreshed_at = CURRENT_TIMESTAMP
+        RETURNING parsed_games, analyzable_games, excluded_games,
+                  fen_extracted_games, tablebase_marked_games, refreshed_at;
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query))
+            row = result.mappings().first() or {}
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+    return _fen_pipeline_summary_from_row(row)
+
+
+async def ensure_fen_pipeline_summary() -> Dict[str, Any]:
+    query = """
+        SELECT parsed_games, analyzable_games, excluded_games,
+               fen_extracted_games, tablebase_marked_games, refreshed_at
+        FROM fen_pipeline_summary
+        WHERE id = 1;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+    if row:
+        return _fen_pipeline_summary_from_row(row)
+    return await refresh_fen_pipeline_summary()
+
+
+async def get_fen_pipeline_overview() -> Dict[str, Any]:
+    """Return O(1) counters for the three automatic pipeline stages."""
+    summary = await ensure_fen_pipeline_summary()
+    return {
+        "total_games": summary["parsed_games"],
+        **summary,
+    }
 
 
 SCORED_POSITION_SUMMARY_COLUMNS = """
@@ -760,7 +1005,7 @@ async def increment_scored_position_summary_for_scored_fens(
                     refreshed_at = CURRENT_TIMESTAMP
                 FROM delta
                 WHERE sps.id = 1
-                RETURNING {SCORED_POSITION_SUMMARY_COLUMNS};
+                RETURNING sps.*;
             """
             result = await session.execute(text(update_query))
             row = result.mappings().first()
@@ -3789,7 +4034,10 @@ async def _get_remaining_fens_count_committed() -> int:
     This reads the last COMMITTED state of the database.
     """
     async with AsyncDBSession() as session:
-        stmt = select(func.count(Game.link)).where(Game.fens_done == False)
+        stmt = select(func.count(Game.link)).where(
+            Game.fens_done == False,
+            Game.rules == "chess",
+        )
         result = await session.execute(stmt)
         count = result.scalar()
         return count or 0

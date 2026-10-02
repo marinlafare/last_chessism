@@ -27,6 +27,7 @@ from chessism_api.database.models import (
 from chessism_api.database.ask_db import (
     get_games_already_in_db,
     refresh_database_summary_game_counts,
+    refresh_fen_pipeline_summary,
     refresh_main_character_mode_summary_for_players
 )
 
@@ -444,7 +445,10 @@ def create_game_dict(game_raw_data: dict) -> Union[Dict[str, Any], str, bool]:
         return "NO PGN"
 
     game_for_db = dict()
-    game_for_db['fens_done'] = False
+    game_for_db['rules'] = str(game_raw_data.get('rules') or 'chess').strip().lower()
+    game_for_db['initial_setup'] = game_raw_data.get('initial_setup')
+    # Standard Stockfish/FEN processing intentionally excludes variant games.
+    game_for_db['fens_done'] = game_for_db['rules'] != 'chess'
     game_for_db['link'] = int(game_raw_data['url'].split('/')[-1])
     game_for_db['time_control'] = game_raw_data['time_control']
     game_for_db['mode'] = normalize_time_control_mode(game_for_db['time_control'])
@@ -776,6 +780,7 @@ async def insert_games_months_moves_and_players(formatted_games_results: List[Di
         database_summary_start = time.time()
         database_summary_counts = await refresh_database_summary_game_counts()
         print(f"Refreshed database game summary in: {time.time()-database_summary_start:.2f} seconds ({database_summary_counts})")
+        await refresh_fen_pipeline_summary()
 
     print(f"Total time for insert_games_months_moves_and_players: {(time.time()-start_moves_format):.2f} seconds")
 

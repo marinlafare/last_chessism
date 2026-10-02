@@ -14,12 +14,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chessism_api.database.ask_db import (
     increment_database_summary_fen_counts,
     increment_game_analysis_summary_for_scored_fens,
+    increment_scored_position_summary_for_scored_fens,
+    refresh_database_summary_fen_counts,
+    refresh_fen_pipeline_summary,
+    refresh_game_analysis_summary,
     refresh_scored_position_summary,
     refresh_scored_rating_summary,
 )
 from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Fen
+from chessism_api.operations.ingestion_pipeline import TABLEBASE_MARKING
+from chessism_api.operations.ingestion_pipeline.timing import (
+    fail_running_ingestion_stages,
+    finish_ingestion_run,
+    finish_ingestion_stage,
+    start_ingestion_stage,
+)
 
 
 TABLEBASE_PATH = os.getenv("STOCKFISH_SYZYGY_PATH", "/syzygy")
@@ -62,12 +73,14 @@ async def _write_progress(
     failed: int,
     phase: str,
     detail: str,
+    ingestion_run_id: str | None = None,
 ) -> None:
     if redis is None:
         return
     payload = {
         "job_id": job_id,
         "kind": TABLEBASE_PROGRESS_KIND,
+        "ingestion_run_id": ingestion_run_id,
         "total": max(0, int(total)),
         "processed": max(0, int(processed)),
         "failed": max(0, int(failed)),
@@ -80,6 +93,21 @@ async def _write_progress(
         json.dumps(payload),
         ex=PROGRESS_TTL_SECONDS,
     )
+
+
+async def _read_progress(redis: ArqRedis | None, job_id: str) -> dict[str, Any]:
+    if redis is None:
+        return {}
+    raw = await redis.get(f"chessism:job_progress:{job_id}")
+    if not raw:
+        return {}
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        payload = json.loads(raw)
+        return payload if isinstance(payload, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
 
 
 def _clean_game_links(game_links: Sequence[int] | None) -> list[int]:
@@ -316,6 +344,7 @@ async def analyze_tablebase_positions(
     batch_size: int = TABLEBASE_BATCH_SIZE,
     progress_job_id: str | None = None,
     refresh_projections: bool = True,
+    ingestion_run_id: str | None = None,
 ) -> dict[str, int]:
     """Solve tablebase-eligible positions directly and persist exact results."""
     if not os.path.isdir(TABLEBASE_PATH):
@@ -332,14 +361,17 @@ async def analyze_tablebase_positions(
     if target <= 0:
         return {"processed": 0, "solved": 0, "unavailable": 0, "target": 0}
 
+    progress_total = target + (1 if refresh_projections else 0)
+
     await _write_progress(
         redis,
         job_id,
-        total=target,
+        total=progress_total,
         processed=0,
         failed=0,
         phase="tablebase",
         detail=f"Probing {target} positions directly with Syzygy.",
+        ingestion_run_id=ingestion_run_id,
     )
 
     processed = solved_total = unavailable_total = 0
@@ -368,13 +400,27 @@ async def analyze_tablebase_positions(
                 await session.close()
 
             if solved:
-                await increment_database_summary_fen_counts(
-                    analyzed_delta=len(solved),
-                    nonzero_scored_delta=sum(
-                        1 for item in solved if float(item.get("score") or 0) != 0.0
-                    ),
-                )
-                await increment_game_analysis_summary_for_scored_fens(solved)
+                try:
+                    await increment_database_summary_fen_counts(
+                        analyzed_delta=len(solved),
+                        nonzero_scored_delta=sum(
+                            1
+                            for item in solved
+                            if float(item.get("score") or 0) != 0.0
+                        ),
+                    )
+                    await increment_scored_position_summary_for_scored_fens(solved)
+                    await increment_game_analysis_summary_for_scored_fens(solved)
+                except Exception:
+                    # FEN scores were committed immediately before these cached
+                    # summaries. Reconcile them before surfacing the failure so a
+                    # retry cannot leave counters or per-game coverage incomplete.
+                    await refresh_database_summary_fen_counts()
+                    await refresh_scored_position_summary()
+                    await refresh_game_analysis_summary(
+                        _clean_game_links(game_links) if game_links is not None else None
+                    )
+                    raise
 
             processed += len(rows)
             solved_total += len(solved)
@@ -382,18 +428,41 @@ async def analyze_tablebase_positions(
             await _write_progress(
                 redis,
                 job_id,
-                total=target,
+                total=progress_total,
                 processed=processed,
                 failed=unavailable_total,
                 phase="tablebase",
                 detail=f"Solved {solved_total}; {unavailable_total} require Stockfish.",
+                ingestion_run_id=ingestion_run_id,
             )
     finally:
         tablebase.close()
 
-    if refresh_projections and solved_total > 0:
-        await refresh_scored_position_summary()
+    # A scoped automatic run follows freshly inserted game associations. Those
+    # associations change rating projections even when every endgame probe is
+    # unavailable, so the handoff still needs one projection refresh.
+    if refresh_projections and (solved_total > 0 or game_links is not None):
+        await _write_progress(
+            redis,
+            job_id,
+            total=progress_total,
+            processed=processed,
+            failed=unavailable_total,
+            phase="refreshing_statistics",
+            detail="Refreshing rating statistics for the solved endgames.",
+            ingestion_run_id=ingestion_run_id,
+        )
         await refresh_scored_rating_summary()
+        await _write_progress(
+            redis,
+            job_id,
+            total=progress_total,
+            processed=processed + 1,
+            failed=unavailable_total,
+            phase="tablebase",
+            detail="Tablebase and rating projections are current.",
+            ingestion_run_id=ingestion_run_id,
+        )
 
     return {
         "processed": processed,
@@ -411,8 +480,10 @@ async def _release_coordination(redis: ArqRedis, job_id: str) -> None:
 async def ensure_tablebase_analysis_enqueued(
     redis: ArqRedis,
     *,
+    game_links: Sequence[int] | None = None,
     max_positions: int | None = None,
     batch_size: int = TABLEBASE_BATCH_SIZE,
+    ingestion_run_id: str | None = None,
 ) -> dict[str, Any]:
     current_job_id = _redis_text(await redis.get(TABLEBASE_COORDINATION_KEY))
     if current_job_id and current_job_id != "reserving":
@@ -427,8 +498,13 @@ async def ensure_tablebase_analysis_enqueued(
     elif current_job_id == "reserving":
         return {"status": "already_active", "job_id": None, "pending": None}
 
-    pending = await count_tablebase_candidates()
+    clean_links = _clean_game_links(game_links)
+    pending = await count_tablebase_candidates(
+        clean_links if game_links is not None else None
+    )
     if pending <= 0:
+        if game_links is None:
+            await refresh_fen_pipeline_summary(mark_tablebase_current=True)
         return {"status": "up_to_date", "job_id": None, "pending": 0}
 
     reserved = await redis.set(
@@ -446,6 +522,8 @@ async def ensure_tablebase_analysis_enqueued(
             max_positions=max_positions,
             batch_size=max(1, min(int(batch_size), 5_000)),
             candidate_count=pending,
+            game_links=clean_links if game_links is not None else None,
+            ingestion_run_id=ingestion_run_id,
             _queue_name="pipeline_queue",
         )
         if job is None:
@@ -460,11 +538,12 @@ async def ensure_tablebase_analysis_enqueued(
         await _write_progress(
             redis,
             job_id,
-            total=target,
+            total=target + 1,
             processed=0,
             failed=0,
             phase="queued",
             detail="Waiting to cache exact Syzygy endgames.",
+            ingestion_run_id=ingestion_run_id,
         )
         return {"status": "queued", "job_id": job_id, "pending": pending}
     except Exception:
@@ -478,26 +557,38 @@ async def run_tablebase_analysis_job(
     max_positions: int | None = None,
     batch_size: int = TABLEBASE_BATCH_SIZE,
     candidate_count: int | None = None,
+    game_links: Sequence[int] | None = None,
+    ingestion_run_id: str | None = None,
     **kwargs,
 ) -> dict[str, int]:
     redis: ArqRedis = ctx["redis"]
     job_id = str(ctx.get("job_id") or "tablebase-analysis")
     try:
+        await start_ingestion_stage(
+            ingestion_run_id,
+            TABLEBASE_MARKING,
+            detail="Probing exact Syzygy endgames and refreshing projections.",
+        )
         result = await analyze_tablebase_positions(
             ctx,
+            game_links=game_links,
             candidate_count=candidate_count,
             max_positions=max_positions,
             batch_size=batch_size,
             progress_job_id=job_id,
+            ingestion_run_id=ingestion_run_id,
         )
+        if game_links is None and await count_tablebase_candidates() <= 0:
+            await refresh_fen_pipeline_summary(mark_tablebase_current=True)
         await _write_progress(
             redis,
             job_id,
-            total=result["target"],
-            processed=result["processed"],
+            total=result["target"] + 1,
+            processed=result["processed"] + 1,
             failed=result["unavailable"],
             phase="complete",
             detail=f"Cached {result['solved']} exact Syzygy positions.",
+            ingestion_run_id=ingestion_run_id,
         )
         try:
             salience_jobs = await enqueue_stale_player_salience_jobs(redis)
@@ -513,16 +604,32 @@ async def run_tablebase_analysis_job(
                 f"refreshes: {error!r}",
                 flush=True,
             )
+        await finish_ingestion_stage(
+            ingestion_run_id,
+            TABLEBASE_MARKING,
+            processed=result["processed"] + 1,
+            total=result["target"] + 1,
+            detail=f"Cached {result['solved']} exact Syzygy positions.",
+        )
+        await finish_ingestion_run(ingestion_run_id)
         return result
     except Exception as error:
+        previous_progress = await _read_progress(redis, job_id)
         await _write_progress(
             redis,
             job_id,
-            total=0,
-            processed=0,
-            failed=1,
+            total=int(previous_progress.get("total") or 0),
+            processed=int(previous_progress.get("processed") or 0),
+            failed=max(1, int(previous_progress.get("failed") or 0)),
             phase="failed",
             detail=str(error),
+            ingestion_run_id=ingestion_run_id,
+        )
+        await fail_running_ingestion_stages(ingestion_run_id, str(error))
+        await finish_ingestion_run(
+            ingestion_run_id,
+            status="failed",
+            error=str(error),
         )
         raise
     finally:

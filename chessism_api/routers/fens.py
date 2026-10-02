@@ -9,6 +9,7 @@ from chessism_api.database.ask_db import (
     get_sum_n_games, 
     get_top_fens_unscored,
     get_fen_analysis_counts,
+    get_fen_pipeline_overview,
     get_scored_positions_overview,
     get_scored_positions_page,
     get_scored_advantage_by_rating,
@@ -18,6 +19,7 @@ from chessism_api.database.ask_db import (
     _get_remaining_fens_count_committed
 )
 from chessism_api.operations.fens import ensure_fen_pipeline_enqueued
+from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
 
 router = APIRouter()
 
@@ -75,6 +77,20 @@ async def api_get_remaining_games_needing_fens() -> JSONResponse:
     """
     remaining = await _get_remaining_fens_count_committed()
     return JSONResponse(content={"remaining_games": int(remaining or 0)})
+
+
+@router.get("/pipeline/overview")
+async def api_get_fen_pipeline_overview() -> JSONResponse:
+    """Return maintained game-level counters for automatic FEN processing."""
+    return JSONResponse(content=await get_fen_pipeline_overview())
+
+
+@router.get("/pipeline/timings/latest")
+async def api_get_latest_ingestion_timing() -> JSONResponse:
+    """Return measured total and per-stage durations for the latest ingestion."""
+    return JSONResponse(content={
+        "run": await get_latest_ingestion_timing(),
+    })
 
 
 @router.get("/analysis_counts")

@@ -66,7 +66,7 @@ const clampAnalysisBatchInput = (value, maximum = MAX_ANALYSIS_BATCH_SIZE) => {
 const isTrackedJobActive = (state) => {
   if (!state?.jobId) return false
   const phase = getTrackedJobPhase(state)
-  return phase !== 'complete' && phase !== 'failed' && phase !== 'not_found'
+  return phase !== 'complete' && phase !== 'failed' && phase !== 'unavailable' && phase !== 'not_found'
 }
 
 const isTrackedJobComplete = (state) => {
@@ -84,6 +84,7 @@ const getTrackedJobPhase = (state) => {
 
 const getPositionJobKey = (job) => {
   const kind = String(job?.progress?.kind || job?.progress?.job_kind || '').toLowerCase()
+  if (kind === 'game_update') return 'gameParsing'
   if (kind === 'fen_extraction') return 'fen'
   if (kind === 'tablebase_analysis') return 'tablebase'
   if (kind === 'character_repeated' || kind === 'player') return 'player'

@@ -14,8 +14,14 @@ services:
       - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
       - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
       - STOCKFISH_STATUS_URL=${STOCKFISH_STATUS_URL}
-      - FEN_ANALYSIS_BACKUP_DIR=/backups
-      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - DATABASE_BACKUP_APP_ID=chessism
+      - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
+      - DATABASE_BACKUP_QUOTA_BYTES=200000000000
+      - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
     networks:
       - chessism_net
     depends_on:
@@ -27,7 +33,7 @@ services:
         condition: service_healthy
     volumes:
       - ./api_logs:/app/logs
-      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+      - /main-monitor-db-backups:/backup-volume
 
   chessism-web:
     build: ./chessism_web
@@ -64,16 +70,32 @@ services:
       - chessism_net
 
   db:
-    image: postgres:15
+    build:
+      context: .
+      dockerfile: postgres-backup/Dockerfile
+      target: database
+    image: chessism-postgres:15-backup
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    command: ["postgres", "-c", "max_wal_size=4GB", "-c", "checkpoint_timeout=15min"]
+    command:
+      - postgres
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=/usr/local/bin/pgbackrest-chessism-archive-push %p
     ports:
       - "5433:5432"
     volumes:
       - ./db_data:/var/lib/postgresql/data
+      - /main-monitor-db-backups:/backup-volume
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - postgres_socket:/var/run/postgresql
     networks:
       - chessism_net
     healthcheck:
@@ -126,10 +148,12 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=games_queue
-      - FEN_ANALYSIS_BACKUP_DIR=/backups
-      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
     volumes:
-      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+      - /main-monitor-db-backups:/backup-volume
     networks:
       - chessism_net
     depends_on:
@@ -147,11 +171,13 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=research_queue
-      - FEN_ANALYSIS_BACKUP_DIR=/backups
-      - COEFFICIENT_RESEARCH_DIR=/backups/research
-      - COEFFICIENT_RESEARCH_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism/research
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - COEFFICIENT_RESEARCH_DIR=/backup-volume/chessism/research
+      - COEFFICIENT_RESEARCH_DISPLAY_DIR=/main-monitor-db-backups/chessism/research
     volumes:
-      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+      - /main-monitor-db-backups:/backup-volume
     networks:
       - chessism_net
     depends_on:
@@ -169,6 +195,40 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=salience_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-backup:
+    build:
+      context: .
+      dockerfile: postgres-backup/Dockerfile
+      target: backup-worker
+    image: chessism-backup-worker:latest
+    command: arq worker.WorkerSettings
+    user: postgres
+    cpus: "1.00"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=backup_queue
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - DATABASE_BACKUP_APP_ID=chessism
+      - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
+      - DATABASE_BACKUP_QUOTA_BYTES=200000000000
+      - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - PGBACKREST_STANZA=chessism
+      - CHESSISM_ARCHIVE_GAP_PATH=/var/spool/pgbackrest/chessism-archive-gap
+    volumes:
+      - ./db_data:/var/lib/postgresql/data:ro
+      - /main-monitor-db-backups:/backup-volume
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - postgres_socket:/var/run/postgresql
     networks:
       - chessism_net
     depends_on:
@@ -241,11 +301,13 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
-      - FEN_ANALYSIS_BACKUP_DIR=/backups
-      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/home/jon/Desktop/workshop/db_backups/chessism
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
       - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
     volumes:
-      - /home/jon/Desktop/workshop/db_backups/chessism:/backups
+      - /main-monitor-db-backups:/backup-volume
       - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
@@ -261,3 +323,5 @@ volumes:
   redis_data:
   db_data:
   chessism_web_node_modules:
+  pgbackrest_spool:
+  postgres_socket:

@@ -1,6 +1,6 @@
 .pipeline-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
   align-items: stretch;
 }
@@ -20,6 +20,152 @@
 .pipeline-card h2 {
   margin: 0;
   font-size: 18px;
+}
+
+.fen-pipeline-card {
+  grid-column: 1 / -1;
+}
+
+.fen-pipeline-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.fen-pipeline-timing {
+  display: grid;
+  gap: 7px;
+  padding-top: 2px;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.fen-pipeline-timing > strong {
+  color: var(--text);
+  font-size: 11px;
+}
+
+.fen-pipeline-timing > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.fen-pipeline-timing span {
+  padding: 5px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #0b1118;
+}
+
+.fen-pipeline-stage {
+  display: grid;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: #0b1118;
+}
+
+.fen-pipeline-stage-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.fen-pipeline-stage-head > span,
+.fen-pipeline-stage > small {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.fen-pipeline-stage > strong {
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 15px;
+  text-align: center;
+}
+
+.fen-pipeline-stage > small {
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fen-pipeline-stage-track {
+  height: 9px;
+  overflow: hidden;
+  border: 1px solid rgba(237, 243, 248, 0.08);
+  border-radius: 999px;
+  background: #020303;
+}
+
+.fen-pipeline-stage-track > div {
+  height: 100%;
+  border-radius: inherit;
+  background: #52606b;
+  transition: width 300ms ease;
+}
+
+.fen-pipeline-live-light {
+  width: 11px;
+  height: 11px;
+  flex: 0 0 11px;
+  border: 1px solid #73808a;
+  border-radius: 50%;
+  background: #52606b;
+  box-shadow: none;
+}
+
+.fen-pipeline-stage.is-working .fen-pipeline-stage-track > div,
+.fen-pipeline-stage.is-working .fen-pipeline-live-light {
+  border-color: rgba(87, 255, 181, 0.82);
+  background: #15c780;
+  box-shadow: 0 0 10px rgba(21, 199, 128, 0.55);
+}
+
+.fen-pipeline-stage.is-working .fen-pipeline-live-light {
+  animation: fen-pipeline-live-blink 1s ease-in-out infinite;
+}
+
+.fen-pipeline-stage.is-failed .fen-pipeline-stage-track > div,
+.fen-pipeline-stage.is-failed .fen-pipeline-live-light {
+  border-color: rgba(255, 101, 101, 0.9);
+  background: #d95757;
+  box-shadow: 0 0 10px rgba(217, 87, 87, 0.42);
+}
+
+.fen-pipeline-stage.is-failed > small {
+  color: #ff8585;
+}
+
+.fen-pipeline-stages.is-fading-to-idle .fen-pipeline-stage-track > div,
+.fen-pipeline-stages.is-fading-to-idle .fen-pipeline-live-light {
+  border-color: #73808a;
+  background: #52606b;
+  box-shadow: none;
+  transition:
+    background-color 10s linear,
+    border-color 10s linear,
+    box-shadow 10s linear;
+}
+
+@keyframes fen-pipeline-live-blink {
+  0%, 100% {
+    opacity: 0.3;
+    box-shadow: 0 0 3px rgba(21, 199, 128, 0.3);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 13px rgba(21, 199, 128, 0.95);
+  }
 }
 
 .analysis-loop-card {
@@ -706,4 +852,17 @@
 
 @media (max-width: 720px) {
   .coverage-bar-row { grid-template-columns: 1fr; gap: 8px; }
+  .fen-pipeline-stages { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fen-pipeline-stage.is-working .fen-pipeline-live-light {
+    animation: none;
+  }
+
+  .fen-pipeline-stage-track > div,
+  .fen-pipeline-stages.is-fading-to-idle .fen-pipeline-stage-track > div,
+  .fen-pipeline-stages.is-fading-to-idle .fen-pipeline-live-light {
+    transition: none;
+  }
 }

@@ -2,6 +2,7 @@ import Header from '../../components/layout/Header'
 import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
 import { EstimatedTime, JobStatus } from './JobStatus'
+import FenPipelineStages from './FenPipelineStages'
 import {
   MAX_ANALYSIS_BATCH_SIZE,
   MAX_LOOP_ANALYSIS_BATCH_SIZE,
@@ -22,9 +23,10 @@ export default function PositionsView({ page }) {
     handleConfirmPlayerGameAnalysis, handleDeleteAnalysisProcess,
     handleGlobalAnalysis, handleInspectPlayer, handleInspectPlayerGameScope,
     handlePlayerAnalysis, handlePreviewPlayerGameAnalysis, jobState, loading,
+    ingestionTiming,
     loopJob, loopJobIsQueueing, pendingPositions,
     playerGameAnalysis, playerGamePreview, playerGamePreviewTotalSeconds,
-    playerInspection, playerJob, remainingFenGames, scoredPositions,
+    playerInspection, playerJob, scoredPositions,
     setGlobalJob, setLoopJob, setPlayerGameAnalysis, setPlayerInspection, setPlayerJob,
   } = page
 
@@ -60,25 +62,34 @@ export default function PositionsView({ page }) {
           </section>
 
           <div className={`pipeline-grid ${playerInspection.data || playerInspection.error ? 'has-player-inspection' : ''}`}>
-            <section className="pipeline-card" aria-live="polite">
+            <section className="pipeline-card fen-pipeline-card" aria-live="polite">
               <div>
-                <p className="eyebrow">AUTOMATIC FEN EXTRACTION</p>
+                <p className="eyebrow">INGESTION PIPELINE</p>
               </div>
-              <div className="pipeline-pending">
-                <span>Games pending</span>
-                <strong>{remainingFenGames === null ? '-' : formatNumber(remainingFenGames)}</strong>
-              </div>
-              <div className="status-banner">
-                {isTrackedJobActive(jobState.tablebase)
-                  ? 'Caching exact endgame results automatically.'
-                  : isTrackedJobActive(jobState.fen)
-                    ? 'Extracting positions automatically.'
-                  : remainingFenGames > 0
-                    ? 'Pending games are queued for automatic extraction.'
-                    : 'New games are extracted automatically, then eligible endgames are solved with Syzygy.'}
-              </div>
-              <JobStatus jobKey="fen" page={page} />
-              <JobStatus jobKey="tablebase" page={page} />
+              <FenPipelineStages jobState={jobState} />
+              {ingestionTiming ? (
+                <div className="fen-pipeline-timing" aria-label="Latest ingestion timing">
+                  <strong>
+                    Latest run
+                    {ingestionTiming.player_name ? ` · ${ingestionTiming.player_name}` : ''}
+                    {ingestionTiming.elapsed_ms != null
+                      ? ` · ${formatPipelineTime(ingestionTiming.elapsed_ms)}`
+                      : ' · running'}
+                  </strong>
+                  <div>
+                    {(ingestionTiming.stages || []).map((stage) => (
+                      <span key={stage.stage}>
+                        {formatStageName(stage.stage)} · {formatPipelineTime(stage.elapsed_ms)}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {['gameParsing', 'fen', 'tablebase'].map((key) => (
+                jobState[key]?.error
+                  ? <div className="status-banner warn" key={key}>{jobState[key].error}</div>
+                  : null
+              ))}
             </section>
 
             <form className="pipeline-card" onSubmit={handleGlobalAnalysis}>
@@ -682,4 +693,14 @@ export default function PositionsView({ page }) {
       </div>
     </div>
   )
+}
+
+function formatStageName(value) {
+  return String(value || '').replaceAll('_', ' ')
+}
+
+function formatPipelineTime(milliseconds) {
+  const seconds = Math.max(0, Number(milliseconds || 0) / 1000)
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  return formatDuration(seconds)
 }

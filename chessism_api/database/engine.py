@@ -2,6 +2,7 @@ import asyncio
 import re
 from urllib.parse import urlparse
 import asyncpg
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -270,6 +271,44 @@ async def _ensure_fen_analysis_schema(
                     f"ALTER TABLE player ADD COLUMN {column_name} {data_type}"
                 )
 
+        game_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'game'
+                  AND column_name = ANY($1::text[])
+            """, ["fens_processing", "rules", "initial_setup"])
+        }
+        game_column_definitions = {
+            "fens_processing": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "rules": "VARCHAR(32) NOT NULL DEFAULT 'chess'",
+            "initial_setup": "VARCHAR(128)",
+        }
+        for column_name, definition in game_column_definitions.items():
+            if column_name not in game_columns:
+                await connection.execute(
+                    f"ALTER TABLE game ADD COLUMN {column_name} {definition}"
+                )
+
+        fen_pipeline_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'fen_pipeline_summary'
+                  AND column_name = ANY($1::text[])
+            """, ["analyzable_games", "excluded_games"])
+        }
+        for column_name in ("analyzable_games", "excluded_games"):
+            if column_name not in fen_pipeline_columns:
+                await connection.execute(
+                    "ALTER TABLE fen_pipeline_summary "
+                    f"ADD COLUMN {column_name} BIGINT NOT NULL DEFAULT 0"
+                )
+
         await connection.execute("""
             CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_game_fen_association_game_order
             ON game_fen_association (game_link, n_move, move_color)
@@ -429,6 +468,13 @@ async def init_db(connection_string: str):
             # Ensure database tables exist using the async engine
             async with async_engine.begin() as conn:
                 print("Ensuring database tables exist...")
+                # Multiple API/worker containers start from the same image. Keep
+                # their metadata checks sequential so a newly introduced table
+                # cannot be created concurrently by two containers.
+                await conn.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                    {"lock_id": FEN_SCHEMA_ADVISORY_LOCK},
+                )
                 await conn.run_sync(Base.metadata.create_all)
                 print("Database tables checked/created.")
             migrated_no_move_games = await _ensure_fen_analysis_schema(

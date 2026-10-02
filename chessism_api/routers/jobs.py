@@ -13,7 +13,7 @@ router = APIRouter()
 
 KNOWN_QUEUES = (
     "pipeline_queue", "fen_queue", "analysis_queue", "games_queue",
-    "research_queue", "salience_queue", "arq:queue",
+    "research_queue", "salience_queue", "backup_queue", "arq:queue",
 )
 ANALYSIS_JOB_FUNCTIONS = {
     "run_analysis_job",
@@ -64,6 +64,9 @@ def _serialize_job_info(info: Any) -> dict[str, Any] | None:
 
     serialized_kwargs = _serialize_value(info.kwargs)
     if info.function == "run_player_games_analysis_job" and isinstance(serialized_kwargs, dict):
+        game_links = serialized_kwargs.pop("game_links", [])
+        serialized_kwargs["game_count"] = len(game_links) if isinstance(game_links, list) else 0
+    elif info.function == "run_tablebase_analysis_job" and isinstance(serialized_kwargs, dict):
         game_links = serialized_kwargs.pop("game_links", [])
         serialized_kwargs["game_count"] = len(game_links) if isinstance(game_links, list) else 0
 
@@ -118,7 +121,7 @@ async def api_get_active_jobs(redis: ArqRedis = Depends(get_redis_pool)) -> JSON
             continue
 
         phase = str(progress.get("phase") or "")
-        if phase in ("complete", "failed"):
+        if phase in ("complete", "failed", "unavailable"):
             continue
 
         status_payload = None

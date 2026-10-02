@@ -55,9 +55,14 @@ async def _has_active_game_job(redis: ArqRedis) -> bool:
         except Exception:
             continue
 
-        if payload.get("kind") not in ("game_update", "player_deletion"):
-            continue
-        if payload.get("phase") not in ("complete", "failed"):
+        phase = str(payload.get("phase") or "")
+        is_ingestion = bool(payload.get("ingestion_run_id"))
+        is_guarded_job = payload.get("kind") in ("game_update", "player_deletion")
+        if (is_ingestion or is_guarded_job) and phase not in (
+            "complete",
+            "failed",
+            "unavailable",
+        ):
             return True
     return False
 

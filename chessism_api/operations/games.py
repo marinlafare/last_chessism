@@ -13,6 +13,13 @@ from chessism_api.database.db_interface import DBInterface
 from chessism_api.operations import players as players_ops
 from chessism_api.operations import months as months_ops
 from chessism_api.operations.fens import ensure_fen_pipeline_enqueued
+from chessism_api.operations.ingestion_pipeline import PARSING_GAMES
+from chessism_api.operations.ingestion_pipeline.timing import (
+    finish_ingestion_run,
+    finish_ingestion_stage,
+    start_ingestion_run,
+    start_ingestion_stage,
+)
 
 PROGRESS_TTL_SECONDS = 60 * 60 * 24
 GAME_UPDATE_PROGRESS_KIND = "game_update"
@@ -29,7 +36,8 @@ async def _write_game_job_progress(
     failed: int = 0,
     phase: str,
     detail: str | None = None,
-    result: str | None = None
+    result: str | None = None,
+    ingestion_run_id: str | None = None,
 ) -> None:
     redis = ctx.get("redis")
     if not redis:
@@ -38,6 +46,7 @@ async def _write_game_job_progress(
     payload = {
         "job_id": job_id,
         "kind": GAME_UPDATE_PROGRESS_KIND,
+        "ingestion_run_id": ingestion_run_id,
         "player_name": player_name,
         "total": int(total),
         "processed": int(processed),
@@ -312,12 +321,23 @@ async def _run_game_job(
     operation: Callable[[dict, ProgressCallback | None], Awaitable[str]],
     fallback_job_id: str,
     queued_detail: str,
+    trigger: str = "automatic",
 ) -> str:
     """Run a game ingestion operation with the shared ARQ progress lifecycle."""
     arq_job_id = str(ctx.get("job_id") or fallback_job_id)
     player_name = str(data.get("player_name", "")).strip().lower()
     latest_total = 1
     latest_processed = 0
+    ingestion_run_id = await start_ingestion_run(
+        run_id=data.get("ingestion_run_id"),
+        player_name=player_name,
+        trigger=trigger,
+    )
+    await start_ingestion_stage(
+        ingestion_run_id,
+        PARSING_GAMES,
+        detail=queued_detail.format(player_name=player_name),
+    )
 
     async def progress_callback(phase: str, total: int, processed: int, detail: str | None = None) -> None:
         nonlocal latest_total, latest_processed
@@ -330,7 +350,8 @@ async def _run_game_job(
             total=latest_total,
             processed=latest_processed,
             phase=phase,
-            detail=detail
+            detail=detail,
+            ingestion_run_id=ingestion_run_id,
         )
 
     await _write_game_job_progress(
@@ -341,11 +362,24 @@ async def _run_game_job(
         processed=0,
         phase="queued",
         detail=queued_detail.format(player_name=player_name),
+        ingestion_run_id=ingestion_run_id,
     )
 
     try:
         message = await operation(data, progress_callback)
-        fen_pipeline = await ensure_fen_pipeline_enqueued(ctx["redis"])
+        await finish_ingestion_stage(
+            ingestion_run_id,
+            PARSING_GAMES,
+            processed=latest_processed,
+            total=latest_total,
+            detail=message,
+        )
+        fen_pipeline = await ensure_fen_pipeline_enqueued(
+            ctx["redis"],
+            ingestion_run_id=ingestion_run_id,
+            player_name=player_name,
+            trigger=trigger,
+        )
         if fen_pipeline["status"] == "queued":
             fen_detail = (
                 f" Automatic FEN extraction queued for "
@@ -355,6 +389,7 @@ async def _run_game_job(
             fen_detail = " Automatic FEN extraction is already running."
         else:
             fen_detail = " FEN extraction is up to date."
+            await finish_ingestion_run(ingestion_run_id)
         completion_message = f"{message}{fen_detail}"
         await _write_game_job_progress(
             ctx,
@@ -364,10 +399,24 @@ async def _run_game_job(
             processed=latest_total,
             phase="complete",
             detail=completion_message,
-            result=completion_message
+            result=completion_message,
+            ingestion_run_id=ingestion_run_id,
         )
         return completion_message
     except Exception as error:
+        await finish_ingestion_stage(
+            ingestion_run_id,
+            PARSING_GAMES,
+            processed=latest_processed,
+            total=latest_total,
+            status="failed",
+            detail=str(error),
+        )
+        await finish_ingestion_run(
+            ingestion_run_id,
+            status="failed",
+            error=str(error),
+        )
         await _write_game_job_progress(
             ctx,
             arq_job_id,
@@ -376,7 +425,8 @@ async def _run_game_job(
             processed=latest_processed,
             failed=1,
             phase="failed",
-            detail=str(error)
+            detail=str(error),
+            ingestion_run_id=ingestion_run_id,
         )
         raise
 
@@ -388,6 +438,7 @@ async def run_create_player_games_job(ctx: dict, data: dict, **kwargs) -> str:
         operation=create_games,
         fallback_job_id="game-download",
         queued_detail="Queued full download for {player_name}.",
+        trigger="player_create",
     )
 
 async def run_update_player_games_job(ctx: dict, data: dict, **kwargs) -> str:
@@ -397,4 +448,5 @@ async def run_update_player_games_job(ctx: dict, data: dict, **kwargs) -> str:
         operation=update_player_games,
         fallback_job_id="game-update",
         queued_detail="Queued update for {player_name}.",
+        trigger="player_update",
     )

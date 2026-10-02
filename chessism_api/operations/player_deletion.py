@@ -15,6 +15,7 @@ from sqlalchemy import text
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.ask_db import (
     refresh_database_summary_game_counts,
+    refresh_fen_pipeline_summary,
     refresh_main_character_mode_summary_for_players,
     refresh_scored_position_summary,
     refresh_scored_rating_summary,
@@ -385,6 +386,7 @@ async def _refresh_after_player_deletion(player_name: str) -> list[str]:
     refreshes = (
         ("main-player summary", lambda: refresh_main_character_mode_summary_for_players({player_name})),
         ("database game summary", refresh_database_summary_game_counts),
+        ("FEN pipeline summary", refresh_fen_pipeline_summary),
         ("scored-position summary", refresh_scored_position_summary),
         ("scored-rating summary", refresh_scored_rating_summary),
     )

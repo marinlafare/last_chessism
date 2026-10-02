@@ -22,6 +22,7 @@ from chessism_api.operations.analysis_backups import (
     list_fen_analysis_backups,
 )
 from chessism_api.operations.analysis_times import record_analysis_times
+from chessism_api.operations.backup_coordination import release_backup, reserve_backup
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
 from chessism_api.database.ask_db import (
     get_player_game_analysis_scope,
@@ -482,16 +483,30 @@ async def api_create_fen_analysis_backup(
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> JSONResponse:
     """Queue creation or an incremental update of the durable FEN snapshot."""
-    job = await redis.enqueue_job(
-        "run_fen_analysis_backup_job",
-        _queue_name="pipeline_queue",
-        _job_timeout=86_400,
-    )
+    job_id = str(uuid4())
+    reserved, owner = await reserve_backup(redis, job_id)
+    if not reserved:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Backup storage is already being used by job {owner}.",
+        )
+    try:
+        job = await redis.enqueue_job(
+            "run_fen_analysis_backup_job",
+            _job_id=job_id,
+            _queue_name="pipeline_queue",
+            _job_timeout=7 * 24 * 60 * 60,
+        )
+        if job is None:
+            raise RuntimeError("The FEN-analysis backup could not be queued.")
+    except Exception:
+        await release_backup(redis, job_id)
+        raise
     return JSONResponse(
         status_code=202,
         content={
             "message": "FEN-analysis backup update queued.",
-            "job_id": _enqueued_job_id(job),
+            "job_id": job_id,
             "storage_location": BACKUP_DISPLAY_DIR,
         },
     )
@@ -515,17 +530,31 @@ async def api_restore_fen_analysis_backup(
     if filename not in available_filenames:
         raise HTTPException(status_code=404, detail="FEN-analysis backup not found")
 
-    job = await redis.enqueue_job(
-        "run_fen_analysis_restore_job",
-        filename=filename,
-        _queue_name="pipeline_queue",
-        _job_timeout=86_400,
-    )
+    job_id = str(uuid4())
+    reserved, owner = await reserve_backup(redis, job_id)
+    if not reserved:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Backup storage is already being used by job {owner}.",
+        )
+    try:
+        job = await redis.enqueue_job(
+            "run_fen_analysis_restore_job",
+            filename=filename,
+            _job_id=job_id,
+            _queue_name="pipeline_queue",
+            _job_timeout=7 * 24 * 60 * 60,
+        )
+        if job is None:
+            raise RuntimeError("The FEN-analysis restore could not be queued.")
+    except Exception:
+        await release_backup(redis, job_id)
+        raise
     return JSONResponse(
         status_code=202,
         content={
             "message": f"Restore queued for {filename}.",
-            "job_id": _enqueued_job_id(job),
+            "job_id": job_id,
             "filename": filename,
         },
     )

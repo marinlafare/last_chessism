@@ -6,6 +6,7 @@ function SideRail() {
     { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
     { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
     { href: '/research', label: 'Research', short: 'R' },
+    { href: '/backups', label: 'Backups', short: 'B' },
     { href: '/add_games', label: 'Add Games', short: '+' }
   ]
 
