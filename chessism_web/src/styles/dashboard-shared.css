@@ -1,0 +1,113 @@
+.section-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.section-head h2,
+.games-action-title {
+  margin: 0;
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1.2;
+  text-transform: capitalize;
+}
+
+.section-head p,
+.result-line {
+  margin: 4px 0 0;
+  color: var(--muted);
+}
+
+.status,
+.games-actions,
+.games-time-controls,
+.games-mode-detail,
+.games-openings-detail,
+.games-hero,
+.scored-positions-panel {
+  padding: 18px;
+}
+
+.status-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.status-card {
+  min-height: 108px;
+  padding: 14px;
+}
+
+.status-card h3 {
+  margin: 0;
+}
+
+.status-card .value {
+  margin: 12px 0 2px;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 20px;
+  font-weight: 700;
+}
+
+.status-card.ok {
+  border-color: rgba(114, 199, 143, 0.45);
+}
+
+.status-card.warn,
+.status-banner.warn {
+  border-color: rgba(214, 168, 79, 0.55);
+}
+
+.status-card.down {
+  border-color: rgba(220, 107, 99, 0.55);
+}
+
+.status-banner {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+}
+
+.status-skeleton {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+.status-skeleton div {
+  height: 108px;
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface-2), var(--surface-3), var(--surface-2));
+}
+
+.games-actions,
+.main-character-grid,
+.main-character-top-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.game-card h2 {
+  margin: 10px 0 6px;
+  font-size: 16px;
+}
+
+.game-card label {
+  color: var(--muted);
+}
+
+.games-hero h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.games-hero p {
+  color: var(--muted);
+}

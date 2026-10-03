@@ -7,12 +7,8 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 
 from chessism_api.redis_client import get_redis_pool
-from chessism_api.operations.games import (
-    read_game,
-    get_time_control_result_color_matrix_payload,
-    get_time_control_game_length_analytics_payload,
-    get_time_control_activity_trend_payload
-)
+from chessism_api.operations.ingestion_pipeline.jobs import read_game
+from chessism_api.operations.player_game_explorer import get_game_score
 from chessism_api.database.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
@@ -28,7 +24,10 @@ from chessism_api.database.ask_db import (
     get_time_control_mode_counts,
     get_rating_time_control_chart,
     get_time_control_top_moves,
-    get_time_control_top_openings
+    get_time_control_top_openings,
+    get_time_control_result_color_matrix,
+    get_time_control_game_length_analytics,
+    get_time_control_activity_trend,
 )
 
 router = APIRouter()
@@ -56,9 +55,14 @@ async def _has_active_game_job(redis: ArqRedis) -> bool:
         except Exception:
             continue
 
-        if payload.get("kind") != "game_update":
-            continue
-        if payload.get("phase") not in ("complete", "failed"):
+        phase = str(payload.get("phase") or "")
+        is_ingestion = bool(payload.get("ingestion_run_id"))
+        is_guarded_job = payload.get("kind") in ("game_update", "player_deletion")
+        if (is_ingestion or is_guarded_job) and phase not in (
+            "complete",
+            "failed",
+            "unavailable",
+        ):
             return True
     return False
 
@@ -180,7 +184,7 @@ async def api_get_time_control_result_color_matrix(
     """
     Returns white/black result matrix for mode and rating range.
     """
-    result = await get_time_control_result_color_matrix_payload(
+    result = await get_time_control_result_color_matrix(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
@@ -197,7 +201,7 @@ async def api_get_time_control_game_length_analytics(
     """
     Returns game-length summary and histograms for mode and rating range.
     """
-    result = await get_time_control_game_length_analytics_payload(
+    result = await get_time_control_game_length_analytics(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
@@ -214,7 +218,7 @@ async def api_get_time_control_activity_trend(
     """
     Returns activity heat data by month/day/hour for mode and rating range.
     """
-    result = await get_time_control_activity_trend_payload(
+    result = await get_time_control_activity_trend(
         mode=mode,
         min_rating=min_rating,
         max_rating=max_rating
@@ -232,6 +236,16 @@ async def api_read_game(link: str) -> JSONResponse:
     if not game:
         raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
     return JSONResponse(content=game[0])
+
+
+@router.get("/{game_id}/score")
+async def api_get_game_score(game_id: int) -> JSONResponse:
+    """Return the canonical move-by-move engine and clock record for one game."""
+    try:
+        payload = await get_game_score(game_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    return JSONResponse(content=payload)
 
 @router.post("")
 async def api_create_game(
@@ -383,7 +397,7 @@ async def api_get_player_mode_games(
 @router.get("/{player_name}/hours_played")
 async def api_get_player_hours_played(player_name: str) -> JSONResponse:
     """
-    Returns total played hours and per-mode played hours for a player.
+    Returns total played hours plus per-mode game counts and played hours for a player.
     """
     player_name_lower = player_name.lower()
     result = await get_player_hours_played(player_name_lower)

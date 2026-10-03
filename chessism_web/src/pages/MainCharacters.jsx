@@ -1,51 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
+import './main-characters/mainCharacters.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { formatNumber } from '../utils/formatters'
+import {
+  createPlayerGames,
+  fetchMainCharacterTimeControls,
+  fetchTopMainCharacters,
+  updatePlayerGames,
+} from './main-characters/mainCharactersApi'
 
 const MAIN_CHARACTER_LIMIT = 5000
 const TOP_PLAYERS_PAGE_SIZE = 6
 const EMPTY_COUNTS = { bullet: 0, blitz: 0, rapid: 0 }
 const COUNTS_CACHE_KEY = 'main_characters_time_controls_v1'
 const COUNTS_CACHE_TTL_MS = 1000 * 60 * 60 * 6
-
-const parseJsonSafely = async (response) => response.json().catch(() => ({}))
-
-const throwIfNotOk = (response, payload) => {
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-}
-
-const fetchJsonOrThrow = async (url, options = undefined) => {
-  const response = await fetch(url, options)
-  const payload = await parseJsonSafely(response)
-  throwIfNotOk(response, payload)
-  return payload
-}
-
-const fetchMainCharacterTimeControls = async () =>
-  fetchJsonOrThrow(`${API_BASE_URL}/players/main_characters/time_controls`)
-
-const fetchTopMainCharacters = async (timeControl, limit = MAIN_CHARACTER_LIMIT) =>
-  fetchJsonOrThrow(
-    `${API_BASE_URL}/players/main_characters/top?time_control=${encodeURIComponent(timeControl)}&limit=${limit}`
-  )
-
-const updatePlayerGames = async (playerName) =>
-  fetchJsonOrThrow(`${API_BASE_URL}/games/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_name: playerName })
-  })
-
-const createPlayerGames = async (playerName) =>
-  fetchJsonOrThrow(`${API_BASE_URL}/games`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_name: playerName })
-  })
 
 const readCachedCounts = () => {
   try {
@@ -80,12 +50,6 @@ const writeCachedCounts = (counts) => {
   } catch {
     // Ignore localStorage errors.
   }
-}
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  if (Number.isNaN(numeric)) return '0'
-  return numeric.toLocaleString('en-US')
 }
 
 const getPrimaryDisplayName = (player) => String(player?.player_name || '').trim() || '--'
@@ -141,7 +105,8 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
 
   const handleCardNavigate = () => {
     if (typeof window !== 'undefined') {
-      window.location.href = profileHref
+      window.history.pushState(null, '', profileHref)
+      window.dispatchEvent(new PopStateEvent('popstate'))
     }
   }
 
@@ -622,7 +587,7 @@ function MainCharacters() {
   }
 
   return (
-    <div className="page-frame">
+    <div className="page-frame main-characters-page">
       <SideRail />
       <div className="home-shell">
         <Header />

@@ -9,6 +9,7 @@ from chessism_api.database.ask_db import (
     get_sum_n_games, 
     get_top_fens_unscored,
     get_fen_analysis_counts,
+    get_fen_pipeline_overview,
     get_scored_positions_overview,
     get_scored_positions_page,
     get_scored_advantage_by_rating,
@@ -17,6 +18,8 @@ from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     _get_remaining_fens_count_committed
 )
+from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
+from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
 
 router = APIRouter()
 
@@ -41,21 +44,27 @@ async def api_generate_fens(
     """
     total_games = data.total_games_to_process
     
-    print(f"Enqueuing FEN Pipeline job for {total_games} games.")
-    
-    job = await redis.enqueue_job(
-        'run_fen_pipeline',
+    pipeline = await ensure_fen_pipeline_enqueued(
+        redis,
         total_games_to_process=total_games,
         batch_size=data.batch_size,
         num_workers=data.num_workers,
-        _queue_name='pipeline_queue'
     )
-    job_id = str(getattr(job, "job_id", job))
+    job_id = pipeline["job_id"]
+    if pipeline["status"] == "up_to_date":
+        return JSONResponse(content={
+            "message": "FEN extraction is already up to date.",
+            "job_id": None,
+        })
     
     return JSONResponse(
         status_code=202,
         content={
-            "message": f"FEN Generation Pipeline started for {total_games} total games.",
+            "message": (
+                f"FEN extraction queued for {pipeline['pending_games']} pending games."
+                if pipeline["status"] == "queued"
+                else "FEN extraction is already running."
+            ),
             "job_id": job_id
         }
     )
@@ -70,6 +79,20 @@ async def api_get_remaining_games_needing_fens() -> JSONResponse:
     return JSONResponse(content={"remaining_games": int(remaining or 0)})
 
 
+@router.get("/pipeline/overview")
+async def api_get_fen_pipeline_overview() -> JSONResponse:
+    """Return maintained game-level counters for automatic FEN processing."""
+    return JSONResponse(content=await get_fen_pipeline_overview())
+
+
+@router.get("/pipeline/timings/latest")
+async def api_get_latest_ingestion_timing() -> JSONResponse:
+    """Return measured total and per-stage durations for the latest ingestion."""
+    return JSONResponse(content={
+        "run": await get_latest_ingestion_timing(),
+    })
+
+
 @router.get("/analysis_counts")
 async def api_get_fen_analysis_counts() -> JSONResponse:
     """
@@ -82,7 +105,7 @@ async def api_get_fen_analysis_counts() -> JSONResponse:
 @router.get("/players/{player_name}/analysis_counts")
 async def api_get_player_fen_analysis_counts(player_name: str) -> JSONResponse:
     """
-    Returns distinct player-position coverage for the Character Repeated panel.
+    Returns game and per-game FEN coverage for a player.
     """
     normalized_player = str(player_name or "").strip().lower()
     counts = await get_player_fen_score_counts(normalized_player)
@@ -96,6 +119,31 @@ async def api_get_scored_positions_overview() -> JSONResponse:
     """
     result = await get_scored_positions_overview()
     return JSONResponse(content=result)
+
+
+@router.get("/pending/repeated")
+async def api_get_most_repeated_pending_fens(
+    page: int = Query(1, ge=1)
+) -> JSONResponse:
+    """Return the most frequent FENs still waiting for an engine score."""
+    page_size = 5
+    offset = (page - 1) * page_size
+    fens = await get_top_fens_unscored(page_size + 1, offset=offset)
+    has_next = len(fens) > page_size
+    return JSONResponse(content={
+        "definition": "score_is_null",
+        "page": page,
+        "page_size": page_size,
+        "has_previous": page > 1,
+        "has_next": has_next,
+        "rows": [
+            {
+                "fen": fen_data["fen"],
+                "repetitions": int(fen_data.get("n_games") or 0),
+            }
+            for fen_data in fens[:page_size]
+        ],
+    })
 
 
 @router.get("/scored")

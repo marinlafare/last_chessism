@@ -3,8 +3,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from routers.analysis import router as analysis_router
-from operations.engine import engine_manager
+from routers.analysis import close_redis, router as analysis_router
+from operations.engine import engine_pool
 
 
 class SuppressNonServerErrorAccessLog(logging.Filter):
@@ -32,11 +32,12 @@ configure_access_log_filter()
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await engine_manager.initialize()
+    await engine_pool.initialize()
     try:
         yield
     finally:
-        await engine_manager.shutdown()
+        await engine_pool.shutdown()
+        await close_redis()
 
 
 app = FastAPI(
@@ -49,7 +50,7 @@ app = FastAPI(
 @app.get("/status")
 async def read_status():
     return {
-        **engine_manager.status(),
+        **engine_pool.status(),
         "version": app.version,
     }
 

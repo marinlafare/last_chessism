@@ -1,26 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import './analyze-times/analyzeTimes.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
-
-const formatNumber = (value, digits = 0) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US', {
-    maximumFractionDigits: digits,
-    minimumFractionDigits: digits
-  })
-}
-
-async function fetchSummary() {
-  const response = await fetch(`${API_BASE_URL}/analysis_times/summary?limit=10`)
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-  return payload
-}
+import { formatNumber } from '../utils/formatters'
+import { fetchAnalysisTimesSummary } from './analyze-times/analyzeTimesApi'
 
 function AnalyzeTimes() {
   const [data, setData] = useState(null)
@@ -30,7 +14,7 @@ function AnalyzeTimes() {
   const load = async () => {
     setLoading(true)
     try {
-      const payload = await fetchSummary()
+      const payload = await fetchAnalysisTimesSummary()
       setData(payload)
       setError('')
     } catch (err) {

@@ -1,0 +1,461 @@
+.game-explorer-backdrop,
+.game-review-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(1, 4, 7, 0.86);
+  backdrop-filter: blur(5px);
+}
+
+.game-explorer-modal,
+.game-review-modal {
+  display: grid;
+  width: min(1050px, 96vw);
+  max-height: 92vh;
+  overflow: hidden;
+  border: 1px solid rgba(91, 112, 130, 0.55);
+  border-radius: 10px;
+  background: #080d12;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.72);
+  color: var(--text);
+}
+
+.game-modal-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  background: #0b1117;
+}
+
+.game-modal-header h2 {
+  margin: 2px 0 0;
+  font: 800 18px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-header small {
+  color: var(--subtle);
+  font: 700 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-icon,
+.game-review-back {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #080d12;
+  color: var(--text);
+  font: 800 14px "IBM Plex Mono", monospace;
+  cursor: pointer;
+}
+
+.game-explorer-summary,
+.game-review-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.game-explorer-summary > div,
+.game-review-summary > div {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #0b1117;
+  text-align: center;
+}
+
+.game-explorer-summary span,
+.game-review-summary span {
+  color: var(--subtle);
+  font: 800 8px "IBM Plex Mono", monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.game-explorer-summary strong,
+.game-review-summary strong {
+  font: 800 12px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-message {
+  margin: 0;
+  padding: 34px;
+  color: var(--subtle);
+  font: 700 11px "IBM Plex Mono", monospace;
+  text-align: center;
+}
+
+.game-modal-message.error {
+  color: #f08a8a;
+}
+
+.game-explorer-list {
+  display: grid;
+  gap: 6px;
+  padding: 12px 18px;
+  overflow-y: auto;
+}
+
+.game-explorer-list > button {
+  display: grid;
+  grid-template-columns: 32px minmax(220px, 1fr) repeat(3, minmax(70px, auto)) 58px;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #0b1117;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-explorer-list > button:hover,
+.game-explorer-list > button:focus-visible {
+  border-color: rgba(21, 199, 128, 0.7);
+  background: rgba(21, 199, 128, 0.06);
+  outline: none;
+}
+
+.game-result-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #d55c5c;
+  color: #05090c;
+  font: 900 11px "IBM Plex Mono", monospace;
+}
+
+.game-result-mark.win { background: #15c780; }
+.game-result-mark.draw { background: #9170ad; }
+
+.game-list-opponent,
+.game-explorer-list > button > span:not(.game-result-mark) {
+  display: grid;
+  gap: 3px;
+}
+
+.game-explorer-list strong {
+  font: 800 10px "IBM Plex Mono", monospace;
+}
+
+.game-explorer-list small,
+.game-list-open {
+  color: var(--subtle);
+  font: 700 8px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-list-open {
+  justify-self: end;
+  color: #15c780;
+}
+
+.game-explorer-more {
+  min-height: 38px;
+  margin: 0 18px 16px;
+  border: 1px solid rgba(21, 199, 128, 0.6);
+  border-radius: 6px;
+  background: rgba(21, 199, 128, 0.1);
+  color: var(--text);
+  font: 800 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.game-review-modal {
+  width: min(1250px, 97vw);
+  height: min(850px, 94vh);
+}
+
+.game-review-modal.maximized {
+  width: 100vw;
+  height: 100vh;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.game-review-header {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+
+.game-review-header > div:nth-child(2) {
+  text-align: center;
+}
+
+.game-review-window-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.game-review-back {
+  color: #15c780;
+  font-size: 9px;
+  text-transform: uppercase;
+}
+
+.game-review-body {
+  display: grid;
+  grid-template-columns: minmax(360px, 1.25fr) minmax(300px, 0.75fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-review-board-column {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  justify-items: center;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 18px 16px;
+  border-right: 1px solid var(--border-soft);
+}
+
+.game-review-names {
+  display: flex;
+  justify-content: space-between;
+  width: min(100%, 720px);
+  color: var(--subtle);
+  font: 800 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-review-stage {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  width: min(100%, 730px);
+  min-height: 0;
+}
+
+.game-review-board {
+  width: min(100%, 680px);
+  min-width: 0;
+  align-self: center;
+}
+
+.game-review-eval {
+  position: relative;
+  flex: 0 0 24px;
+  align-self: stretch;
+  min-height: 280px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: #111;
+}
+
+.game-review-eval-black,
+.game-review-eval-white {
+  position: absolute;
+  right: 0;
+  left: 0;
+}
+
+.game-review-eval-black {
+  top: 0;
+  bottom: var(--white-eval);
+  background: #14191e;
+}
+
+.game-review-eval-white {
+  top: calc(100% - var(--white-eval));
+  bottom: 0;
+  background: #e9eef2;
+}
+
+.game-review-eval.flipped .game-review-eval-white {
+  top: 0;
+  bottom: calc(100% - var(--white-eval));
+}
+
+.game-review-eval.flipped .game-review-eval-black {
+  top: var(--white-eval);
+  bottom: 0;
+}
+
+.game-review-eval strong {
+  position: absolute;
+  z-index: 1;
+  bottom: 5px;
+  left: 50%;
+  color: #000;
+  font: 900 7px "IBM Plex Mono", monospace;
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.game-review-navigation {
+  display: grid;
+  grid-template-columns: 46px minmax(190px, 1fr) 46px;
+  align-items: center;
+  width: min(100%, 730px);
+  overflow: hidden;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #0b1117;
+}
+
+.game-review-navigation button {
+  min-height: 38px;
+  border: 0;
+  background: rgba(21, 199, 128, 0.08);
+  color: #15c780;
+  cursor: pointer;
+}
+
+.game-review-navigation button:disabled {
+  cursor: default;
+  opacity: 0.3;
+}
+
+.game-review-navigation span {
+  overflow: hidden;
+  font: 800 10px "IBM Plex Mono", monospace;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-review-analysis {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-review-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+}
+
+.game-review-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font: 700 9px "IBM Plex Mono", monospace;
+}
+
+.game-review-current > strong {
+  width: 100%;
+  color: #15c780;
+  text-transform: uppercase;
+}
+
+.game-review-current > span,
+.game-review-current > small {
+  color: var(--subtle);
+}
+
+.game-review-current > small {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-review-moves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 4px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.game-review-moves button {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #0b1117;
+  color: var(--text);
+  font: 700 9px "IBM Plex Mono", monospace;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-review-moves button.active {
+  border-color: #15c780;
+  background: rgba(21, 199, 128, 0.1);
+}
+
+.game-review-moves button.blunder { box-shadow: inset 3px 0 #d55c5c; }
+.game-review-moves button.mistake { box-shadow: inset 3px 0 #db8b45; }
+.game-review-moves button.inaccuracy { box-shadow: inset 3px 0 #c9a84c; }
+.game-review-moves button.best { box-shadow: inset 3px 0 #15c780; }
+
+.game-review-moves span,
+.game-review-moves small {
+  color: var(--subtle);
+}
+
+@media (max-width: 800px) {
+  .game-explorer-backdrop,
+  .game-review-backdrop {
+    padding: 0;
+  }
+
+  .game-explorer-modal,
+  .game-review-modal {
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .game-explorer-list > button {
+    grid-template-columns: 30px minmax(160px, 1fr) 70px;
+  }
+
+  .game-explorer-list > button > span:nth-child(4),
+  .game-explorer-list > button > span:nth-child(5),
+  .game-list-open {
+    display: none;
+  }
+
+  .game-review-body {
+    grid-template-columns: 1fr;
+    overflow-y: auto;
+  }
+
+  .game-review-board-column {
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .game-review-analysis {
+    min-height: 420px;
+  }
+}

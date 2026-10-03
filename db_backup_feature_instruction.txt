@@ -1,0 +1,92 @@
+DATABASE BACKUP FEATURE INSTRUCTIONS
+
+Build a database-backup feature for this application. The application owns the
+backup process because it knows its database engine, credentials, schema, and
+the correct way to produce a consistent backup. Do not copy live database data
+files directly. Use the database engine's supported dump/snapshot mechanism and
+provide a tested restore procedure.
+
+BACKUP DESTINATION
+
+Store backups on the dedicated external recovery disk:
+
+- Disk model: ST1000DM010-2EP102 (approximately 1 TB)
+- Partition label: timeshift
+- Filesystem: ext4
+- Partition UUID: 1ebffac6-4b7a-4906-9e07-9586060d3825
+- Application backup directory:
+  /main-monitor-db-backups/<stable-app-id>/
+
+Resolve and mount the partition by UUID. Never depend on /dev/sda or another
+/dev/sdX name because those names can change between boots. Keep application
+backups outside the partition's /timeshift directory; do not modify Timeshift's
+own files or snapshot layout.
+
+BACKUP TRIGGERS
+
+Support both of these triggers:
+
+1. Automatically request a backup once whenever the application starts.
+2. Provide a "Backup database" control in the application's UI for a manual
+   on-demand backup.
+
+Only one backup may run at a time. If the external disk is absent, full, or
+read-only, the application must continue running but must publish a clear failed
+or unavailable backup status. A failed backup must never replace the last known
+good backup.
+
+BACKUP SAFETY
+
+- Produce a transactionally consistent backup using the database's native
+  tools (for example pg_dump/pg_dumpall for PostgreSQL or the appropriate
+  equivalent for another engine).
+- Write into a temporary staging directory first.
+- Record database and tool versions, UTC timestamps, backup size, and SHA-256
+  hashes for every artifact.
+- Validate the completed artifacts. When practical, perform a restore test in
+  an isolated disposable container.
+- Atomically promote the staging directory only after every validation passes.
+- Keep at least the two newest verified backups. Never delete the previous
+  verified backup until the replacement has passed validation.
+- Do not place database passwords, tokens, connection strings, or other secrets
+  in logs or monitoring files.
+
+MAIN MONITOR SIGNALS
+
+Publish a machine-readable status file so Main Monitor can observe backup
+health without receiving database credentials. Write it atomically to:
+
+  /main-monitor-db-backups/<stable-app-id>/backup-status.json
+
+Use this generic structure:
+
+{
+  "schema_version": 1,
+  "app_id": "stable-app-id",
+  "database_engine": "postgresql",
+  "status": "success",
+  "trigger": "startup",
+  "backup_id": "UTC timestamp or UUID",
+  "started_at": "ISO-8601 UTC timestamp",
+  "completed_at": "ISO-8601 UTC timestamp",
+  "last_verified_at": "ISO-8601 UTC timestamp",
+  "restore_tested": true,
+  "artifact_count": 1,
+  "total_bytes": 0,
+  "destination_uuid": "1ebffac6-4b7a-4906-9e07-9586060d3825",
+  "relative_path": "main-monitor-db-backups/stable-app-id/<backup-id>",
+  "manifest_sha256": "sha256 digest",
+  "error_code": null,
+  "error_message": null
+}
+
+Allowed status values should include: running, success, failed, unavailable,
+and stale. Also keep a manifest inside each completed backup directory listing
+every artifact and its SHA-256 hash. Main Monitor will read these signals to
+show freshness, size, verification state, destination health, and errors. It
+must monitor backup state only; it must not need the application's database
+credentials.
+
+Document and test both backup and restore. Do not report success merely because
+a command exited successfully: artifact validation and checksum creation must
+also succeed.

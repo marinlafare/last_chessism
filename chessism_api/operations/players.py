@@ -10,7 +10,7 @@ from chessism_api.database.ask_db import (
     get_top_main_characters_by_time_control
 )
 from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData
-from chessism_api.operations.chess_com_api import get_profile, get_player_stats
+from chessism_api.operations.ingestion_pipeline.chesscom import get_profile, get_player_stats
 
 async def read_player(player_name: str) -> Optional[Dict[str, Any]]:
     """
@@ -64,6 +64,15 @@ async def insert_player(data: dict) -> Optional[PlayerCreateData]:
 
 
     fetched_profile_dict = fetched_profile.model_dump()
+    # An explicit games download is the restore path for a previously deleted
+    # main player. Merely opening the deleted shell in the UI does not call this.
+    fetched_profile_dict["deleted_at"] = None
+
+    # Chess.com does not provide an IANA timezone. Never erase a manually
+    # curated timezone when the rest of the public profile is refreshed.
+    if existing_player and not fetched_profile_dict.get("timezone"):
+        fetched_profile_dict.pop("timezone", None)
+        fetched_profile_dict.pop("timezone_source", None)
 
     # Existing row: update directly and avoid intentional duplicate insert attempts.
     if existing_player:

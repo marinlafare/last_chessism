@@ -1,25 +1,15 @@
 # chessism_api/database/ask_db.py
-import os
-import asyncio
 import time
 import math
 import json
 from typing import List, Dict, Any, Tuple, Set, Optional
 from datetime import datetime, timedelta, timezone
-from constants import CONN_STRING
 from sqlalchemy.exc import ResourceClosedError
-# --- MODIFIED: Import distinct ---
-from sqlalchemy import text, select, update, func, distinct
+from sqlalchemy import exists, text, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-# --- FIXED IMPORTS ---
-from chessism_api.database.engine import async_engine, AsyncDBSession, init_db
-# --- THIS IS THE FIX: Import the CamelCase class name ---
-from chessism_api.database.models import Fen, Game, PlayerStats, GameFenAssociation
-# ---
-
-from chessism_api.database.db_interface import DBInterface
-# ---
+from chessism_api.database.engine import async_engine, AsyncDBSession
+from chessism_api.database.models import Fen, Game, GameAnalysisSummary, GameFenAssociation
 
 async def get_all_database_names():
     """
@@ -273,12 +263,30 @@ async def refresh_database_summary_game_counts() -> Dict[str, int]:
             refreshed_at = CURRENT_TIMESTAMP
         FROM (
             SELECT
-                (SELECT COUNT(*)::bigint FROM game) AS n_games_in_db,
-                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NOT NULL AND joined <> 0) AS main_characters,
-                (SELECT COUNT(*)::bigint FROM player WHERE joined IS NULL OR joined = 0) AS secondary_characters,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'bullet') AS bullet_games,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'blitz') AS blitz_games,
-                (SELECT COUNT(*)::bigint FROM game WHERE mode = 'rapid') AS rapid_games
+                game_counts.n_games_in_db,
+                player_counts.main_characters,
+                player_counts.secondary_characters,
+                game_counts.bullet_games,
+                game_counts.blitz_games,
+                game_counts.rapid_games
+            FROM (
+                SELECT
+                    COUNT(*)::bigint AS n_games_in_db,
+                    COUNT(*) FILTER (WHERE mode = 'bullet')::bigint AS bullet_games,
+                    COUNT(*) FILTER (WHERE mode = 'blitz')::bigint AS blitz_games,
+                    COUNT(*) FILTER (WHERE mode = 'rapid')::bigint AS rapid_games
+                FROM game
+            ) AS game_counts
+            CROSS JOIN (
+                SELECT
+                    COUNT(*) FILTER (
+                        WHERE joined IS NOT NULL AND joined <> 0
+                    )::bigint AS main_characters,
+                    COUNT(*) FILTER (
+                        WHERE joined IS NULL OR joined = 0
+                    )::bigint AS secondary_characters
+                FROM player
+            ) AS player_counts
         ) counts
         WHERE database_summary.id = 1
         RETURNING {DATABASE_SUMMARY_RETURNING_COLUMNS};
@@ -382,6 +390,144 @@ async def increment_database_summary_fen_counts(
     return _database_summary_from_row(row or existing)
 
 
+FEN_INGESTION_APPEARANCE_FIELDS = (
+    "equal_appearances",
+    "small_appearances",
+    "clear_appearances",
+    "decisive_appearances",
+    "mate_appearances",
+)
+
+
+async def get_fen_ingestion_summary(fen_values: List[str]) -> Dict[str, int]:
+    """Read summary inputs only for FENs touched by one ingestion pass."""
+    unique_fens = list(dict.fromkeys(str(fen) for fen in fen_values if fen))
+    summary = {
+        "positions": 0,
+        **{field: 0 for field in FEN_INGESTION_APPEARANCE_FIELDS},
+    }
+    if not unique_fens:
+        return summary
+
+    query = text("""
+        SELECT
+            COUNT(*)::bigint AS positions,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) < 50
+            ), 0)::bigint AS equal_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 50 AND ABS(score) < 150
+            ), 0)::bigint AS small_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 150 AND ABS(score) < 300
+            ), 0)::bigint AS clear_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 300 AND ABS(score) < 9000
+            ), 0)::bigint AS decisive_appearances,
+            COALESCE(SUM(n_games) FILTER (
+                WHERE score IS NOT NULL AND ABS(score) >= 9000
+            ), 0)::bigint AS mate_appearances
+        FROM fen
+        WHERE fen = ANY(CAST(:fen_values AS VARCHAR[]));
+    """)
+    async with AsyncDBSession() as session:
+        for start in range(0, len(unique_fens), 5_000):
+            result = await session.execute(
+                query,
+                {"fen_values": unique_fens[start:start + 5_000]},
+            )
+            row = result.mappings().first() or {}
+            summary["positions"] += int(row.get("positions") or 0)
+            for field in FEN_INGESTION_APPEARANCE_FIELDS:
+                summary[field] += int(row.get(field) or 0)
+
+    return summary
+
+
+def fen_ingestion_summary_delta(
+    before: Dict[str, int],
+    after: Dict[str, int],
+) -> Dict[str, int]:
+    """Calculate idempotent cache deltas from affected-FEN snapshots."""
+    return {
+        "new_positions": max(
+            0,
+            int(after.get("positions") or 0) - int(before.get("positions") or 0),
+        ),
+        **{
+            field: int(after.get(field) or 0) - int(before.get(field) or 0)
+            for field in FEN_INGESTION_APPEARANCE_FIELDS
+        },
+    }
+
+
+async def increment_fen_ingestion_summaries(
+    before: Dict[str, int],
+    after: Dict[str, int],
+) -> Dict[str, int]:
+    """Apply one ingestion pass without rescanning the complete FEN table."""
+    delta = fen_ingestion_summary_delta(before, after)
+
+    database_summary = await _read_database_summary()
+    scored_summary = await _read_scored_position_summary()
+    if database_summary is None or scored_summary is None:
+        # First-run recovery is intentionally exhaustive; normal ingestion uses
+        # the O(affected FENs) update below.
+        await refresh_database_summary_fen_counts()
+        await refresh_scored_position_summary()
+        return {**delta, "reconciled": 1}
+
+    if not any(delta.values()):
+        return {**delta, "reconciled": 0}
+
+    params = {
+        "new_positions": delta["new_positions"],
+        **{
+            f"{field}_delta": delta[field]
+            for field in FEN_INGESTION_APPEARANCE_FIELDS
+        },
+    }
+    async with AsyncDBSession() as session:
+        try:
+            await session.execute(text("""
+                UPDATE database_summary
+                SET
+                    n_positions = n_positions + :new_positions,
+                    unscored_fens = unscored_fens + :new_positions,
+                    refreshed_at = CURRENT_TIMESTAMP
+                WHERE id = 1;
+            """), params)
+            await session.execute(text("""
+                UPDATE scored_position_summary
+                SET
+                    total_positions = total_positions + :new_positions,
+                    unscored_fens = unscored_fens + :new_positions,
+                    equal_appearances = GREATEST(
+                        0, equal_appearances + :equal_appearances_delta
+                    ),
+                    small_appearances = GREATEST(
+                        0, small_appearances + :small_appearances_delta
+                    ),
+                    clear_appearances = GREATEST(
+                        0, clear_appearances + :clear_appearances_delta
+                    ),
+                    decisive_appearances = GREATEST(
+                        0, decisive_appearances + :decisive_appearances_delta
+                    ),
+                    mate_appearances = GREATEST(
+                        0, mate_appearances + :mate_appearances_delta
+                    ),
+                    refreshed_at = CURRENT_TIMESTAMP
+                WHERE id = 1;
+            """), params)
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+    return {**delta, "reconciled": 0}
+
+
 async def ensure_database_summary() -> Dict[str, int]:
     """
     Returns the precomputed summary, building it only if the row does not exist.
@@ -390,6 +536,113 @@ async def ensure_database_summary() -> Dict[str, int]:
     if summary is not None:
         return summary
     return await refresh_database_summary()
+
+
+def _fen_pipeline_summary_from_row(row: Any) -> Dict[str, Any]:
+    return {
+        "parsed_games": int(row.get("parsed_games") or 0),
+        "analyzable_games": int(row.get("analyzable_games") or 0),
+        "excluded_games": int(row.get("excluded_games") or 0),
+        "fen_extracted_games": int(row.get("fen_extracted_games") or 0),
+        "tablebase_marked_games": int(row.get("tablebase_marked_games") or 0),
+        "refreshed_at": row.get("refreshed_at").isoformat()
+        if row.get("refreshed_at") else None,
+    }
+
+
+async def refresh_fen_pipeline_summary(
+    *,
+    mark_tablebase_current: bool = False,
+) -> Dict[str, Any]:
+    """Refresh stage totals once after pipeline writes, never during UI polling."""
+    tablebase_insert = "counts.fen_extracted_games" if mark_tablebase_current else "0"
+    tablebase_update = (
+        "EXCLUDED.fen_extracted_games"
+        if mark_tablebase_current
+        else "LEAST(fen_pipeline_summary.tablebase_marked_games, EXCLUDED.fen_extracted_games)"
+    )
+    query = f"""
+        INSERT INTO fen_pipeline_summary (
+            id,
+            parsed_games,
+            analyzable_games,
+            excluded_games,
+            fen_extracted_games,
+            tablebase_marked_games,
+            refreshed_at
+        )
+        SELECT
+            1,
+            counts.parsed_games,
+            counts.analyzable_games,
+            counts.excluded_games,
+            counts.fen_extracted_games,
+            {tablebase_insert},
+            CURRENT_TIMESTAMP
+        FROM (
+            SELECT
+                (SELECT COUNT(*)::bigint FROM game) AS parsed_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game
+                    WHERE rules = 'chess'
+                ) AS analyzable_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game
+                    WHERE rules <> 'chess'
+                ) AS excluded_games,
+                (
+                    SELECT COUNT(*)::bigint
+                    FROM game_analysis_summary summary
+                    JOIN game game_row ON game_row.link = summary.link
+                    WHERE summary.total_positions > 0
+                      AND game_row.rules = 'chess'
+                ) AS fen_extracted_games
+        ) counts
+        ON CONFLICT (id) DO UPDATE SET
+            parsed_games = EXCLUDED.parsed_games,
+            analyzable_games = EXCLUDED.analyzable_games,
+            excluded_games = EXCLUDED.excluded_games,
+            fen_extracted_games = EXCLUDED.fen_extracted_games,
+            tablebase_marked_games = {tablebase_update},
+            refreshed_at = CURRENT_TIMESTAMP
+        RETURNING parsed_games, analyzable_games, excluded_games,
+                  fen_extracted_games, tablebase_marked_games, refreshed_at;
+    """
+    async with AsyncDBSession() as session:
+        try:
+            result = await session.execute(text(query))
+            row = result.mappings().first() or {}
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+    return _fen_pipeline_summary_from_row(row)
+
+
+async def ensure_fen_pipeline_summary() -> Dict[str, Any]:
+    query = """
+        SELECT parsed_games, analyzable_games, excluded_games,
+               fen_extracted_games, tablebase_marked_games, refreshed_at
+        FROM fen_pipeline_summary
+        WHERE id = 1;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        row = result.mappings().first()
+    if row:
+        return _fen_pipeline_summary_from_row(row)
+    return await refresh_fen_pipeline_summary()
+
+
+async def get_fen_pipeline_overview() -> Dict[str, Any]:
+    """Return O(1) counters for the three automatic pipeline stages."""
+    summary = await ensure_fen_pipeline_summary()
+    return {
+        "total_games": summary["parsed_games"],
+        **summary,
+    }
 
 
 SCORED_POSITION_SUMMARY_COLUMNS = """
@@ -770,7 +1023,7 @@ async def increment_scored_position_summary_for_scored_fens(
                     refreshed_at = CURRENT_TIMESTAMP
                 FROM delta
                 WHERE sps.id = 1
-                RETURNING {SCORED_POSITION_SUMMARY_COLUMNS};
+                RETURNING sps.*;
             """
             result = await session.execute(text(update_query))
             row = result.mappings().first()
@@ -2276,11 +2529,17 @@ async def get_games_already_in_db(links_to_check: Tuple[int, ...]) -> Set[int]:
                     insert_sql = f"INSERT INTO {temp_table_name} (link_col) VALUES {values_clause} ON CONFLICT DO NOTHING;"
                     await session.execute(text(insert_sql))
 
-            # 3. Join game table with the temporary table
+            # 3. Check both playable games and zero-move tombstones. A game
+            # archived without moves must not be downloaded and discarded on
+            # every future player update.
             join_sql = f"""
-                SELECT g.link 
+                SELECT g.link
                 FROM game AS g
-                JOIN {temp_table_name} AS t ON g.link = t.link_col;
+                JOIN {temp_table_name} AS t ON g.link = t.link_col
+                UNION
+                SELECT empty_game.game_id AS link
+                FROM no_moves_games AS empty_game
+                JOIN {temp_table_name} AS t ON empty_game.game_id = t.link_col;
             """
             result = await session.execute(text(join_sql))
             links_found_in_db.update(result.scalars().all())
@@ -2330,7 +2589,10 @@ async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
     )
     return result
 
-async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
+async def get_top_fens_unscored(
+    limit: int = 20,
+    offset: int = 0,
+) -> List[Dict[str, Any]]:
     """
     Retrieves the top N FENs based on the highest count of n_games,
     where the score has NOT been calculated yet.
@@ -2346,9 +2608,13 @@ async def get_top_fens_unscored(limit: int = 20) -> List[Dict[str, Any]]:
             score IS NULL
         ORDER BY
             n_games DESC
-        LIMIT :limit;
+        LIMIT :limit
+        OFFSET :offset;
     """
-    params = {"limit": limit}
+    params = {
+        "limit": max(1, min(100, int(limit))),
+        "offset": max(0, int(offset)),
+    }
 
     result = await open_async_request(
         sql_query,
@@ -2902,6 +3168,14 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
             await session.rollback()
             raise
 
+    try:
+        from chessism_api.operations.player_game_scores import (
+            refresh_game_player_engine_summaries,
+        )
+        await refresh_game_player_engine_summaries(clean_links or None)
+    except Exception as error:
+        print(f"Failed to refresh player engine summaries: {error!r}")
+
     return {
         "games": len(rows),
         "scope": "links" if clean_links else "all"
@@ -3009,6 +3283,20 @@ async def increment_game_analysis_summary_for_scored_fens(
         except Exception:
             await session.rollback()
             raise
+
+    fully_analyzed_links = tuple(
+        int(row["link"])
+        for row in rows
+        if bool(row.get("is_fully_analyzed"))
+    )
+    if fully_analyzed_links:
+        try:
+            from chessism_api.operations.player_game_scores import (
+                refresh_game_player_engine_summaries,
+            )
+            await refresh_game_player_engine_summaries(fully_analyzed_links)
+        except Exception as error:
+            print(f"Failed to refresh completed player engine summaries: {error!r}")
 
     return {
         "games": len(rows),
@@ -3167,6 +3455,25 @@ async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Opt
         await session.close()
         return None, None
 
+
+def _player_fens_for_analysis_stmt(player_name: str, limit: int):
+    """Build a lockable, duplicate-free player FEN selection statement."""
+    player_has_fen = exists(
+        select(GameFenAssociation.game_link)
+        .join(Game, GameFenAssociation.game_link == Game.link)
+        .where(GameFenAssociation.fen_fen == Fen.fen)
+        .where((Game.white == player_name) | (Game.black == player_name))
+    )
+    return (
+        select(Fen.fen)
+        .where(Fen.score.is_(None))
+        .where(player_has_fen)
+        .order_by(Fen.n_games.desc())
+        .limit(limit)
+        .with_for_update(skip_locked=True, of=Fen)
+    )
+
+
 async def get_player_fens_for_analysis(
     player_name: str,
     limit: int
@@ -3180,32 +3487,10 @@ async def get_player_fens_for_analysis(
     session = AsyncDBSession()
     try:
         await session.begin()
-        
-        # --- FIX: Use a Subquery with WHERE IN ---
-        
-        # 1. Create a subquery to find the TOP N *distinct* FENs for the player.
-        # This subquery is NOT locked.
-        player_fens_subquery = (
-            # --- THIS IS THE FIX: Removed distinct() ---
-            select(Fen.fen)
-            .join(GameFenAssociation, Fen.fen == GameFenAssociation.fen_fen)
-            .join(Game, GameFenAssociation.game_link == Game.link)
-            .where(
-                (Game.white == player_name) | (Game.black == player_name)
-            )
-            .where(Fen.score.is_(None))
-            .group_by(Fen.fen, Fen.n_games) # <-- Use GROUP BY
-            .order_by(Fen.n_games.desc()) # <-- This is now valid
-            .limit(limit)
-        ).scalar_subquery() # Makes it a subquery returning a list of scalars
 
-        # 2. Now, select from the Fen table WHERE fen is in our subquery list,
-        # and apply the lock HERE.
-        stmt = (
-            select(Fen.fen)
-            .where(Fen.fen.in_(player_fens_subquery))
-            .with_for_update(skip_locked=True)
-        )
+        # Fen remains the only row-producing table, so PostgreSQL can skip rows
+        # already leased by another worker before satisfying LIMIT.
+        stmt = _player_fens_for_analysis_stmt(player_name, limit)
         
         result = await session.execute(stmt)
         fens = result.scalars().all()
@@ -3222,32 +3507,456 @@ async def get_player_fens_for_analysis(
         await session.rollback()
         await session.close()
         return None, None
-# --- END CORRECTION ---
 
-async def get_player_fen_score_counts(player_name: str) -> Dict[str, int]:
+
+def _player_game_analysis_conditions(
+    player_name: str,
+    date_from: Optional[datetime] = None,
+    date_to_exclusive: Optional[datetime] = None,
+):
+    conditions = [
+        (Game.white == player_name) | (Game.black == player_name),
+        GameAnalysisSummary.total_positions > 0,
+    ]
+    if date_from is not None:
+        conditions.append(Game.played_at >= date_from)
+    if date_to_exclusive is not None:
+        conditions.append(Game.played_at < date_to_exclusive)
+    return conditions
+
+
+async def get_player_game_analysis_scope(
+    player_name: str,
+    date_from: Optional[datetime] = None,
+    date_to_exclusive: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Count analyzable, complete, and incomplete player games in an optional date range."""
+    stmt = (
+        select(
+            func.count(Game.link).label("games_with_fens"),
+            func.count(Game.link).filter(GameAnalysisSummary.is_fully_analyzed.is_(True)).label("complete_games"),
+            func.count(Game.link).filter(GameAnalysisSummary.is_fully_analyzed.is_(False)).label("incomplete_games"),
+            func.min(Game.played_at).label("earliest_game"),
+            func.max(Game.played_at).label("latest_game"),
+        )
+        .join(GameAnalysisSummary, GameAnalysisSummary.link == Game.link)
+        .where(*_player_game_analysis_conditions(player_name, date_from, date_to_exclusive))
+    )
+    async with AsyncDBSession() as session:
+        result = await session.execute(stmt)
+        row = result.mappings().first() or {}
+
+    games_with_fens = int(row.get("games_with_fens") or 0)
+    complete_games = int(row.get("complete_games") or 0)
+    return {
+        "player_name": player_name,
+        "games_with_fens": games_with_fens,
+        "complete_games": complete_games,
+        "incomplete_games": int(row.get("incomplete_games") or 0),
+        "earliest_game": row.get("earliest_game").isoformat() if row.get("earliest_game") else None,
+        "latest_game": row.get("latest_game").isoformat() if row.get("latest_game") else None,
+    }
+
+
+def _evenly_spaced_indices(size: int, count: int) -> List[int]:
+    """Return deterministic indices spanning the complete input range."""
+    safe_size = max(0, int(size))
+    safe_count = min(safe_size, max(0, int(count)))
+    if safe_count <= 0:
+        return []
+    if safe_count == 1:
+        return [(safe_size - 1) // 2]
+    denominator = safe_count - 1
+    return [
+        ((index * (safe_size - 1)) + (denominator // 2)) // denominator
+        for index in range(safe_count)
+    ]
+
+
+def fair_sample_player_games_by_month(
+    chronological_rows: List[Any],
+    game_limit: int,
+) -> Tuple[List[Any], Dict[str, int]]:
+    """Balance a game sample across every available calendar month.
+
+    Every represented month receives one game before any month receives a
+    second. If the requested sample is smaller than the number of months,
+    evenly spaced months are selected across the full history. Games within
+    each month are also selected at evenly spaced chronological positions.
     """
-    Counts per-game position coverage for a specific player.
+    rows = list(chronological_rows or [])
+    target = min(len(rows), max(1, int(game_limit))) if rows else 0
+    if target <= 0:
+        return [], {"available_periods": 0, "sampled_periods": 0}
+
+    period_groups: Dict[Tuple[Any, ...], List[Tuple[int, Any]]] = {}
+    for chronological_index, row in enumerate(rows):
+        played_at = row.get("played_at")
+        period = (
+            (int(played_at.year), int(played_at.month))
+            if played_at is not None
+            else ("unknown",)
+        )
+        period_groups.setdefault(period, []).append((chronological_index, row))
+
+    groups = list(period_groups.values())
+    allocations = [0] * len(groups)
+    if target < len(groups):
+        for group_index in _evenly_spaced_indices(len(groups), target):
+            allocations[group_index] = 1
+    else:
+        allocations = [1] * len(groups)
+        remaining = target - len(groups)
+        while remaining > 0:
+            eligible = [
+                index
+                for index, group in enumerate(groups)
+                if allocations[index] < len(group)
+            ]
+            if not eligible:
+                break
+            if remaining < len(eligible):
+                chosen = [
+                    eligible[index]
+                    for index in _evenly_spaced_indices(len(eligible), remaining)
+                ]
+            else:
+                chosen = eligible
+            for group_index in chosen:
+                allocations[group_index] += 1
+                remaining -= 1
+
+    selected_with_indices: List[Tuple[int, Any]] = []
+    for group, allocation in zip(groups, allocations):
+        for row_index in _evenly_spaced_indices(len(group), allocation):
+            selected_with_indices.append(group[row_index])
+    selected_with_indices.sort(key=lambda item: item[0])
+
+    return [row for _, row in selected_with_indices], {
+        "available_periods": len(groups),
+        "sampled_periods": sum(1 for allocation in allocations if allocation > 0),
+    }
+
+
+async def preview_player_games_for_analysis(
+    player_name: str,
+    *,
+    order: str,
+    game_limit: Optional[int],
+    date_from: Optional[datetime] = None,
+    date_to_exclusive: Optional[datetime] = None,
+) -> Dict[str, Any]:
+    """Freeze an ordered selection of incomplete games and calculate its exact FEN workload."""
+    normalized_order = str(order or "latest").lower()
+    fair_range = normalized_order == "fair_range"
+    order_desc = normalized_order != "oldest" and not fair_range
+    played_order = Game.played_at.desc().nullslast() if order_desc else Game.played_at.asc().nullslast()
+    link_order = Game.link.desc() if order_desc else Game.link.asc()
+    stmt = (
+        select(
+            Game.link,
+            Game.played_at,
+            GameAnalysisSummary.total_positions,
+            GameAnalysisSummary.analyzed_positions,
+            GameAnalysisSummary.unscored_positions,
+        )
+        .join(GameAnalysisSummary, GameAnalysisSummary.link == Game.link)
+        .where(*_player_game_analysis_conditions(player_name, date_from, date_to_exclusive))
+        .where(GameAnalysisSummary.is_fully_analyzed.is_(False))
+        .order_by(played_order, link_order)
+    )
+    if game_limit is not None and not fair_range:
+        stmt = stmt.limit(max(1, int(game_limit)))
+
+    async with AsyncDBSession() as session:
+        selected_result = await session.execute(stmt)
+        selected_rows = selected_result.mappings().all()
+        sampling = {"available_periods": 0, "sampled_periods": 0}
+        if fair_range and game_limit is not None:
+            selected_rows, sampling = fair_sample_player_games_by_month(
+                selected_rows,
+                game_limit,
+            )
+        game_links = [int(row["link"]) for row in selected_rows]
+        if not game_links:
+            return {
+                "player_name": player_name,
+                "game_links": [],
+                "selected_games": 0,
+                "position_occurrences": 0,
+                "analyzed_occurrences": 0,
+                "unscored_occurrences": 0,
+                "unique_fens": 0,
+                "analyzed_unique_fens": 0,
+                "fens_to_analyze": 0,
+                "tablebase_fens": 0,
+                **sampling,
+            }
+
+        stats_result = await session.execute(text("""
+            SELECT
+                COUNT(*)::bigint AS position_occurrences,
+                COUNT(*) FILTER (WHERE f.score IS NOT NULL)::bigint AS analyzed_occurrences,
+                COUNT(*) FILTER (WHERE f.score IS NULL)::bigint AS unscored_occurrences,
+                COUNT(DISTINCT gfa.fen_fen)::bigint AS unique_fens,
+                COUNT(DISTINCT gfa.fen_fen) FILTER (WHERE f.score IS NOT NULL)::bigint AS analyzed_unique_fens,
+                COUNT(DISTINCT gfa.fen_fen) FILTER (WHERE f.score IS NULL)::bigint AS fens_to_analyze,
+                COUNT(DISTINCT gfa.fen_fen) FILTER (
+                    WHERE f.score IS NULL
+                      AND COALESCE(f.analysis_source, '') <> 'tablebase_unavailable'
+                      AND COALESCE(
+                            f.piece_count,
+                            char_length(translate(split_part(f.fen, ' ', 1), '12345678/', ''))
+                          ) BETWEEN 2 AND 5
+                )::bigint AS tablebase_fens
+            FROM game_fen_association gfa
+            JOIN fen f ON f.fen = gfa.fen_fen
+            WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]));
+        """), {"game_links": game_links})
+        stats = stats_result.mappings().first() or {}
+
+    return {
+        "player_name": player_name,
+        "game_links": game_links,
+        "selected_games": len(game_links),
+        "first_game_at": selected_rows[0].get("played_at").isoformat() if selected_rows[0].get("played_at") else None,
+        "last_game_at": selected_rows[-1].get("played_at").isoformat() if selected_rows[-1].get("played_at") else None,
+        "position_occurrences": int(stats.get("position_occurrences") or 0),
+        "analyzed_occurrences": int(stats.get("analyzed_occurrences") or 0),
+        "unscored_occurrences": int(stats.get("unscored_occurrences") or 0),
+        "unique_fens": int(stats.get("unique_fens") or 0),
+        "analyzed_unique_fens": int(stats.get("analyzed_unique_fens") or 0),
+        "fens_to_analyze": int(stats.get("fens_to_analyze") or 0),
+        "tablebase_fens": int(stats.get("tablebase_fens") or 0),
+        **sampling,
+    }
+
+
+async def count_game_set_fens_for_analysis(game_links: List[int]) -> int:
+    clean_links = [int(link) for link in game_links if link is not None]
+    if not clean_links:
+        return 0
+    async with AsyncDBSession() as session:
+        result = await session.execute(text("""
+            SELECT COUNT(DISTINCT gfa.fen_fen)::bigint AS remaining
+            FROM game_fen_association gfa
+            JOIN fen f ON f.fen = gfa.fen_fen
+            WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
+              AND f.score IS NULL;
+        """), {"game_links": clean_links})
+        return int(result.scalar() or 0)
+
+
+async def get_game_set_analysis_completion(game_links: List[int]) -> Dict[str, int]:
+    clean_links = [int(link) for link in game_links if link is not None]
+    if not clean_links:
+        return {"selected_games": 0, "fully_analyzed_games": 0, "incomplete_games": 0}
+    async with AsyncDBSession() as session:
+        result = await session.execute(text("""
+            SELECT
+                COUNT(*)::bigint AS selected_games,
+                COUNT(*) FILTER (WHERE is_fully_analyzed)::bigint AS fully_analyzed_games,
+                COUNT(*) FILTER (WHERE NOT is_fully_analyzed)::bigint AS incomplete_games
+            FROM game_analysis_summary
+            WHERE link = ANY(CAST(:game_links AS BIGINT[]));
+        """), {"game_links": clean_links})
+        row = result.mappings().first() or {}
+    return {
+        "selected_games": int(row.get("selected_games") or 0),
+        "fully_analyzed_games": int(row.get("fully_analyzed_games") or 0),
+        "incomplete_games": int(row.get("incomplete_games") or 0),
+    }
+
+
+async def get_game_set_fens_for_analysis(
+    game_links: List[int],
+    limit: int,
+) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
+    """Lease missing FENs for a frozen, ordered set of games."""
+    clean_links = [int(link) for link in game_links if link is not None]
+    if not clean_links:
+        return None, None
+
+    session = AsyncDBSession()
+    try:
+        await session.begin()
+        result = await session.execute(text("""
+            WITH selected_games AS MATERIALIZED (
+                SELECT link, priority
+                FROM unnest(CAST(:game_links AS BIGINT[]))
+                     WITH ORDINALITY AS selected(link, priority)
+            ),
+            candidate_fens AS MATERIALIZED (
+                SELECT
+                    gfa.fen_fen,
+                    MIN(selected.priority) AS game_priority,
+                    MIN(
+                        (gfa.n_move * 2) +
+                        CASE WHEN gfa.move_color = 'white' THEN 0 ELSE 1 END
+                    ) AS move_priority
+                FROM selected_games selected
+                JOIN game_fen_association gfa ON gfa.game_link = selected.link
+                GROUP BY gfa.fen_fen
+            )
+            SELECT f.fen
+            FROM candidate_fens candidate
+            JOIN fen f ON f.fen = candidate.fen_fen
+            WHERE f.score IS NULL
+            ORDER BY candidate.game_priority, candidate.move_priority, f.fen
+            LIMIT :limit
+            FOR UPDATE OF f SKIP LOCKED;
+        """), {
+            "game_links": clean_links,
+            "limit": max(1, int(limit)),
+        })
+        fens = list(result.scalars().all())
+        if not fens:
+            await session.rollback()
+            await session.close()
+            return None, None
+        return session, fens
+    except Exception as error:
+        print(f"Error in get_game_set_fens_for_analysis: {repr(error)}", flush=True)
+        await session.rollback()
+        await session.close()
+        return None, None
+
+async def get_player_fen_score_counts(player_name: str) -> Dict[str, Any]:
+    """
+    Counts game and per-game position coverage for a specific player.
+
+    Position totals are occurrences in the player's games, rather than globally
+    distinct FEN strings. This keeps the values aligned with whole-game
+    completion and lets the per-game summary table answer the request quickly.
     """
     sql_query = """
         SELECT
-            COALESCE(SUM(gas.total_positions), 0)::bigint AS total_positions,
-            COALESCE(SUM(gas.analyzed_positions), 0)::bigint AS analyzed_positions,
-            COALESCE(SUM(gas.unscored_positions), 0)::bigint AS unscored_positions
-        FROM game_player gp
-        LEFT JOIN game_analysis_summary gas ON gas.link = gp.link
-        WHERE gp.player_name = :player;
+            coverage.*,
+            latest.rating AS latest_rating,
+            latest.mode AS latest_rating_mode,
+            latest.played_at AS latest_rating_at
+        FROM (
+            SELECT
+                COUNT(*)::bigint AS total_games,
+                COUNT(*) FILTER (
+                    WHERE gas.total_positions > 0
+                      AND gas.is_fully_analyzed
+                )::bigint AS analyzed_games,
+                COALESCE(SUM(gas.total_positions), 0)::bigint AS total_positions,
+                COALESCE(SUM(gas.analyzed_positions), 0)::bigint AS analyzed_positions,
+                COALESCE(SUM(gas.unscored_positions), 0)::bigint AS unscored_positions
+            FROM game_player gp
+            LEFT JOIN LATERAL (
+                SELECT
+                    total_positions,
+                    analyzed_positions,
+                    unscored_positions,
+                    is_fully_analyzed
+                FROM game_analysis_summary
+                WHERE link = gp.link
+                OFFSET 0
+            ) gas ON TRUE
+            WHERE gp.player_name = :player
+        ) coverage
+        LEFT JOIN LATERAL (
+            SELECT rating, mode, played_at
+            FROM game_player
+            WHERE player_name = :player
+              AND played_at IS NOT NULL
+            ORDER BY played_at DESC
+            LIMIT 1
+        ) latest ON TRUE;
     """
     
     async with AsyncDBSession() as session:
         result = await session.execute(text(sql_query), {"player": player_name})
         row = result.mappings().first()
 
+    latest_rating_at = (row or {}).get("latest_rating_at")
     return {
         "player_name": player_name,
+        "total_games": int((row or {}).get("total_games") or 0),
+        "analyzed_games": int((row or {}).get("analyzed_games") or 0),
+        "total_fens": int((row or {}).get("total_positions") or 0),
+        "analyzed_fens": int((row or {}).get("analyzed_positions") or 0),
         "total_positions": int((row or {}).get("total_positions") or 0),
         "analyzed_positions": int((row or {}).get("analyzed_positions") or 0),
         "unscored_positions": int((row or {}).get("unscored_positions") or 0),
+        "latest_rating": (
+            int((row or {}).get("latest_rating"))
+            if (row or {}).get("latest_rating") is not None
+            else None
+        ),
+        "latest_rating_mode": (row or {}).get("latest_rating_mode"),
+        "latest_rating_at": (
+            latest_rating_at.isoformat()
+            if hasattr(latest_rating_at, "isoformat")
+            else latest_rating_at
+        ),
     }
+
+
+async def get_player_neighbors(player_name: str) -> Dict[str, Optional[str]]:
+    """Return alphabetic player neighbors, wrapping at both ends."""
+    query = """
+        SELECT
+            COALESCE(
+                (
+                    SELECT player_name
+                    FROM player
+                    WHERE joined != 0 AND player_name < :player
+                    ORDER BY player_name DESC
+                    LIMIT 1
+                ),
+                (
+                    SELECT player_name
+                    FROM player
+                    WHERE joined != 0
+                    ORDER BY player_name DESC
+                    LIMIT 1
+                )
+            ) AS previous_player,
+            COALESCE(
+                (
+                    SELECT player_name
+                    FROM player
+                    WHERE joined != 0 AND player_name > :player
+                    ORDER BY player_name ASC
+                    LIMIT 1
+                ),
+                (
+                    SELECT player_name
+                    FROM player
+                    WHERE joined != 0
+                    ORDER BY player_name ASC
+                    LIMIT 1
+                )
+            ) AS next_player;
+    """
+
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query), {"player": player_name})
+        row = result.mappings().first() or {}
+
+    return {
+        "player_name": player_name,
+        "previous_player": row.get("previous_player"),
+        "next_player": row.get("next_player"),
+    }
+
+
+async def get_tracked_player_names() -> List[str]:
+    """Return active full-profile player names for lightweight UI navigation."""
+    query = """
+        SELECT player_name
+        FROM player
+        WHERE joined != 0
+          AND deleted_at IS NULL
+        ORDER BY player_name ASC;
+    """
+    async with AsyncDBSession() as session:
+        result = await session.execute(text(query))
+        return [str(row[0]) for row in result.all()]
 
 
 # --- NEW: STATISTICAL ANALYSIS QUERIES ---
@@ -3343,7 +4052,10 @@ async def _get_remaining_fens_count_committed() -> int:
     This reads the last COMMITTED state of the database.
     """
     async with AsyncDBSession() as session:
-        stmt = select(func.count(Game.link)).where(Game.fens_done == False)
+        stmt = select(func.count(Game.link)).where(
+            Game.fens_done == False,
+            Game.rules == "chess",
+        )
         result = await session.execute(stmt)
         count = result.scalar()
         return count or 0
@@ -3556,8 +4268,11 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     query = """
         SELECT
             ROUND((COALESCE(SUM(time_elapsed), 0) / 3600.0)::numeric, 2) AS total_hours,
+            COUNT(*) FILTER (WHERE mode = 'bullet') AS bullet_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'bullet' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS bullet_hours,
+            COUNT(*) FILTER (WHERE mode = 'blitz') AS blitz_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'blitz' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS blitz_hours,
+            COUNT(*) FILTER (WHERE mode = 'rapid') AS rapid_games,
             ROUND((COALESCE(SUM(CASE WHEN mode = 'rapid' THEN time_elapsed ELSE 0 END), 0) / 3600.0)::numeric, 2) AS rapid_hours
         FROM game_player
         WHERE player_name = :player;
@@ -3570,8 +4285,11 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     return {
         "player_name": player_name,
         "total_hours": float(row.get("total_hours") or 0.0),
+        "bullet_games": int(row.get("bullet_games") or 0),
         "bullet_hours": float(row.get("bullet_hours") or 0.0),
+        "blitz_games": int(row.get("blitz_games") or 0),
         "blitz_hours": float(row.get("blitz_hours") or 0.0),
+        "rapid_games": int(row.get("rapid_games") or 0),
         "rapid_hours": float(row.get("rapid_hours") or 0.0)
     }
 
@@ -3947,13 +4665,18 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
     query = """
         SELECT
             mode,
-            color,
-            result,
-            rating,
-            played_at
+            COUNT(*)::bigint AS n_games,
+            COUNT(*) FILTER (WHERE color = 'white')::bigint AS as_white,
+            COUNT(*) FILTER (WHERE color <> 'white')::bigint AS as_black,
+            COUNT(*) FILTER (WHERE result = 1.0)::bigint AS wins,
+            COUNT(*) FILTER (WHERE result = 0.5)::bigint AS draws,
+            COUNT(*) FILTER (WHERE result NOT IN (1.0, 0.5))::bigint AS losses,
+            (ARRAY_AGG(rating ORDER BY played_at ASC, link ASC))[1] AS oldest_rating,
+            (ARRAY_AGG(rating ORDER BY played_at DESC, link DESC))[1] AS newest_rating
         FROM game_player
         WHERE player_name = :player
-        ORDER BY played_at ASC, link ASC;
+        GROUP BY mode
+        ORDER BY COUNT(*) DESC;
     """
 
     async with AsyncDBSession() as session:
@@ -3963,43 +4686,23 @@ async def get_player_modes_stats(player_name: str) -> Dict[str, Dict[str, int]]:
     by_mode: Dict[str, Dict[str, int]] = {}
     for row in rows:
         mode = str(row.get("mode") or "unknown")
-        as_white = row.get("color") == "white"
-        rating = int(row.get("rating") or 0)
-        result_value = float(row.get("result") or 0.0)
-
-        if mode not in by_mode:
-            by_mode[mode] = {
-                "n_games": 0,
-                "as_white": 0,
-                "as_black": 0,
-                "wins": 0,
-                "losses": 0,
-                "draws": 0,
-                "oldest_rating": rating,
-                "newest_rating": rating
-            }
-
-        by_mode[mode]["n_games"] += 1
-        if as_white:
-            by_mode[mode]["as_white"] += 1
-        else:
-            by_mode[mode]["as_black"] += 1
-        if result_value == 1.0:
-            by_mode[mode]["wins"] += 1
-        elif result_value == 0.5:
-            by_mode[mode]["draws"] += 1
-        else:
-            by_mode[mode]["losses"] += 1
-        by_mode[mode]["newest_rating"] = rating
-
-    for stats in by_mode.values():
+        stats = {
+            "n_games": int(row.get("n_games") or 0),
+            "as_white": int(row.get("as_white") or 0),
+            "as_black": int(row.get("as_black") or 0),
+            "wins": int(row.get("wins") or 0),
+            "losses": int(row.get("losses") or 0),
+            "draws": int(row.get("draws") or 0),
+            "oldest_rating": int(row.get("oldest_rating") or 0),
+            "newest_rating": int(row.get("newest_rating") or 0),
+        }
         total = int(stats.get("n_games") or 0)
         wins = int(stats.get("wins") or 0)
         draws = int(stats.get("draws") or 0)
         stats["score_rate"] = round(((wins + 0.5 * draws) / total), 4) if total > 0 else 0.0
+        by_mode[mode] = stats
 
-    sorted_modes = sorted(by_mode.items(), key=lambda item: item[1]["n_games"], reverse=True)
-    return {mode: stats for mode, stats in sorted_modes}
+    return by_mode
 
 
 def _build_y_ticks(min_rating: int, max_rating: int, count: int = 5) -> List[int]:

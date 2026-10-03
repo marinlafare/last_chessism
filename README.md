@@ -50,7 +50,7 @@ This project is not a single application, but a collection of services managed b
 
 ### Possible Areas of Upgrade
 
-1. **Endgame Tablebase Integration**: This is the single most valuable performance upgrade. Integrating Syzygy tablebases (work in progress) will make endgame analysis instantaneous, dramatically reducing engine load and job time.
+1. **Endgame Tablebase Integration**: Syzygy is enabled for Stockfish and eligible game positions are also probed directly and cached before complete-game analysis, reducing engine load while preserving exact WDL/DTZ results.
 2. **Statistical Analysis**: Statistical endpoints are still minimal. Building out SQL/report payloads that consume `PlayerStats` and `Fen` data to generate a `PlayerStatsReport` is the main "next feature" to implement.
 3. **API Security**: The API is currently open. Adding a simple API key check (e.g., as a FastAPI dependency checking `x-api-key` in the request header) would prevent unauthorized access.
 4. **Configuration Management**: Centralize all configuration (like `CONN_STRING`, `REDIS_HOST`, etc.) into environment variables, perhaps using Pydantic's `BaseSettings` for validation and loading.

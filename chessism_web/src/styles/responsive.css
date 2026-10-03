@@ -1,0 +1,223 @@
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--subtle);
+  font-size: 13px;
+}
+
+.site-footer p {
+  margin: 0;
+}
+
+.footer-links a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+@media (max-width: 1100px) {
+  :root {
+    --rail-width: 84px;
+  }
+
+  .superadmin-account-controls {
+    width: 56px;
+  }
+
+  .superadmin-logout {
+    font-size: 11px;
+  }
+
+  .rail-brand span,
+  .rail-btn span:last-child {
+    display: none;
+  }
+
+  .rail-btn {
+    justify-content: center;
+  }
+
+  .players-top-grid,
+  .main-character-hover-grid,
+  .openings-layout,
+  .pipeline-grid,
+  .scored-top-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .players-top-grid .players-profile-layout {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
+  .players-position-summary {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .status-grid,
+  .metric-grid,
+  .games-generalities-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 720px) {
+  :root {
+    --rail-width: 1fr;
+  }
+
+  .page-frame {
+    display: block;
+  }
+
+  .repeated-pending-heading {
+    flex-direction: column;
+  }
+
+  .repeated-pending-row {
+    grid-template-columns: 48px minmax(0, 1fr) 86px;
+    gap: 8px;
+    padding-inline: 9px;
+  }
+
+  .left-rail {
+    position: static;
+    height: auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .left-rail-menu {
+    padding: 10px;
+  }
+
+  .superadmin-account-controls {
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: auto;
+  }
+
+  .rail-nav {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+  }
+
+  .rail-brand span {
+    display: inline;
+  }
+
+  .home-shell {
+    padding: 16px;
+  }
+
+  .analysis-loop-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-processes-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .analysis-loop-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analysis-process-parameters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-mode,
+  .player-game-scope-results,
+  .player-game-preview-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .player-game-confirmation-heading,
+  .player-game-confirm-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-profile-navigation-section > .section-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .players-top-grid .players-profile-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .players-position-summary {
+    grid-column: auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .players-profile-avatar-box {
+    min-height: 150px;
+  }
+
+  .players-profile-actions,
+  .player-delete-heading,
+  .player-delete-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-analysis-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .player-profile-charts {
+    grid-template-columns: 1fr;
+  }
+
+  .player-phase-row,
+  .player-conversion-row,
+  .player-pressure-row,
+  .player-endgame-row,
+  .player-opening-row {
+    grid-template-columns: 1fr;
+  }
+
+  .player-delete-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .site-header,
+  .section-head {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .status-grid,
+  .metric-grid,
+  .games-generalities-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .advantage-rating-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .rating-group-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .rating-group-button {
+    min-width: 0;
+  }
+
+  .mode-summary-head,
+  .mode-row {
+    grid-template-columns: 74px minmax(0, 1fr) 74px;
+  }
+}

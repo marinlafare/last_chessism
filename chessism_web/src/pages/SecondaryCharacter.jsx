@@ -1,6 +1,7 @@
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import './secondary-character/secondaryCharacter.css'
 
 function SecondaryCharacter() {
   return (
@@ -9,7 +10,7 @@ function SecondaryCharacter() {
       <div className="home-shell">
         <Header />
         <main>
-          <section className="games-hero">
+          <section className="games-hero secondary-character-panel">
             <h1>Secondary Character</h1>
             <p>Placeholder page.</p>
           </section>
