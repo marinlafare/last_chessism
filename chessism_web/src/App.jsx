@@ -10,6 +10,9 @@ import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
 import AnalyzeTimes from './pages/AnalyzeTimes'
 import Research from './pages/Research'
+import AccuracyCoefficient from './pages/AccuracyCoefficient'
+import MatricesConstructor from './pages/MatricesConstructor'
+import SalienceResearch from './pages/SalienceResearch'
 import DatabaseBackups from './pages/DatabaseBackups'
 import {
   fetchAdmins,
@@ -36,6 +39,8 @@ const APP_PATHS = new Set([
   '/analyze_times',
   '/research',
   '/research/chessism-coefficient',
+  '/research/matrices',
+  '/research/salience',
   '/backups'
 ])
 
@@ -201,8 +206,14 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <ScoredPositions />
   } else if (path === '/analyze_times') {
     page = <AnalyzeTimes />
-  } else if (path === '/research' || path === '/research/chessism-coefficient') {
+  } else if (path === '/research') {
     page = <Research />
+  } else if (path === '/research/chessism-coefficient') {
+    page = <AccuracyCoefficient />
+  } else if (path === '/research/matrices') {
+    page = <MatricesConstructor />
+  } else if (path === '/research/salience') {
+    page = <SalienceResearch />
   } else if (path === '/backups') {
     page = <DatabaseBackups />
   }

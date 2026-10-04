@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import time
 from collections.abc import Iterable
@@ -13,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.operations.player_salience_calculation import calculate_player_salience
 from chessism_api.operations.player_hero_analytics import CHART_MODES, _analytics_scope
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
 
@@ -27,6 +29,13 @@ def position_depth_weight(ply: int) -> float:
     """Give opening positions some weight and reach full weight at ply 16."""
     safe_ply = max(0, int(ply))
     return 0.25 + 0.75 * min(safe_ply / 16.0, 1.0)
+
+
+def position_salience(games_with_position: int, occurrence_index: int) -> float:
+    """Return corpus and intra-game repetition weight for one occurrence."""
+    corpus_frequency = max(1, int(games_with_position))
+    intra_game_index = max(1, int(occurrence_index))
+    return 1.0 / (corpus_frequency * intra_game_index)
 
 
 def salience_weighted_accuracy(rows: Iterable[dict[str, Any]]) -> float | None:
@@ -51,6 +60,7 @@ def _normalized_player_names(player_names: Iterable[str]) -> list[str]:
 async def mark_player_salience_stale(
     player_names: Iterable[str],
     *,
+    game_links: Iterable[int] = (),
     session: AsyncSession | None = None,
 ) -> int:
     """Mark tracked players stale in the same transaction as game ingestion."""
@@ -73,14 +83,34 @@ async def mark_player_salience_stale(
             error = NULL
         RETURNING player_name
     """)
-    if session is not None:
-        result = await session.execute(statement, {"players": normalized})
-        return len(result.fetchall())
-    async with AsyncDBSession() as owned_session:
-        result = await owned_session.execute(statement, {"players": normalized})
+    links = sorted({int(link) for link in game_links})
+
+    async def execute(working_session: AsyncSession) -> int:
+        result = await working_session.execute(statement, {"players": normalized})
         rows = result.fetchall()
-        await owned_session.commit()
+        if links:
+            await working_session.execute(text("""
+                INSERT INTO player_salience_pending_game (
+                    player_name, game_link, player_color
+                )
+                SELECT gp.player_name, gp.link, gp.color
+                FROM game_player gp
+                JOIN player
+                  ON player.player_name = gp.player_name
+                WHERE gp.link = ANY(CAST(:game_links AS bigint[]))
+                  AND gp.player_name = ANY(CAST(:players AS text[]))
+                  AND COALESCE(player.joined, 0) > 0
+                  AND player.deleted_at IS NULL
+                ON CONFLICT DO NOTHING
+            """), {"game_links": links, "players": normalized})
         return len(rows)
+
+    if session is not None:
+        return await execute(session)
+    async with AsyncDBSession() as owned_session:
+        affected = await execute(owned_session)
+        await owned_session.commit()
+        return affected
 
 
 async def seed_player_salience_summaries() -> int:
@@ -129,165 +159,6 @@ async def _write_progress(
         }),
         ex=SALIENCE_PROGRESS_TTL_SECONDS,
     )
-
-
-async def _set_failed(player_name: str, error: Exception) -> None:
-    async with AsyncDBSession() as session:
-        await session.execute(text("""
-            UPDATE player_salience_summary
-            SET
-                status = CASE WHEN status = 'stale' THEN 'stale' ELSE 'failed' END,
-                error = :error
-            WHERE player_name = :player
-        """), {"player": player_name, "error": str(error)})
-        await session.commit()
-
-
-async def calculate_player_salience(player_name: str) -> dict[str, Any]:
-    """Atomically rebuild one player's corpus-wide per-game salience values."""
-    player = str(player_name).strip().lower()
-    if not player:
-        raise ValueError("Player name is required.")
-
-    async with AsyncDBSession() as session:
-        tracked = await session.scalar(text("""
-            SELECT EXISTS (
-                SELECT 1
-                FROM player
-                WHERE player_name = :player
-                  AND COALESCE(joined, 0) > 0
-                  AND deleted_at IS NULL
-            )
-        """), {"player": player})
-        if not tracked:
-            raise ValueError(f"Tracked player {player!r} was not found.")
-        await session.execute(text("""
-            INSERT INTO player_salience_summary (
-                player_name, status, source_game_count,
-                source_position_count, effective_game_count, error
-            ) VALUES (:player, 'running', 0, 0, 0, NULL)
-            ON CONFLICT (player_name) DO UPDATE SET
-                status = 'running',
-                error = NULL
-        """), {"player": player})
-        await session.commit()
-
-    try:
-        async with AsyncDBSession() as session:
-            async with session.begin():
-                await session.execute(text("""
-                    CREATE TEMP TABLE game_player_salience_stage
-                    ON COMMIT DROP AS
-                    WITH corpus_games AS MATERIALIZED (
-                        SELECT gp.link AS game_link, gp.color AS player_color
-                        FROM game_player gp
-                        JOIN game game_row ON game_row.link = gp.link
-                        WHERE gp.player_name = :player
-                          AND game_row.fens_done
-                    ),
-                    game_positions AS MATERIALIZED (
-                        SELECT
-                            corpus.game_link,
-                            corpus.player_color,
-                            association.fen_fen,
-                            MIN(
-                                association.n_move * 2
-                                - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END
-                            )::integer AS first_ply
-                        FROM corpus_games corpus
-                        JOIN game_fen_association association
-                          ON association.game_link = corpus.game_link
-                        GROUP BY
-                            corpus.game_link,
-                            corpus.player_color,
-                            association.fen_fen
-                    ),
-                    position_frequency AS MATERIALIZED (
-                        SELECT
-                            player_color,
-                            fen_fen,
-                            COUNT(*)::double precision AS games_with_position
-                        FROM game_positions
-                        GROUP BY player_color, fen_fen
-                    ),
-                    weighted_positions AS MATERIALIZED (
-                        SELECT
-                            game_positions.game_link,
-                            game_positions.player_color,
-                            (
-                                0.25 + 0.75 * LEAST(
-                                    game_positions.first_ply::double precision / 16.0,
-                                    1.0
-                                )
-                            ) AS depth_weight,
-                            position_frequency.games_with_position
-                        FROM game_positions
-                        JOIN position_frequency
-                          ON position_frequency.player_color = game_positions.player_color
-                         AND position_frequency.fen_fen = game_positions.fen_fen
-                    )
-                    SELECT
-                        weighted_positions.game_link,
-                        CAST(:player AS text) AS player_name,
-                        weighted_positions.player_color,
-                        (
-                            SUM(depth_weight / games_with_position)
-                            / NULLIF(SUM(depth_weight), 0)
-                        )::double precision AS salience,
-                        COUNT(*)::integer AS position_count
-                    FROM weighted_positions
-                    GROUP BY
-                        weighted_positions.game_link,
-                        weighted_positions.player_color
-                """), {"player": player})
-
-                stats = (await session.execute(text("""
-                    SELECT
-                        COUNT(*)::bigint AS source_game_count,
-                        COALESCE(SUM(position_count), 0)::bigint AS source_position_count,
-                        COALESCE(SUM(salience), 0)::double precision AS effective_game_count
-                    FROM game_player_salience_stage
-                """))).mappings().one()
-
-                await session.execute(text("""
-                    DELETE FROM game_player_salience
-                    WHERE player_name = :player
-                """), {"player": player})
-                await session.execute(text("""
-                    INSERT INTO game_player_salience (
-                        game_link, player_name, player_color, salience, position_count
-                    )
-                    SELECT
-                        game_link, player_name, player_color, salience, position_count
-                    FROM game_player_salience_stage
-                """))
-                status = await session.scalar(text("""
-                    UPDATE player_salience_summary
-                    SET
-                        status = CASE WHEN status = 'running' THEN 'ready' ELSE status END,
-                        source_game_count = :source_game_count,
-                        source_position_count = :source_position_count,
-                        effective_game_count = :effective_game_count,
-                        error = NULL
-                    WHERE player_name = :player
-                    RETURNING status
-                """), {
-                    "player": player,
-                    "source_game_count": int(stats["source_game_count"] or 0),
-                    "source_position_count": int(stats["source_position_count"] or 0),
-                    "effective_game_count": float(stats["effective_game_count"] or 0),
-                })
-
-        return {
-            "player_name": player,
-            "status": str(status or "stale"),
-            "source_game_count": int(stats["source_game_count"] or 0),
-            "source_position_count": int(stats["source_position_count"] or 0),
-            "effective_game_count": round(float(stats["effective_game_count"] or 0), 6),
-        }
-    except Exception as error:
-        await _set_failed(player, error)
-        raise
 
 
 async def enqueue_player_salience(
@@ -410,13 +281,14 @@ async def run_player_salience_job(
             total=1,
             processed=1,
             detail=(
-                f"Calculated {result['source_game_count']:,} games as "
+                f"{result['calculation'].title()} calculation covered "
+                f"{result['source_game_count']:,} games as "
                 f"{result['effective_game_count']:,.2f} effective games"
                 + ("; another refresh is required." if result["status"] != "ready" else ".")
             ),
         )
         return result
-    except Exception as error:
+    except (Exception, asyncio.CancelledError) as error:
         await _write_progress(
             redis,
             job_id,
@@ -454,19 +326,32 @@ async def get_salience_overview(limit: int = 100) -> dict[str, Any]:
     async with AsyncDBSession() as session:
         result = await session.execute(text("""
             SELECT
-                player_name, status, source_game_count,
-                source_position_count, effective_game_count, error
-            FROM player_salience_summary
+                player.player_name,
+                COALESCE(summary.status, 'missing') AS status,
+                COALESCE(summary.source_game_count, 0) AS source_game_count,
+                COALESCE(summary.source_position_count, 0) AS source_position_count,
+                COALESCE(summary.effective_game_count, 0) AS effective_game_count,
+                summary.error
+            FROM player
+            LEFT JOIN player_salience_summary summary
+              ON summary.player_name = player.player_name
+            WHERE COALESCE(player.joined, 0) > 0
+              AND player.deleted_at IS NULL
             ORDER BY
-                CASE status
+                CASE COALESCE(summary.status, 'missing')
                     WHEN 'running' THEN 0 WHEN 'queued' THEN 1 WHEN 'stale' THEN 2
-                    WHEN 'failed' THEN 3 ELSE 4
+                    WHEN 'missing' THEN 3 WHEN 'failed' THEN 4 ELSE 5
                 END,
-                player_name
+                player.player_name
             LIMIT :limit
         """), {"limit": max(1, min(int(limit), 1_000))})
         rows = result.mappings().all()
-    return {"players": [_summary_payload(row, str(row["player_name"])) for row in rows]}
+    players = [_summary_payload(row, str(row["player_name"])) for row in rows]
+    status_counts: dict[str, int] = {}
+    for item in players:
+        status = str(item["status"])
+        status_counts[status] = status_counts.get(status, 0) + 1
+    return {"players": players, "status_counts": status_counts}
 
 
 async def get_player_salience_report(
@@ -477,6 +362,7 @@ async def get_player_salience_report(
     player = str(player_name).strip().lower()
     safe_limit = max(1, min(int(game_limit), 50))
     async with AsyncDBSession() as session:
+        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
         player_exists = await session.scalar(
             text("SELECT EXISTS (SELECT 1 FROM player WHERE player_name = :player)"),
             {"player": player},
@@ -521,7 +407,9 @@ async def get_player_salience_report(
                     salience.game_link,
                     salience.player_color,
                     salience.salience,
-                    salience.position_count,
+                    salience.position_occurrence_count,
+                    salience.unique_position_count,
+                    salience.repeated_position_count,
                     gp.played_at,
                     gp.mode,
                     gp.n_moves,
@@ -600,6 +488,7 @@ async def get_player_daily_salience_accuracy(
     selected_modes = normalize_salience_modes(mode)
     local_timestamp = player_local_timestamp_sql("gp")
     async with AsyncDBSession() as session:
+        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
         scope = await _analytics_scope(
             session, player, "all", date_from, date_to, timezone_name
         )
@@ -624,6 +513,10 @@ async def get_player_daily_salience_accuracy(
              AND gp.color = engine.player_color
              AND gp.player_name = engine.player_name
             WHERE engine.player_name = :player
+              AND EXISTS (
+                  SELECT 1 FROM player_salience_summary summary
+                  WHERE summary.player_name = :player AND summary.status = 'ready'
+              )
               AND engine.analyzed_player_moves > {MINIMUM_ACCURACY_PLAYER_MOVES_EXCLUSIVE}
               AND engine.game_efficiency IS NOT NULL
               AND gp.mode = ANY(CAST(:selected_modes AS text[]))

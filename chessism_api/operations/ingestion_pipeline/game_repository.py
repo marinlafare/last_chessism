@@ -118,7 +118,11 @@ async def insert_game_bundle(
                     await DBInterface(model).create_all_with_session(session, rows)
             await _sync_player_month_counts(session, player_name, affected_months)
             if games:
-                await mark_player_salience_stale(affected_players, session=session)
+                await mark_player_salience_stale(
+                    affected_players,
+                    game_links=[int(game["link"]) for game in games],
+                    session=session,
+                )
             await session.commit()
         except Exception:
             await session.rollback()

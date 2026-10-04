@@ -1,0 +1,147 @@
+.salience-main {
+  display: grid;
+  gap: 16px;
+}
+
+.salience-hero,
+.salience-panel,
+.salience-stat-grid article {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.salience-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 20px;
+}
+
+.salience-hero h1 {
+  margin: 4px 0;
+}
+
+.salience-hero p:last-child,
+.salience-player-row > span {
+  color: var(--muted);
+}
+
+.salience-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.salience-actions a,
+.salience-actions button,
+.salience-player-row button {
+  padding: 8px 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #060b0f;
+  color: var(--text);
+  font: 800 11px "IBM Plex Mono", monospace;
+  text-decoration: none;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.salience-actions button {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.salience-actions button:disabled,
+.salience-player-row button:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.salience-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.salience-stat-grid article {
+  display: grid;
+  gap: 5px;
+  padding: 14px;
+  text-align: center;
+}
+
+.salience-stat-grid span,
+.salience-table-head {
+  color: var(--muted);
+  font: 800 10px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.salience-stat-grid strong {
+  font: 800 22px "IBM Plex Mono", monospace;
+}
+
+.salience-panel {
+  padding: 14px;
+  overflow-x: auto;
+}
+
+.salience-table-head,
+.salience-player-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 1.3fr) 90px repeat(3, minmax(100px, 1fr)) 90px;
+  align-items: center;
+  gap: 10px;
+  min-width: 790px;
+}
+
+.salience-table-head {
+  padding: 0 10px 8px;
+}
+
+.salience-player-list {
+  display: grid;
+  gap: 6px;
+}
+
+.salience-player-row {
+  position: relative;
+  min-height: 49px;
+  padding: 9px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #070c11;
+  font: 12px "IBM Plex Mono", monospace;
+}
+
+.salience-player-row > p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--danger);
+}
+
+.salience-status {
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.salience-status.is-ready { color: var(--accent); }
+.salience-status.is-running,
+.salience-status.is-queued { color: #dfbd55; }
+.salience-status.is-failed { color: var(--danger); }
+
+.salience-error {
+  margin: 0;
+  padding: 11px;
+  border: 1px solid var(--danger);
+  border-radius: 7px;
+  color: var(--danger);
+}
+
+@media (max-width: 760px) {
+  .salience-hero { align-items: stretch; flex-direction: column; }
+  .salience-stat-grid { grid-template-columns: repeat(2, 1fr); }
+}

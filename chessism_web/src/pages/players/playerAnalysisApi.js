@@ -66,6 +66,14 @@ export function fetchDailyEfficiency({ playerName, signal, bypassCache = false, 
   )
 }
 
+export function fetchDailySalienceAccuracy({ playerName, signal, bypassCache = false, ...filters }) {
+  const search = analyticsSearch(filters)
+  return cachedRequest(
+    `/players/${playerPath(playerName)}/analysis/measures/daily-salience-accuracy?${search}`,
+    { signal, bypassCache }
+  )
+}
+
 export function fetchGameMeasures({ playerName, gameId, timezone, signal }) {
   const search = analyticsSearch({ timezone })
   return cachedRequest(

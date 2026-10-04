@@ -1,7 +1,7 @@
 # local
 .virtual_documents/
 .codex
-backups/
+/backups/
 db_backup/
 db_data/
 api_logs/

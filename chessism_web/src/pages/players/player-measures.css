@@ -286,8 +286,10 @@
 }
 
 .measure-daily-efficiency-point:focus,
+.measure-daily-efficiency-point:hover,
 .measure-hour-hitbox:focus {
   outline: none;
+  opacity: 1;
   stroke: #fff;
   stroke-width: 2.5;
 }
@@ -318,6 +320,13 @@
 
 .measure-chart-message.error {
   color: #f08a8a;
+}
+
+.measure-salience-state {
+  margin: 4px 12px 0;
+  color: #c9a84c;
+  font: 700 10px "IBM Plex Mono", monospace;
+  text-align: center;
 }
 
 .measure-zero-line {

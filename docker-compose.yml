@@ -22,6 +22,9 @@ services:
       - BACKUP_FREE_FLOOR_BYTES=150000000000
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
       - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
+      - MATRIX_ARTIFACT_DIR=/backup-volume/chessism/research/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=/main-monitor-db-backups/chessism/research/matrices
+      - MATRIX_FREE_FLOOR_BYTES=150000000000
     networks:
       - chessism_net
     depends_on:
@@ -176,6 +179,9 @@ services:
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
       - COEFFICIENT_RESEARCH_DIR=/backup-volume/chessism/research
       - COEFFICIENT_RESEARCH_DISPLAY_DIR=/main-monitor-db-backups/chessism/research
+      - MATRIX_ARTIFACT_DIR=/backup-volume/chessism/research/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=/main-monitor-db-backups/chessism/research/matrices
+      - MATRIX_FREE_FLOOR_BYTES=150000000000
     volumes:
       - /main-monitor-db-backups:/backup-volume
     networks:

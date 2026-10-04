@@ -375,6 +375,11 @@ class PlayerSalienceTests(unittest.TestCase):
         self.assertEqual(player_salience.position_depth_weight(16), 1.0)
         self.assertEqual(player_salience.position_depth_weight(80), 1.0)
 
+    def test_position_salience_penalizes_corpus_and_intra_game_repetition(self):
+        self.assertAlmostEqual(player_salience.position_salience(10, 1), 0.1)
+        self.assertAlmostEqual(player_salience.position_salience(10, 2), 0.05)
+        self.assertAlmostEqual(player_salience.position_salience(1, 3), 1 / 3)
+
     def test_weighted_accuracy_deduplicates_repeated_game_mass(self):
         rows = [
             *({"accuracy": 100.0, "salience": 0.05} for _ in range(20)),
@@ -385,6 +390,8 @@ class PlayerSalienceTests(unittest.TestCase):
 
     def test_salience_schema_separates_player_state_from_game_values(self):
         summary_columns = set(models.PlayerSalienceSummary.__table__.columns.keys())
+        frequency_columns = set(models.PlayerPositionFrequency.__table__.columns.keys())
+        pending_columns = set(models.PlayerSaliencePendingGame.__table__.columns.keys())
         game_columns = set(models.GamePlayerSalience.__table__.columns.keys())
 
         self.assertEqual(
@@ -395,8 +402,24 @@ class PlayerSalienceTests(unittest.TestCase):
             },
         )
         self.assertEqual(
+            frequency_columns,
+            {
+                "player_name", "player_color", "fen_fen",
+                "games_with_position", "total_occurrences",
+            },
+        )
+        self.assertEqual(
+            pending_columns,
+            {"player_name", "game_link", "player_color"},
+        )
+        self.assertEqual(
             game_columns,
-            {"game_link", "player_color", "player_name", "salience", "position_count"},
+            {
+                "game_link", "player_color", "player_name", "salience",
+                "weighted_numerator", "depth_weight_sum",
+                "position_occurrence_count", "unique_position_count",
+                "repeated_position_count",
+            },
         )
 
 
@@ -2305,6 +2328,8 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
             mutation_result,
             mutation_result,
             mutation_result,
+            mutation_result,
+            mutation_result,
             updated_result,
         ]
 
@@ -2320,6 +2345,8 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("joined = 0", sql)
         self.assertIn("deleted_at = CURRENT_TIMESTAMP", sql)
         self.assertIn("DELETE FROM game_player_salience", sql)
+        self.assertIn("DELETE FROM player_position_frequency", sql)
+        self.assertIn("DELETE FROM player_salience_pending_game", sql)
         self.assertIn("DELETE FROM player_salience_summary", sql)
         self.assertNotIn("DELETE FROM player WHERE", sql)
         session.commit.assert_awaited_once()

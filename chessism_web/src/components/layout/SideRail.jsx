@@ -21,7 +21,7 @@ function SideRail() {
           {navItems.map((item) => (
             <a
               key={item.href}
-              className={`rail-btn ${path === item.href ? 'active' : ''}`}
+              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/')) ? 'active' : ''}`}
               href={item.href}
               title={item.label}
             >

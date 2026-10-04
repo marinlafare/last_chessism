@@ -7,7 +7,6 @@ import uuid
 from typing import Literal
 
 from arq.connections import ArqRedis
-from arq.jobs import Job, JobStatus
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
@@ -28,18 +27,13 @@ from chessism_api.operations.player_salience import (
     get_salience_overview,
     seed_player_salience_summaries,
 )
+from chessism_api.operations.research_resources import analysis_jobs_active
 from chessism_api.redis_client import get_redis_pool
+from chessism_api.routers.research_matrices import router as matrices_router
 
 
 router = APIRouter()
-ANALYSIS_JOB_FUNCTIONS = {
-    "run_analysis_job",
-    "run_player_analysis_job",
-    "run_analysis_loop_job",
-    "run_player_games_analysis_job",
-}
-
-
+router.include_router(matrices_router, prefix="/matrices", tags=["Research matrices"])
 class CoefficientExperimentConfig(BaseModel):
     modes: list[Literal["bullet", "blitz", "rapid"]] = Field(
         default_factory=lambda: ["bullet", "blitz", "rapid"]
@@ -55,20 +49,6 @@ class CoefficientDecisionRequest(BaseModel):
     action: Literal["keep_lichess", "alongside", "replace"]
     strategy: Literal["global", "rating_bins"]
     notes: str = Field("", max_length=2000)
-
-
-async def _analysis_jobs_active(redis: ArqRedis) -> bool:
-    queued_rows = await redis.zrange("analysis_queue", 0, -1)
-    for raw_job_id in queued_rows:
-        job_id = raw_job_id.decode("utf-8") if isinstance(raw_job_id, bytes) else str(raw_job_id)
-        job = Job(job_id, redis, _queue_name="analysis_queue")
-        status = await job.status()
-        if status not in (JobStatus.queued, JobStatus.deferred, JobStatus.in_progress):
-            continue
-        info = await job.info()
-        if info and info.function in ANALYSIS_JOB_FUNCTIONS:
-            return True
-    return False
 
 
 async def _research_progress(redis: ArqRedis, experiment_id: str) -> dict | None:
@@ -89,7 +69,7 @@ async def coefficient_overview(
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
     payload = await get_coefficient_research_overview(config.model_dump())
-    analysis_active = await _analysis_jobs_active(redis)
+    analysis_active = await analysis_jobs_active(redis)
     payload["resources"] = {
         "analysis_active": analysis_active,
         "safe_to_start": not analysis_active,
@@ -111,7 +91,7 @@ async def start_salience_backfill(
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
     """Seed tracked players and queue a bounded first salience pass."""
-    if await _analysis_jobs_active(redis):
+    if await analysis_jobs_active(redis):
         raise HTTPException(
             status_code=409,
             detail="Wait for the Stockfish analysis queue to become idle before starting salience backfill.",
@@ -139,7 +119,7 @@ async def start_player_salience(
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
     """Queue a forced corpus refresh for one tracked player."""
-    if await _analysis_jobs_active(redis):
+    if await analysis_jobs_active(redis):
         raise HTTPException(
             status_code=409,
             detail="Wait for the Stockfish analysis queue to become idle before calculating salience.",
@@ -177,7 +157,7 @@ async def create_coefficient_experiment(
     account: Account = Depends(get_current_account),
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
-    if await _analysis_jobs_active(redis):
+    if await analysis_jobs_active(redis):
         raise HTTPException(
             status_code=409,
             detail="Wait for the Stockfish analysis queue to become idle before starting research.",

@@ -1,0 +1,237 @@
+.database-backups-main {
+  display: grid;
+  gap: 16px;
+}
+
+.database-backups-hero,
+.database-backups-panel {
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.database-backups-copy,
+.database-backups-location {
+  color: var(--muted);
+}
+
+.database-backups-copy {
+  margin: 6px 0 0;
+}
+
+.database-backups-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.database-backups-stats {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+
+.database-backups-breakdown {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.database-backups-breakdown article {
+  background: #0a1118;
+}
+
+.database-backups-stats article {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: #070c11;
+  text-align: center;
+}
+
+.database-backups-stats span,
+.database-backups-progress span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.database-backups-stats strong,
+.database-backups-progress,
+.database-backups-table,
+.database-backups-location {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.database-backups-stats strong {
+  font-size: 18px;
+}
+
+.database-backups-meter {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #030609;
+}
+
+.database-backups-meter div {
+  height: 100%;
+  background: var(--accent);
+}
+
+.database-backups-location {
+  margin: 10px 0 0;
+  text-align: center;
+  font-size: 12px;
+}
+
+.database-backups-storage-note {
+  max-width: 880px;
+  margin: 12px auto 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.database-backups-status-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.database-backups-live-light {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 1px solid rgba(87, 255, 181, 0.8);
+  border-radius: 50%;
+  background: #15c780;
+  box-shadow: 0 0 12px rgba(21, 199, 128, 0.9);
+  animation: database-backup-live-blink 1s ease-in-out infinite;
+}
+
+@keyframes database-backup-live-blink {
+  0%, 100% {
+    opacity: 0.25;
+    box-shadow: 0 0 3px rgba(21, 199, 128, 0.3);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(21, 199, 128, 0.95);
+  }
+}
+
+.database-backups-progress {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(21, 199, 128, 0.35);
+  border-radius: var(--radius);
+  background: #070c11;
+}
+
+.database-backups-progress.failed {
+  border-color: rgba(207, 79, 87, 0.55);
+}
+
+.database-backups-progress .database-backups-elapsed {
+  color: #57ffb5;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.database-backups-transfer-progress {
+  display: grid;
+  gap: 8px;
+  margin: 5px 0;
+}
+
+.database-backups-transfer-meter {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 255, 181, 0.32);
+  border-radius: 999px;
+  background: #020507;
+}
+
+.database-backups-transfer-meter > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #138f62, #57ffb5);
+  transition: width 600ms ease;
+}
+
+.database-backups-transfer-meter.indeterminate > div {
+  width: 32%;
+  animation: database-backup-progress-search 1.4s ease-in-out infinite;
+}
+
+.database-backups-transfer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+@keyframes database-backup-progress-search {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+.database-backups-table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+}
+
+.database-backups-table {
+  width: 100%;
+  min-width: 880px;
+  border-collapse: collapse;
+}
+
+.database-backups-table th,
+.database-backups-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-soft);
+  text-align: left;
+}
+
+.database-backups-table th {
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.database-backups-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+@media (max-width: 900px) {
+  .database-backups-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .database-backups-stats {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .database-backups-live-light,
+  .database-backups-transfer-meter.indeterminate > div {
+    animation: none;
+    opacity: 1;
+  }
+}

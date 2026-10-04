@@ -37,6 +37,13 @@ Supporting modules:
 - Position occurrence counts are recomputed only for affected FENs. Full
   database summary scans are fallback repair paths, not the normal algorithm.
 - Tablebase discovery is scoped to the games completed by the current pass.
+- New game ownership rows are recorded in `player_salience_pending_game` in the
+  same transaction as ingestion. The drained pipeline queues those players for
+  salience refresh; small updates apply exact position-frequency deltas, while
+  first runs and large changes use a canonical full rebuild.
+- `player_position_frequency` stores only positions appearing in multiple games.
+  A missing row means corpus frequency one; this keeps singleton positions from
+  duplicating the much larger game/FEN association table.
 
 ## Parallelism and batching
 

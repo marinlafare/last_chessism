@@ -169,6 +169,142 @@ async def _reshape_game_player_engine_summary(connection: asyncpg.Connection) ->
     return requires_cache_reset
 
 
+async def _reshape_player_salience_schema(connection: asyncpg.Connection) -> bool:
+    """Migrate the rebuildable salience projection to occurrence-based scoring."""
+    table_exists = await connection.fetchval(
+        "SELECT to_regclass('public.game_player_salience') IS NOT NULL"
+    )
+    if not table_exists:
+        return False
+    columns = {
+        str(row["column_name"]): str(row["is_nullable"])
+        for row in await connection.fetch("""
+            SELECT column_name, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'game_player_salience'
+        """)
+    }
+    legacy_formula = "position_count" in columns
+    async with connection.transaction():
+        for name in (
+            "position_occurrence_count",
+            "unique_position_count",
+            "repeated_position_count",
+        ):
+            if name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_salience "
+                    f"ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                )
+        if "depth_weight_sum" not in columns:
+            await connection.execute(
+                "ALTER TABLE game_player_salience "
+                "ADD COLUMN depth_weight_sum DOUBLE PRECISION"
+            )
+        if "weighted_numerator" not in columns:
+            await connection.execute(
+                "ALTER TABLE game_player_salience "
+                "ADD COLUMN weighted_numerator DOUBLE PRECISION"
+            )
+        if legacy_formula:
+            # These rows used a distinct-position formula and must never be
+            # mixed with the occurrence-based canonical score.
+            await connection.execute("DELETE FROM game_player_salience")
+            await connection.execute("DELETE FROM player_position_frequency")
+            await connection.execute("""
+                UPDATE player_salience_summary
+                SET status = 'stale', source_game_count = 0,
+                    source_position_count = 0, effective_game_count = 0,
+                    error = NULL
+            """)
+            legacy_constraint = await connection.fetchval("""
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'game_player_salience'::regclass
+                  AND conname = 'game_player_salience_position_count'
+            """)
+            if legacy_constraint:
+                await connection.execute("""
+                    ALTER TABLE game_player_salience
+                    DROP CONSTRAINT game_player_salience_position_count
+                """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience DROP COLUMN position_count
+            """)
+
+        # Only legacy nullable columns need backfilling. Current schemas must
+        # not scan every player's games and acquire an ALTER lock at startup.
+        if columns.get("depth_weight_sum") != "NO":
+            await connection.execute("""
+                UPDATE game_player_salience
+                SET depth_weight_sum = CASE
+                        WHEN position_occurrence_count <= 16 THEN
+                            0.25 * position_occurrence_count
+                            + (0.75 / 16.0)
+                              * position_occurrence_count
+                              * (position_occurrence_count + 1) / 2.0
+                        ELSE position_occurrence_count - 5.625
+                    END
+                WHERE depth_weight_sum IS NULL
+            """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience
+                ALTER COLUMN depth_weight_sum SET NOT NULL
+            """)
+        if columns.get("weighted_numerator") != "NO":
+            await connection.execute("""
+                UPDATE game_player_salience
+                SET weighted_numerator = salience * depth_weight_sum
+                WHERE weighted_numerator IS NULL
+            """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience
+                ALTER COLUMN weighted_numerator SET NOT NULL
+            """)
+
+        constraints = {
+            str(row["conname"])
+            for row in await connection.fetch("""
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'game_player_salience'::regclass
+            """)
+        }
+        additions = {
+            "game_player_salience_occurrence_count": (
+                "CHECK (position_occurrence_count > 0)"
+            ),
+            "game_player_salience_unique_count": (
+                "CHECK (unique_position_count > 0 "
+                "AND unique_position_count <= position_occurrence_count)"
+            ),
+            "game_player_salience_repeated_count": (
+                "CHECK (repeated_position_count = "
+                "position_occurrence_count - unique_position_count)"
+            ),
+            "game_player_salience_components_positive": (
+                "CHECK (weighted_numerator > 0 AND depth_weight_sum > 0)"
+            ),
+        }
+        for name, definition in additions.items():
+            if name not in constraints:
+                await connection.execute(
+                    f"ALTER TABLE game_player_salience "
+                    f"ADD CONSTRAINT {name} {definition}"
+                )
+    reverse_index_exists = await connection.fetchval(
+        "SELECT to_regclass('public.ix_player_position_frequency_fen_player') "
+        "IS NOT NULL"
+    )
+    if reverse_index_exists:
+        await connection.execute(
+            "DROP INDEX CONCURRENTLY public.ix_player_position_frequency_fen_player"
+        )
+        print("Removed unused reverse player-position frequency index.")
+    return legacy_formula
+
+
 async def _ensure_fen_analysis_schema(
     *,
     user: str,
@@ -191,6 +327,9 @@ async def _ensure_fen_analysis_schema(
         reshaped_engine_summaries = await _reshape_game_player_engine_summary(connection)
         if reshaped_engine_summaries:
             print("Player engine summary cache reshaped; rows will rebuild on demand.")
+        reshaped_salience = await _reshape_player_salience_schema(connection)
+        if reshaped_salience:
+            print("Player salience cache reshaped; occurrence-based rows require backfill.")
         redundant_fen_index_exists = await connection.fetchval(
             "SELECT to_regclass('public.ix_fen_fen') IS NOT NULL"
         )

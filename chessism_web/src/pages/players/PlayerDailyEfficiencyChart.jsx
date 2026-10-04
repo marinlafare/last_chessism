@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchDailyEfficiency } from './playerAnalysisApi'
+import { fetchDailyEfficiency, fetchDailySalienceAccuracy } from './playerAnalysisApi'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 
 const WIDTH = 1200
@@ -20,14 +20,49 @@ function seriesYears(points) {
   return [...new Set(years)].sort((left, right) => Number(left) - Number(right))
 }
 
-function efficiencyPoints(points, selectedYear) {
+function efficiencyPoints(points, selectedYear, salienceReady) {
   return (points || [])
     .filter(([date]) => selectedYear === 'all' || String(date).startsWith(`${selectedYear}-`))
-    .map(([date, gameEfficiency]) => ({
+    .map(([date, weightedAccuracy, unweightedAccuracy, dailySalience, games]) => ({
       date,
-      gameEfficiency: Number(gameEfficiency),
+      gameEfficiency: Number(weightedAccuracy),
+      unweightedAccuracy: Number.isFinite(Number(unweightedAccuracy))
+        ? Number(unweightedAccuracy)
+        : Number(weightedAccuracy),
+      dailySalience: salienceReady && Number.isFinite(Number(dailySalience))
+        ? Math.max(0, Number(dailySalience))
+        : null,
+      games: Number.isFinite(Number(games)) ? Number(games) : null,
       timestamp: Date.parse(`${date}T00:00:00Z`),
     }))
+}
+
+function saliencePointPresentation(points) {
+  if (!points.length) return []
+  const positive = points
+    .map((point) => point.dailySalience)
+    .filter((value) => value !== null && value > 0)
+    .sort((left, right) => left - right)
+  if (!positive.length) {
+    return points.map((point) => ({ ...point, radius: 4, opacity: 1 }))
+  }
+  const capIndex = Math.max(0, Math.ceil(positive.length * 0.9) - 1)
+  const salienceCap = Math.max(positive[capIndex] || 1, Number.EPSILON)
+  const presented = points.map((point) => ({
+    ...point,
+    radius: 2.75 + 6.25 * Math.sqrt(Math.min(point.dailySalience / salienceCap, 1)),
+    opacity: 1,
+  }))
+  const renderOrder = []
+  for (let index = 0; index < presented.length; index += 5) {
+    const group = presented.slice(index, index + 5)
+      .sort((left, right) => right.dailySalience - left.dailySalience)
+    const denominator = Math.max(1, group.length - 1)
+    group.forEach((point, rank) => {
+      renderOrder.push({ ...point, opacity: 0.2 + 0.8 * (rank / denominator) })
+    })
+  }
+  return renderOrder
 }
 
 function axisDate(timestamp, span) {
@@ -78,7 +113,7 @@ function buildPlot(points) {
       y: PLOT_TOP + ((scale.maximum - value) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
     })
   }
-  if (!points.length) return { points: [], xTicks: [], yTicks }
+  if (!points.length) return { points: [], renderPoints: [], xTicks: [], yTicks }
 
   const start = points[0].timestamp
   const end = points.at(-1).timestamp
@@ -101,7 +136,7 @@ function buildPlot(points) {
         x: PLOT_LEFT + ratio * (PLOT_RIGHT - PLOT_LEFT),
       }
     })
-  return { points: plotted, xTicks, yTicks }
+  return { points: plotted, renderPoints: saliencePointPresentation(plotted), xTicks, yTicks }
 }
 
 function efficiencyBand(value) {
@@ -115,20 +150,23 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   const [activeModes, setActiveModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [selectedYear, setSelectedYear] = useState('all')
   const [request, setRequest] = useState(emptyRequest)
+  const [refreshToken, setRefreshToken] = useState(0)
   const selectedModes = useMemo(() => PLAYER_ANALYSIS_MODES.filter(
     (mode) => activeModes.has(mode)
   ), [activeModes])
   const modeQuery = selectedModes.join(',')
   const years = useMemo(() => seriesYears(request.data?.points), [request.data])
+  const salienceReady = request.data?.salience?.status === 'ready'
   const dailyPoints = useMemo(
-    () => efficiencyPoints(request.data?.points, selectedYear),
-    [request.data, selectedYear]
+    () => efficiencyPoints(request.data?.points, selectedYear, salienceReady),
+    [request.data, salienceReady, selectedYear]
   )
   const plot = useMemo(() => buildPlot(dailyPoints), [dailyPoints])
 
   useEffect(() => {
     setActiveModes(new Set(PLAYER_ANALYSIS_MODES))
     setSelectedYear('all')
+    setRefreshToken(0)
   }, [playerName])
 
   useEffect(() => {
@@ -142,12 +180,34 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
     }
     const controller = new AbortController()
     setRequest((current) => ({ ...current, error: '', loading: true }))
-    fetchDailyEfficiency({
-      playerName,
-      mode: modeQuery,
-      signal: controller.signal,
-      bypassCache: true,
-    })
+    const loadAccuracy = async () => {
+      let salienceData = null
+      try {
+        salienceData = await fetchDailySalienceAccuracy({
+          playerName,
+          mode: modeQuery,
+          signal: controller.signal,
+          bypassCache: true,
+        })
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+      }
+      if (salienceData?.salience?.status === 'ready') return salienceData
+
+      const fallback = await fetchDailyEfficiency({
+        playerName,
+        mode: modeQuery,
+        signal: controller.signal,
+        bypassCache: true,
+      })
+      return {
+        ...fallback,
+        salience: salienceData?.salience || { status: 'unavailable' },
+        saliencePending: true,
+      }
+    }
+
+    loadAccuracy()
       .then((data) => {
         if (!controller.signal.aborted) setRequest({ data, error: '', loading: false })
       })
@@ -157,7 +217,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
         }
       })
     return () => controller.abort()
-  }, [modeQuery, playerName])
+  }, [modeQuery, playerName, refreshToken])
+
+  useEffect(() => {
+    const status = request.data?.salience?.status
+    if (request.loading || !status || status === 'ready') return undefined
+    const timer = window.setTimeout(() => setRefreshToken((value) => value + 1), 15000)
+    return () => window.clearTimeout(timer)
+  }, [playerName, request.data, request.loading])
 
   const toggleMode = (mode) => {
     setActiveModes((current) => {
@@ -195,6 +262,11 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
 
       {request.loading ? <div className="measure-chart-message">Calculating daily accuracy…</div> : null}
       {!request.loading && request.error ? <div className="measure-chart-message error" role="alert">{request.error}</div> : null}
+      {!request.loading && request.data?.saliencePending ? (
+        <p className="measure-salience-state">
+          Salience is {request.data.salience?.status || 'unavailable'}; showing unweighted Accuracy until the player rebuild finishes.
+        </p>
+      ) : null}
       {!request.loading && !request.error ? (
         <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Average game accuracy by local date">
           {plot.yTicks.map((tick) => (
@@ -205,15 +277,18 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
           ))}
           {plot.points.length ? (
             <>
-              {plot.points.map((point) => (
+              {plot.renderPoints.map((point) => (
                 <circle
                   className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
                   cx={point.x}
                   cy={point.y}
-                  r="4"
+                  r={point.radius}
+                  opacity={point.opacity}
                   role="button"
                   tabIndex="0"
-                  aria-label={`${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`}
+                  aria-label={point.dailySalience === null
+                    ? `${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`
+                    : `${point.date}, ${point.gameEfficiency.toFixed(2)} salience-weighted accuracy, ${point.dailySalience.toFixed(2)} effective games. Explore games.`}
                   onClick={() => onSelectPoint?.({
                     scope: 'date',
                     date: point.date,
@@ -235,7 +310,9 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
                   }}
                   key={point.date}
                 >
-                  <title>{`${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy`}</title>
+                  <title>{point.dailySalience === null
+                    ? `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy\nSalience rebuild pending`
+                    : `${point.date}\n${point.gameEfficiency.toFixed(2)} salience-weighted accuracy\n${point.unweightedAccuracy.toFixed(2)} unweighted accuracy\n${point.dailySalience.toFixed(2)} effective games\n${point.games} analyzed games`}</title>
                 </circle>
               ))}
             </>

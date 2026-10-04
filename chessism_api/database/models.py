@@ -290,6 +290,68 @@ class PlayerSalienceSummary(Base):
     )
 
 
+class PlayerPositionFrequency(Base):
+    """Repeated-position frequency; absent rows have implicit frequency one."""
+
+    __tablename__ = "player_position_frequency"
+
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    player_color = Column(String(5), primary_key=True)
+    fen_fen = Column(
+        String,
+        ForeignKey("fen.fen", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    games_with_position = Column(BigInteger, nullable=False)
+    total_occurrences = Column(BigInteger, nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "player_color IN ('white', 'black')",
+            name="player_position_frequency_color",
+        ),
+        CheckConstraint(
+            "games_with_position > 1",
+            name="player_position_frequency_games_positive",
+        ),
+        CheckConstraint(
+            "total_occurrences >= games_with_position",
+            name="player_position_frequency_occurrences_valid",
+        ),
+    )
+
+
+class PlayerSaliencePendingGame(Base):
+    """Durable append-only ingestion work awaiting a salience refresh."""
+
+    __tablename__ = "player_salience_pending_game"
+
+    player_name = Column(
+        String,
+        ForeignKey("player.player_name", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    game_link = Column(BigInteger, primary_key=True)
+    player_color = Column(String(5), primary_key=True)
+
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["game_link", "player_color"],
+            ["game_player.link", "game_player.color"],
+            ondelete="CASCADE",
+            name="fk_player_salience_pending_game_player",
+        ),
+        CheckConstraint(
+            "player_color IN ('white', 'black')",
+            name="player_salience_pending_game_color",
+        ),
+    )
+
+
 class GamePlayerSalience(Base):
     """Corpus-relative information weight for one player in one game."""
 
@@ -303,7 +365,11 @@ class GamePlayerSalience(Base):
         nullable=False,
     )
     salience = Column(Float, nullable=False)
-    position_count = Column(Integer, nullable=False)
+    weighted_numerator = Column(Float, nullable=False)
+    depth_weight_sum = Column(Float, nullable=False)
+    position_occurrence_count = Column(Integer, nullable=False)
+    unique_position_count = Column(Integer, nullable=False)
+    repeated_position_count = Column(Integer, nullable=False)
 
     __table_args__ = (
         ForeignKeyConstraint(
@@ -317,8 +383,21 @@ class GamePlayerSalience(Base):
             name="game_player_salience_range",
         ),
         CheckConstraint(
-            "position_count > 0",
-            name="game_player_salience_position_count",
+            "weighted_numerator > 0 AND depth_weight_sum > 0",
+            name="game_player_salience_components_positive",
+        ),
+        CheckConstraint(
+            "position_occurrence_count > 0",
+            name="game_player_salience_occurrence_count",
+        ),
+        CheckConstraint(
+            "unique_position_count > 0 "
+            "AND unique_position_count <= position_occurrence_count",
+            name="game_player_salience_unique_count",
+        ),
+        CheckConstraint(
+            "repeated_position_count = position_occurrence_count - unique_position_count",
+            name="game_player_salience_repeated_count",
         ),
         Index("ix_game_player_salience_player_game", "player_name", "game_link"),
     )
@@ -769,4 +848,41 @@ class CoefficientResearchExperiment(Base):
             "decision IS NULL OR decision IN ('keep_lichess', 'alongside', 'replace')",
             name="coefficient_research_experiment_decision",
         ),
+    )
+
+
+class MatrixArtifact(Base):
+    """Metadata for an immutable matrix snapshot stored outside PostgreSQL."""
+
+    __tablename__ = "matrix_artifact"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(100), nullable=False)
+    row_type = Column(String(32), nullable=False, index=True)
+    status = Column(String(16), nullable=False, default="queued", index=True)
+    job_id = Column(String(96), nullable=True, index=True)
+    created_by = Column(
+        String(36),
+        ForeignKey("account.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    config = Column(JSON, nullable=False)
+    estimate = Column(JSON, nullable=True)
+    result = Column(JSON, nullable=True)
+    artifact_path = Column(String, nullable=True)
+    row_count = Column(BigInteger, nullable=True)
+    feature_count = Column(Integer, nullable=True)
+    label_count = Column(Integer, nullable=True)
+    size_bytes = Column(BigInteger, nullable=True)
+    error = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'complete', 'failed')",
+            name="matrix_artifact_status",
+        ),
+        Index("ix_matrix_artifact_created_at", created_at.desc()),
     )

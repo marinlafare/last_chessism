@@ -49,6 +49,7 @@ from chessism_api.operations.player_hero_analytics import (
 from chessism_api.operations.player_hero_efficiency import get_player_daily_efficiency
 from chessism_api.operations.player_game_explorer import explore_player_games
 from chessism_api.operations.player_salience import get_player_daily_salience_accuracy
+from chessism_api.operations.player_move_salience import get_player_game_salience
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -363,6 +364,19 @@ async def api_get_player_daily_salience_accuracy(
         date_from,
         date_to,
         timezone,
+    )
+
+
+@router.get("/{player_name}/analysis/salience/games/{game_id}")
+async def api_get_player_game_salience(
+    player_name: str,
+    game_id: int,
+) -> JSONResponse:
+    """Return every occurrence-level salience contribution in one player game."""
+    return await _hero_analytics_response(
+        get_player_game_salience,
+        player_name,
+        game_id,
     )
 
 

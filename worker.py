@@ -29,6 +29,7 @@ from chessism_api.operations.ingestion_pipeline.jobs import (
 from chessism_api.operations.tablebase import run_tablebase_analysis_job
 from chessism_api.operations.player_deletion import run_delete_player_job
 from chessism_api.operations.coefficient_research import run_chessism_coefficient_experiment
+from chessism_api.operations.matrix_constructor import run_matrix_construction_job
 from chessism_api.operations.player_salience import run_player_salience_job
 from chessism_api.operations.database_backups import run_database_backup_job
 from chessism_api.operations.database_restore_tests import (
@@ -101,6 +102,7 @@ class WorkerSettings:
         run_tablebase_analysis_job,
         run_delete_player_job,
         run_chessism_coefficient_experiment,
+        func(run_matrix_construction_job, timeout=7 * 24 * 60 * 60),
         run_player_salience_job,
         func(run_database_backup_job, timeout=7 * 24 * 60 * 60),
         func(run_database_restore_test_job, timeout=7 * 24 * 60 * 60),
