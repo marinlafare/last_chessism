@@ -15,7 +15,7 @@ from chessism_api.operations.matrix_constructor.arrays import TypedArrayWriter, 
 from chessism_api.operations.matrix_constructor.artifact_files import sha256
 from chessism_api.operations.matrix_constructor.catalog import ROW_TYPES
 from chessism_api.operations.matrix_constructor.preview import PreviewUnavailable, read_matrix_preview
-from chessism_api.routers import research_matrices
+from chessism_api.routers.matrices import legacy_snapshots as research_matrices
 
 
 def update_manifest(folder, manifest):

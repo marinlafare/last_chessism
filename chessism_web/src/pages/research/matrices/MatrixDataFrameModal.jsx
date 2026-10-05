@@ -55,7 +55,7 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
   const pages = Math.max(1, Math.ceil(total / limit))
   const currentPage = Math.floor(offset / limit) + 1
   const lastOffset = (pages - 1) * limit
-  const hasCategories = data?.columns.some((column) => column.encoding === 'dictionary')
+  const hasCategories = data?.columns?.some((column) => column.encoding === 'dictionary')
   const changeRole = (value) => { setRole(value); setOffset(0); setSliceIndex(0) }
   const closeFromBackdrop = (event) => {
     if (event.target !== event.currentTarget) return

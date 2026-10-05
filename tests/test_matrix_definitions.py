@@ -12,7 +12,7 @@ import httpx
 from chessism_api.database.models import MatrixDefinition
 from chessism_api.operations.matrix_constructor import definitions, live_preview
 from chessism_api.operations.matrix_constructor.definition_backups import definition_fingerprint, validate_definition_backup
-from chessism_api.routers import research_matrices as routes
+from chessism_api.routers.matrices import definitions as routes, legacy_snapshots
 
 
 CONFIG = {"name": "Small recipe", "row_type": "game_player",
@@ -123,7 +123,7 @@ class DefinitionQueryTests(unittest.IsolatedAsyncioTestCase):
         @asynccontextmanager
         async def lock(**kwargs):
             yield session
-        with patch.object(routes, 'matrix_catalog_lock', lock), patch.object(routes, '_delete_working_artifact', AsyncMock(side_effect=AssertionError('must keep snapshot'))):
+        with patch.object(routes, 'matrix_catalog_lock', lock), patch.object(legacy_snapshots, '_delete_working_artifact', AsyncMock(side_effect=AssertionError('must keep snapshot'))):
             await routes.delete_matrix_definition(uuid.UUID(definition.id))
         session.delete.assert_awaited_once_with(definition)
 

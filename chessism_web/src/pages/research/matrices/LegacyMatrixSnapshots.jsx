@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { deleteMatrixArtifact, fetchMatrixArtifacts } from './matrixApi'
 import MatrixPreviewButton from './MatrixPreviewButton'
-import { formatNumber } from '../../utils/formatters'
+import { formatNumber } from '../../../utils/formatters'
 
 export default function LegacyMatrixSnapshots({ count, onPreview, onChanged }) {
   const [open, setOpen] = useState(false)

@@ -75,7 +75,7 @@ def select_statements(
     count = f"SELECT COUNT(*)::bigint FROM (SELECT 1 {base} {where_sql} {group} LIMIT :count_limit) matrix_count"
     present = base_aliases | set(filter_joins)
     enrichment = required_joins(" ".join(expressions), present)
-    select_columns = f"{row_type.row_key_expression} AS row_key, {', '.join(expressions)}"
+    select_columns = ", ".join([f"{row_type.row_key_expression} AS row_key", *expressions])
     if group or not enrichment:
         joins = "\n".join(JOINS[key] for key in enrichment)
         return count, f"SELECT {select_columns} {base} {joins} {where_sql} {group} ORDER BY {row_type.order_sql} LIMIT :max_rows"

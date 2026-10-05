@@ -1,8 +1,8 @@
-import { deleteJson, getJson, postJson } from '../../services/apiClient'
+import { deleteJson, getJson, postJson } from '../../../services/apiClient'
 
-export const fetchMatrixCatalog = () => getJson('/research/matrices/catalog')
+export const fetchMatrixCatalog = (options = {}) => getJson('/research/matrices/catalog', options)
 
-export const estimateMatrix = (config) => postJson('/research/matrices/estimate', config)
+export const estimateMatrix = (config, options = {}) => postJson('/research/matrices/estimate', config, options)
 
 export const saveMatrixDefinition = (config) => postJson('/research/matrices', config)
 

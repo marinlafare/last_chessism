@@ -6,7 +6,8 @@ from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
 from .catalog import ROW_TYPES
-from .queries import matrix_sql, normalize_matrix_config
+from .config import normalize_matrix_config
+from .queries import matrix_sql
 
 
 DEFINITION_VERSION = 1

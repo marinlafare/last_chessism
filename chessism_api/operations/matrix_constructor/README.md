@@ -13,11 +13,15 @@ creation and runs only once, so deleted definitions do not reappear on restart.
 
 ## Definitions and live previews
 
+- `config.py` owns pure allowlist validation and shared limits; it has no worker,
+  NumPy, disk-space, or database dependencies.
 - `definitions.py` normalizes recipes and estimates counts up to 10,001 matching
   rows (or the recipe cap plus one). Larger scopes are labeled as lower bounds.
 - `live_preview.py` reads an ordered prefix of 25/50/100 rows plus one lookahead,
   under a read-only transaction and a 15-second statement timeout. No count query,
-  files, or full dictionaries are needed. Aggregate row types may still need to
+  files, or full dictionaries are needed. Feature/label selection also narrows
+  the SQL projection and its enrichment joins, not just the returned JSON.
+  Aggregate row types may still need to
   aggregate the filtered source data; users should narrow expensive scopes.
 - `definition_backups.py` fingerprints instructions protected by the normal
   PostgreSQL backup. The manual restore rehearsal compares the restored records
@@ -44,12 +48,43 @@ saves/deletes use the same short advisory-lock operation as the backup catalog;
 while a backup holds that lock, writes return a retryable conflict. Previewing
 and reading definitions remain available.
 
+## Page-owned code map
+
+`routers/research_matrices.py` preserves the public route surface and assembles
+`routers/matrices/definitions.py`, `legacy_snapshots.py`, and `schemas.py`.
+Superuser authorization is inherited from the research router's mounting in
+`main.py`. Legacy snapshot reads connect to Redis only for queued/running work;
+completed snapshots remain readable without Redis. The legacy NumPy reader is
+imported only when its preview endpoint is used. Package imports never load the
+legacy construction worker implicitly.
+
+`chessism_web/src/pages/MatricesConstructor.jsx` owns page layout. Everything
+specific to this page is in `pages/research/matrices/`:
+
+- `MatrixDefinitionForm.jsx`: the four form sections, without request logic.
+- `matrixForm.js`: pure, tested form conversions; copies never mutate recipes.
+- `useMatrixConstructor.js`: form actions, saved/draft preview selection, and
+  abortable estimates. Changes and navigation discard stale responses.
+- `useMatrixDefinitions.js`: list pagination and metadata updates. Repeated
+  load-more clicks cannot request one page twice. Save/delete update the list
+  from their successful response, avoiding a redundant follow-up GET.
+- `matrixApi.js`: all page-owned HTTP calls, including cancellation signals.
+- `MatrixDefinitionList.jsx` and `LegacyMatrixSnapshots.jsx`: clearly separated
+  saved instructions and preserved files.
+- `MatrixDataFrameModal.jsx`, `MatrixPreviewButton.jsx`, and the two stylesheets:
+  the bounded live/legacy viewer and presentation.
+
+Legacy materialization remains for existing jobs, validation utilities, and
+future algorithm reuse; it is not reachable from the constructor's save button.
+This cleanup changes no stored definitions, snapshot files, or backup format.
+
 ## Shared query and legacy materialization infrastructure
 
 - `catalog.py` owns the allowlisted row units, source fields, encodings, and SQL
   expressions exposed to the UI.
-- `queries.py` validates requests, caps preview
-  counts at the requested row limit, and protects the local disk reserve.
+- `queries.py` builds parameterized selection/filter queries only.
+- `legacy_estimates.py` estimates disk usage and checks the local reserve for
+  legacy materialization; it is never imported by definition-only requests.
 - `sql_plan.py` adds only the joins needed by selected fields and filters. For
   non-aggregate exports, it limits the source rows before optional enrichment.
 - `arrays.py` writes typed column batches, missing masks, dictionaries, and
@@ -169,7 +204,7 @@ Important semantics:
 Validation:
 
 ```sh
-python -m unittest tests.test_matrix_constructor tests.test_matrix_preview tests.test_matrix_definitions
+python -m unittest tests.test_matrix_constructor tests.test_matrix_preview tests.test_matrix_definitions tests.test_matrix_cleanup tests.test_matrix_storage
 # Optional PostgreSQL checks: temporary tables roll back; preview reads <=5 rows.
 CHESSISM_DB_INTEGRATION=1 python -m unittest tests.test_matrix_definitions_database tests.test_matrix_storage_database
 # Against the existing schema, with a disposable MATRIX_ARTIFACT_DIR and an
@@ -177,3 +212,19 @@ CHESSISM_DB_INTEGRATION=1 python -m unittest tests.test_matrix_definitions_datab
 python -m tests.matrix_constructor_smoke
 python -m tests.validate_matrix_artifact /path/to/manifest.json
 ```
+
+Frontend checks, from `chessism_web/`:
+
+```sh
+npm run test:matrices
+npm run build
+# Optional: host Firefox + Node with WebSocket support, and the local Vite server.
+# Uses a temporary browser profile and mocked APIs; no production records change.
+npm run test:matrices:browser
+```
+
+The browser test defaults to `http://localhost:6789`; override `MATRIX_TEST_URL`
+and `MATRIX_BROWSER_PORT` if needed. It exercises the editor, preview, pagination,
+and delayed responses after edits/deletes. The fixture is not part of the built
+application. Python regression tests cover import isolation, public URLs,
+column-specific SQL joins, and preserved snapshot/backup compatibility.

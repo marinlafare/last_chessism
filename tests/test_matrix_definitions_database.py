@@ -15,7 +15,7 @@ from chessism_api.operations.matrix_constructor.definition_backups import (
     definition_backup_manifest, validate_definition_backup,
 )
 from chessism_api.operations.matrix_constructor.live_preview import preview_definition
-from chessism_api.routers import research_matrices as routes
+from chessism_api.routers.matrices import definitions as routes
 from tests.test_matrix_definitions import CONFIG
 
 
@@ -71,3 +71,15 @@ class DefinitionDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertLessEqual(len(preview["rows"]), 5)
         self.assertFalse(preview["materialized"])
         self.assertEqual(len(preview["columns"]), 3)
+
+    async def test_column_projection_preserves_source_scope_and_row_keys(self):
+        AsyncDBSession.configure(bind=self.engine)
+        full = await preview_definition(CONFIG, limit=3)
+        features = await preview_definition(CONFIG, limit=3, role="features")
+        labels = await preview_definition(CONFIG, limit=3, role="labels")
+        self.assertEqual(full["row_keys"], features["row_keys"])
+        self.assertEqual(full["row_keys"], labels["row_keys"])
+        self.assertEqual(full["rows"], [left + right for left, right in zip(features["rows"], labels["rows"])])
+        empty = await preview_definition({**CONFIG, "label_columns": []}, limit=3, role="labels")
+        self.assertEqual(empty["row_keys"], full["row_keys"])
+        self.assertEqual(empty["rows"], [[], [], []])

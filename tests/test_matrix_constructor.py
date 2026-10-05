@@ -6,11 +6,9 @@ import numpy as np
 
 from chessism_api.operations.matrix_constructor.catalog import ROW_TYPES, matrix_catalog
 from chessism_api.operations.matrix_constructor.arrays import TypedArrayWriter, array_layout, validate_typed_arrays
-from chessism_api.operations.matrix_constructor.queries import (
-    estimated_artifact_bytes,
-    matrix_sql,
-    normalize_matrix_config,
-)
+from chessism_api.operations.matrix_constructor.config import normalize_matrix_config
+from chessism_api.operations.matrix_constructor.queries import matrix_sql
+from chessism_api.operations.matrix_constructor.legacy_estimates import estimated_artifact_bytes
 
 
 class MatrixConstructorTests(unittest.TestCase):

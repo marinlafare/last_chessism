@@ -19,7 +19,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.operations.matrix_constructor.catalog import ROW_TYPES
 from chessism_api.operations.matrix_constructor.jobs import _construct_artifact
-from chessism_api.operations.matrix_constructor.queries import matrix_sql, normalize_matrix_config
+from chessism_api.operations.matrix_constructor.config import normalize_matrix_config
+from chessism_api.operations.matrix_constructor.queries import matrix_sql
 from tests.validate_matrix_artifact import validate
 
 

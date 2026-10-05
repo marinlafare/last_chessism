@@ -31,7 +31,12 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
     cap = normalized["filters"]["max_rows"]
     # Select a tiny ordered prefix BEFORE optional expensive enrichment joins.
     # There is intentionally no total-count query or unbounded OFFSET paging.
-    _, select_sql, params = matrix_sql(normalized)
+    selected_config = {
+        **normalized,
+        "feature_columns": normalized["feature_columns"] if role in {"all", "features"} else [],
+        "label_columns": normalized["label_columns"] if role in {"all", "labels"} else [],
+    }
+    _, select_sql, params = matrix_sql(selected_config)
     sample_limit = min(limit, cap)
     params["max_rows"] = min(sample_limit + 1, cap)
     async with AsyncDBSession() as session:
@@ -41,12 +46,11 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         result = await session.execute(text(select_sql), params)
         records = list(result.mappings())
     columns = []
-    for group, keys in (("features", normalized["feature_columns"]), ("labels", normalized["label_columns"])):
-        if role in {"all", group}:
-            for key in keys:
-                column = row_type.columns_by_key[key]
-                columns.append({"key": key, "role": group, "storage_dtype": column.numpy_dtype,
-                                "encoding": "source_category" if column.data_type == "category" else "numeric"})
+    for group, keys in (("features", selected_config["feature_columns"]), ("labels", selected_config["label_columns"])):
+        for key in keys:
+            column = row_type.columns_by_key[key]
+            columns.append({"key": key, "role": group, "storage_dtype": column.numpy_dtype,
+                            "encoding": "source_category" if column.data_type == "category" else "numeric"})
     rows = [[source_value(record[column["key"]]) for column in columns] for record in records[:sample_limit]]
     return {
         "preview_kind": "live", "materialized": False, "dimensions": 2,

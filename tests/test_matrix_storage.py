@@ -7,13 +7,15 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from fastapi import HTTPException
+
 from chessism_api.operations.matrix_constructor.arrays import TypedArrayWriter, validate_typed_arrays
 from chessism_api.operations.matrix_constructor.catalog import ROW_TYPES
 from chessism_api.operations.matrix_constructor.artifact_files import copy_snapshot, inspect_snapshot, sha256
 from chessism_api.operations.matrix_constructor.storage import relative_manifest_path
 from chessism_api.operations.matrix_backups import backup_completed_matrices, validate_matrix_bundle
 from chessism_api.operations import database_backups as backup
-from chessism_api.routers import research_matrices
+from chessism_api.routers.matrices import legacy_snapshots as research_matrices
 
 
 def fixture_snapshot(root: Path, artifact_id: str) -> dict:
@@ -130,6 +132,23 @@ class MatrixFileTests(unittest.TestCase):
 
 
 class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
+    async def test_deletion_rejects_symlink_to_another_working_snapshot(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            original_id, alias_id = str(uuid.uuid4()), str(uuid.uuid4())
+            fixture_snapshot(root, original_id)
+            (root / alias_id).symlink_to(root / original_id, target_is_directory=True)
+            session = AsyncMock()
+            session.get.return_value = SimpleNamespace(id=alias_id, status="complete")
+            factory = MagicMock()
+            factory.return_value.__aenter__.return_value = session
+            with patch.object(research_matrices, "ARTIFACT_ROOT", root), patch.object(research_matrices, "AsyncDBSession", factory):
+                with self.assertRaises(HTTPException) as caught:
+                    await research_matrices._delete_working_artifact(alias_id)
+            self.assertEqual(caught.exception.status_code, 409)
+            self.assertEqual(inspect_snapshot(root, original_id, verify=True)["artifact_id"], original_id)
+            session.delete.assert_not_awaited()
+
     async def test_manual_companion_backup_copies_new_only(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

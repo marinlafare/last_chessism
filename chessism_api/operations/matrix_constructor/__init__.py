@@ -1,12 +1,5 @@
-"""Curated, reproducible matrix snapshots for Chessism research."""
+"""Matrix definitions and bounded previews.
 
-from .catalog import matrix_catalog
-from .jobs import run_matrix_construction_job
-from .queries import estimate_matrix, normalize_matrix_config
-
-__all__ = [
-    "estimate_matrix",
-    "matrix_catalog",
-    "normalize_matrix_config",
-    "run_matrix_construction_job",
-]
+Import specific modules: importing a recipe must not load the legacy NumPy
+writer, worker machinery, or filesystem-capacity checks.
+"""

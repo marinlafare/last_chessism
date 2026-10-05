@@ -1,7 +1,7 @@
 import MatrixPreviewButton from './MatrixPreviewButton'
-import { formatNumber } from '../../utils/formatters'
+import { formatNumber } from '../../../utils/formatters'
 
-export default function MatrixDefinitionList({ definitions, onPreview, onUse, onDelete }) {
+export default function MatrixDefinitionList({ definitions, onPreview, onUse, onDelete, disabled = false }) {
   if (!definitions.length) return <p className="matrix-empty">No definitions saved yet. Saving stores instructions only.</p>
   return <div className="matrix-artifact-list">{definitions.map((definition) => (
     <article className="matrix-artifact" key={definition.id}>
@@ -19,8 +19,8 @@ export default function MatrixDefinitionList({ definitions, onPreview, onUse, on
       </p>
       <div className="matrix-definition-columns"><span>Features: {definition.config.feature_columns.join(', ')}</span><span>Labels: {definition.config.label_columns.join(', ') || 'none'}</span></div>
       <div className="matrix-definition-actions">
-        <button className="matrix-inspect-button" type="button" onClick={() => onUse(definition)}>use as starting point</button>
-        <button className="matrix-delete" type="button" onClick={() => onDelete(definition)}>delete definition</button>
+        <button className="matrix-inspect-button" type="button" disabled={disabled} onClick={() => onUse(definition)}>use as starting point</button>
+        <button className="matrix-delete" type="button" disabled={disabled} onClick={() => onDelete(definition)}>delete definition</button>
       </div>
     </article>
   ))}</div>

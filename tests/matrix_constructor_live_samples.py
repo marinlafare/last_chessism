@@ -19,12 +19,9 @@ from sqlalchemy import select
 from chessism_api.database.engine import AsyncDBSession, init_db
 from chessism_api.database.models import MatrixArtifact
 from chessism_api.operations.matrix_constructor.jobs import run_matrix_construction_job
-from chessism_api.operations.matrix_constructor.queries import ARTIFACT_ROOT
-from chessism_api.operations.matrix_constructor.storage import matrix_catalog_lock
-from chessism_api.operations.matrix_constructor.queries import (
-    estimate_matrix,
-    normalize_matrix_config,
-)
+from chessism_api.operations.matrix_constructor.storage import ARTIFACT_ROOT, matrix_catalog_lock
+from chessism_api.operations.matrix_constructor.config import normalize_matrix_config
+from chessism_api.operations.matrix_constructor.legacy_estimates import estimate_matrix
 from chessism_api.redis_client import redis_settings
 
 

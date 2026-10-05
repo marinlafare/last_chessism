@@ -23,10 +23,10 @@ from chessism_api.database.models import MatrixArtifact
 from .arrays import TypedArrayWriter, validate_typed_arrays
 from .catalog import ROW_TYPES
 from .storage import matrix_catalog_lock, relative_manifest_path
-from .queries import (
-    ARTIFACT_DISPLAY_ROOT, ARTIFACT_ROOT, estimate_matrix,
-    matrix_sql, normalize_matrix_config, storage_status,
-)
+from .storage import ARTIFACT_DISPLAY_ROOT, ARTIFACT_ROOT
+from .config import normalize_matrix_config
+from .legacy_estimates import estimate_matrix, storage_status
+from .queries import matrix_sql
 
 
 PROGRESS_TTL_SECONDS = 7 * 24 * 60 * 60
