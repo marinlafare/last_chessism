@@ -12,6 +12,7 @@ import AnalyzeTimes from './pages/AnalyzeTimes'
 import Research from './pages/Research'
 import AccuracyCoefficient from './pages/AccuracyCoefficient'
 import MatricesConstructor from './pages/MatricesConstructor'
+import Algorithms from './pages/Algorithms'
 import SalienceResearch from './pages/SalienceResearch'
 import DatabaseBackups from './pages/DatabaseBackups'
 import {
@@ -40,6 +41,7 @@ const APP_PATHS = new Set([
   '/research',
   '/research/chessism-coefficient',
   '/research/matrices',
+  '/research/algorithms',
   '/research/salience',
   '/backups'
 ])
@@ -212,6 +214,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <AccuracyCoefficient />
   } else if (path === '/research/matrices') {
     page = <MatricesConstructor />
+  } else if (path === '/research/algorithms') {
+    page = <Algorithms />
   } else if (path === '/research/salience') {
     page = <SalienceResearch />
   } else if (path === '/backups') {

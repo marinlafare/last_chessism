@@ -209,6 +209,7 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(job, "release_backup", AsyncMock()),
                 patch.object(job, "backup_completed_matrices", side_effect=save_matrices),
                 patch.object(job, "definition_backup_manifest", AsyncMock(return_value={"count": 0, "storage": "postgresql"})),
+                patch.object(job, "algorithm_backup_manifest", AsyncMock(return_value={"schema_version": 1, "definitions": {"count": 0}, "completed_runs": {"count": 0}})),
                 patch.object(backup, "require_storage", return_value={"application_bytes": 100}),
                 patch.object(backup, "DATABASE_BACKUP_ROOT", root),
                 patch.object(backup, "MANIFEST_DIRECTORY", root / "manifests"),
@@ -227,7 +228,8 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(calls, ["matrices", "database"])
             self.assertEqual(result["matrices"], matrices)
             manifest = json.loads((root / "manifests" / "testF.json").read_text())
-            self.assertEqual(manifest["schema_version"], 4)
+            self.assertEqual(manifest["schema_version"], 5)
+            self.assertEqual(manifest["algorithms"]["completed_runs"]["count"], 0)
             self.assertEqual(manifest["matrices"], matrices)
             self.assertEqual(manifest["matrix_definitions"], {"count": 0, "storage": "postgresql"})
 

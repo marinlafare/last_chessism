@@ -14,6 +14,8 @@ services:
       - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
       - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
       - STOCKFISH_STATUS_URL=${STOCKFISH_STATUS_URL}
+      - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
+      - ALGORITHM_FREE_FLOOR_BYTES=20000000000
       - BACKUP_VOLUME_ROOT=/backup-volume
       - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
       - DATABASE_BACKUP_APP_ID=chessism
@@ -189,6 +191,31 @@ services:
     volumes:
       - ./research_data:/research-data
       - /main-monitor-db-backups:/backup-volume
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-algorithms:
+    build: .
+    image: chessism-api:latest
+    command: arq chessism_api.operations.research_algorithms.worker.WorkerSettings
+    cpus: "1.00"
+    mem_limit: 1g
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
+      - ALGORITHM_FREE_FLOOR_BYTES=20000000000
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+    volumes:
+      - ./research_data:/research-data
     networks:
       - chessism_net
     depends_on:

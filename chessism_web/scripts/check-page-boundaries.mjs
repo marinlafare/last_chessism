@@ -19,6 +19,7 @@ const routeFiles = [
   ['pages/Research.jsx', './research/researchHub.css'],
   ['pages/AccuracyCoefficient.jsx', './research/coefficientResearch.css'],
   ['pages/MatricesConstructor.jsx', './research/matrices/matricesConstructor.css'],
+  ['pages/Algorithms.jsx', './research/algorithms/algorithms.css'],
   ['pages/SalienceResearch.jsx', './research/salienceResearch.css'],
 ]
 
@@ -35,6 +36,7 @@ const apiBoundaryFiles = [
   'pages/analyze-times/analyzeTimesApi.js',
   'pages/research/coefficientResearchApi.js',
   'pages/research/matrices/matrixApi.js',
+  'pages/research/algorithms/algorithmApi.js',
 ]
 
 const errors = []

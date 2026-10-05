@@ -9,6 +9,7 @@ from chessism_api.operations.backup_coordination import ensure_backup_reservatio
 from chessism_api.operations.matrix_backups import backup_completed_matrices
 from chessism_api.operations.matrix_constructor.storage import matrix_catalog_lock
 from chessism_api.operations.matrix_constructor.definition_backups import definition_backup_manifest
+from chessism_api.operations.research_algorithms.backups import algorithm_backup_manifest
 
 
 async def run_database_backup_job(ctx: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
@@ -85,6 +86,7 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
         await publish_progress(phase="preparing", detail=running_status["detail"])
 
         definitions = await definition_backup_manifest(session)
+        algorithms = await algorithm_backup_manifest(session)
         matrices = await backup_completed_matrices(session, publish_progress=publish_progress)
         info = await backup._pgbackrest_info(tolerate_missing=True)
         stanza_ready = bool(
@@ -173,7 +175,8 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         completed_at = backup._iso_now()
         manifest = {
-            "schema_version": 4,
+            "schema_version": 5,
+            "algorithms": algorithms,
             "matrix_definitions": definitions,
             "matrices": matrices,
             "format": "chessism-pgbackrest",

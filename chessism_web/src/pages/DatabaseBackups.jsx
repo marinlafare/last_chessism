@@ -333,7 +333,7 @@ export default function DatabaseBackups() {
               <div>
                 <p className="eyebrow">RECOVERY</p>
                 <h1>Database Backups</h1>
-                <p className="database-backups-copy">Matrix definitions are included inside PostgreSQL. Live previews create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
+                <p className="database-backups-copy">Matrix and algorithm definitions, plus completed algorithm results, are included inside PostgreSQL. Previews and temporary algorithm inputs create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
               </div>
               <div className="database-backups-actions">
                 <button

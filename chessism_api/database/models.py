@@ -866,6 +866,43 @@ class MatrixDefinition(Base):
     __table_args__ = (Index("ix_matrix_definition_created_at", created_at.desc()),)
 
 
+class AlgorithmDefinition(Base):
+    """Immutable calculation instructions, including a copy of the matrix recipe."""
+
+    __tablename__ = "algorithm_definition"
+    id = Column(String(36), primary_key=True)
+    name = Column(String(100), nullable=False)
+    matrix_definition_id = Column(String(36), ForeignKey("matrix_definition.id", ondelete="SET NULL"))
+    config = Column(JSON, nullable=False)
+    created_by = Column(String(36), ForeignKey("account.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    __table_args__ = (Index("ix_algorithm_definition_created_at", created_at.desc()),)
+
+
+class AlgorithmRun(Base):
+    """Durable execution state; completed compact results are immutable."""
+
+    __tablename__ = "algorithm_run"
+    id = Column(String(36), primary_key=True)
+    definition_id = Column(String(36), ForeignKey("algorithm_definition.id", ondelete="SET NULL"))
+    name = Column(String(100), nullable=False)
+    config = Column(JSON, nullable=False)
+    status = Column(String(16), nullable=False, default="queued")
+    cancel_requested = Column(Boolean, nullable=False, default=False)
+    progress = Column(JSON, nullable=False, default=dict)
+    result = Column(JSON)
+    error = Column(String(2000))
+    created_by = Column(String(36), ForeignKey("account.id", ondelete="SET NULL"))
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    started_at = Column(DateTime(timezone=True))
+    finished_at = Column(DateTime(timezone=True))
+    __table_args__ = (
+        CheckConstraint("status IN ('queued','running','complete','failed','cancelled')", name="algorithm_run_status"),
+        Index("ix_algorithm_run_created_at", created_at.desc()),
+        Index("ix_algorithm_run_active", status, postgresql_where=text("status IN ('queued','running')")),
+    )
+
+
 class MatrixArtifact(Base):
     """Metadata for an immutable matrix snapshot stored outside PostgreSQL."""
 

@@ -30,10 +30,12 @@ from chessism_api.operations.player_salience import (
 from chessism_api.operations.research_resources import analysis_jobs_active
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.routers.research_matrices import router as matrices_router
+from chessism_api.routers.research_algorithms import router as algorithms_router
 
 
 router = APIRouter()
 router.include_router(matrices_router, prefix="/matrices", tags=["Research matrices"])
+router.include_router(algorithms_router, prefix="/algorithms", tags=["Research algorithms"])
 class CoefficientExperimentConfig(BaseModel):
     modes: list[Literal["bullet", "blitz", "rapid"]] = Field(
         default_factory=lambda: ["bullet", "blitz", "rapid"]

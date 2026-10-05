@@ -20,6 +20,21 @@ Older recovery points remain testable, but report definition verification as
 not recorded. A database backup must be made after saving a definition to
 protect that new definition; this remains a manual operation.
 
+Algorithm instructions (`algorithm_definition`) and compact results/history
+(`algorithm_run`) are also stored inside PostgreSQL. Schema-version-5 recovery
+manifests record counts and PostgreSQL-canonical JSON digests of the definitions
+and completed results. The manual **Test backup** compares these after restore.
+Older backups remain testable and report this check as not recorded. These
+logical checks supplement pgBackRest's physical integrity checks; they do not
+replace them. Active progress is excluded from the completed-result digest.
+
+Algorithm temporary arrays live in the ignored local
+`research_data/algorithms/tmp/` directory, never the external backup volume.
+They are removed after success, cancellation or failure, and orphaned workspaces
+are cleaned by the dedicated algorithm worker at startup. Neither backups nor
+restore tests materialize input matrices. A changed live database can produce
+different data when an algorithm is rerun; a saved recipe is not a pinned dataset.
+
 Legacy working matrix files are in the project's ignored `research_data/matrices/`
 folder, not in PostgreSQL. A physical database backup by itself only contains
 their metadata. New recovery-point manifests include a `matrices` list of UUIDs
@@ -30,10 +45,15 @@ pruned. Deleting a legacy snapshot only deletes that working copy. Deleting
 instructions only removes the definition row; existing snapshots and previous
 database backups are unaffected.
 
-During backup, recipe saves/deletes and legacy snapshot completion/deletion are protected by a database
+During backup, matrix/algorithm recipe saves/deletes, completed algorithm result
+publication and legacy snapshot completion/deletion are protected by a database
 advisory lock until pgBackRest has finished. Existing completed matrices remain
 readable; Stockfish and game ingestion are unaffected. The `saving_matrices`
 phase reports snapshot counts separately from the database byte progress.
+An algorithm may continue extracting/calculating while a backup is active; its
+temporary inputs are removed before it waits to publish results. The UI reports
+that wait as `saving_results`, and cancellation remains available. Backups and
+restore tests still start only from an explicit superuser action.
 
 The existing `/main-monitor-db-backups/timeshift/` directory belongs only to
 Timeshift. Chessism never creates, edits, moves, or removes anything inside it.

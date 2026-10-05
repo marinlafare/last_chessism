@@ -626,6 +626,20 @@ async def run_database_restore_test_job(
         _validate_probe(validation)
 
         backup_manifest = _read_json(MANIFEST_DIRECTORY / f"{backup_id}.json", {})
+        if "algorithms" in backup_manifest:
+            from chessism_api.operations.research_algorithms.backups import ALGORITHM_BACKUP_QUERY, validate_algorithm_backup
+            await _write_progress(redis, job_id, phase="validating_algorithms",
+                                  detail="Verifying restored algorithm instructions and completed results.")
+            _code, algorithms_output = await _run_command_capture(
+                "psql", "--no-psqlrc", "--tuples-only", "--no-align", "--set=ON_ERROR_STOP=1",
+                f"--host={socket_dir}", "--port=55432", f"--username={RESTORE_USER}",
+                f"--dbname={RESTORE_DATABASE}", f"--command={ALGORITHM_BACKUP_QUERY}",
+            )
+            validation["algorithms"] = validate_algorithm_backup(backup_manifest["algorithms"], json.loads(algorithms_output.strip()))
+        elif int(backup_manifest.get("schema_version") or 0) >= 5:
+            raise RuntimeError("This backup is missing its algorithm integrity manifest.")
+        else:
+            validation["algorithms"] = {"status": "not_recorded", "detail": "Backup predates algorithm research."}
         if "matrix_definitions" in backup_manifest:
             await _write_progress(redis, job_id, phase="validating_definitions",
                                   detail="Verifying matrix instructions restored inside PostgreSQL.")

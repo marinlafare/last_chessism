@@ -19,6 +19,13 @@ const RESEARCH_AREAS = [
     action: 'Open matrix constructor',
   },
   {
+    href: '/research/algorithms',
+    eyebrow: 'CALCULATIONS',
+    title: 'Algorithm creation',
+    description: 'Use saved matrix instructions for numerical summaries, correlations and scatter plots. Run calculations on demand.',
+    action: 'Open algorithm creation',
+  },
+  {
     href: '/research/salience',
     eyebrow: 'SIMILARITY',
     title: 'Game salience',
