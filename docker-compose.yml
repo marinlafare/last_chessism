@@ -20,11 +20,14 @@ services:
       - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
       - DATABASE_BACKUP_QUOTA_BYTES=200000000000
       - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
+      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
+      - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
       - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
-      - MATRIX_ARTIFACT_DIR=/backup-volume/chessism/research/matrices
-      - MATRIX_ARTIFACT_DISPLAY_DIR=/main-monitor-db-backups/chessism/research/matrices
-      - MATRIX_FREE_FLOOR_BYTES=150000000000
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=${MATRIX_ARTIFACT_DISPLAY_DIR:-/home/jon/Desktop/workshop/last_chessism/research_data/matrices}
+      - MATRIX_FREE_FLOOR_BYTES=${MATRIX_FREE_FLOOR_BYTES:-20000000000}
     networks:
       - chessism_net
     depends_on:
@@ -35,6 +38,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ./research_data:/research-data
       - ./api_logs:/app/logs
       - /main-monitor-db-backups:/backup-volume
 
@@ -179,10 +183,11 @@ services:
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
       - COEFFICIENT_RESEARCH_DIR=/backup-volume/chessism/research
       - COEFFICIENT_RESEARCH_DISPLAY_DIR=/main-monitor-db-backups/chessism/research
-      - MATRIX_ARTIFACT_DIR=/backup-volume/chessism/research/matrices
-      - MATRIX_ARTIFACT_DISPLAY_DIR=/main-monitor-db-backups/chessism/research/matrices
-      - MATRIX_FREE_FLOOR_BYTES=150000000000
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=${MATRIX_ARTIFACT_DISPLAY_DIR:-/home/jon/Desktop/workshop/last_chessism/research_data/matrices}
+      - MATRIX_FREE_FLOOR_BYTES=${MATRIX_FREE_FLOOR_BYTES:-20000000000}
     volumes:
+      - ./research_data:/research-data
       - /main-monitor-db-backups:/backup-volume
     networks:
       - chessism_net
@@ -222,12 +227,16 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=backup_queue
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
       - BACKUP_VOLUME_ROOT=/backup-volume
       - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
       - DATABASE_BACKUP_APP_ID=chessism
       - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
       - DATABASE_BACKUP_QUOTA_BYTES=200000000000
       - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
+      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
+      - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
       - PGBACKREST_STANZA=chessism
       - CHESSISM_ARCHIVE_GAP_PATH=/var/spool/pgbackrest/chessism-archive-gap
       - DATABASE_RESTORE_TEST_ROOT=/restore-test
@@ -236,6 +245,7 @@ services:
       - RESTORE_TEST_DB_USER=${POSTGRES_USER}
       - RESTORE_TEST_DB_NAME=${POSTGRES_DB}
     volumes:
+      - ./research_data:/research-data:ro
       - ./db_data:/var/lib/postgresql/data:ro
       - /main-monitor-db-backups:/backup-volume
       - pgbackrest_spool:/var/spool/pgbackrest

@@ -1,4 +1,4 @@
-"""Superuser matrix catalog, estimates, and background artifact jobs."""
+"""Superuser matrix definitions/live previews and preserved legacy snapshots."""
 
 from __future__ import annotations
 
@@ -12,18 +12,24 @@ from typing import Literal
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
+from sqlalchemy.exc import DBAPIError
 
 from chessism_api.auth import get_current_account
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Account, MatrixArtifact
+from chessism_api.database.models import Account, MatrixArtifact, MatrixDefinition
 from chessism_api.operations.matrix_constructor import (
-    estimate_matrix,
     matrix_catalog,
     normalize_matrix_config,
 )
 from chessism_api.operations.matrix_constructor.queries import ARTIFACT_ROOT
-from chessism_api.operations.research_resources import analysis_jobs_active
+from chessism_api.operations.matrix_constructor.artifact_files import file_operation
+from chessism_api.operations.matrix_constructor.preview import PreviewUnavailable, read_matrix_preview
+from chessism_api.operations.matrix_constructor.definitions import definition_config, definition_payload, estimate_definition
+from chessism_api.operations.matrix_constructor.live_preview import preview_definition
+from chessism_api.operations.matrix_constructor.storage import (
+    MatrixCatalogBusy, display_manifest_path, matrix_catalog_lock,
+)
 from chessism_api.redis_client import get_redis_pool
 
 
@@ -84,7 +90,8 @@ def _artifact_payload(artifact: MatrixArtifact, progress: dict | None = None) ->
         "config": artifact.config,
         "estimate": artifact.estimate,
         "result": artifact.result,
-        "artifact_path": artifact.artifact_path,
+        "artifact_path": display_manifest_path(artifact.id) if artifact.status == "complete" else None,
+        "storage_kind": "working_copy",
         "row_count": artifact.row_count,
         "feature_count": artifact.feature_count,
         "label_count": artifact.label_count,
@@ -105,12 +112,43 @@ async def get_matrix_catalog() -> dict:
 @router.post("/estimate")
 async def preview_matrix(request: MatrixRequest) -> dict:
     try:
-        return await estimate_matrix(_request_config(request))
+        return await estimate_definition(_request_config(request))
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    except DBAPIError as error:
+        _query_error(error)
+
+
+def _query_error(error):
+    if getattr(error.orig, "sqlstate", None) == "57014":
+        raise HTTPException(status_code=504, detail="Live data query took too long. Narrow the players or date range and retry.") from error
+    raise error
+
+
+@router.post("/preview")
+async def preview_unsaved_definition(
+    request: MatrixRequest, limit: int = Query(50, ge=1, le=100),
+    role: Literal["all", "features", "labels"] = "all",
+) -> dict:
+    try:
+        return await preview_definition(_request_config(request), limit=limit, role=role)
+    except DBAPIError as error:
+        _query_error(error)
 
 
 @router.get("")
+async def list_matrix_definitions(limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)) -> dict:
+    async with AsyncDBSession() as session:
+        result = await session.execute(select(MatrixDefinition).order_by(
+            MatrixDefinition.created_at.desc(), MatrixDefinition.id,
+        ).limit(limit + 1).offset(offset))
+        definitions = list(result.scalars())
+        legacy_count = await session.scalar(select(func.count()).select_from(MatrixArtifact))
+    return {"definitions": [definition_payload(item) for item in definitions[:limit]],
+            "has_more": len(definitions) > limit, "legacy_snapshot_count": legacy_count}
+
+
+@router.get("/snapshots")
 async def list_matrix_artifacts(
     limit: int = Query(30, ge=1, le=100),
     redis: ArqRedis = Depends(get_redis_pool),
@@ -128,6 +166,7 @@ async def list_matrix_artifacts(
 
 
 @router.get("/{artifact_id}")
+@router.get("/snapshots/{artifact_id}")
 async def get_matrix_artifact(
     artifact_id: str,
     redis: ArqRedis = Depends(get_redis_pool),
@@ -139,62 +178,95 @@ async def get_matrix_artifact(
     return _artifact_payload(artifact, await _progress(redis, artifact))
 
 
-@router.post("", status_code=202)
-async def create_matrix_artifact(
+@router.post("", status_code=201)
+async def save_matrix_definition(
     request: MatrixRequest,
     account: Account = Depends(get_current_account),
-    redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
-    config = _request_config(request)
-    if await analysis_jobs_active(redis):
-        raise HTTPException(
-            status_code=409,
-            detail="Wait for Stockfish analysis to become idle before constructing a matrix.",
-        )
-    estimate = await estimate_matrix(config)
-    if estimate["selected_rows"] < 1:
-        raise HTTPException(status_code=422, detail="The selected scope contains no rows.")
-    if not estimate["storage"]["safe_to_build"]:
-        raise HTTPException(
-            status_code=409,
-            detail="The matrix would cross the protected free-space floor.",
-        )
-    artifact_id = str(uuid.uuid4())
-    job_id = f"matrix-constructor-{artifact_id}"
-    async with AsyncDBSession() as session:
-        session.add(MatrixArtifact(
-            id=artifact_id,
-            name=config["name"],
-            row_type=config["row_type"],
-            status="queued",
-            job_id=job_id,
-            created_by=account.id,
-            config=config,
-            estimate=estimate,
-        ))
-        await session.commit()
+    config = definition_config(_request_config(request))
     try:
-        job = await redis.enqueue_job(
-            "run_matrix_construction_job",
-            artifact_id=artifact_id,
-            _queue_name="research_queue",
-            _job_id=job_id,
+        async with matrix_catalog_lock(wait=False) as session:
+            definition = MatrixDefinition(id=str(uuid.uuid4()), name=config["name"], row_type=config["row_type"],
+                                          created_by=account.id, config=config)
+            session.add(definition)
+            await session.flush()
+            payload = definition_payload(definition)
+        return payload
+    except MatrixCatalogBusy as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/definitions/{definition_id}")
+async def get_matrix_definition(definition_id: uuid.UUID) -> dict:
+    async with AsyncDBSession() as session:
+        definition = await session.get(MatrixDefinition, str(definition_id))
+        if definition is None:
+            raise HTTPException(status_code=404, detail="Matrix definition not found.")
+        return definition_payload(definition)
+
+
+@router.get("/definitions/{definition_id}/preview")
+async def preview_saved_definition(
+    definition_id: uuid.UUID, limit: int = Query(50, ge=1, le=100),
+    role: Literal["all", "features", "labels"] = "all",
+) -> dict:
+    definition = await get_matrix_definition(definition_id)
+    try:
+        return await preview_definition(definition["config"], limit=limit, role=role)
+    except DBAPIError as error:
+        _query_error(error)
+
+
+@router.delete("/definitions/{definition_id}", status_code=204)
+async def delete_matrix_definition(definition_id: uuid.UUID) -> None:
+    try:
+        async with matrix_catalog_lock(wait=False) as session:
+            definition = await session.get(MatrixDefinition, str(definition_id))
+            if definition is None:
+                raise HTTPException(status_code=404, detail="Matrix definition not found.")
+            await session.delete(definition)
+    except MatrixCatalogBusy as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+@router.get("/{artifact_id}/preview")
+@router.get("/snapshots/{artifact_id}/preview")
+async def preview_matrix_artifact(
+    artifact_id: uuid.UUID,
+    offset: int = Query(0, ge=0),
+    limit: int = Query(50, ge=1, le=100),
+    role: Literal["all", "features", "labels"] = "all",
+    slice_index: int = Query(0, ge=0),
+) -> dict:
+    async with AsyncDBSession() as session:
+        artifact = await session.get(MatrixArtifact, str(artifact_id))
+        if artifact is None:
+            raise HTTPException(status_code=404, detail="Matrix artifact not found.")
+        if artifact.status != "complete":
+            raise HTTPException(status_code=409, detail="Wait for the matrix snapshot to complete.")
+    try:
+        return await file_operation(
+            read_matrix_preview, ARTIFACT_ROOT, str(artifact_id),
+            offset=offset, limit=limit, role=role, slice_index=slice_index,
         )
-        if job is None:
-            raise RuntimeError("Redis did not create the matrix job.")
-    except Exception as error:
-        async with AsyncDBSession() as session:
-            artifact = await session.get(MatrixArtifact, artifact_id)
-            if artifact is not None:
-                artifact.status = "failed"
-                artifact.error = str(error)
-                await session.commit()
-        raise HTTPException(status_code=503, detail="Could not queue the matrix job.") from error
-    return {"artifact_id": artifact_id, "job_id": job_id, "status": "queued"}
+    except PreviewUnavailable as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 @router.delete("/{artifact_id}", status_code=204)
+@router.delete("/snapshots/{artifact_id}", status_code=204)
 async def delete_matrix_artifact(artifact_id: str) -> None:
+    try:
+        async with matrix_catalog_lock(wait=False):
+            await _delete_working_artifact(artifact_id)
+    except MatrixCatalogBusy as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+
+
+async def _delete_working_artifact(artifact_id: str) -> None:
+    """Delete only local working files. Backup directories are never pruned."""
     async with AsyncDBSession() as session:
         artifact = await session.get(MatrixArtifact, artifact_id)
         if artifact is None:

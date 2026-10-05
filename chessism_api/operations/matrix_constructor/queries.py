@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import os
 import shutil
 from datetime import date
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import text
@@ -14,14 +12,12 @@ from chessism_api.database.engine import AsyncDBSession
 
 from .catalog import ROW_TYPES, MatrixColumn, MatrixRowType
 from .sql_plan import select_statements
+from .storage import ARTIFACT_ROOT, ARTIFACT_DISPLAY_ROOT, FREE_SPACE_FLOOR
 
 
 MAXIMUM_ROWS = 5_000_000
 MAXIMUM_COLUMNS = 48
 DEFAULT_ROWS = 100_000
-ARTIFACT_ROOT = Path(os.environ.get("MATRIX_ARTIFACT_DIR", "/tmp/chessism-matrices"))
-ARTIFACT_DISPLAY_ROOT = Path(os.environ.get("MATRIX_ARTIFACT_DISPLAY_DIR", str(ARTIFACT_ROOT)))
-FREE_SPACE_FLOOR = int(os.environ.get("MATRIX_FREE_FLOOR_BYTES", "150000000000"))
 
 
 def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:

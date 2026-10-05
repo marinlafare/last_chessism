@@ -340,12 +340,14 @@ ROW_TYPES: dict[str, MatrixRowType] = {
 def matrix_catalog() -> dict[str, Any]:
     return {
         "version": 2,
-        "formats": ["typed column-group npy", "jsonl.gz row keys", "manifest/dictionaries"],
+        "workflow": "definition_only",
+        "formats": ["PostgreSQL JSON definition"],
         "row_types": [row_type.public_payload() for row_type in ROW_TYPES.values()],
         "limits": {"maximum_rows": 5_000_000, "maximum_columns": 48},
         "notes": [
-            "Artifacts are immutable snapshots stored outside PostgreSQL.",
-            "Categorical values are dictionary-encoded; missing values have a separate mask.",
+            "Saving stores instructions only; it never constructs arrays or queues a worker.",
+            "Live previews contain at most 100 source rows and may change as the database changes.",
+            "Categories are encoded and missing masks are constructed only when an algorithm materializes data.",
             "Only allowlisted fields are accepted. Arbitrary SQL is never executed.",
             "Corpus-based salience fields are missing until the player's projection is ready.",
             "Row limits select an ordered prefix, not a random sample.",

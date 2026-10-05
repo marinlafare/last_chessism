@@ -2,12 +2,15 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import MatrixDataFrameModal from './research/MatrixDataFrameModal'
+import MatrixDefinitionList from './research/MatrixDefinitionList'
+import LegacyMatrixSnapshots from './research/LegacyMatrixSnapshots'
 import { formatNumber } from '../utils/formatters'
 import {
-  constructMatrix,
-  deleteMatrixArtifact,
+  saveMatrixDefinition,
+  deleteMatrixDefinition,
   estimateMatrix,
-  fetchMatrixArtifacts,
+  fetchMatrixDefinitions,
   fetchMatrixCatalog,
 } from './research/matrixApi'
 import './research/matricesConstructor.css'
@@ -22,103 +25,6 @@ const EMPTY_FILTERS = {
   max_rows: 100000,
 }
 
-const formatBytes = (value) => {
-  const bytes = Number(value || 0)
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const power = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-  return `${(bytes / (1024 ** power)).toFixed(power > 1 ? 2 : 0)} ${units[power]}`
-}
-
-const artifactProgress = (artifact) => {
-  const progress = artifact.progress || {}
-  const total = Number(progress.total || artifact.estimate?.selected_rows || 0)
-  const processed = Number(progress.processed || 0)
-  return total ? Math.min(100, (processed / total) * 100) : 0
-}
-
-const profileRange = (profile) => {
-  if (profile.data_type === 'category') return `${formatNumber(profile.category_count || 0)} categories`
-  if (profile.minimum === null || profile.maximum === null) return 'no numeric values'
-  const minimum = Number(profile.minimum)
-  const maximum = Number(profile.maximum)
-  return `${minimum.toLocaleString(undefined, { maximumFractionDigits: 3 })} → ${maximum.toLocaleString(undefined, { maximumFractionDigits: 3 })}`
-}
-
-function ArtifactInspection({ artifact }) {
-  const profiles = [
-    ...(artifact.result?.profiles?.features || []).map((profile) => ({ ...profile, role: 'feature' })),
-    ...(artifact.result?.profiles?.labels || []).map((profile) => ({ ...profile, role: 'label' })),
-  ]
-  if (!profiles.length) return <p className="matrix-empty">This artifact predates snapshot profiling.</p>
-  return (
-    <div className="matrix-inspection">
-      <div className="matrix-inspection-summary">
-        <span>format v{artifact.result?.version || 1}</span>
-        <span>{artifact.result?.storage_layout?.replaceAll('_', ' ') || 'legacy dense array'}</span>
-        <span>{artifact.result?.snapshot_isolation || 'unknown isolation'}</span>
-      </div>
-      <div className="matrix-profile-head"><span>Column</span><span>Type</span><span>Missing</span><span>Profile</span></div>
-      {profiles.map((profile) => (
-        <div className="matrix-profile-row" key={`${profile.role}-${profile.key}`}>
-          <span><strong>{profile.key}</strong><small>{profile.role}</small></span>
-          <code>{profile.storage_dtype}</code>
-          <span>{(Number(profile.missing_fraction || 0) * 100).toFixed(2)}%</span>
-          <span>{profileRange(profile)}</span>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ArtifactList({ artifacts, onDelete }) {
-  const [expandedId, setExpandedId] = useState('')
-  if (!artifacts.length) return <p className="matrix-empty">No matrix snapshots have been constructed.</p>
-  return (
-    <div className="matrix-artifact-list">
-      {artifacts.map((artifact) => (
-        <article className="matrix-artifact" key={artifact.id}>
-          <div className="matrix-artifact-head">
-            <div>
-              <strong>{artifact.name}</strong>
-              <span>{artifact.row_type.replaceAll('_', ' ')} · {artifact.created_at ? new Date(artifact.created_at).toLocaleString() : '-'}</span>
-            </div>
-            <span className={`matrix-state ${artifact.status}`}>{artifact.status}</span>
-          </div>
-          {['queued', 'running'].includes(artifact.status) ? (
-            <div className="matrix-progress" aria-live="polite">
-              <div><span>{artifact.progress?.detail || 'Waiting for the research worker.'}</span><b>{artifactProgress(artifact).toFixed(0)}%</b></div>
-              <div className="matrix-progress-track"><i style={{ width: `${artifactProgress(artifact)}%` }} /></div>
-            </div>
-          ) : null}
-          {artifact.status === 'complete' ? (
-            <>
-              <div className="matrix-artifact-result">
-                <span>{formatNumber(artifact.row_count)} rows</span>
-                <span>{artifact.feature_count} features</span>
-                <span>{artifact.label_count} labels</span>
-                <span>{formatBytes(artifact.size_bytes)}</span>
-                <code title={artifact.artifact_path}>{artifact.artifact_path}</code>
-              </div>
-              <button
-                className="matrix-inspect-button"
-                type="button"
-                onClick={() => setExpandedId((current) => current === artifact.id ? '' : artifact.id)}
-              >
-                {expandedId === artifact.id ? 'hide inspection' : 'inspect snapshot'}
-              </button>
-              {expandedId === artifact.id ? <ArtifactInspection artifact={artifact} /> : null}
-            </>
-          ) : null}
-          {artifact.error ? <p className="matrix-error">{artifact.error}</p> : null}
-          {!['queued', 'running'].includes(artifact.status) ? (
-            <button className="matrix-delete" type="button" onClick={() => onDelete(artifact)}>delete snapshot</button>
-          ) : null}
-        </article>
-      ))}
-    </div>
-  )
-}
 
 export default function MatricesConstructor() {
   const [catalog, setCatalog] = useState(null)
@@ -128,11 +34,14 @@ export default function MatricesConstructor() {
   const [filters, setFilters] = useState(EMPTY_FILTERS)
   const [name, setName] = useState('Player-game research matrix')
   const [estimate, setEstimate] = useState(null)
-  const [artifacts, setArtifacts] = useState([])
+  const [definitions, setDefinitions] = useState([])
+  const [hasMore, setHasMore] = useState(false)
+  const [legacyCount, setLegacyCount] = useState(0)
+  const [notice, setNotice] = useState('')
+  const [viewedArtifact, setViewedArtifact] = useState(null)
   const [working, setWorking] = useState('')
   const [error, setError] = useState('')
   const estimateRevision = useRef(0)
-  const hasActiveArtifacts = artifacts.some((item) => ['queued', 'running'].includes(item.status))
 
   const rowTypes = catalog?.row_types || []
   const rowType = useMemo(
@@ -140,18 +49,22 @@ export default function MatricesConstructor() {
     [rowTypes, rowTypeKey]
   )
 
-  const loadArtifacts = async () => {
-    const payload = await fetchMatrixArtifacts()
-    setArtifacts(Array.isArray(payload.artifacts) ? payload.artifacts : [])
+  const loadDefinitions = async (append = false) => {
+    const payload = await fetchMatrixDefinitions({ offset: append ? definitions.length : 0 })
+    setDefinitions((current) => append ? [...current, ...payload.definitions] : payload.definitions || [])
+    setLegacyCount(payload.legacy_snapshot_count || 0)
+    setHasMore(Boolean(payload.has_more))
   }
 
   useEffect(() => {
     let active = true
-    Promise.all([fetchMatrixCatalog(), fetchMatrixArtifacts()])
-      .then(([catalogPayload, artifactsPayload]) => {
+    Promise.all([fetchMatrixCatalog(), fetchMatrixDefinitions()])
+      .then(([catalogPayload, definitionsPayload]) => {
         if (!active) return
         setCatalog(catalogPayload)
-        setArtifacts(Array.isArray(artifactsPayload.artifacts) ? artifactsPayload.artifacts : [])
+        setDefinitions(definitionsPayload.definitions || [])
+        setLegacyCount(definitionsPayload.legacy_snapshot_count || 0)
+        setHasMore(Boolean(definitionsPayload.has_more))
         const initial = catalogPayload.row_types?.find((item) => item.key === 'game_player')
         setFeatures((initial?.columns || []).filter((item) => item.default).map((item) => item.key))
       })
@@ -159,25 +72,7 @@ export default function MatricesConstructor() {
     return () => { active = false }
   }, [])
 
-  useEffect(() => {
-    if (!hasActiveArtifacts) return undefined
-    let active = true
-    let timer
-    const refresh = async () => {
-      try {
-        const response = await fetchMatrixArtifacts()
-        if (active) setArtifacts(Array.isArray(response.artifacts) ? response.artifacts : [])
-      } catch (loadError) {
-        if (active) setError(loadError.message || 'Unable to refresh matrix jobs.')
-      } finally {
-        if (active) timer = window.setTimeout(refresh, 3000)
-      }
-    }
-    timer = window.setTimeout(refresh, 3000)
-    return () => { active = false; window.clearTimeout(timer) }
-  }, [hasActiveArtifacts])
-
-  const invalidate = () => { estimateRevision.current += 1; setEstimate(null) }
+  const invalidate = () => { estimateRevision.current += 1; setEstimate(null); setNotice('') }
   const changeRowType = (key) => {
     const next = rowTypes.find((item) => item.key === key)
     setRowTypeKey(key)
@@ -225,7 +120,7 @@ export default function MatricesConstructor() {
     },
   })
 
-  const preview = async () => {
+  const estimateCurrentScope = async () => {
     const revision = estimateRevision.current
     setWorking('estimate')
     setError('')
@@ -239,29 +134,43 @@ export default function MatricesConstructor() {
     }
   }
 
-  const build = async () => {
-    setWorking('build')
+  const save = async () => {
+    setWorking('save')
     setError('')
     try {
-      await constructMatrix(payload())
-      setEstimate(null)
-      await loadArtifacts()
-    } catch (buildError) {
-      setError(buildError.message || 'Unable to queue this matrix.')
+      const definition = await saveMatrixDefinition(payload())
+      setNotice(`Saved “${definition.name}”: instructions only. No matrix files or background job were created.`)
+      await loadDefinitions()
+    } catch (saveError) {
+      setError(saveError.message || 'Unable to save this definition.')
     } finally {
       setWorking('')
     }
   }
 
-  const remove = async (artifact) => {
-    if (!window.confirm(`Delete the matrix snapshot “${artifact.name}”?`)) return
+  const remove = async (definition) => {
+    if (!window.confirm(`Delete the instructions for “${definition.name}”? Existing snapshots and backups will be kept.`)) return
     try {
-      await deleteMatrixArtifact(artifact.id)
-      await loadArtifacts()
+      await deleteMatrixDefinition(definition.id)
+      await loadDefinitions()
     } catch (deleteError) {
-      setError(deleteError.message || 'Unable to delete this snapshot.')
+      setError(deleteError.message || 'Unable to delete this definition.')
     }
   }
+
+  const useDefinition = (definition) => {
+    const config = definition.config
+    setName(`${definition.name} copy`)
+    setRowTypeKey(config.row_type)
+    setFeatures(config.feature_columns)
+    setLabels(config.label_columns)
+    setFilters({ ...EMPTY_FILTERS, ...config.filters, players: config.filters.players.join(', '), date_from: config.filters.date_from || '', date_to: config.filters.date_to || '' })
+    invalidate()
+    setNotice('Definition loaded into the form. Save creates a separate definition; the original is unchanged.')
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+  const showDraftPreview = () => setViewedArtifact({ id: null, storage_kind: 'definition', name,
+    config: payload(), feature_count: features.length, label_count: labels.length })
 
   return (
     <div className="page-frame">
@@ -273,11 +182,12 @@ export default function MatricesConstructor() {
             <div>
               <p className="eyebrow">SUPERUSER RESEARCH</p>
               <h1>Matrices constructor</h1>
-              <p>Compose an allowlisted database snapshot for later CUDA or TensorFlow work.</p>
+              <p>Save reusable instructions for future algorithms. Preview a small live sample; no matrix files are created. Definitions are protected by the database backup.</p>
             </div>
             <a className="matrix-back" href="/research">Research index</a>
           </section>
           {error ? <div className="status-banner warn">{error}</div> : null}
+          {notice ? <div className="status-banner" role="status">{notice}</div> : null}
 
           <section className="matrix-panel">
             <div className="section-head"><div><p className="eyebrow">1 · ROW UNIT</p><h2>Choose what one row represents</h2></div></div>
@@ -292,7 +202,7 @@ export default function MatricesConstructor() {
           </section>
 
           <section className="matrix-panel">
-            <div className="section-head"><div><p className="eyebrow">2 · SCOPE</p><h2>Filter the source snapshot</h2></div></div>
+            <div className="section-head"><div><p className="eyebrow">2 · SCOPE</p><h2>Define the source filters</h2></div></div>
             <div className="matrix-filter-grid">
               <label className="matrix-wide"><span>Players · comma separated</span><input value={filters.players} onChange={(event) => updateFilter('players', event.target.value)} disabled={!rowType?.filters.players} placeholder="hikaru, lafareto" /></label>
               <label><span>From</span><input type="date" value={filters.date_from} onChange={(event) => updateFilter('date_from', event.target.value)} disabled={!rowType?.filters.dates} /></label>
@@ -323,31 +233,34 @@ export default function MatricesConstructor() {
           </section>
 
           <section className="matrix-panel matrix-build-panel">
-            <div className="section-head"><div><p className="eyebrow">4 · SNAPSHOT</p><h2>Estimate, then construct</h2></div></div>
-            <div className="matrix-build-row">
-              <label><span>Artifact name</span><input value={name} maxLength="100" onChange={(event) => { setName(event.target.value); invalidate() }} /></label>
-              <button className="btn btn-secondary btn-inline" type="button" onClick={preview} disabled={working || !features.length}>{working === 'estimate' ? 'Estimating' : 'Estimate'}</button>
-              <button className="btn btn-primary btn-inline" type="button" onClick={build} disabled={working || !estimate?.storage?.safe_to_build}>{working === 'build' ? 'Queueing' : 'Construct matrix'}</button>
+            <div className="section-head"><div><p className="eyebrow">4 · DEFINITION</p><h2>Preview and save instructions</h2></div></div>
+            <div className="matrix-build-row matrix-definition-build-row">
+              <label><span>Definition name</span><input value={name} maxLength="100" onChange={(event) => { setName(event.target.value); invalidate() }} /></label>
+              <button className="btn btn-secondary btn-inline" type="button" onClick={estimateCurrentScope} disabled={working || !features.length}>{working === 'estimate' ? 'Estimating' : 'Estimate'}</button>
+              <button className="btn btn-secondary btn-inline" type="button" onClick={showDraftPreview} disabled={working || !features.length}>Live preview</button>
+              <button className="btn btn-primary btn-inline" type="button" onClick={save} disabled={working || !features.length}>{working === 'save' ? 'Saving' : 'Save definition'}</button>
             </div>
             {estimate ? (
               <div className="matrix-estimate">
                 <article><span>Matching rows</span><strong>{formatNumber(estimate.matching_rows)}{estimate.matching_rows_is_lower_bound ? '+' : ''}</strong></article>
-                <article><span>Snapshot rows</span><strong>{formatNumber(estimate.selected_rows)}</strong></article>
-                <article><span>Estimated size</span><strong>{formatBytes(estimate.estimated_artifact_bytes)}</strong></article>
-                <article><span>Protected free space</span><strong>{formatBytes(estimate.storage.available_for_matrix_bytes)}</strong></article>
-                {estimate.truncated ? <p>The row cap truncates this snapshot.</p> : null}
-                {!estimate.storage.safe_to_build ? <p className="matrix-error">This build would cross the 150 GB protected free-space floor.</p> : null}
+                <article><span>Rows if run now</span><strong>{formatNumber(estimate.selected_rows)}{estimate.selected_rows_is_lower_bound ? '+' : ''}</strong></article>
+                <article><span>Configured row limit</span><strong>{formatNumber(estimate.row_limit)}</strong></article>
+                <article><span>Instructions only</span><strong>{formatNumber(estimate.definition_bytes)} B</strong></article>
+                <p>Live estimate, not a frozen dataset. “+” means a lower bound; counting is capped to avoid scanning the entire database. Saving does not require an estimate or matching rows.</p>
               </div>
             ) : null}
           </section>
 
           <section className="matrix-panel">
-            <div className="section-head"><div><p className="eyebrow">ARTIFACTS</p><h2>Immutable matrix snapshots</h2></div><button className="btn btn-secondary btn-inline" type="button" onClick={() => loadArtifacts().catch((loadError) => setError(loadError.message))}>refresh</button></div>
-            <ArtifactList artifacts={artifacts} onDelete={remove} />
+            <div className="section-head"><div><p className="eyebrow">DEFINITIONS</p><h2>Saved matrix instructions</h2></div><button className="btn btn-secondary btn-inline" type="button" onClick={() => loadDefinitions().catch((failure) => setError(failure.message))}>refresh</button></div>
+            <MatrixDefinitionList definitions={definitions} onDelete={remove} onPreview={setViewedArtifact} onUse={useDefinition} />
+            {hasMore ? <button className="matrix-inspect-button" type="button" onClick={() => loadDefinitions(true).catch((failure) => setError(failure.message))}>load more definitions</button> : null}
           </section>
+          <LegacyMatrixSnapshots count={legacyCount} onPreview={setViewedArtifact} onChanged={() => loadDefinitions().catch((failure) => setError(failure.message))} />
         </main>
         <Footer />
       </div>
+      {viewedArtifact ? <MatrixDataFrameModal key={`${viewedArtifact.storage_kind}-${viewedArtifact.id || 'draft'}`} artifact={viewedArtifact} onClose={() => setViewedArtifact(null)} /> : null}
     </div>
   )
 }

@@ -1,12 +1,39 @@
 # Chessism database backups
 
-Chessism keeps two independent backup formats on the recovery disk whose UUID
+Chessism keeps these recovery files on the backup disk whose UUID
 is `1ebffac6-4b7a-4906-9e07-9586060d3825`:
 
 - `/main-monitor-db-backups/chessism/database/` is a pgBackRest repository for
   complete PostgreSQL recovery.
 - `/main-monitor-db-backups/chessism/fen-analysis/` contains the portable,
   compressed FEN-analysis export.
+- `/main-monitor-db-backups/chessism/research/matrices/` contains separate copies
+  of legacy completed snapshots, synchronized by the manual database backup.
+
+New matrix definitions are small instruction records in PostgreSQL's
+`matrix_definition` table. They are included directly in physical full and
+incremental database backups. Live previews write no files and are never
+backed up. Schema-version-4 recovery manifests record a definition count and
+SHA-256 fingerprint; the manual **Test backup** compares the restored
+instructions against it. No matrix materialization is triggered by a backup.
+Older recovery points remain testable, but report definition verification as
+not recorded. A database backup must be made after saving a definition to
+protect that new definition; this remains a manual operation.
+
+Legacy working matrix files are in the project's ignored `research_data/matrices/`
+folder, not in PostgreSQL. A physical database backup by itself only contains
+their metadata. New recovery-point manifests include a `matrices` list of UUIDs
+and checksums. The worker copies only new snapshots, reuses unchanged copies,
+and publishes no successful combined backup if matrix copying fails. Temporary
+failed copies are removed; previously valid copies are never overwritten or
+pruned. Deleting a legacy snapshot only deletes that working copy. Deleting
+instructions only removes the definition row; existing snapshots and previous
+database backups are unaffected.
+
+During backup, recipe saves/deletes and legacy snapshot completion/deletion are protected by a database
+advisory lock until pgBackRest has finished. Existing completed matrices remain
+readable; Stockfish and game ingestion are unaffected. The `saving_matrices`
+phase reports snapshot counts separately from the database byte progress.
 
 The existing `/main-monitor-db-backups/timeshift/` directory belongs only to
 Timeshift. Chessism never creates, edits, moves, or removes anything inside it.
@@ -18,13 +45,26 @@ Timeshift. Chessism never creates, edits, moves, or removes anything inside it.
 - First database backup: full.
 - Storage format: pgBackRest bundled block-incremental backups.
 - Normal subsequent backup: block incremental.
-- New full chain: after 30 incrementals, after 30 days, or after interrupted
+- New full chain: after 10 incrementals, after 7 days, or after interrupted
   WAL archiving.
 - Retention: two complete full-backup chains.
 - Trigger: manual only, from the Backups page.
+- The age and incremental-count rules only select the type after the superuser
+  clicks `Backup database`; they never schedule or start work themselves.
+- Storage reporting separates backup-chain files, continuously archived WAL,
+  FEN exports, research artifacts, and other metadata. The cached measurement
+  refreshes at most once per minute while the Backups page is open.
 - Validation: pgBackRest verifies the selected recovery point and required WAL
   before Chessism publishes a successful status.
 - Restore rehearsal: manual only, from the superuser-only `Test backup` button.
+
+While a backup runs, its status file and Redis job progress contain pgBackRest's
+factual completed and total byte counters. The Backups page uses those counters
+for the transfer bar and a rolling 30-second throughput estimate for the
+transfer ETA. Verification is shown as a separate final phase because
+pgBackRest does not expose a byte-total percentage for that step. Elapsed time
+continues across every phase and is reconstructed from the persisted start
+timestamp after a page refresh.
 
 ## Block-incremental migration
 
@@ -58,6 +98,17 @@ not restore Redis queues, source code, `.env` secrets, Syzygy files, or logs.
 The FEN-analysis export remains independently restorable into regenerated FEN
 rows.
 
+After PostgreSQL recovery, matrix working files can be restored separately:
+
+```sh
+docker compose exec -T chessism-api python -m chessism_api.operations.matrix_constructor.storage_cli restore --backup-id RECOVERY_POINT_ID
+```
+
+This verifies and copies the matrix UUIDs referenced by the restored database,
+then rebases their metadata to portable relative paths. Retain the matrix
+backup directory alongside the PostgreSQL backup chains. Old database backups
+without a matrix companion manifest cannot claim matrix-file recovery coverage.
+
 Full database restoration is intentionally not exposed in the UI. It must be
 performed while the database is stopped and should first be rehearsed in an
 isolated PostgreSQL 15 container.
@@ -70,6 +121,11 @@ into the local Docker volume `database_restore_test`. The worker is limited to
 one CPU, starts the restored PostgreSQL 15 cluster only on a private Unix
 socket, validates the required schema, durable summary rows, and FEN primary
 key, then stops PostgreSQL and removes the restored files.
+
+For new recovery points, the rehearsal also compares completed matrix UUIDs in
+the restored database with the recovery-point manifest and hashes every matrix
+backup file. This is read-only and does not replace working matrices. The
+additional validation remains manual, as part of `Test backup`.
 
 The backup worker also removes any leftover `rehearsal-*` workspace when it
 starts. This recovers the temporary disk space if Docker or the host was

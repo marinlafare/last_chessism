@@ -22,6 +22,7 @@ from chessism_api.database.models import MatrixArtifact
 
 from .arrays import TypedArrayWriter, validate_typed_arrays
 from .catalog import ROW_TYPES
+from .storage import matrix_catalog_lock, relative_manifest_path
 from .queries import (
     ARTIFACT_DISPLAY_ROOT, ARTIFACT_ROOT, estimate_matrix,
     matrix_sql, normalize_matrix_config, storage_status,
@@ -194,6 +195,7 @@ async def run_matrix_construction_job(ctx: dict, *, artifact_id: str) -> dict:
             return {"artifact_id": artifact_id, "status": "already_complete"}
         config = dict(artifact.config)
     await _update_artifact(artifact_id, status="running", started_at=_utc_now(), error=None)
+    published = False
     try:
         await _write_progress(
             redis, job_id, artifact_id=artifact_id, phase="starting", total=0, processed=0,
@@ -202,12 +204,19 @@ async def run_matrix_construction_job(ctx: dict, *, artifact_id: str) -> dict:
         result = await _construct_artifact(
             artifact_id=artifact_id, config=config, redis=redis, job_id=job_id,
         )
-        await _update_artifact(
-            artifact_id, status="complete", finished_at=_utc_now(),
-            artifact_path=result["artifact_path"], row_count=result["row_count"],
-            feature_count=result["feature_count"], label_count=result["label_count"],
-            size_bytes=result["size_bytes"], result=result["manifest"],
+        await _write_progress(
+            redis, job_id, artifact_id=artifact_id, phase="publishing",
+            total=result["row_count"], processed=result["row_count"],
+            detail="Publishing the working snapshot; waits if a database backup is active.",
         )
+        async with matrix_catalog_lock():
+            await _update_artifact(
+                artifact_id, status="complete", finished_at=_utc_now(),
+                artifact_path=relative_manifest_path(artifact_id), row_count=result["row_count"],
+                feature_count=result["feature_count"], label_count=result["label_count"],
+                size_bytes=result["size_bytes"], result=result["manifest"],
+            )
+            published = True
         try:
             await _write_progress(
                 redis, job_id, artifact_id=artifact_id, phase="complete",
@@ -219,6 +228,10 @@ async def run_matrix_construction_job(ctx: dict, *, artifact_id: str) -> dict:
             logger.exception("Unable to publish completed matrix progress: %s", artifact_id)
         return result
     except (Exception, asyncio.CancelledError) as error:
+        if published:
+            # A cancellation after publication must not change a completed
+            # artifact's membership in an in-progress backup recovery point.
+            raise
         message = str(error) or "Matrix construction was interrupted."
         await _update_artifact(artifact_id, status="failed", finished_at=_utc_now(), error=message[:4000])
         await _write_progress(

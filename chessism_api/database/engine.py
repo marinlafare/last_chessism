@@ -625,7 +625,14 @@ async def init_db(connection_string: str):
                     text("SELECT pg_advisory_xact_lock(:lock_id)"),
                     {"lock_id": FEN_SCHEMA_ADVISORY_LOCK},
                 )
+                definitions_missing = not await conn.scalar(text(
+                    "SELECT to_regclass('public.matrix_definition') IS NOT NULL"
+                ))
                 await conn.run_sync(Base.metadata.create_all)
+                if definitions_missing:
+                    from chessism_api.database.matrix_definitions import import_snapshot_definitions
+                    imported = await import_snapshot_definitions(conn)
+                    print(f"Imported {imported} legacy matrix recipes; original snapshots preserved.")
                 print("Database tables checked/created.")
             migrated_no_move_games = await _ensure_fen_analysis_schema(
                 user=db_user,

@@ -97,7 +97,8 @@ install -d -o 999 -g 999 -m 0750 \
   "${MOUNT_POINT}/chessism/database/pgbackrest" \
   "${MOUNT_POINT}/chessism/database/manifests" \
   "${MOUNT_POINT}/chessism/fen-analysis" \
-  "${MOUNT_POINT}/chessism/research"
+  "${MOUNT_POINT}/chessism/research" \
+  "${MOUNT_POINT}/chessism/research/matrices"
 
 REQUESTING_UID="${SUDO_UID:-1000}"
 REQUESTING_GID="${SUDO_GID:-1000}"

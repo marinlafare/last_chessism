@@ -15,7 +15,7 @@ const RESEARCH_AREAS = [
     href: '/research/matrices',
     eyebrow: 'DATASETS',
     title: 'Matrices constructor',
-    description: 'Select a row unit, source fields, labels, and scope; then build an immutable GPU-ready snapshot.',
+    description: 'Save matrix instructions and inspect a small live preview. Data is materialized only when an algorithm runs.',
     action: 'Open matrix constructor',
   },
   {

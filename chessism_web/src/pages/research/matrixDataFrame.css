@@ -1,0 +1,94 @@
+.matrix-dataframe {
+  width: min(1120px, calc(100vw - 32px));
+  height: min(780px, calc(100dvh - 48px));
+  max-width: none;
+  max-height: none;
+  margin: auto;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  background: #0b1117;
+  color: var(--text);
+  box-shadow: 0 16px 70px #0009;
+}
+.matrix-dataframe[open] { display: flex; flex-direction: column; gap: 14px; }
+.matrix-dataframe::backdrop { background: #000b; }
+.matrix-dataframe.is-fullscreen { width: 100vw; height: 100dvh; border-radius: 0; }
+.matrix-dataframe-header, .matrix-dataframe-controls, .matrix-dataframe-footer,
+.matrix-dataframe-actions, .matrix-dataframe-footer nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.matrix-dataframe-header, .matrix-dataframe-footer { justify-content: space-between; }
+.matrix-dataframe-header h2 { margin: 4px 0 0; overflow-wrap: anywhere; }
+.matrix-dataframe button, .matrix-dataframe select, .matrix-dataframe input {
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #05090d;
+  color: var(--text);
+  padding: 6px 10px;
+  font: inherit;
+}
+.matrix-dataframe button { cursor: pointer; }
+.matrix-dataframe button:disabled { cursor: default; opacity: .35; }
+.matrix-dataframe :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.matrix-dataframe-controls label { display: flex; align-items: center; gap: 8px; }
+.matrix-dataframe-controls input { width: 90px; }
+.matrix-dataframe-controls, .matrix-dataframe-footer, .matrix-dataframe-note {
+  font: 12px "IBM Plex Mono", monospace;
+  color: var(--muted);
+}
+.matrix-dataframe-shape { margin-left: auto; }
+.matrix-dataframe-note { margin: 0; line-height: 1.6; }
+.matrix-dataframe-scroll {
+  flex: 1;
+  min-height: 100px;
+  overflow: auto;
+  scrollbar-color: #3b4d5c #0b1117;
+  scrollbar-width: thin;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #05090d;
+}
+.matrix-dataframe-scroll > p, .matrix-dataframe-scroll > div { padding: 12px; }
+.matrix-dataframe table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font: 12px "IBM Plex Mono", monospace;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.matrix-dataframe th, .matrix-dataframe td { padding: 9px 15px; border-bottom: 1px solid #1a252e; white-space: nowrap; }
+.matrix-dataframe thead th { position: sticky; top: 0; z-index: 2; background: #15202a; }
+.matrix-dataframe th:first-child { position: sticky; left: 0; width: 1%; background: #15202a; color: var(--muted); }
+.matrix-dataframe thead th:first-child { z-index: 3; }
+.matrix-dataframe th small { display: block; margin-top: 5px; font-size: 10px; font-weight: 400; color: var(--muted); }
+.matrix-dataframe tbody tr:nth-child(even) { background: #0e161d; }
+.matrix-dataframe tbody tr:hover { background: #1b2b37; }
+.matrix-dataframe td.is-missing { color: var(--muted); font-style: italic; }
+.matrix-dataframe-caption { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.matrix-artifact-head .matrix-artifact-tools { display: flex; align-items: center; gap: 8px; }
+.matrix-view-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  padding: 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #05090d;
+  color: var(--accent);
+  cursor: pointer;
+}
+.matrix-view-button:hover { border-color: var(--accent); }
+.matrix-view-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.matrix-view-button svg { width: 17px; height: 17px; }
+@media (max-width: 600px) {
+  .matrix-dataframe { padding: 12px; width: calc(100vw - 12px); height: calc(100dvh - 12px); }
+  .matrix-dataframe-shape { margin-left: 0; }
+  .matrix-dataframe-header h2 { font-size: 17px; }
+}

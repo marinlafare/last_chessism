@@ -450,6 +450,36 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
         )
         self.assertEqual(backup_type, "full")
 
+    def test_pgbackrest_progress_uses_factual_byte_counts(self):
+        progress = database_backups._parse_pgbackrest_progress([{
+            "status": {
+                "lock": {
+                    "backup": {
+                        "held": True,
+                        "size": 1_000,
+                        "size-cplt": 275,
+                    },
+                },
+            },
+        }])
+
+        self.assertEqual(progress, (1_000, 275))
+
+    def test_pgbackrest_progress_is_absent_without_active_backup(self):
+        progress = database_backups._parse_pgbackrest_progress([{
+            "status": {
+                "lock": {
+                    "backup": {
+                        "held": False,
+                        "size": 1_000,
+                        "size-cplt": 1_000,
+                    },
+                },
+            },
+        }])
+
+        self.assertIsNone(progress)
+
     def test_healthy_recent_chain_uses_incremental_backup(self):
         now = datetime(2026, 10, 2, tzinfo=timezone.utc)
         backups = [{
@@ -528,12 +558,12 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
             ["old-legacy-full"],
         )
 
-    def test_thirty_incrementals_start_a_new_full_chain(self):
+    def test_ten_incrementals_start_a_new_full_chain(self):
         full_stop = int(datetime(2026, 9, 28, tzinfo=timezone.utc).timestamp())
         backups = [{"type": "full", "timestamp": {"stop": full_stop}}]
         backups.extend(
             {"type": "incr", "timestamp": {"stop": full_stop + index + 1}}
-            for index in range(30)
+            for index in range(10)
         )
         backup_type, _reason = database_backups.choose_backup_type(
             backups,
@@ -553,10 +583,10 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
         )
         self.assertEqual(backup_type, "full")
 
-    def test_thirty_day_old_chain_starts_a_new_full_backup(self):
+    def test_seven_day_old_chain_starts_a_new_full_backup(self):
         backups = [{
             "type": "full",
-            "timestamp": {"stop": int(datetime(2026, 9, 1, tzinfo=timezone.utc).timestamp())},
+            "timestamp": {"stop": int(datetime(2026, 9, 25, tzinfo=timezone.utc).timestamp())},
         }]
         backup_type, _reason = database_backups.choose_backup_type(
             backups,
@@ -564,6 +594,37 @@ class DatabaseBackupPolicyTests(unittest.TestCase):
             now=datetime(2026, 10, 2, tzinfo=timezone.utc),
         )
         self.assertEqual(backup_type, "full")
+
+    def test_backup_usage_measurement_separates_live_wal_and_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            backup = root / "database" / "pgbackrest" / "backup"
+            archive = root / "database" / "pgbackrest" / "archive"
+            fen_analysis = root / "fen-analysis"
+            research = root / "research"
+            for directory in (backup, archive, fen_analysis, research):
+                directory.mkdir(parents=True)
+            (backup / "base").write_bytes(b"b" * 11)
+            (archive / "wal").write_bytes(b"w" * 13)
+            (fen_analysis / "fens").write_bytes(b"f" * 17)
+            (research / "matrix").write_bytes(b"r" * 19)
+            (root / "metadata").write_bytes(b"m" * 23)
+
+            with (
+                patch.object(database_backups, "APP_BACKUP_ROOT", root),
+                patch.object(database_backups, "PGBACKREST_BACKUP_DIRECTORY", backup),
+                patch.object(database_backups, "PGBACKREST_ARCHIVE_DIRECTORY", archive),
+                patch.object(database_backups, "FEN_ANALYSIS_BACKUP_ROOT", fen_analysis),
+                patch.object(database_backups, "RESEARCH_BACKUP_ROOT", research),
+            ):
+                usage = database_backups._measure_application_usage()
+
+        self.assertEqual(usage["database_backup_bytes"], 11)
+        self.assertEqual(usage["archived_wal_bytes"], 13)
+        self.assertEqual(usage["fen_analysis_bytes"], 17)
+        self.assertEqual(usage["research_bytes"], 19)
+        self.assertEqual(usage["other_bytes"], 23)
+        self.assertEqual(usage["total_bytes"], 83)
 
     def test_restore_probe_accepts_a_complete_postgres_15_database(self):
         database_restore_tests._validate_probe({

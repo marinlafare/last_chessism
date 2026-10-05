@@ -851,6 +851,21 @@ class CoefficientResearchExperiment(Base):
     )
 
 
+class MatrixDefinition(Base):
+    """Small reusable instructions; contains no materialized rows or arrays."""
+
+    __tablename__ = "matrix_definition"
+
+    id = Column(String(36), primary_key=True)
+    name = Column(String(100), nullable=False)
+    row_type = Column(String(32), nullable=False)
+    config = Column(JSON, nullable=False)
+    created_by = Column(String(36), ForeignKey("account.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    __table_args__ = (Index("ix_matrix_definition_created_at", created_at.desc()),)
+
+
 class MatrixArtifact(Base):
     """Metadata for an immutable matrix snapshot stored outside PostgreSQL."""
 

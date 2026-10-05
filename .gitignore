@@ -4,6 +4,7 @@
 /backups/
 db_backup/
 db_data/
+research_data/
 api_logs/
 logs/
 tablebases/

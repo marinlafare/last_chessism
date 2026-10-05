@@ -44,6 +44,18 @@ const formatDate = (value) => (
   value ? new Date(value).toLocaleString() : '-'
 )
 
+const formatElapsedTime = (elapsedMs) => {
+  const totalSeconds = Math.max(0, Math.floor(Number(elapsedMs || 0) / 1000))
+  const days = Math.floor(totalSeconds / 86400)
+  const hours = Math.floor((totalSeconds % 86400) / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const clock = [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, '0'))
+    .join(':')
+  return days > 0 ? `${days}d ${clock}` : clock
+}
+
 export default function DatabaseBackups() {
   const [overview, setOverview] = useState(null)
   const [job, setJob] = useState(null)
@@ -94,6 +106,10 @@ export default function DatabaseBackups() {
           ...current,
           phase,
           detail: failedDetail || progress.detail || current.detail,
+          total: Number(progress.total ?? current.total ?? 0),
+          processed: Number(progress.processed ?? current.processed ?? 0),
+          etaSeconds: progress.eta_seconds ?? null,
+          rateBytesPerSecond: progress.rate_bytes_per_second ?? null,
           result,
           terminalAt: TERMINAL_PHASES.has(phase)
             ? current.terminalAt || new Date().toISOString()
@@ -156,6 +172,11 @@ export default function DatabaseBackups() {
         jobId: payload.job_id,
         kind: 'backup',
         phase: 'queued',
+        startedAt: new Date().toISOString(),
+        total: 0,
+        processed: 0,
+        etaSeconds: null,
+        rateBytesPerSecond: null,
         detail: payload.message || 'Database backup queued.',
         result: null,
         terminalAt: null,
@@ -210,7 +231,7 @@ export default function DatabaseBackups() {
       || ['queued', 'running'].includes(restoreTest.status)
   )
   const active = backupActive || restoreActive
-  const rawBackupPhase = job?.kind === 'backup' ? job.phase : status.status
+  const rawBackupPhase = job?.kind === 'backup' ? job.phase : status.phase || status.status
   const rawBackupDetail = job?.kind === 'backup' ? job.detail : status.detail
   const backupCompletedAt = job?.kind === 'backup' ? job.terminalAt : status.completed_at
   const rawRestorePhase = job?.kind === 'restore_test' ? job.phase : restoreTest.status
@@ -226,11 +247,65 @@ export default function DatabaseBackups() {
   const restoreDisplayDetail = restoreResultVisible
     ? rawRestoreDetail
     : 'Waiting for a new restore rehearsal.'
+  const backupStartedAt = status.status === 'running'
+    ? status.started_at
+    : job?.kind === 'backup'
+      ? job.startedAt
+      : null
+  const backupStartedAtMs = completedAtMs(backupStartedAt)
+  const backupElapsedMs = backupActive && backupStartedAtMs !== null
+    ? statusClock - backupStartedAtMs
+    : null
+  const trackedProgressAvailable = job?.kind === 'backup' && Number(job.total || 0) > 0
+  const persistedProgressAvailable = status.status === 'running'
+    && Number(status.progress_total_bytes || 0) > 0
+  const backupProgressTotal = trackedProgressAvailable
+    ? Number(job.total)
+    : persistedProgressAvailable
+      ? Number(status.progress_total_bytes)
+      : 0
+  const backupProgressCompleted = trackedProgressAvailable
+    ? Number(job.processed || 0)
+    : persistedProgressAvailable
+      ? Number(status.progress_completed_bytes || 0)
+      : 0
+  const backupEtaSeconds = trackedProgressAvailable
+    ? Number(job.etaSeconds)
+    : persistedProgressAvailable
+      ? Number(status.progress_eta_seconds)
+      : Number.NaN
+  const backupRateBytesPerSecond = trackedProgressAvailable
+    ? Number(job.rateBytesPerSecond)
+    : persistedProgressAvailable
+      ? Number(status.progress_rate_bytes_per_second)
+      : Number.NaN
+  const backupProgressPercent = backupProgressTotal > 0
+    ? Math.min(100, Math.max(0, (backupProgressCompleted / backupProgressTotal) * 100))
+    : 0
+  const normalizedBackupPhase = String(rawBackupPhase || '').toLowerCase()
+  const backupEtaLabel = normalizedBackupPhase === 'saving_matrices'
+    ? 'Saving completed matrix snapshots · unchanged copies are reused'
+    : normalizedBackupPhase === 'verifying'
+    ? 'Transfer complete · verifying the recovery point'
+    : Number.isFinite(backupEtaSeconds) && backupEtaSeconds > 0
+      ? `Estimated transfer remaining: ${formatElapsedTime(backupEtaSeconds * 1000)}`
+      : backupProgressTotal > 0 && backupProgressCompleted >= backupProgressTotal
+        ? 'Database transfer complete'
+        : backupProgressTotal > 0
+          ? 'Calculating transfer ETA…'
+          : 'Measuring database bytes…'
   const usagePercent = useMemo(() => {
     const application = Number(storage.application_bytes || 0)
     const quota = Number(storage.quota_bytes || 0)
     return quota > 0 ? Math.min(100, (application / quota) * 100) : 0
   }, [storage.application_bytes, storage.quota_bytes])
+
+  useEffect(() => {
+    if (!backupActive) return undefined
+    setStatusClock(Date.now())
+    const timer = window.setInterval(() => setStatusClock(Date.now()), 1000)
+    return () => window.clearInterval(timer)
+  }, [backupActive])
 
   useEffect(() => {
     const now = Date.now()
@@ -258,7 +333,7 @@ export default function DatabaseBackups() {
               <div>
                 <p className="eyebrow">RECOVERY</p>
                 <h1>Database Backups</h1>
-                <p className="database-backups-copy">Complete PostgreSQL recovery chains, stored separately from the portable FEN-analysis export.</p>
+                <p className="database-backups-copy">Matrix definitions are included inside PostgreSQL. Live previews create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
               </div>
               <div className="database-backups-actions">
                 <button
@@ -295,18 +370,23 @@ export default function DatabaseBackups() {
             <div className="database-backups-stats">
               <article><span>Available</span><strong>{formatBytes(storage.free_bytes)}</strong></article>
               <article><span>Database protected</span><strong>{formatBytes(latestBackup?.database_bytes)}</strong></article>
-              <article><span>Backup storage used</span><strong>{formatBytes(storage.application_bytes)}</strong></article>
+              <article><span>Current total used</span><strong>{formatBytes(storage.application_bytes)}</strong></article>
               <article><span>Chessism allocation</span><strong>{formatBytes(storage.quota_bytes)}</strong></article>
               <article><span>Protected reserve</span><strong>{formatBytes(storage.free_floor_bytes)}</strong></article>
             </div>
             <div className="database-backups-meter" aria-label={`${usagePercent.toFixed(1)} percent of the Chessism backup allocation used`}>
               <div style={{ width: `${usagePercent}%` }} />
             </div>
-            {latestBackup ? (
-              <p className="database-backups-storage-note">
-                The protected database size is measured before compression. Its pgBackRest repository currently uses {formatBytes(latestBackup.repository_bytes)}; backup storage used also includes FEN exports, research files, and metadata.
-              </p>
-            ) : null}
+            <div className="database-backups-stats database-backups-breakdown">
+              <article><span>Backup chains</span><strong>{formatBytes(storage.database_backup_bytes)}</strong></article>
+              <article><span>Archived WAL</span><strong>{formatBytes(storage.archived_wal_bytes)}</strong></article>
+              <article><span>FEN exports</span><strong>{formatBytes(storage.fen_analysis_bytes)}</strong></article>
+              <article><span>Research files</span><strong>{formatBytes(storage.research_bytes)}</strong></article>
+              <article><span>Metadata / other</span><strong>{formatBytes(storage.other_bytes)}</strong></article>
+            </div>
+            <p className="database-backups-storage-note">
+              Current storage is measured at most once per minute · last measured {formatDate(storage.usage_measured_at)}. The protected database value is its uncompressed size at the latest recovery point{latestBackup ? `; that recovery point added ${formatBytes(latestBackup.repository_delta_bytes)} to the repository` : ''}.
+            </p>
             <p className="database-backups-location">{storage.storage_location || '/main-monitor-db-backups/chessism'}</p>
           </section>
 
@@ -329,6 +409,34 @@ export default function DatabaseBackups() {
             </div>
             <div className={`database-backups-progress ${['failed', 'unavailable'].includes(backupDisplayPhase) ? 'failed' : ''}`}>
               <strong>{backupDisplayDetail || 'No database backup has run yet.'}</strong>
+              {backupElapsedMs !== null ? (
+                <span className="database-backups-elapsed">Elapsed: {formatElapsedTime(backupElapsedMs)}</span>
+              ) : null}
+              {backupActive ? (
+                <div className="database-backups-transfer-progress">
+                  <div
+                    className={`database-backups-transfer-meter ${backupProgressTotal > 0 ? '' : 'indeterminate'}`}
+                    role="progressbar"
+                    aria-label="Database backup byte progress"
+                    aria-valuemin="0"
+                    aria-valuemax={backupProgressTotal || undefined}
+                    aria-valuenow={backupProgressTotal ? backupProgressCompleted : undefined}
+                  >
+                    <div style={backupProgressTotal > 0 ? { width: `${backupProgressPercent}%` } : undefined} />
+                  </div>
+                  <div className="database-backups-transfer-meta">
+                    <span>
+                      {backupProgressTotal > 0
+                        ? `${formatBytes(backupProgressCompleted)} / ${formatBytes(backupProgressTotal)} · ${backupProgressPercent.toFixed(1)}%`
+                        : 'Waiting for pgBackRest progress data'}
+                    </span>
+                    <span>{backupEtaLabel}</span>
+                    {Number.isFinite(backupRateBytesPerSecond) && backupRateBytesPerSecond > 0 ? (
+                      <span>{formatBytes(backupRateBytesPerSecond)}/s</span>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
               <span>Latest verified: {formatDate(status.last_verified_at)}</span>
               <span>Backup type: {status.backup_type || (job?.kind === 'backup' ? job?.result?.type : null) || '-'}</span>
               <span>Backup ID: {status.backup_id || (job?.kind === 'backup' ? job?.result?.backup_id : null) || '-'}</span>
@@ -390,7 +498,9 @@ export default function DatabaseBackups() {
                 </tbody>
               </table>
             </div>
-            <p className="database-backups-copy">A block-enabled full stores the maps used by later block incrementals. A new full starts after 30 incrementals, 30 days, or interrupted WAL continuity.</p>
+            <p className="database-backups-copy">
+              Backups run only after a superuser clicks Backup database. That manual request starts a new full chain after {policy.full_after_incrementals ?? 10} incrementals, when the full base is at least {policy.full_after_days ?? 7} days old, or after interrupted WAL continuity; otherwise it stores a block incremental.
+            </p>
           </section>
         </main>
         <Footer />

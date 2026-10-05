@@ -18,6 +18,9 @@ from chessism_api.operations.backup_coordination import (
     ensure_backup_reservation,
     release_backup,
 )
+from chessism_api.operations.matrix_backups import validate_matrix_bundle
+from chessism_api.operations.matrix_constructor.artifact_files import file_operation
+from chessism_api.operations.matrix_constructor.definition_backups import validate_definition_backup
 
 
 APP_ID = os.getenv("DATABASE_BACKUP_APP_ID", "chessism")
@@ -621,6 +624,43 @@ async def run_database_restore_test_job(
         if not isinstance(validation, dict):
             raise RuntimeError("The restored database validation result is not an object.")
         _validate_probe(validation)
+
+        backup_manifest = _read_json(MANIFEST_DIRECTORY / f"{backup_id}.json", {})
+        if "matrix_definitions" in backup_manifest:
+            await _write_progress(redis, job_id, phase="validating_definitions",
+                                  detail="Verifying matrix instructions restored inside PostgreSQL.")
+            _code, definitions_output = await _run_command_capture(
+                "psql", "--no-psqlrc", "--tuples-only", "--no-align", "--set=ON_ERROR_STOP=1",
+                f"--host={socket_dir}", "--port=55432", f"--username={RESTORE_USER}",
+                f"--dbname={RESTORE_DATABASE}",
+                "--command=SELECT COALESCE(json_agg(json_build_object('id', id, 'name', name, "
+                "'row_type', row_type, 'config', config) ORDER BY id), '[]'::json) FROM matrix_definition",
+            )
+            validation["matrix_definitions"] = validate_definition_backup(
+                backup_manifest["matrix_definitions"], json.loads(definitions_output.strip()),
+            )
+        elif int(backup_manifest.get("schema_version") or 0) >= 4:
+            raise RuntimeError("This backup is missing its matrix definition fingerprint.")
+        else:
+            validation["matrix_definitions"] = {"status": "not_recorded", "detail": "Backup predates matrix definitions."}
+        if "matrices" in backup_manifest:
+            await _write_progress(redis, job_id, phase="validating_matrices",
+                                  detail="Verifying matrix backup files against the restored database.")
+            _code, matrix_output = await _run_command_capture(
+                "psql", "--no-psqlrc", "--tuples-only", "--no-align", "--set=ON_ERROR_STOP=1",
+                f"--host={socket_dir}", "--port=55432", f"--username={RESTORE_USER}",
+                f"--dbname={RESTORE_DATABASE}",
+                "--command=SELECT COALESCE(json_agg(id ORDER BY id), '[]'::json) "
+                "FROM matrix_artifact WHERE status = 'complete'",
+            )
+            validation["matrices"] = await file_operation(
+                validate_matrix_bundle, backup_manifest["matrices"],
+                APP_BACKUP_ROOT / "research" / "matrices", json.loads(matrix_output.strip()),
+            )
+        elif int(backup_manifest.get("schema_version") or 0) >= 3:
+            raise RuntimeError("This backup is missing its matrix companion manifest.")
+        else:
+            validation["matrices"] = {"status": "not_recorded", "detail": "Legacy backup: external matrices were not included."}
 
         await _write_progress(
             redis,

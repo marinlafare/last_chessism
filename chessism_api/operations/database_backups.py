@@ -13,9 +13,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from chessism_api.operations.backup_coordination import (
-    ensure_backup_reservation,
-    release_backup,
+from chessism_api.operations.database_backup_progress import (
+    parse_pgbackrest_progress as _parse_pgbackrest_progress,
+    read_pgbackrest_progress,
+    write_database_backup_progress as _write_progress,
 )
 from chessism_api.operations.database_restore_tests import database_restore_test_status
 
@@ -30,26 +31,28 @@ VOLUME_MARKER = BACKUP_VOLUME_ROOT / ".chessism-backup-volume"
 APP_BACKUP_ROOT = BACKUP_VOLUME_ROOT / APP_ID
 DATABASE_BACKUP_ROOT = APP_BACKUP_ROOT / "database"
 PGBACKREST_REPOSITORY = DATABASE_BACKUP_ROOT / "pgbackrest"
+PGBACKREST_BACKUP_DIRECTORY = PGBACKREST_REPOSITORY / "backup"
+PGBACKREST_ARCHIVE_DIRECTORY = PGBACKREST_REPOSITORY / "archive"
+FEN_ANALYSIS_BACKUP_ROOT = APP_BACKUP_ROOT / "fen-analysis"
+RESEARCH_BACKUP_ROOT = APP_BACKUP_ROOT / "research"
 MANIFEST_DIRECTORY = DATABASE_BACKUP_ROOT / "manifests"
 BACKUP_STATUS_PATH = APP_BACKUP_ROOT / "backup-status.json"
 BACKUP_USAGE_PATH = APP_BACKUP_ROOT / "backup-usage.json"
 BACKUP_CATALOG_PATH = DATABASE_BACKUP_ROOT / "catalog.json"
 PGBACKREST_GAP_PATH = Path(os.getenv(
-    "CHESSISM_ARCHIVE_GAP_PATH",
-    "/var/spool/pgbackrest/chessism-archive-gap",
+    "CHESSISM_ARCHIVE_GAP_PATH", "/var/spool/pgbackrest/chessism-archive-gap",
 ))
 PGBACKREST_STANZA = os.getenv("PGBACKREST_STANZA", "chessism")
 DISPLAY_ROOT = os.getenv(
-    "DATABASE_BACKUP_DISPLAY_DIR",
-    "/main-monitor-db-backups/chessism/database",
+    "DATABASE_BACKUP_DISPLAY_DIR", "/main-monitor-db-backups/chessism/database",
 )
 
 FREE_FLOOR_BYTES = int(os.getenv("BACKUP_FREE_FLOOR_BYTES", "150000000000"))
 APP_QUOTA_BYTES = int(os.getenv("DATABASE_BACKUP_QUOTA_BYTES", "200000000000"))
 STOP_MARGIN_BYTES = int(os.getenv("BACKUP_STOP_MARGIN_BYTES", "2000000000"))
-FULL_AFTER_INCREMENTALS = int(os.getenv("DATABASE_BACKUP_FULL_AFTER_INCREMENTALS", "30"))
-FULL_AFTER_DAYS = int(os.getenv("DATABASE_BACKUP_FULL_AFTER_DAYS", "30"))
-PROGRESS_TTL_SECONDS = 7 * 24 * 60 * 60
+FULL_AFTER_INCREMENTALS = int(os.getenv("DATABASE_BACKUP_FULL_AFTER_INCREMENTALS", "10"))
+FULL_AFTER_DAYS = int(os.getenv("DATABASE_BACKUP_FULL_AFTER_DAYS", "7"))
+USAGE_CACHE_SECONDS = int(os.getenv("DATABASE_BACKUP_USAGE_CACHE_SECONDS", "60"))
 BACKUP_FORMAT_VERSION = 2
 BACKUP_STORAGE_MODE = "block_incremental_v1"
 LEGACY_STORAGE_MODE = "file_incremental_legacy"
@@ -122,15 +125,56 @@ def _directory_size(path: Path) -> int:
     return total
 
 
-def record_application_usage() -> int:
-    """Persist an exact quota measurement after a backup writer completes."""
+def _measure_application_usage() -> dict[str, Any]:
+    """Measure the live repository without reading backup file contents."""
+    backup_bytes = _directory_size(PGBACKREST_BACKUP_DIRECTORY)
+    archived_wal_bytes = _directory_size(PGBACKREST_ARCHIVE_DIRECTORY)
+    fen_analysis_bytes = _directory_size(FEN_ANALYSIS_BACKUP_ROOT)
+    research_bytes = _directory_size(RESEARCH_BACKUP_ROOT)
     total_bytes = _directory_size(APP_BACKUP_ROOT)
-    _atomic_write_json(BACKUP_USAGE_PATH, {
-        "schema_version": 1,
-        "updated_at": _iso_now(),
+    measured_components = (
+        backup_bytes
+        + archived_wal_bytes
+        + fen_analysis_bytes
+        + research_bytes
+    )
+    return {
+        "schema_version": 2,
+        "measured_at": _iso_now(),
         "total_bytes": total_bytes,
-    })
-    return total_bytes
+        "database_backup_bytes": backup_bytes,
+        "archived_wal_bytes": archived_wal_bytes,
+        "fen_analysis_bytes": fen_analysis_bytes,
+        "research_bytes": research_bytes,
+        "other_bytes": max(0, total_bytes - measured_components),
+    }
+
+
+def _usage_snapshot(*, force: bool = False) -> dict[str, Any]:
+    """Return a recent component breakdown, refreshing at most once per minute."""
+    cached = _read_json(BACKUP_USAGE_PATH, {})
+    cache_is_current = False
+    try:
+        age_seconds = max(0.0, time.time() - BACKUP_USAGE_PATH.stat().st_mtime)
+        cache_is_current = (
+            isinstance(cached, dict)
+            and int(cached.get("schema_version") or 0) >= 2
+            and age_seconds <= max(1, USAGE_CACHE_SECONDS)
+        )
+    except OSError:
+        pass
+    if cache_is_current and not force:
+        return cached
+
+    measured = _measure_application_usage()
+    _atomic_write_json(BACKUP_USAGE_PATH, measured)
+    return measured
+
+
+def record_application_usage() -> int:
+    """Persist an exact component and quota measurement after a writer completes."""
+    usage = _usage_snapshot(force=True)
+    return int(usage["total_bytes"])
 
 
 def _volume_marker_value() -> str | None:
@@ -232,12 +276,17 @@ def database_backup_overview() -> dict[str, Any]:
     status = saved_status if isinstance(saved_status, dict) and saved_status else _default_status(storage)
     if not saved_status and storage.get("available"):
         _atomic_write_json(BACKUP_STATUS_PATH, status)
-    saved_usage = _read_json(BACKUP_USAGE_PATH, {}) if storage["marker_matches"] else {}
-    storage["application_bytes"] = int(
-        saved_usage.get("total_bytes")
-        if isinstance(saved_usage, dict) and saved_usage.get("total_bytes") is not None
-        else status.get("total_bytes") or 0
-    )
+    saved_usage = _usage_snapshot() if storage["marker_matches"] else {}
+    storage["application_bytes"] = int(saved_usage.get("total_bytes") or 0)
+    storage["usage_measured_at"] = saved_usage.get("measured_at")
+    for field in (
+        "database_backup_bytes",
+        "archived_wal_bytes",
+        "fen_analysis_bytes",
+        "research_bytes",
+        "other_bytes",
+    ):
+        storage[field] = int(saved_usage.get(field) or 0)
     if not storage["available"]:
         status = {
             **status,
@@ -257,6 +306,7 @@ def database_backup_overview() -> dict[str, Any]:
         "restore_test": database_restore_test_status(),
         "policy": {
             "manual_only": True,
+            "selection_trigger": "superuser_button",
             "full_after_incrementals": FULL_AFTER_INCREMENTALS,
             "full_after_days": FULL_AFTER_DAYS,
             "retained_full_chains": 2,
@@ -268,33 +318,6 @@ def database_backup_overview() -> dict[str, Any]:
         },
         "backups": backups,
     }
-
-
-async def _write_progress(
-    redis: Any,
-    job_id: str,
-    *,
-    phase: str,
-    detail: str,
-    result: dict[str, Any] | None = None,
-) -> None:
-    if redis is None:
-        return
-    payload = {
-        "job_id": job_id,
-        "kind": "database_backup",
-        "phase": phase,
-        "total": 0,
-        "processed": 0,
-        "detail": detail,
-        "result": result,
-        "updated_at": time.time(),
-    }
-    await redis.set(
-        f"chessism:job_progress:{job_id}",
-        json.dumps(payload),
-        ex=PROGRESS_TTL_SECONDS,
-    )
 
 
 def _backup_rows(info: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -360,11 +383,11 @@ def choose_backup_type(
     active_full_storage_mode: str | None = BACKUP_STORAGE_MODE,
     now: datetime | None = None,
 ) -> tuple[str, str]:
-    """Select a safe backup type using the agreed 30/30 chain policy."""
+    """Select a safe backup type using the manual 10-incremental/7-day policy."""
     if archive_gap:
-        return "full", "WAL archiving was interrupted, so a new full chain is required."
+        return "full", "This manual backup requires a new full chain because WAL archiving was interrupted."
     if not backups:
-        return "full", "No verified base backup exists yet."
+        return "full", "This manual backup will create the first verified full base."
 
     full_rows = [row for row in backups if str(row.get("type")) == "full"]
     if not full_rows:
@@ -372,7 +395,7 @@ def choose_backup_type(
     if active_full_storage_mode != BACKUP_STORAGE_MODE:
         return (
             "full",
-            "Block-incremental storage is enabled, so one new full base is required; "
+            "This manual backup requires one new Block-incremental full base; "
             "the existing chain remains protected until the new full is verified.",
         )
     latest_full = max(
@@ -387,13 +410,24 @@ def choose_backup_type(
         and int((row.get("timestamp") or {}).get("stop") or 0) > full_stop
     )
     if incrementals >= FULL_AFTER_INCREMENTALS:
-        return "full", f"The current chain already has {incrementals} incrementals."
+        return (
+            "full",
+            f"This manual backup will start a new full chain because the current chain "
+            f"already has {incrementals} incrementals.",
+        )
 
     reference_now = now or utc_now()
     age_seconds = max(0, int(reference_now.timestamp()) - full_stop)
     if age_seconds >= FULL_AFTER_DAYS * 24 * 60 * 60:
-        return "full", f"The current full base is at least {FULL_AFTER_DAYS} days old."
-    return "incr", "A healthy block-enabled full base exists, so only changed blocks will be stored."
+        return (
+            "full",
+            f"This manual backup will start a new full chain because the current full "
+            f"base is at least {FULL_AFTER_DAYS} days old.",
+        )
+    return (
+        "incr",
+        "This manual backup will store only blocks changed since the healthy full base.",
+    )
 
 
 async def _run_command_capture(*arguments: str, allow_failure: bool = False) -> tuple[int, str]:
@@ -431,8 +465,7 @@ async def _run_backup_command(
     backup_type: str,
     *,
     baseline_app_bytes: int,
-    redis: Any,
-    job_id: str,
+    publish_progress: Any,
 ) -> str:
     process = await asyncio.create_subprocess_exec(
         "pgbackrest",
@@ -447,7 +480,13 @@ async def _run_backup_command(
     )
     recent_lines: list[str] = []
     last_storage_check = 0.0
+    last_progress_check = 0.0
     start_free = shutil.disk_usage(BACKUP_VOLUME_ROOT).free
+    byte_samples: list[tuple[float, int]] = []
+    latest_total = 0
+    latest_completed = 0
+    latest_rate: float | None = None
+    latest_eta: float | None = None
 
     assert process.stdout is not None
     while True:
@@ -460,9 +499,45 @@ async def _run_backup_command(
             if line:
                 recent_lines.append(line)
                 recent_lines = recent_lines[-40:]
-                await _write_progress(redis, job_id, phase="backing_up", detail=line[-500:])
+                await publish_progress(
+                    phase="backing_up",
+                    detail=line[-500:],
+                    total=latest_total,
+                    processed=latest_completed,
+                    eta_seconds=latest_eta,
+                    rate_bytes_per_second=latest_rate,
+                )
 
         now_monotonic = time.monotonic()
+        if now_monotonic - last_progress_check >= 2.0:
+            try:
+                progress = await read_pgbackrest_progress(PGBACKREST_STANZA)
+            except Exception:
+                # Progress is observability only and must never endanger a backup.
+                progress = None
+            if progress is not None:
+                latest_total, latest_completed = progress
+                if byte_samples and latest_completed < byte_samples[-1][1]:
+                    byte_samples.clear()
+                byte_samples.append((now_monotonic, latest_completed))
+                cutoff = now_monotonic - 30.0
+                while len(byte_samples) > 2 and byte_samples[1][0] < cutoff:
+                    byte_samples.pop(0)
+                sample_seconds = byte_samples[-1][0] - byte_samples[0][0]
+                sample_bytes = byte_samples[-1][1] - byte_samples[0][1]
+                if sample_seconds >= 5.0 and sample_bytes > 0:
+                    latest_rate = sample_bytes / sample_seconds
+                    latest_eta = max(0, latest_total - latest_completed) / latest_rate
+                await publish_progress(
+                    phase="backing_up",
+                    detail="Copying and compressing database blocks.",
+                    total=latest_total,
+                    processed=latest_completed,
+                    eta_seconds=latest_eta,
+                    rate_bytes_per_second=latest_rate,
+                )
+            last_progress_check = now_monotonic
+
         if now_monotonic - last_storage_check >= 2.0:
             current_free = shutil.disk_usage(BACKUP_VOLUME_ROOT).free
             estimated_app_bytes = baseline_app_bytes + max(0, start_free - current_free)
@@ -489,6 +564,15 @@ async def _run_backup_command(
     return_code = await process.wait()
     if return_code:
         raise RuntimeError("\n".join(recent_lines[-15:]) or f"pgBackRest failed with exit code {return_code}.")
+    if latest_total:
+        await publish_progress(
+            phase="backing_up",
+            detail="Database block transfer complete; preparing verification.",
+            total=latest_total,
+            processed=latest_total,
+            eta_seconds=0,
+            rate_bytes_per_second=latest_rate,
+        )
     return "\n".join(recent_lines)
 
 
@@ -664,211 +748,7 @@ async def cleanup_legacy_backup_chains() -> dict[str, Any]:
     }
 
 
-async def run_database_backup_job(ctx: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
-    """Create a full or incremental pgBackRest backup after explicit UI request."""
-    job_id = str(ctx.get("job_id") or uuid.uuid4())
-    redis = ctx.get("redis")
-    started_at = _iso_now()
-    await ensure_backup_reservation(redis, job_id)
-
-    try:
-        storage = require_storage(include_app_usage=True)
-        baseline_app_bytes = int(storage.get("application_bytes") or 0)
-        DATABASE_BACKUP_ROOT.mkdir(parents=True, exist_ok=True)
-        MANIFEST_DIRECTORY.mkdir(parents=True, exist_ok=True)
-
-        running_status = {
-            **_default_status(storage),
-            "status": "running",
-            "trigger": "manual",
-            "started_at": started_at,
-            "detail": "Inspecting the pgBackRest repository.",
-            "error_code": None,
-            "error_message": None,
-        }
-        _atomic_write_json(BACKUP_STATUS_PATH, running_status)
-        await _write_progress(redis, job_id, phase="preparing", detail=running_status["detail"])
-
-        info = await _pgbackrest_info(tolerate_missing=True)
-        stanza_ready = bool(
-            info
-            and isinstance(info[0], dict)
-            and int((info[0].get("status") or {}).get("code") or 0) == 0
-        )
-        if not stanza_ready:
-            await _write_progress(redis, job_id, phase="initializing", detail="Creating the Chessism backup stanza.")
-            await _run_command_capture(
-                "pgbackrest",
-                f"--stanza={PGBACKREST_STANZA}",
-                "stanza-create",
-            )
-            info = await _pgbackrest_info()
-
-        existing_catalog = _read_json(BACKUP_CATALOG_PATH, {"backups": []})
-        known_backups = (
-            existing_catalog.get("backups", [])
-            if isinstance(existing_catalog, dict)
-            else []
-        )
-        if not isinstance(known_backups, list):
-            known_backups = []
-        repository_backups = _backup_rows(info)
-        previous_backup_ids = {
-            str(row.get("label"))
-            for row in repository_backups
-            if row.get("label")
-        }
-        active_full_storage_mode = _active_full_storage_mode(
-            repository_backups,
-            known_backups,
-        )
-        backup_type, selection_reason = choose_backup_type(
-            repository_backups,
-            archive_gap=PGBACKREST_GAP_PATH.exists(),
-            active_full_storage_mode=active_full_storage_mode,
-        )
-        migration_full = bool(repository_backups) and (
-            active_full_storage_mode != BACKUP_STORAGE_MODE
-        ) and backup_type == "full"
-        await _write_progress(redis, job_id, phase="checking", detail="Checking PostgreSQL and WAL archiving.")
-        await _run_command_capture(
-            "pgbackrest",
-            f"--stanza={PGBACKREST_STANZA}",
-            "check",
-        )
-
-        running_status.update({
-            "backup_type": backup_type,
-            "detail": selection_reason,
-        })
-        _atomic_write_json(BACKUP_STATUS_PATH, running_status)
-        await _write_progress(redis, job_id, phase="backing_up", detail=selection_reason)
-        await _run_backup_command(
-            backup_type,
-            baseline_app_bytes=baseline_app_bytes,
-            redis=redis,
-            job_id=job_id,
-        )
-
-        verified_info = await _pgbackrest_info()
-        catalog_rows = _catalog_rows(verified_info, known_backups=known_backups)
-        if not catalog_rows:
-            raise RuntimeError("pgBackRest completed without publishing a backup record.")
-        newest = catalog_rows[0]
-        if str(newest.get("backup_id")) in previous_backup_ids:
-            raise RuntimeError("pgBackRest did not publish a new backup record.")
-        if newest.get("type") != backup_type:
-            raise RuntimeError("The completed pgBackRest backup type did not match the request.")
-        newest["storage_mode"] = BACKUP_STORAGE_MODE
-        newest["backup_format_version"] = BACKUP_FORMAT_VERSION
-
-        await _write_progress(
-            redis,
-            job_id,
-            phase="verifying",
-            detail=f"Verifying backup {newest['backup_id']} and its required WAL.",
-        )
-        await _run_command_capture(
-            "pgbackrest",
-            f"--stanza={PGBACKREST_STANZA}",
-            f"--set={newest['backup_id']}",
-            "verify",
-        )
-
-        completed_at = _iso_now()
-        manifest = {
-            "schema_version": 2,
-            "format": "chessism-pgbackrest",
-            "backup_format_version": BACKUP_FORMAT_VERSION,
-            "storage_mode": BACKUP_STORAGE_MODE,
-            "app_id": APP_ID,
-            "database_engine": "postgresql",
-            "backup_id": newest["backup_id"],
-            "backup_type": newest["type"],
-            "prior": newest.get("prior"),
-            "trigger": "manual",
-            "started_at": started_at,
-            "completed_at": completed_at,
-            "verified_at": completed_at,
-            "selection_reason": selection_reason,
-            "database_bytes": newest["database_bytes"],
-            "database_delta_bytes": newest["database_delta_bytes"],
-            "repository_bytes": newest["repository_bytes"],
-            "repository_delta_bytes": newest["repository_delta_bytes"],
-            "destination_uuid": EXPECTED_VOLUME_UUID,
-            "restore_tested": False,
-        }
-        manifest_path = MANIFEST_DIRECTORY / f"{newest['backup_id']}.json"
-        _atomic_write_json(manifest_path, manifest)
-        manifest_sha256 = _sha256(manifest_path)
-        _write_catalog(catalog_rows, updated_at=completed_at)
-
-        removed_backup_ids: list[str] = []
-        if migration_full:
-            catalog_rows, removed_backup_ids = await _expire_legacy_backup_chains(
-                catalog_rows,
-                protected_backup_id=str(newest["backup_id"]),
-                redis=redis,
-                job_id=job_id,
-            )
-        current_app_bytes = record_application_usage()
-
-        if backup_type == "full":
-            PGBACKREST_GAP_PATH.unlink(missing_ok=True)
-
-        result = {
-            **newest,
-            "manifest": str(manifest_path),
-            "manifest_sha256": manifest_sha256,
-            "application_bytes": current_app_bytes,
-            "storage_mode": BACKUP_STORAGE_MODE,
-            "backup_format_version": BACKUP_FORMAT_VERSION,
-            "removed_backup_ids": removed_backup_ids,
-        }
-        success_status = {
-            **running_status,
-            "status": "success",
-            "backup_id": newest["backup_id"],
-            "completed_at": completed_at,
-            "last_verified_at": completed_at,
-            "artifact_count": 1,
-            "total_bytes": current_app_bytes,
-            "bytes_added": max(0, current_app_bytes - baseline_app_bytes),
-            "manifest_sha256": manifest_sha256,
-            "storage_mode": BACKUP_STORAGE_MODE,
-            "backup_format_version": BACKUP_FORMAT_VERSION,
-            "detail": (
-                f"Verified {backup_type} database backup {newest['backup_id']}"
-                + (
-                    f" and removed {len(removed_backup_ids)} superseded legacy backups."
-                    if removed_backup_ids
-                    else "."
-                )
-            ),
-        }
-        _atomic_write_json(BACKUP_STATUS_PATH, success_status)
-        await _write_progress(redis, job_id, phase="complete", detail=success_status["detail"], result=result)
-        return result
-    except Exception as error:
-        storage = storage_snapshot(include_app_usage=False)
-        failure_status = {
-            **_default_status(storage),
-            "status": "unavailable" if isinstance(error, BackupUnavailableError) else "failed",
-            "trigger": "manual",
-            "started_at": started_at,
-            "completed_at": _iso_now(),
-            "error_code": error.__class__.__name__,
-            "error_message": str(error),
-            "detail": str(error),
-        }
-        if storage.get("marker_matches"):
-            _atomic_write_json(BACKUP_STATUS_PATH, failure_status)
-        await _write_progress(
-            redis,
-            job_id,
-            phase="unavailable" if isinstance(error, BackupUnavailableError) else "failed",
-            detail=str(error),
-        )
-        raise
-    finally:
-        await release_backup(redis, job_id)
+async def run_database_backup_job(ctx: dict[str, Any], **kwargs: Any) -> dict[str, Any]:
+    """Public ARQ entrypoint; orchestration lives separately from storage policy."""
+    from chessism_api.operations.database_backup_job import run_database_backup_job as run
+    return await run(ctx, **kwargs)

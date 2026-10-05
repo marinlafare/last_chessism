@@ -6,6 +6,7 @@ __pycache__/
 
 backups/
 db_data/
+research_data/
 api_logs/
 logs/
 chessism_web/dist/

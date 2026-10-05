@@ -3,6 +3,15 @@
   gap: 16px;
 }
 
+.matrix-build-row.matrix-definition-build-row { grid-template-columns: minmax(200px, 1fr) auto auto auto; }
+.matrix-definition-scope { margin: 0; color: var(--muted); font-size: 12px; }
+.matrix-definition-columns { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.matrix-definition-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+@media (max-width: 900px) {
+  .matrix-build-row.matrix-definition-build-row { grid-template-columns: 1fr 1fr; }
+  .matrix-definition-build-row label { grid-column: 1 / -1; }
+}
+
 .matrix-hero,
 .matrix-panel {
   padding: 18px;
@@ -205,8 +214,7 @@
 }
 
 .matrix-estimate strong,
-.matrix-artifact-result,
-.matrix-progress {
+.matrix-artifact-result {
   font-family: "IBM Plex Mono", monospace;
 }
 
@@ -231,7 +239,6 @@
 }
 
 .matrix-artifact-head,
-.matrix-progress > div:first-child,
 .matrix-artifact-result {
   display: flex;
   align-items: center;
@@ -263,19 +270,6 @@
 .matrix-state.failed,
 .matrix-error {
   color: var(--danger);
-}
-
-.matrix-progress-track {
-  height: 7px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #020405;
-}
-
-.matrix-progress-track i {
-  display: block;
-  height: 100%;
-  background: var(--accent);
 }
 
 .matrix-artifact-result {
@@ -314,68 +308,6 @@
   cursor: pointer;
 }
 
-.matrix-inspection {
-  display: grid;
-  overflow: hidden;
-  border: 1px solid var(--border-soft);
-  border-radius: 8px;
-  background: #030609;
-}
-
-.matrix-inspection-summary {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 14px;
-  padding: 9px;
-  border-bottom: 1px solid var(--border-soft);
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-.matrix-profile-head,
-.matrix-profile-row {
-  display: grid;
-  grid-template-columns: minmax(160px, 1.3fr) 90px 90px minmax(160px, 1fr);
-  align-items: center;
-  gap: 10px;
-  padding: 8px 11px;
-}
-
-.matrix-profile-head {
-  color: var(--muted);
-  font-size: 9px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.matrix-profile-row {
-  border-top: 1px solid rgba(255, 255, 255, 0.045);
-  color: var(--muted);
-  font-family: "IBM Plex Mono", monospace;
-  font-size: 10px;
-}
-
-.matrix-profile-row > span:first-child {
-  display: grid;
-  gap: 2px;
-}
-
-.matrix-profile-row strong {
-  color: var(--text);
-}
-
-.matrix-profile-row small {
-  color: var(--muted);
-  text-transform: uppercase;
-}
-
-.matrix-profile-row code {
-  color: #87b7df;
-}
-
 @media (max-width: 980px) {
   .matrix-row-types,
   .matrix-columns {
@@ -402,13 +334,5 @@
 
   .matrix-filter-grid .matrix-wide {
     grid-column: auto;
-  }
-
-  .matrix-profile-head {
-    display: none;
-  }
-
-  .matrix-profile-row {
-    grid-template-columns: 1fr 1fr;
   }
 }
