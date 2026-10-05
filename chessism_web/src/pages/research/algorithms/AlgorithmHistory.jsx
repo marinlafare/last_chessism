@@ -57,6 +57,8 @@ function SavedAlgorithms({ model }) {
             <h3>{definition.name}</h3>
             <div className="algorithm-actions">
               <button type="button" disabled={Boolean(model.working)}
+                onClick={() => model.openDefinition(definition)}>Open / new revision</button>
+              <button type="button" disabled={Boolean(model.working)}
                 onClick={() => model.run(definition)}>Run</button>
               <button type="button" disabled={Boolean(model.working)}
                 onClick={() => model.remove(definition)}>Delete instructions</button>
@@ -68,8 +70,10 @@ function SavedAlgorithms({ model }) {
           </p>
           <p>
             {number(definition.config.max_rows)} rows maximum ·
-            {' '}{definition.config.missing === 'drop_rows' ? 'exclude incomplete rows' : 'column-mean imputation'} ·
-            {' '}{definition.config.scaling === 'none' ? 'original units' : 'z-score scatter'}
+            {' '}{definition.config.missing === 'drop_rows' ? 'exclude incomplete rows' : definition.config.missing === 'keep' ? 'keep missing as N/A' : 'column-mean imputation'} ·
+            {' '}{definition.config.operation === 'pipeline'
+              ? `${definition.config.steps.length} steps · ${definition.config.outputs.length} outputs · revision ${definition.config.revision || 1}`
+              : 'legacy Feature relationships'}
           </p>
         </article>
       ))}

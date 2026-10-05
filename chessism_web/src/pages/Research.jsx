@@ -22,7 +22,7 @@ const RESEARCH_AREAS = [
     href: '/research/algorithms',
     eyebrow: 'CALCULATIONS',
     title: 'Algorithm creation',
-    description: 'Use saved matrix instructions for numerical summaries, correlations and scatter plots. Run calculations on demand.',
+    description: 'Build algorithms from editable steps and formulas, test a small sample, and save revisions with tables and charts.',
     action: 'Open algorithm creation',
   },
   {

@@ -20,7 +20,10 @@ def capacity(config):
     while not ancestor.exists():
         ancestor = ancestor.parent
     free = shutil.disk_usage(ancestor).free
-    return {"temporary_bytes_upper_estimate": required, "free_bytes": free,
+    working = config['max_rows'] * (len(config['columns']) * 72 + 80)
+    return {"temporary_bytes_upper_estimate": required, "working_input_bytes_estimate": working,
+            "intermediate_memory_limit_bytes": 256 * 1024 * 1024 if config.get('operation') == 'pipeline' else None,
+            "free_bytes": free,
             "free_floor_bytes": FREE_FLOOR, "safe_to_run": free - required >= FREE_FLOOR}
 
 

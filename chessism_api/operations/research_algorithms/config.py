@@ -15,9 +15,15 @@ ACTIVE = ("queued", "running")
 
 
 def algorithm_catalog():
+    from .builder_schema import AGGREGATIONS, BUILDER_MAX_ROWS, MAX_OUTPUTS, MAX_STEPS, OPERATIONS, SAMPLE_ROWS
+    from .expressions import FUNCTIONS
     return {
         "operations": [{"key": "feature_relationships", "name": "Feature relationships",
-                        "description": "Numerical summaries, Pearson correlations, and a sampled scatter plot."}],
+                        "description": "Legacy template: summaries, Pearson correlations and scatter."},
+                       {"key": "pipeline", "name": "Custom algorithm", "description": "Compose steps and formulas."}],
+        "builder": {"max_rows": BUILDER_MAX_ROWS, "max_steps": MAX_STEPS, "max_outputs": MAX_OUTPUTS,
+                    "sample_rows": SAMPLE_ROWS, "steps": OPERATIONS, "aggregations": AGGREGATIONS,
+                    "functions": FUNCTIONS, "version": 2},
         "backends": ["numpy_cpu"], "max_rows": MAX_ROWS, "max_columns": MAX_COLUMNS,
         "scatter_limit": SCATTER_LIMIT, "implementation_version": VERSION,
         "missing": ["drop_rows", "column_mean"], "scaling": ["none", "standardize"],
@@ -26,6 +32,9 @@ def algorithm_catalog():
 
 
 def normalize_algorithm(request: dict, matrix: dict) -> dict:
+    if request.get('operation') == 'pipeline':
+        from .builder_schema import normalize_builder
+        return normalize_builder(request, matrix)
     recipe = definition_config(matrix)
     if request.get("operation", "feature_relationships") != "feature_relationships":
         raise ValueError("Unsupported algorithm.")

@@ -7,8 +7,8 @@ import Algorithms from '/src/pages/Algorithms.jsx'
 import '/src/index.css'
 
 const matrix = { id: 'matrix-test', name: 'Small test', row_type: 'game_player', storage_kind: 'definition', feature_count: 3, label_count: 0,
-  config: { row_type: 'game_player', feature_columns: ['rating', 'opponent_rating', 'mode'], label_columns: [], filters: { max_rows: 100, modes: ['blitz'] } } }
-const catalog = { row_types: [{ key: 'game_player', columns: ['rating', 'opponent_rating', 'mode'].map((key) => ({ key, label: key, data_type: key === 'mode' ? 'category' : 'number' })) }] }
+  config: { row_type: 'game_player', feature_columns: ['moves', 'elapsed_seconds', 'result', 'mode'], label_columns: [], filters: { max_rows: 100, modes: ['blitz'] } } }
+const catalog = { row_types: [{ key: 'game_player', columns: ['moves', 'elapsed_seconds', 'result', 'mode'].map((key) => ({ key, label: key, data_type: key === 'mode' ? 'category' : 'number' })) }] }
 window.algorithmTest = { requests: [], definitions: [], runs: [] }
 window.confirm = () => true
 const state = window.algorithmTest
@@ -17,19 +17,26 @@ window.fetch = async (input, options = {}) => {
   const url = new URL(input, location.href), method = options.method || 'GET', pathname = url.pathname
   state.requests.push({ method, url: pathname + url.search })
   if (pathname.endsWith('/matrices/catalog')) return reply(catalog)
-  if (pathname.endsWith('/algorithms/catalog')) return reply({ backends: ['numpy_cpu'] })
+  if (pathname.endsWith('/algorithms/catalog')) return reply({ backends: ['numpy_cpu'], builder: { version: 2, max_rows: 100000 } })
   if (pathname.endsWith('/matrices')) return reply({ definitions: [matrix], has_more: false })
-  if (pathname.endsWith('/preview')) return reply({ columns: ['rating', 'opponent_rating'].map((key) => ({ key, role: 'features', storage_dtype: 'int32', encoding: 'numeric' })), rows: [[1500, 1600], [1800, 1900]], row_keys: ['1:white', '2:black'], shape: [2, 2], dimensions: 2, materialized: false, more_matching_rows: false, row_limit: 100 })
-  if (pathname.endsWith('/preflight')) return reply({ estimate: { selected_rows: 100, selected_rows_is_lower_bound: false }, resources: { temporary_bytes_upper_estimate: 100000, safe_to_run: true } })
+  if (pathname.endsWith('/preview')) return reply({ columns: ['moves', 'elapsed_seconds'].map((key) => ({ key, role: 'features', storage_dtype: 'int32', encoding: 'numeric' })), rows: [[20, 120], [30, 180]], row_keys: ['1:white', '2:black'], shape: [2, 2], dimensions: 2, materialized: false, more_matching_rows: false, row_limit: 100 })
+  if (pathname.endsWith('/validate')) return reply({ valid: true, schemas: {} })
+  if (pathname.endsWith('/preflight')) return reply({ estimate: { selected_rows: 100, selected_rows_is_lower_bound: false }, resources: { working_input_bytes_estimate: 100000, safe_to_run: true } })
   if (pathname.endsWith('/definitions') && method === 'POST') {
     const form = JSON.parse(options.body)
-    const definition = { id: crypto.randomUUID(), name: form.name, config: { ...form, matrix: matrix.config } }
+    const parent = state.definitions.find((item) => item.id === form.parent_definition_id)
+    const definition = { id: crypto.randomUUID(), name: form.name, matrix_definition_id: matrix.id, config: { ...form, matrix: matrix.config, revision: parent ? parent.config.revision + 1 : 1 } }
     state.definitions.unshift(definition); return reply(definition, 201)
   }
   if (pathname.endsWith('/definitions')) return reply({ definitions: state.definitions, has_more: false })
+  if (pathname.endsWith('/sample')) {
+    const config = { ...JSON.parse(options.body), sample_run: true }
+    const run = { id: crypto.randomUUID(), name: config.name + ' · sample', config, status: 'queued', created_at: new Date().toISOString(), progress: { phase: 'queued' } }
+    state.runs.unshift(run); return reply(run, 202)
+  }
   if (pathname.endsWith('/runs') && method === 'POST') {
     const definition = state.definitions.find((item) => item.id === pathname.split('/').at(-2))
-    const run = { id: crypto.randomUUID(), name: definition.name, status: 'queued', created_at: new Date().toISOString(), progress: { phase: 'queued', detail: 'Waiting for worker' } }
+    const run = { id: crypto.randomUUID(), name: definition.name, config: structuredClone(definition.config), status: 'queued', created_at: new Date().toISOString(), progress: { phase: 'queued', detail: 'Waiting for worker' } }
     state.runs.unshift(run); return reply(run, 202)
   }
   if (pathname.endsWith('/runs')) return reply({ runs: state.runs, has_more: false })
@@ -38,13 +45,23 @@ window.fetch = async (input, options = {}) => {
     Object.assign(run, { status: 'cancelled', finished_at: new Date().toISOString(), progress: { phase: 'cancelled' } })
     return reply({ status: 'cancelled', message: 'Cancellation recorded.' })
   }
-  if (pathname.includes('/runs/')) return reply({ ...state.runs.find((item) => item.id === pathname.split('/').at(-1)), result: state.result })
-  if (method === 'DELETE') { state.definitions = []; return reply(null, 204) }
+  if (pathname.includes('/runs/')) return reply(state.runs.find((item) => item.id === pathname.split('/').at(-1)))
+  if (method === 'DELETE') { state.definitions = state.definitions.filter((item) => item.id !== pathname.split('/').at(-1)); return reply(null, 204) }
   throw new Error(`Unexpected request: ${method} ${pathname}`)
 }
 state.finish = () => {
   Object.assign(state.runs[0], { status: 'complete', started_at: new Date(Date.now() - 5000).toISOString(), finished_at: new Date().toISOString(), progress: { phase: 'complete', detail: 'Temporary inputs removed.' } })
-  state.result = { input_rows: 100, included_rows: 90, excluded_rows: 10, imputed_rows: 0, backend: 'numpy_cpu', precision: 'float64', timings: { extraction_seconds: 2, calculation_seconds: 1 }, source: { taken_at: '2026-10-04', input_sha256: 'test', inputs_retained: false }, columns: ['rating', 'opponent_rating'], correlations: [[1, 0.9], [0.9, 1]], missing_by_column: { rating: 10, opponent_rating: 0 }, summaries: ['rating', 'opponent_rating'].map((column) => ({ column, mean: 1600, std: 100, min: 1400, max: 1900 })), scatter: { x: 'rating', y: 'opponent_rating', units: 'source values', sampled: true, points: [{ row_key: '1:white', x: 1500, y: 1600 }, { row_key: '2:black', x: 1800, y: 1900 }] }, warnings: ['Inputs are temporary.'], seed: 42, implementation_version: 1 }
+  state.runs[0].result = {
+    format: 'algorithm_builder_v2', sample_run: state.runs[0].config.sample_run || false,
+    input_rows: 100, included_rows: 100, excluded_rows: 0, imputed_rows: 0,
+    timings: { extraction_seconds: 1, calculation_seconds: 1 }, source: { taken_at: '2026-10-05', input_sha256: 'test', inputs_retained: false },
+    outputs: [
+      { name: 'Duration by result', type: 'table', input: 'by_result', columns: ['result', 'games', 'mean_seconds'], rows: [[0, 40, 6], [1, 60, 5]], total_rows: 2 },
+      { name: 'Individual games', type: 'scatter', input: 'pace', total_rows: 100, x: 'moves', y: 'seconds_per_full_move', units: 'step values', points: [{ row_key: '1:white', x: 20, y: 6 }, { row_key: '2:black', x: 30, y: 5 }] },
+    ],
+    steps: state.runs[0].config.steps.map((step) => ({ ...step, input_rows: 100, output_rows: 90, seconds: .01, missing: {}, preview: { columns: ['moves'], rows: [[20], [30]], row_keys: ['a', 'b'], total_rows: 90, truncated: true } })),
+    warnings: ['Inputs are temporary.'],
+  }
 }
 createRoot(document.getElementById('root')).render(React.createElement(Algorithms))
 </script></body></html>

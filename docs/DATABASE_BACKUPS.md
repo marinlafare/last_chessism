@@ -35,6 +35,14 @@ are cleaned by the dedicated algorithm worker at startup. Neither backups nor
 restore tests materialize input matrices. A changed live database can produce
 different data when an algorithm is rerun; a saved recipe is not a pinned dataset.
 
+Custom algorithm revisions and step graphs are stored in the same definition
+JSON; each run retains its exact instructions and bounded outputs/intermediate
+previews. The version-5 integrity digest already covers those fields, so no
+separate artifact copy or new backup format is needed for the builder. Its typed
+working arrays are temporary worker memory, not new permanent database tables.
+An explicitly requested sample test is a small algorithm run, not a database
+backup or restore rehearsal; it does not trigger either backup operation.
+
 Legacy working matrix files are in the project's ignored `research_data/matrices/`
 folder, not in PostgreSQL. A physical database backup by itself only contains
 their metadata. New recovery-point manifests include a `matrices` list of UUIDs

@@ -1,4 +1,5 @@
 import RelationshipScatter from './RelationshipScatter'
+import BuilderResults from './BuilderResults'
 import { duration, number } from './algorithmForm'
 
 function color(value) {
@@ -60,6 +61,7 @@ function CorrelationTable({ result }) {
 
 export default function AlgorithmResults({ run, onClose }) {
   const result = run.result
+  if (result?.format === 'algorithm_builder_v2') return <BuilderResults run={run} onClose={onClose} />
   return (
     <section className="algorithm-panel algorithm-results" aria-label="Algorithm results">
       <div className="algorithm-heading">

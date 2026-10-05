@@ -14,6 +14,8 @@ from sqlalchemy.orm import sessionmaker
 
 from chessism_api.database.models import AlgorithmRun
 from chessism_api.operations.research_algorithms import config, inputs, jobs, storage
+from chessism_api.operations.research_algorithms import builder_inputs, builder_runner
+from chessism_api.operations.research_algorithms.builder_schema import normalize_builder
 from chessism_api.operations.research_algorithms.backups import algorithm_backup_manifest, validate_algorithm_backup
 from chessism_api.operations.research_algorithms.repository import run_payload
 
@@ -58,6 +60,23 @@ class AlgorithmDatabaseTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(result['source']['input_sha256']), 64)
             self.assertFalse(result['source']['inputs_retained'])
 
+    async def test_builder_typed_source_and_branched_calculation(self):
+        await self.connection.execute(text('ALTER TABLE game ADD COLUMN mode TEXT'))
+        await self.connection.execute(text("UPDATE game SET mode = CASE WHEN link < 3 THEN 'blitz' ELSE 'rapid' END"))
+        await self.connection.commit()
+        recipe = {'row_type': 'game', 'feature_columns': ['moves', 'elapsed_seconds', 'mode', 'started_at'], 'filters': {'max_rows': 4}}
+        settings = normalize_builder({'columns': recipe['feature_columns'], 'steps': [
+            {'id': 'pace', 'input': 'input', 'op': 'calculate', 'column': 'seconds_per_move', 'expression': 'safe_divide(elapsed_seconds, moves)'},
+            {'id': 'summary', 'input': 'pace', 'op': 'aggregate', 'group_by': ['mode'], 'metrics': [{'name': 'mean_seconds', 'op': 'mean', 'column': 'seconds_per_move'}]},
+            {'id': 'dates', 'input': 'input', 'op': 'calculate', 'column': 'day', 'expression': 'utc_day(started_at)'},
+        ], 'outputs': [{'input': 'summary', 'type': 'table'}, {'input': 'dates', 'type': 'table', 'columns': ['day']}]}, recipe)
+        with patch.object(builder_inputs, 'AsyncDBSession', self.factory), patch.object(storage, 'FREE_FLOOR', 0):
+            result = await builder_runner.execute(settings, AsyncMock())
+        self.assertEqual(result['outputs'][0]['rows'], [['blitz', 2.0], ['rapid', 2.0]])
+        self.assertEqual(result['outputs'][1]['rows'][0], ['2026-01-01'])
+        self.assertEqual(result['input_rows'], 4)
+        self.assertEqual(result['steps'][0]['missing']['seconds_per_move'], 1)
+
     async def test_whole_job_durable_result_cleanup_and_backup_integrity(self):
         run_id = str(uuid.uuid4())
         async with self.factory() as session, session.begin():
@@ -85,6 +104,29 @@ class AlgorithmDatabaseTests(unittest.IsolatedAsyncioTestCase):
             await session.flush()
             with self.assertRaises(ValueError):
                 validate_algorithm_backup(original, await algorithm_backup_manifest(session))
+
+    async def test_builder_job_publishes_sample_and_is_covered_by_backup_digest(self):
+        config = normalize_builder({'columns': ['moves', 'elapsed_seconds'], 'steps': [
+            {'id': 'pace', 'op': 'calculate', 'input': 'input', 'column': 'seconds_per_move',
+             'expression': 'safe_divide(elapsed_seconds, moves)'},
+        ], 'outputs': [{'input': 'pace', 'type': 'table'}]}, self.settings['matrix'])
+        config['sample_run'] = True
+        run_id = str(uuid.uuid4())
+        async with self.factory() as session, session.begin():
+            session.add(AlgorithmRun(id=run_id, name='Builder temporary test', config=config, status='queued'))
+        @asynccontextmanager
+        async def local_lock(**kwargs):
+            async with self.factory() as session, session.begin(): yield session
+        with TemporaryDirectory() as temporary, patch.object(storage, 'WORK_ROOT', Path(temporary)), patch.object(storage, 'FREE_FLOOR', 0), \
+                patch.object(jobs, 'AsyncDBSession', self.factory), patch.object(builder_inputs, 'AsyncDBSession', self.factory), \
+                patch.object(jobs, 'Reporter', return_value=AsyncMock()), patch.object(jobs, 'matrix_catalog_lock', local_lock):
+            self.assertEqual((await jobs.run_algorithm_job({}, run_id=run_id))['status'], 'complete')
+            self.assertEqual(list(Path(temporary).iterdir()), [])
+        async with self.factory() as session:
+            row = await session.get(AlgorithmRun, run_id)
+            self.assertTrue(row.result['sample_run'])
+            self.assertEqual(row.result['outputs'][0]['rows'][2], [30., None, None])
+            self.assertEqual((await algorithm_backup_manifest(session))['completed_runs']['count'], 1)
 
 
 if __name__ == '__main__': unittest.main()

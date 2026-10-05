@@ -40,4 +40,11 @@
 .algorithm-panel .algorithm-warning { color: #dbc080; font-size: 13px; }
 .algorithm-estimate { margin-top: 16px; color: #87c8bd; }
 .algorithm-results code { overflow-wrap: anywhere; }
+.algorithm-main textarea { background: #080e12; border: 1px solid #3a5563; border-radius: 6px; color: #deebf4; padding: 12px; font: 14px monospace; resize: vertical; }
+.algorithm-metric-editor { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 14px 0; align-items: end; }
+.algorithm-formula-help { margin-top: 18px; }
+.algorithm-formula-help code, .algorithm-column-hint { font: 13px monospace; }
+.algorithm-main details > summary { cursor: pointer; padding: 8px 0; }
+.algorithm-main pre { overflow: auto; max-height: 380px; background: #080e12; padding: 16px; }
+.algorithm-scalar { display: block; text-align: center; font: bold 32px monospace; padding: 24px; }
 @media (max-width: 700px) { .algorithm-main { padding: 12px; }.algorithm-panel { padding: 15px; } }

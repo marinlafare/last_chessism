@@ -6,7 +6,6 @@ import json
 import time
 
 import numpy as np
-from sqlalchemy import select
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import AlgorithmRun
@@ -82,15 +81,22 @@ async def run_algorithm_job(ctx, *, run_id):
     reporter = Reporter(run_id)
     started = time.monotonic()
     try:
-        if config.get("implementation_version") != VERSION:
+        expected = 2 if config.get('operation') == 'pipeline' else VERSION
+        if config.get("implementation_version") != expected:
             raise ValueError("This algorithm implementation version is no longer supported.")
+        stored = config
         config = normalize_algorithm(config, config["matrix"])
+        config['sample_run'] = bool(stored.get('sample_run'))
         await reporter.check()
         with workspace(run_id) as folder:
-            source = await materialize(config, folder, reporter)
-            calculation_started = time.monotonic()
-            result = await calculate(config, folder, source, reporter)
-            result["timings"] = {"extraction_seconds": source["seconds"], "calculation_seconds": time.monotonic() - calculation_started}
+            if config['operation'] == 'pipeline':
+                from .builder_runner import execute
+                result = await execute(config, reporter)
+            else:
+                source = await materialize(config, folder, reporter)
+                calculation_started = time.monotonic()
+                result = await calculate(config, folder, source, reporter)
+                result["timings"] = {"extraction_seconds": source["seconds"], "calculation_seconds": time.monotonic() - calculation_started}
             await reporter.progress("cleaning", detail="Removing temporary numerical arrays and row identifiers.")
         result["timings"]["total_compute_seconds"] = time.monotonic() - started
         await publish(run_id, result, reporter)

@@ -1,149 +1,137 @@
-import { bytes, number, numericColumns } from './algorithmForm'
+import { bytes, number } from './algorithmForm'
+import { inputColumns } from './builderForm'
+import BuilderSteps from './BuilderSteps'
+import BuilderOutputs from './BuilderOutputs'
 
 export default function AlgorithmForm({ model }) {
-  const { form, inputs, catalog, working, update, estimate } = model
-  if (!form) {
-    return (
-      <section className="algorithm-panel">
-        <h2>1. Input matrix</h2>
-        <p>{working ? 'Loading matrix definitions…' : 'Save a matrix definition first.'}</p>
-        <a href="/research/matrices">Open matrices constructor</a>
-      </section>
-    )
-  }
-  const matrix = inputs.find((item) => item.id === form.matrix_definition_id)
-  const numeric = numericColumns(matrix, catalog)
-  const axes = [...form.columns, ...(form.rating_difference ? ['rating_difference'] : [])]
-  const maxColumns = model.algorithmCatalog?.max_columns || 12
-  const valid = form.columns.length >= 2 && form.x && form.y && form.name.trim()
-  const canDerive = form.columns.includes('rating') && form.columns.includes('opponent_rating')
-  const rowLimit = Math.min(matrix?.config.filters.max_rows || 1000000, 1000000)
+  const { form, inputs, catalog, matrix, working, update, estimate, schemas } = model
+  if (!form) return (
+    <section className="algorithm-panel">
+      <h2>1. Input matrix</h2>
+      <p>{working ? 'Loading matrix definitions…' : 'Save a matrix definition first.'}</p>
+      <a href="/research/matrices">Open matrices constructor</a>
+    </section>
+  )
+  const available = inputColumns(matrix, catalog)
+  const valid = form.name.trim() && form.columns.length && form.steps.length && form.outputs.length
   const toggle = (key) => update({
-    columns: form.columns.includes(key)
-      ? form.columns.filter((item) => item !== key)
-      : [...form.columns, key],
+    columns: form.columns.includes(key) ? form.columns.filter((item) => item !== key) : [...form.columns, key],
   })
-
   return (
     <form onSubmit={(event) => { event.preventDefault(); model.save() }}>
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
+        <h2>Create an algorithm</h2>
+        <p>Build your own calculation from steps and formulas. Open a saved algorithm below to make a new revision.</p>
+        <label>Open saved algorithm
+          <select value="" onChange={(event) => {
+            const definition = model.definitions.find((item) => item.id === event.target.value)
+            if (definition) model.openDefinition(definition)
+          }}>
+            <option value="">Choose saved instructions…</option>
+            {model.definitions.map((item) => <option key={item.id} value={item.id}>
+              {item.name} · revision {item.config.revision || 1}
+            </option>)}
+          </select>
+        </label>
+        <div className="algorithm-actions">
+          <button type="button" onClick={model.reset}>Create blank algorithm</button>
+          <button type="button" onClick={() => model.template('relationships')}>Feature relationships template</button>
+          <button type="button" onClick={() => model.template('duration')}>Duration by result example</button>
+        </div>
+        {form.parent_definition_id && <p className="algorithm-estimate">Editing a new revision. The original instructions and past results will not change.</p>}
+      </fieldset>
+
+      <fieldset className="algorithm-panel" disabled={Boolean(working)}>
         <h2>1. Input matrix</h2>
         <div className="algorithm-fields">
-          <label>
-            Saved instructions
-            <select value={form.matrix_definition_id} onChange={(event) => model.selectInput(event.target.value)}>
-              {inputs.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+          <label>Saved matrix instructions
+            <select value={form.matrix_definition_id || ''} onChange={(event) => model.selectInput(event.target.value)}>
+              {inputs.map((item) => <option key={item.id || 'frozen'} value={item.id || ''}>{item.name}</option>)}
             </select>
           </label>
           <div className="algorithm-actions">
-            <button type="button" onClick={() => model.setPreview(matrix)}>Preview live rows</button>
+            <button type="button" disabled={!matrix} onClick={() => model.setPreview({
+              ...matrix, id: null, storage_kind: 'definition',
+              feature_count: matrix.config.feature_columns.length, label_count: matrix.config.label_columns.length,
+            })}>Preview live rows</button>
             {model.inputMore && <button type="button" onClick={model.moreInputs}>Load more matrices</button>}
           </div>
         </div>
-        <p>
-          Source: {matrix?.row_type} · {matrix?.config.filters.modes?.join(', ') || 'all game types'} ·
-          ordered source rows, not random selection. The source recipe is frozen when you save;
-          each run reads current database values.
-        </p>
-      </fieldset>
-
-      <fieldset className="algorithm-panel" disabled={Boolean(working)}>
-        <h2>2. Calculation</h2>
-        <h3>{model.algorithmCatalog?.operations?.[0]?.name || 'Feature relationships'}</h3>
-        <p>
-          Column summaries, Pearson correlation heatmap and a scatter plot.
-          Select 2–{maxColumns} numeric columns. Category codes are excluded.
-        </p>
         <div className="algorithm-checks">
-          {numeric.map((column) => (
-            <label key={column.key}>
-              <input type="checkbox" checked={form.columns.includes(column.key)}
-                disabled={!form.columns.includes(column.key) && form.columns.length >= maxColumns}
-                onChange={() => toggle(column.key)} />
-              {column.label || column.key}
-            </label>
-          ))}
+          {available.map((column) => <label key={column.key}>
+            <input type="checkbox" checked={form.columns.includes(column.key)}
+              disabled={!form.columns.includes(column.key) && form.columns.length >= 12}
+              onChange={() => toggle(column.key)} />
+            {column.key} <small>({column.data_type})</small>
+          </label>)}
         </div>
-        {numeric.length < 2 && (
-          <p role="alert">
-            This matrix needs at least two numeric columns. Create another definition in the matrix constructor.
-          </p>
-        )}
-        <label className="algorithm-check">
-          <input type="checkbox" checked={form.rating_difference} disabled={!canDerive}
-            onChange={(event) => update({ rating_difference: event.target.checked })} />
-          Add rating_difference = opponent_rating − rating
-        </label>
-        <div className="algorithm-fields">
-          {['x', 'y'].map((axis) => (
-            <label key={axis}>
-              Scatter {axis.toUpperCase()}
-              <select value={form[axis]} onChange={(event) => update({ [axis]: event.target.value })}>
-                {axes.map((key) => <option key={key} value={key}>{key}</option>)}
-              </select>
-            </label>
-          ))}
-        </div>
+        <p>
+          Select up to 12 input columns. Text columns are valid grouping keys, not numeric measurements.
+          Source: {matrix?.config.row_type} · {matrix?.config.filters.modes?.join(', ') || 'all game types'}.
+          Inputs are read from current database values only when you run or explicitly preview.
+        </p>
       </fieldset>
 
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
-        <h2>3. Data preparation</h2>
+        <BuilderSteps form={form} schemas={schemas} update={update} />
+      </fieldset>
+      <fieldset className="algorithm-panel" disabled={Boolean(working)}>
+        <BuilderOutputs form={form} schemas={schemas} update={update} />
+      </fieldset>
+
+      <fieldset className="algorithm-panel" disabled={Boolean(working)}>
+        <h2>4. Preparation and limits</h2>
         <div className="algorithm-fields">
-          <label>
-            Missing values
+          <label>Source missing values
             <select value={form.missing} onChange={(event) => update({ missing: event.target.value })}>
-              <option value="drop_rows">Exclude incomplete rows</option>
-              <option value="column_mean">Replace with column mean</option>
+              <option value="keep">Keep N/A for explicit handling in steps</option>
+              <option value="drop_rows">Exclude incomplete source rows</option>
+              <option value="column_mean">Impute numeric column means</option>
             </select>
           </label>
-          <label>
-            Scatter scaling
-            <select value={form.scaling} onChange={(event) => update({ scaling: event.target.value })}>
-              <option value="none">Original units</option>
-              <option value="standardize">Standardize (z-score)</option>
+          <label>Invalid formula results / division by zero
+            <select value={form.invalid_values} onChange={(event) => update({ invalid_values: event.target.value })}>
+              <option value="null">Return N/A</option><option value="error">Fail with an explanation</option>
             </select>
           </label>
-          <label>
-            Maximum source rows
-            <input type="number" min="2" max={rowLimit} value={form.max_rows} required
-              onChange={(event) => update({ max_rows: Number(event.target.value) })} />
+          <label>Maximum source rows
+            <input type="number" min="1" max={Math.min(matrix?.config.filters.max_rows || 100000, 100000)}
+              required value={form.max_rows} onChange={(event) => update({ max_rows: Number(event.target.value) })} />
           </label>
-          <label>
-            Scatter sampling seed
-            <input type="number" min="0" max="4294967295" value={form.seed} required
+          <label>Scatter sampling seed
+            <input type="number" min="0" max="4294967295" required value={form.seed}
               onChange={(event) => update({ seed: Number(event.target.value) })} />
           </label>
         </div>
         <p>
-          Missing values are never silently replaced by zero. Standardization changes scatter units,
-          not Pearson correlations. Summaries retain the original units.
+          One CPU worker · 100,000 source rows · 20 steps · 6 outputs · 10,000 groups maximum.
+          Steps use the ordered source prefix, not a random selection. Rerunning after database changes can change results.
         </p>
       </fieldset>
 
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
-        <h2>4. Save instructions</h2>
-        <label>
-          Algorithm name
-          <input required maxLength="100" value={form.name}
-            onChange={(event) => update({ name: event.target.value })} />
+        <h2>5. Validate, test and save</h2>
+        <label>Algorithm name
+          <input required maxLength="100" value={form.name} onChange={(event) => update({ name: event.target.value })} />
         </label>
         <div className="algorithm-actions">
+          <button type="button" disabled={!valid} onClick={model.validate}>Validate steps</button>
           <button type="button" disabled={!valid} onClick={model.preflight}>Check scope</button>
-          <button type="submit" disabled={!valid}>Save algorithm</button>
+          <button type="button" disabled={!valid} onClick={model.sample}>Test on up to 500 rows</button>
+          <button type="submit" disabled={!valid}>{form.parent_definition_id ? 'Save new revision' : 'Save algorithm'}</button>
         </div>
+        {model.validation && <p className="algorithm-estimate" role="status">Valid: formulas, column types, dependencies and output definitions checked. No data was extracted.</p>}
+        {estimate && <div className="algorithm-estimate" role="status">
+          {estimate.estimate.selected_rows_is_lower_bound ? 'At least ' : ''}
+          {number(estimate.estimate.selected_rows)} selected rows · input memory estimate{' '}
+          {bytes(estimate.resources.working_input_bytes_estimate)} · intermediate allowance 256 MiB ·{' '}
+          {estimate.resources.safe_to_run ? 'disk reserve protected' : 'insufficient free space'}.
+        </div>}
         <p>
-          CPU reference · one run at a time · up to 1 million rows · temporary arrays removed after
-          each run. CUDA and TensorFlow execution are not enabled in this version.
+          Saving stores instructions only. Test explicitly queues a small run and shows intermediate previews.
+          For the full calculation, press Run on the saved algorithm. Working inputs are discarded;
+          compact results and instructions enter your next manual database backup.
         </p>
-        {estimate && (
-          <div role="status" className="algorithm-estimate">
-            {estimate.estimate.selected_rows_is_lower_bound ? 'At least ' : ''}
-            {number(estimate.estimate.selected_rows)} selected rows · temporary allowance{' '}
-            {bytes(estimate.resources.temporary_bytes_upper_estimate)} ·{' '}
-            {estimate.resources.safe_to_run ? 'disk reserve protected' : 'insufficient free space'}.
-            No matrix has been created.
-          </div>
-        )}
       </fieldset>
     </form>
   )

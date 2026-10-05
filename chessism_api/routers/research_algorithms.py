@@ -38,13 +38,39 @@ class AlgorithmRequest(BaseModel):
     seed: int = Field(42, ge=0, le=2 ** 32 - 1)
 
 
+class BuilderRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    operation: Literal['pipeline']
+    matrix_definition_id: uuid.UUID | None = None
+    parent_definition_id: uuid.UUID | None = None
+    columns: list[str] = Field(min_length=1, max_length=12)
+    steps: list[dict] = Field(min_length=1, max_length=20)
+    outputs: list[dict] = Field(min_length=1, max_length=6)
+    missing: Literal['keep', 'drop_rows', 'column_mean'] = 'keep'
+    invalid_values: Literal['null', 'error'] = 'null'
+    max_rows: int = Field(100000, ge=1, le=100000)
+    seed: int = Field(42, ge=0, le=2**32 - 1)
+
+
 async def request_config(request, session):
-    matrix = await session.get(MatrixDefinition, str(request.matrix_definition_id))
-    if matrix is None:
-        raise HTTPException(404, "Matrix definition not found. Refresh the input list.")
+    parent_id = getattr(request, 'parent_definition_id', None)
+    parent = await session.get(AlgorithmDefinition, str(parent_id)) if parent_id else None
+    if parent_id and parent is None:
+        raise HTTPException(404, 'Parent algorithm not found. Start a new definition instead.')
+    if parent and (request.matrix_definition_id is None or str(request.matrix_definition_id) == parent.matrix_definition_id):
+        recipe = parent.config['matrix']
+    else:
+        matrix = await session.get(MatrixDefinition, str(request.matrix_definition_id))
+        if matrix is None:
+            raise HTTPException(404, "Matrix definition not found. Refresh the input list.")
+        recipe = matrix.config
     try:
-        return normalize_algorithm(request.model_dump(mode="json"), matrix.config)
-    except ValueError as error:
+        config = normalize_algorithm(request.model_dump(mode="json"), recipe)
+        if request.operation == 'pipeline':
+            config['revision'] = int(parent.config.get('revision', 1)) + 1 if parent else 1
+            config['parent_definition_id'] = str(parent_id) if parent else None
+        return config
+    except (ValueError, TypeError, KeyError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error
 
 
@@ -54,7 +80,7 @@ async def catalog():
 
 
 @router.post("/preflight")
-async def preflight(request: AlgorithmRequest):
+async def preflight(request: AlgorithmRequest | BuilderRequest):
     async with AsyncDBSession() as session:
         config = await request_config(request, session)
     # A bounded count is advisory, never an assertion of an exact total.
@@ -65,7 +91,14 @@ async def preflight(request: AlgorithmRequest):
         if getattr(error.orig, "sqlstate", None) == "57014":
             raise HTTPException(504, "Counting took too long. Narrow the matrix scope; saving does not require a count.") from error
         raise
-    return {"estimate": estimate, "resources": capacity(config), "backend": "numpy_cpu", "materialized": False}
+    return {"estimate": estimate, "resources": capacity(config), "schemas": config.get('schemas'), "backend": "numpy_cpu", "materialized": False}
+
+
+@router.post('/validate')
+async def validate(request: BuilderRequest):
+    async with AsyncDBSession() as session:
+        config = await request_config(request, session)
+    return {'valid': True, 'schemas': config['schemas'], 'resources': capacity(config), 'materialized': False}
 
 
 @router.get("/definitions")
@@ -76,12 +109,13 @@ async def definitions(limit: int = Query(100, ge=1, le=100), offset: int = Query
 
 
 @router.post("/definitions", status_code=201)
-async def save_definition(request: AlgorithmRequest, account: Account = Depends(get_current_account)):
+async def save_definition(request: AlgorithmRequest | BuilderRequest, account: Account = Depends(get_current_account)):
     try:
         async with matrix_catalog_lock(wait=False) as session:
             config = await request_config(request, session)
-            row = AlgorithmDefinition(id=str(uuid.uuid4()), name=request.name.strip() or "Feature relationships",
-                                      matrix_definition_id=str(request.matrix_definition_id), config=config, created_by=account.id)
+            matrix_id = str(request.matrix_definition_id) if request.matrix_definition_id else None
+            row = AlgorithmDefinition(id=str(uuid.uuid4()), name=request.name.strip() or "Custom algorithm",
+                                      matrix_definition_id=matrix_id, config=config, created_by=account.id)
             session.add(row)
             await session.flush()
             return definition_payload(row)
@@ -103,17 +137,34 @@ async def delete_definition(definition_id: uuid.UUID):
 
 @router.post("/definitions/{definition_id}/runs", status_code=202)
 async def start_run(definition_id: uuid.UUID, account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    return await enqueue_run(definition_id, account, redis)
+
+
+@router.post('/sample', status_code=202)
+async def test_sample(request: BuilderRequest, account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    async with AsyncDBSession() as session:
+        config = await request_config(request, session)
+    config['max_rows'] = min(config['max_rows'], 500)
+    config['sample_run'] = True
+    return await enqueue_run(None, account, redis, draft=(request.name.strip()[:85] + ' · sample', config))
+
+
+async def enqueue_run(definition_id, account, redis, *, draft=None):
     run_id = str(uuid.uuid4())
     async with AsyncDBSession() as session, session.begin():
         await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": QUEUE_LOCK})
         if await session.scalar(select(func.count()).select_from(AlgorithmRun).where(AlgorithmRun.status.in_(ACTIVE))) >= 5:
             raise HTTPException(409, "The algorithm queue already has five active requests. Wait or cancel one.")
-        definition = await session.get(AlgorithmDefinition, str(definition_id), with_for_update=True)
-        if definition is None:
-            raise HTTPException(404, "Algorithm definition not found.")
-        if not capacity(definition.config)["safe_to_run"]:
+        if draft:
+            name, config = draft
+        else:
+            definition = await session.get(AlgorithmDefinition, str(definition_id), with_for_update=True)
+            if definition is None:
+                raise HTTPException(404, "Algorithm definition not found.")
+            name, config = definition.name, definition.config
+        if not capacity(config)["safe_to_run"]:
             raise HTTPException(409, "Not enough local disk space above the protected reserve.")
-        row = AlgorithmRun(id=run_id, definition_id=definition.id, name=definition.name, config=deepcopy(definition.config),
+        row = AlgorithmRun(id=run_id, definition_id=str(definition_id) if definition_id else None, name=name, config=deepcopy(config),
                            created_by=account.id, status="queued", progress={"phase": "queued", "detail": "Waiting for the dedicated algorithm worker."})
         session.add(row)
     try:
