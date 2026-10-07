@@ -1,0 +1,20 @@
+.cloud-analysis { grid-column: 1 / -1; padding: 1.25rem; border: 1px solid #35525a; border-radius: 12px; }
+.cloud-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.cloud-selection, .cloud-job { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; background: #142322; border-radius: 8px; }
+.cloud-selection label { display: flex; flex-direction: column; gap: .4rem; }
+.cloud-selection fieldset { display: flex; flex-direction: column; flex: 1; gap: .75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.cloud-selection fieldset:disabled { opacity: .55; }
+.cloud-selection fieldset:disabled button { cursor: not-allowed; }
+.cloud-busy-notice { padding: .75rem; border-left: 3px solid #9c7ab4; background: #1b2c2b; }
+.cloud-fen-progress { display: flex; flex-direction: column; gap: .5rem; }
+.cloud-fen-count { display: flex; justify-content: space-between; gap: .5rem; }
+.cloud-fen-progress progress { appearance: none; width: 100%; height: 16px; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: #9c7ab4; }
+.cloud-fen-progress progress::-webkit-progress-bar { background: #283a3c; }
+.cloud-fen-progress progress::-webkit-progress-value { background: #9c7ab4; }
+.cloud-fen-progress progress::-moz-progress-bar { background: #9c7ab4; }
+.cloud-selection .btn { margin-top: auto; }
+.cloud-job { margin-top: 1rem; }
+.cloud-job progress { width: 100%; }
+.cloud-job small { overflow-wrap: anywhere; }
+.cloud-analysis small { color: #a9b9bd; }
+@media (max-width: 800px) { .cloud-analysis-grid { grid-template-columns: 1fr; } }

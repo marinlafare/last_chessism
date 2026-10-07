@@ -4,12 +4,52 @@ from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger,
     DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
-    SmallInteger, text, ForeignKeyConstraint
+    SmallInteger, text, ForeignKeyConstraint, Text
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
 
 Base = declarative_base()
+
+
+class CloudAnalysisJob(Base):
+    __tablename__ = "cloud_analysis_job"
+    id = Column(String(32), primary_key=True)
+    status = Column(String(32), nullable=False, default="queued", index=True)
+    selection = Column(JSON, nullable=False)
+    target = Column(Integer, nullable=False)
+    imported = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    error = Column(Text)
+
+
+class CloudAnalysisRun(Base):
+    __tablename__ = "cloud_analysis_run"
+    id = Column(String(32), primary_key=True)
+    job_id = Column(String(32), ForeignKey("cloud_analysis_job.id"), nullable=False, index=True)
+    status = Column(String(32), nullable=False, default="preparing")
+    positions = Column(JSON, nullable=False)
+    # Immutable launch parameters and attempt names survive controller restarts.
+    launch = Column(JSON, nullable=False, default=dict)
+    receipts = Column(JSON, nullable=False, default=dict)
+    contract = Column(JSON)
+    cloud_state = Column(String(32))
+    cleanup_plan = Column(JSON)
+    error = Column(Text)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CloudFenClaim(Base):
+    __tablename__ = "cloud_fen_claim"
+    fen = Column(String, ForeignKey("fen.fen"), primary_key=True)
+    run_id = Column(String(32), ForeignKey("cloud_analysis_run.id"), nullable=False, index=True)
+
+
+class CloudControllerHeartbeat(Base):
+    __tablename__ = "cloud_controller_heartbeat"
+    id = Column(Integer, primary_key=True)
+    seen_at = Column(DateTime(timezone=True), nullable=False)
 
 
 class AccountRole(str, enum.Enum):

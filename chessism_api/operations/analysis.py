@@ -26,6 +26,8 @@ from chessism_api.database.ask_db import (
     refresh_scored_rating_summary
 )
 from chessism_api.operations.analysis_times import record_analysis_times
+from chessism_api.operations.fen_results import stage_fen_results
+from chessism_api.operations.analysis_scheduling import balanced_analysis_batch_size
 from chessism_api.operations.tablebase import analyze_tablebase_positions
 # ---
 
@@ -38,6 +40,7 @@ fen_interface = DBInterface(Fen)
 # Concurrency for analysis batches (number of parallel workers per job)
 ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "4")))
 MAX_ANALYSIS_BATCH_SIZE = 500
+MAX_GLOBAL_ANALYSIS_BATCH_SIZE = 1000
 MAX_LOOP_ANALYSIS_BATCH_SIZE = 1000
 PROGRESS_TTL_SECONDS = 60 * 60 * 24
 
@@ -335,9 +338,17 @@ async def _run_analysis_job(
     """Run the shared transactional Stockfish analysis loop."""
     arq_job_id = str(ctx.get("job_id") or fallback_arq_job_id)
     engine_url = ENGINE_URL
+    worker_count = ANALYSIS_CONCURRENCY
+    dispatch_batch_size = balanced_analysis_batch_size(
+        total_fens_to_process,
+        batch_size,
+        concurrency=worker_count,
+        service_limit=max_batch_size,
+    )
     
     print(f"--- [START JOB {job_id}] ---", flush=True)
     print(f"Targeting {total_fens_to_process} FENs, Batch Size: {batch_size}, Nodes: {nodes_limit}", flush=True)
+    print(f"[{job_id}] Balanced engine batch: up to {dispatch_batch_size} FENs per request", flush=True)
     print(f"[{job_id}] Routing to: {engine_url}", flush=True) # <-- Test log
 
     total_processed = 0
@@ -372,7 +383,7 @@ async def _run_analysis_job(
                     # Keep legacy or manually queued payloads compatible with the
                     # Stockfish service request limit.
                     current_batch_size = min(
-                        batch_size,
+                        dispatch_batch_size,
                         remaining,
                         max_batch_size,
                     )
@@ -447,13 +458,7 @@ async def _run_analysis_job(
                         continue
 
                     # 4. Save results (using the same session)
-                    await fen_interface.update_fen_analysis_data(session, db_ready_data)
-                    fen_list = [item["fen"] for item in db_ready_data]
-                    await session.execute(
-                        delete(FenContinuation).where(FenContinuation.fen_fen.in_(fen_list))
-                    )
-                    if continuation_rows:
-                        await session.execute(insert(FenContinuation.__table__), continuation_rows)
+                    await stage_fen_results(session, db_ready_data, continuation_rows, interface=fen_interface)
 
                     # 5. Commit the transaction
                     # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
@@ -512,7 +517,6 @@ async def _run_analysis_job(
                     if session:
                         await session.close()
 
-    worker_count = ANALYSIS_CONCURRENCY
     print(f"[{job_id}] Concurrency: {worker_count}", flush=True)
     worker_tasks = [
         asyncio.create_task(_worker(i + 1))
@@ -570,6 +574,7 @@ async def run_analysis_job(
         job_id="ANALYSIS",
         fallback_arq_job_id="analysis",
         no_more_message="No more FENs found to analyze. Stopping job.",
+        max_batch_size=MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
     )
 
 

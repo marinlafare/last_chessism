@@ -1,0 +1,10 @@
+**
+!Dockerfile
+!requirements.txt
+!stockfish_batch/
+!stockfish_batch/*.py
+!benchmark_fen_batches/
+!benchmark_fen_batches/__init__.py
+!benchmark_fen_batches/benchmark.py
+!scripts/
+!scripts/fetch_engine.py

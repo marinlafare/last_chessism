@@ -3064,7 +3064,7 @@ async def get_scored_positions_page(
     }
 
 
-async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = None) -> Dict[str, int]:
+async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = None, *, strict: bool = False) -> Dict[str, int]:
     """
     Rebuilds per-game scored-position coverage. When game_links are provided,
     only those games are refreshed.
@@ -3175,6 +3175,8 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
         await refresh_game_player_engine_summaries(clean_links or None)
     except Exception as error:
         print(f"Failed to refresh player engine summaries: {error!r}")
+        if strict:
+            raise
 
     return {
         "games": len(rows),
@@ -3422,7 +3424,7 @@ async def get_scored_game_analysis_page(
     }
 
 
-async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
+async def get_fens_for_analysis(limit: int, *, raise_errors: bool = False) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of FENs that need analysis.
     Starts a new transaction and applies a row-level lock.
@@ -3434,13 +3436,15 @@ async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Opt
         stmt = (
             select(Fen.fen)
             .where(Fen.score.is_(None))
+            .where(text("NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = fen.fen)"))
             .order_by(Fen.n_games.desc())
             .limit(limit)
             .with_for_update(skip_locked=True) 
         )
         
         result = await session.execute(stmt)
-        fens = result.scalars().all()
+        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        fens = await unclaimed_locked_fens(session, result.scalars().all())
         
         if not fens:
             await session.rollback()
@@ -3453,6 +3457,8 @@ async def get_fens_for_analysis(limit: int) -> Tuple[Optional[AsyncSession], Opt
         print(f"Error in get_fens_for_analysis: {repr(e)}", flush=True)
         await session.rollback()
         await session.close()
+        if raise_errors:
+            raise
         return None, None
 
 
@@ -3468,6 +3474,7 @@ def _player_fens_for_analysis_stmt(player_name: str, limit: int):
         select(Fen.fen)
         .where(Fen.score.is_(None))
         .where(player_has_fen)
+        .where(text("NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = fen.fen)"))
         .order_by(Fen.n_games.desc())
         .limit(limit)
         .with_for_update(skip_locked=True, of=Fen)
@@ -3476,7 +3483,8 @@ def _player_fens_for_analysis_stmt(player_name: str, limit: int):
 
 async def get_player_fens_for_analysis(
     player_name: str,
-    limit: int
+    limit: int,
+    *, raise_errors: bool = False,
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of DISTINCT FENs for a specific player.
@@ -3493,7 +3501,8 @@ async def get_player_fens_for_analysis(
         stmt = _player_fens_for_analysis_stmt(player_name, limit)
         
         result = await session.execute(stmt)
-        fens = result.scalars().all()
+        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        fens = await unclaimed_locked_fens(session, result.scalars().all())
         
         if not fens:
             await session.rollback()
@@ -3506,6 +3515,8 @@ async def get_player_fens_for_analysis(
         print(f"Error in get_player_fens_for_analysis: {repr(e)}", flush=True)
         await session.rollback()
         await session.close()
+        if raise_errors:
+            raise
         return None, None
 
 
@@ -3771,6 +3782,7 @@ async def get_game_set_analysis_completion(game_links: List[int]) -> Dict[str, i
 async def get_game_set_fens_for_analysis(
     game_links: List[int],
     limit: int,
+    *, raise_errors: bool = False,
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """Lease missing FENs for a frozen, ordered set of games."""
     clean_links = [int(link) for link in game_links if link is not None]
@@ -3802,6 +3814,7 @@ async def get_game_set_fens_for_analysis(
             FROM candidate_fens candidate
             JOIN fen f ON f.fen = candidate.fen_fen
             WHERE f.score IS NULL
+              AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
             ORDER BY candidate.game_priority, candidate.move_priority, f.fen
             LIMIT :limit
             FOR UPDATE OF f SKIP LOCKED;
@@ -3809,7 +3822,8 @@ async def get_game_set_fens_for_analysis(
             "game_links": clean_links,
             "limit": max(1, int(limit)),
         })
-        fens = list(result.scalars().all())
+        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        fens = await unclaimed_locked_fens(session, list(result.scalars().all()))
         if not fens:
             await session.rollback()
             await session.close()
@@ -3819,6 +3833,8 @@ async def get_game_set_fens_for_analysis(
         print(f"Error in get_game_set_fens_for_analysis: {repr(error)}", flush=True)
         await session.rollback()
         await session.close()
+        if raise_errors:
+            raise
         return None, None
 
 async def get_player_fen_score_counts(player_name: str) -> Dict[str, Any]:

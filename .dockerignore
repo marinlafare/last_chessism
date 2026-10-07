@@ -15,6 +15,7 @@ dev_tools/
 
 .env
 .venv/
+.venv-cloud/
 venv/
 env/
 *.log

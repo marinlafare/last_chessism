@@ -11,9 +11,11 @@ from arq.connections import ArqRedis
 import math
 
 from chessism_api.redis_client import get_redis_pool
+from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES
 from chessism_api.operations.analysis import (
     ENGINE_URL,
     MAX_ANALYSIS_BATCH_SIZE,
+    MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
     MAX_LOOP_ANALYSIS_BATCH_SIZE,
     timing_rows_from_engine_results,
 )
@@ -40,13 +42,14 @@ class AnalysisJobRequest(BaseModel):
     batch_size: int = Field(
         MAX_ANALYSIS_BATCH_SIZE,
         ge=1,
-        le=MAX_ANALYSIS_BATCH_SIZE,
+        le=MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
     )
-    nodes_limit: int = Field(1_000_000, ge=1)
+    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
 
 
 class PlayerAnalysisJobRequest(AnalysisJobRequest):
     total_fens_to_process: int = Field(100_000, ge=1)
+    batch_size: int = Field(MAX_ANALYSIS_BATCH_SIZE, ge=1, le=MAX_ANALYSIS_BATCH_SIZE)
     player_name: str = Field(..., min_length=1)
 
 
@@ -57,12 +60,12 @@ class AnalysisLoopJobRequest(BaseModel):
     runs: int = Field(4, ge=1, le=100)
     batches: int = Field(500, ge=1, le=MAX_LOOP_ANALYSIS_BATCH_SIZE)
     cool_off: int = Field(300, ge=0, le=3_600)
-    nodes_limit: int = Field(1_000_000, ge=1)
+    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
 
 
 class FenAnalysisRequest(BaseModel):
     fens: list[str] = Field(..., min_length=1, max_length=20)
-    nodes_limit: int = Field(1_000_000, ge=1, le=100_000_000)
+    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1, le=100_000_000)
     multipv: int = Field(4, ge=1, le=10)
 
 
@@ -88,7 +91,7 @@ class PlayerGameAnalysisConfirmRequest(BaseModel):
     plan_id: str = Field(..., min_length=1)
     batch_size: int = Field(500, ge=1, le=MAX_LOOP_ANALYSIS_BATCH_SIZE)
     cool_off: int = Field(120, ge=0, le=3_600)
-    nodes_limit: int = Field(1_000_000, ge=1)
+    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
 
 
 def _analysis_timeout(total_fens: int) -> int:
@@ -195,7 +198,7 @@ async def api_run_analysis_job(
     {
         "total_fens_to_process": 100000,
         "batch_size": 100,
-        "nodes_limit": 1000000
+        "nodes_limit": 100000
     }
     """
     total_fens = data.total_fens_to_process
@@ -237,7 +240,7 @@ async def api_run_player_analysis_job(
         "player_name": "hikaru",
         "total_fens_to_process": 1000,
         "batch_size": 50,
-        "nodes_limit": 1000000
+        "nodes_limit": 100000
     }
     """
     player_name = data.player_name.lower()

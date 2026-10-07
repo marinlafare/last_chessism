@@ -1,0 +1,29 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Cloud analysis isolated UI test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import CloudAnalysisSection from '/src/pages/positions/CloudAnalysisSection.jsx'
+import '/src/index.css'
+
+const job = { id: 'cloud-test', status: 'running', target: 2082, imported: 500,
+  selection: { mode: 'games', player_name: 'magnuscarlsen' }, error: null,
+  runs: [{ id: 'run-test', status: 'running', cloud_state: 'RUNNING', batch_jobs: ['batch-test'] }] }
+const state = window.cloudTest = { job, online: true, requests: [] }
+window.fetch = async (input, options = {}) => {
+  const url = new URL(input, location.href), method = options.method || 'GET'
+  state.requests.push({ path: url.pathname, method })
+  const reply = (value, status=200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
+  if (url.pathname.endsWith('/analysis/cloud')) {
+    if (method === 'POST') {
+      Object.assign(job, { id: 'next-job', status: 'queued', imported: 0, target: 1000, runs: [], selection: { mode: 'all' } })
+      return reply({ id: job.id, status: job.status }, 202)
+    }
+    return reply({ controller_online: state.online, cloud_busy: job.status !== 'complete',
+      blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job] })
+  }
+  if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }
+  throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
+}
+createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection))
+</script></body></html>

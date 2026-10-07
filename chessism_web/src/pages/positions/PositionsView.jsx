@@ -3,13 +3,16 @@ import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
 import { EstimatedTime, JobStatus } from './JobStatus'
 import FenPipelineStages from './FenPipelineStages'
+import CloudAnalysisSection from './CloudAnalysisSection'
 import {
   MAX_ANALYSIS_BATCH_SIZE,
+  MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
   MAX_LOOP_ANALYSIS_BATCH_SIZE,
   clampAnalysisBatchInput,
   formatDuration,
   formatNumber,
   formatTruncatedMillions,
+  getAnalysisButtonLabel,
   getPlayerGameSelectionLabel,
   isTrackedJobActive,
 } from './positionPageSupport'
@@ -124,18 +127,18 @@ export default function PositionsView({ page }) {
                     className="text-input number-input-clean"
                     type="number"
                     min="1"
-                    max={MAX_ANALYSIS_BATCH_SIZE}
+                    max={MAX_GLOBAL_ANALYSIS_BATCH_SIZE}
                     value={globalJob.batchSize}
                     onWheel={(event) => event.currentTarget.blur()}
                     onChange={(event) => setGlobalJob((current) => ({
                       ...current,
-                      batchSize: clampAnalysisBatchInput(event.target.value)
+                      batchSize: clampAnalysisBatchInput(event.target.value, MAX_GLOBAL_ANALYSIS_BATCH_SIZE)
                     }))}
                   />
                 </label>
               </div>
               <button className="btn btn-primary" type="submit" disabled={jobState.global?.loading || isTrackedJobActive(jobState.global)}>
-                {jobState.global?.loading ? 'Queueing' : isTrackedJobActive(jobState.global) ? 'Analyzing' : 'Analyze'}
+                {getAnalysisButtonLabel(jobState.global)}
               </button>
               <JobStatus jobKey="global" page={page} />
             </form>
@@ -213,7 +216,7 @@ export default function PositionsView({ page }) {
                 </label>
               </div>
               <button className="btn btn-primary" type="submit" disabled={jobState.player?.loading || isTrackedJobActive(jobState.player)}>
-                {jobState.player?.loading ? 'Queueing' : isTrackedJobActive(jobState.player) ? 'Analyzing' : 'Analyze'}
+                {getAnalysisButtonLabel(jobState.player)}
               </button>
               <JobStatus jobKey="player" page={page} />
             </form>
@@ -687,6 +690,7 @@ export default function PositionsView({ page }) {
                 ))}
               </div>
             </section>
+            <CloudAnalysisSection onProgress={page.refreshCloudProgress} />
           </div>
         </main>
         <Footer />

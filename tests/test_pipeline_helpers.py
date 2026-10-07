@@ -1436,11 +1436,12 @@ class FenIngestionSummaryTests(unittest.TestCase):
 
 class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
     def test_analysis_job_batch_is_capped_at_stockfish_service_limit(self):
-        request = AnalysisJobRequest(batch_size=analysis.MAX_ANALYSIS_BATCH_SIZE)
+        request = AnalysisJobRequest(batch_size=analysis.MAX_GLOBAL_ANALYSIS_BATCH_SIZE)
 
-        self.assertEqual(request.batch_size, 500)
+        self.assertEqual(request.batch_size, 1000)
+        self.assertEqual(AnalysisJobRequest().batch_size, 500)
         with self.assertRaises(ValueError):
-            AnalysisJobRequest(batch_size=501)
+            AnalysisJobRequest(batch_size=1001)
 
     def test_analysis_loop_accepts_1000_batch_maximum(self):
         request = AnalysisLoopJobRequest(
@@ -1730,6 +1731,7 @@ class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
             ]
 
         with (
+            patch.object(analysis, "ANALYSIS_CONCURRENCY", 1),
             patch.object(analysis, "_call_engine_service", side_effect=call_engine),
             patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
             patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),

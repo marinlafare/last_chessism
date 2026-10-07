@@ -17,3 +17,8 @@ export const queuePlayerAnalysis = (payload) => postJson('/analysis/run_player_j
 export const queueAnalysisLoop = (payload) => postJson('/analysis/run_loop_job', payload)
 export const queuePlayerGameAnalysis = (payload) => postJson('/analysis/player_games/run_job', payload)
 export const deleteQueuedAnalysisJob = (jobId) => deleteJson(`/jobs/${encodeURIComponent(jobId)}/queued`)
+export const fetchCloudAnalysis = () => getJson('/analysis/cloud')
+export const createCloudAnalysis = (payload) => postJson('/analysis/cloud', payload)
+export const resumeCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/resume`, {})
+export const retryCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/retry-cloud`, {})
+export const cancelCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/cancel`, {})

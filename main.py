@@ -12,6 +12,7 @@ import constants
 # --- MODIFIED: Import the fens and new analysis router ---
 from chessism_api.routers import auth, players, games, fens, analysis, jobs, analysis_times, backups, research
 from chessism_api.auth import require_superuser
+from chessism_api.routers import cloud_analysis
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
@@ -198,6 +199,7 @@ app.include_router(fens.router, prefix="/fens", tags=["FENs"], dependencies=[Dep
 
 # --- NEW: Include the Analysis router ---
 app.include_router(analysis.router, prefix="/analysis", tags=["Analysis"], dependencies=[Depends(require_superuser)])
+app.include_router(cloud_analysis.router, prefix="/analysis/cloud", tags=["Cloud analysis"], dependencies=[Depends(require_superuser)])
 
 app.include_router(jobs.router, prefix="/jobs", tags=["Jobs"], dependencies=[Depends(require_superuser)])
 

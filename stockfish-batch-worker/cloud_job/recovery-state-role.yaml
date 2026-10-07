@@ -1,0 +1,6 @@
+title: Chessism Recovery State Writer
+description: Create and replace recovery owner/state JSON only; bind with the documented bucket condition.
+stage: GA
+includedPermissions:
+  - storage.objects.create
+  - storage.objects.delete

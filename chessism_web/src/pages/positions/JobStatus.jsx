@@ -1,6 +1,7 @@
 import {
   formatCountdown,
   formatNumber,
+  getAnalysisJobProgress,
   getLoopScopeLabel,
   getProgressSnapshot,
   getTrackedJobPhase,
@@ -9,7 +10,7 @@ import {
 } from './positionPageSupport'
 
 export function EstimatedTime({ jobId, progress, status, etaClockMs, etaEstimatesRef }) {
-  const phase = String(progress?.phase || status || '').toLowerCase()
+  const phase = getTrackedJobPhase({ status: { status, progress } })
   if (
     !jobId || phase === 'queued' || phase === 'deferred' || phase === 'complete' ||
     phase === 'failed' || phase === 'not_found'
@@ -102,7 +103,12 @@ export function JobStatus({ jobKey, page }) {
         <JobProgress mode="fen" state={state} status={status} {...page} />
       ) : null}
       {(isAnalysisJobKey(jobKey) || jobKey === 'tablebase') && state.progress ? (
-        <JobProgress mode="analysis" state={state} status={status} {...page} />
+        <JobProgress
+          mode="analysis"
+          state={isAnalysisJobKey(jobKey) ? { ...state, progress: getAnalysisJobProgress(state) } : state}
+          status={status}
+          {...page}
+        />
       ) : null}
     </div>
   )

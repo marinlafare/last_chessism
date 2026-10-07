@@ -1,7 +1,8 @@
-import { formatNumber } from '../../utils/formatters'
+import { formatNumber } from '../../utils/formatters.js'
 
-const DEFAULT_ANALYSIS_NODES = 1_000_000
+const DEFAULT_ANALYSIS_NODES = 100_000
 const MAX_ANALYSIS_BATCH_SIZE = 500
+const MAX_GLOBAL_ANALYSIS_BATCH_SIZE = 1000
 const MAX_LOOP_ANALYSIS_BATCH_SIZE = 1000
 const POSITION_JOBS_STORAGE_KEY = 'chessism:positions:jobs'
 const COMPLETED_JOB_VISIBLE_MS = 5000
@@ -79,7 +80,41 @@ const pageHasAttention = () => {
 }
 
 const getTrackedJobPhase = (state) => {
-  return state?.status?.progress?.phase || state?.progress?.phase || state?.status?.status || 'queued'
+  const queueStatus = state?.status?.status
+  if (queueStatus === 'queued' || queueStatus === 'deferred') return queueStatus
+  return state?.status?.progress?.phase || queueStatus || state?.progress?.phase || 'queued'
+}
+
+const getAnalysisButtonLabel = (state) => {
+  if (state?.loading) return 'Queueing'
+  if (!isTrackedJobActive(state)) return 'Analyze'
+  const phase = getTrackedJobPhase(state)
+  if (phase === 'queued' || phase === 'deferred') return 'Queued'
+  return phase === 'cooling' ? 'Cooling off' : 'Analyzing'
+}
+
+const getAnalysisJobProgress = (state) => {
+  // Only server progress for this job counts. Cached UI totals and database-wide
+  // scored counts may include another job's work, including while this job waits.
+  const status = state?.status || {}
+  const progress = status.progress || {}
+  const kwargs = status.info?.kwargs || {}
+  const phase = getTrackedJobPhase(state)
+  const isQueued = phase === 'queued' || phase === 'deferred'
+  const target = Math.max(0, Number(
+    progress.total ?? kwargs.total_fens_to_process ?? kwargs.planned_fens ??
+    (kwargs.positions_per_run ? kwargs.positions_per_run * (kwargs.runs || 1) : null) ??
+    state?.targetFens ?? state?.targetPlayerFens ?? state?.progress?.target ?? 0
+  ) || 0)
+  const analyzed = isQueued ? 0 : Math.min(target, Math.max(0, Number(progress.processed) || 0))
+  return {
+    analyzed,
+    failed: isQueued ? 0 : Math.max(0, Number(progress.failed) || 0),
+    target,
+    percent: target > 0 ? Math.min(100, Math.round(analyzed / target * 100)) : 0,
+    phase,
+    detail: isQueued ? 'Waiting to start.' : progress.detail,
+  }
 }
 
 const getPositionJobKey = (job) => {
@@ -142,11 +177,11 @@ const getAnalysisProcessView = (job) => {
   const total = Math.max(0, Number(
     progress.total || (isGameCompletion ? kwargs.planned_fens : positionsPerRun * runs)
   ))
-  const processed = Math.min(total, Math.max(0, Number(progress.processed || 0)))
-  const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0
   const queueStatus = String(job?.status || 'queued')
   const progressPhase = String(progress.phase || '')
   const isQueued = queueStatus === 'queued' || queueStatus === 'deferred'
+  const processed = isQueued ? 0 : Math.min(total, Math.max(0, Number(progress.processed || 0)))
+  const percent = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0
   const phase = isQueued
     ? 'queued'
     : progressPhase === 'cooling'
@@ -155,6 +190,7 @@ const getAnalysisProcessView = (job) => {
 
   return {
     ...job,
+    progress: isQueued ? { ...progress, processed: 0, phase: 'queued', detail: 'Waiting to start.' } : job.progress,
     batchSize: Number(kwargs.batches || kwargs.batch_size || 0),
     coolOff: Number(kwargs.cool_off || 0),
     isQueued,
@@ -200,6 +236,7 @@ export {
   DEFAULT_ANALYSIS_NODES,
   ETA_RATE_SMOOTHING,
   MAX_ANALYSIS_BATCH_SIZE,
+  MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
   MAX_LOOP_ANALYSIS_BATCH_SIZE,
   POSITION_JOBS_STORAGE_KEY,
   clampAnalysisBatchInput,
@@ -207,6 +244,8 @@ export {
   formatDuration,
   formatNumber,
   formatTruncatedMillions,
+  getAnalysisButtonLabel,
+  getAnalysisJobProgress,
   getAnalysisProcessView,
   getLoopScopeLabel,
   getPlayerGameSelectionLabel,

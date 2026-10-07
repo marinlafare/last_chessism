@@ -62,6 +62,81 @@ services:
       chessism-api:
         condition: service_started
 
+  # Build/check the cloud execution image, then exit. Never runs local analysis.
+  cloud-worker-image:
+    build: ./stockfish-batch-worker
+    image: chessism-stockfish-batch:fen-compat-v1
+    platform: linux/amd64
+    entrypoint: ["python", "-c"]
+    command: ["import stockfish_batch; print('Cloud worker image ready: ' + stockfish_batch.__version__)"]
+    restart: "no"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.25"
+    mem_limit: 128m
+    pids_limit: 32
+
+  cloud-controller:
+    build:
+      context: .
+      dockerfile: stockfish-batch-worker/cloud_job/Dockerfile
+    image: chessism-cloud-controller:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    read_only: true
+    # Bootstrap drops UID/GID; Docker's root init needs KILL to forward SIGTERM.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    # Large single-VM selections can carry up to 200,000 manifest references.
+    mem_limit: 2g
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CLOUD_WORKER_IMAGE: chessism-stockfish-batch:fen-compat-v1
+      CLOUD_CLEANUP_DIRECTORY: /tmp/chessism-cloud-cleanup
+    volumes:
+      # Read-only mount still permits Docker API operations: trusted controller only.
+      - type: bind
+        source: ${CLOUD_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLOUD_GCLOUD_CONFIG_DIR:-${HOME}/.config/gcloud}
+        target: /host-gcloud
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
+      chessism-api:
+        condition: service_started
+      cloud-worker-image:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "cloud_job.run_compose", "--check-health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 5m
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
+        max-file: "2"
+
   stockfish-service:
     build: ./stockfish-service
     image: stockfish-service:latest
@@ -148,6 +223,38 @@ services:
         condition: service_healthy
       stockfish-service:
         condition: service_started
+
+  # Read-only host telemetry; automatically records active Stockfish jobs.
+  analysis-telemetry:
+    build: .
+    image: chessism-api:latest
+    command: python -m analysis_telemetry.watcher --output-root /recordings --interval 15
+    restart: unless-stopped
+    user: "${ANALYSIS_TELEMETRY_UID:-1000}:${ANALYSIS_TELEMETRY_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.10"
+    mem_limit: 128m
+    pids_limit: 32
+    environment:
+      - REDIS_HOST=redis
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./dev_tools/analysis_telemetry:/app/analysis_telemetry:ro
+      - ./research_data/analysis_telemetry:/recordings
+      - /sys/devices/system/cpu:/host-cpu:ro
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
 
   worker-games:
     build: .

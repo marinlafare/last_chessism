@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   COMPLETED_JOB_FADE_MS, COMPLETED_JOB_VISIBLE_MS, DEFAULT_ANALYSIS_NODES,
   ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE,
-  formatNumber, getAnalysisProcessView, getPositionJobKey,
+  formatNumber, getAnalysisJobProgress, getAnalysisProcessView, getPositionJobKey,
   getProgressSnapshot, getTrackedJobPhase, isAnalysisJobKey, isTrackedJobActive,
   isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
   storeJobState,
@@ -181,6 +181,10 @@ export function usePositionsPage() {
 
     observations.forEach((observation) => {
       const jobId = String(observation.jobId || '')
+      if (observation.status === 'queued' || observation.status === 'deferred') {
+        changed = etaEstimatesRef.current.delete(jobId) || changed
+        return
+      }
       const snapshot = getProgressSnapshot(observation.progress)
       if (!jobId || !snapshot) return
 
@@ -637,31 +641,10 @@ export function usePositionsPage() {
               }
             }
 
-            if (isAnalysisJobKey(key) && status.progress) {
-              const processed = Number(status.progress.processed || 0)
-              const failed = Number(status.progress.failed || 0)
-              const targetFens = Math.max(1, Number(status.progress.total || state.targetFens || state.targetPlayerFens || 1))
-              patch.progress = {
-                analyzed: Math.min(targetFens, processed),
-                failed,
-                target: targetFens,
-                percent: Math.min(100, Math.round((Math.min(targetFens, processed) / targetFens) * 100)),
-                phase: status.progress.phase,
-                detail: status.progress.detail
-              }
-            } else if (key === 'global') {
-              const latestCounts = await loadAnalysisCounts()
-              const startAnalyzed = Number(state.startAnalyzed ?? latestCounts?.analyzed_fens ?? 0)
-              const currentAnalyzed = Number(latestCounts?.analyzed_fens ?? startAnalyzed)
-              const targetFens = Math.max(1, Number(state.targetFens || 1))
-              const analyzed = Math.max(0, currentAnalyzed - startAnalyzed)
-              patch.progress = {
-                analyzed: Math.min(targetFens, analyzed),
-                target: targetFens,
-                percent: Math.min(100, Math.round((Math.min(targetFens, analyzed) / targetFens) * 100))
-              }
+            if (isAnalysisJobKey(key)) {
+              patch.progress = getAnalysisJobProgress({ ...state, status })
             }
-            const phase = status.progress?.phase || status.status
+            const phase = getTrackedJobPhase({ status })
             if (phase === 'complete') {
               await loadCoverage()
               await loadAnalysisCounts()
@@ -714,7 +697,6 @@ export function usePositionsPage() {
   const handleGlobalAnalysis = (event) => {
     event.preventDefault()
     unlockCompletionAudio(audioContextRef)
-    const currentAnalyzed = Number(analysisCounts?.analyzed_fens || 0)
     const targetFens = Number(globalJob.totalFens)
     enqueueJob({
       key: 'global',
@@ -725,7 +707,6 @@ export function usePositionsPage() {
         nodes_limit: DEFAULT_ANALYSIS_NODES
       },
       meta: {
-        startAnalyzed: currentAnalyzed,
         targetFens,
         progress: {
           analyzed: 0,
@@ -985,5 +966,6 @@ export function usePositionsPage() {
     playerGamePreviewTotalSeconds, playerInspection, playerJob,
     scoredPositions, setGlobalJob, setJobCardRef, setLoopJob,
     setPlayerGameAnalysis, setPlayerInspection, setPlayerJob,
+    refreshCloudProgress: () => Promise.allSettled([loadAnalysisCounts(), loadCoverage(), loadGameAnalysisOverview()]),
   }
 }

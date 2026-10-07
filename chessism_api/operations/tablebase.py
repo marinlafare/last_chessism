@@ -53,6 +53,7 @@ PIECE_COUNT_SQL = (
 )
 TABLEBASE_CANDIDATE_SQL = f"""
     f.score IS NULL
+    AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
     AND COALESCE(f.analysis_source, '') <> 'tablebase_unavailable'
     AND {PIECE_COUNT_SQL} BETWEEN 2 AND {TABLEBASE_MAX_PIECES}
 """
@@ -179,6 +180,9 @@ async def _lease_tablebase_batch(
             params = {"limit": max(1, int(limit))}
 
         rows = [dict(row) for row in (await session.execute(text(query), params)).mappings()]
+        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        unclaimed = set(await unclaimed_locked_fens(session, [row["fen"] for row in rows]))
+        rows = [row for row in rows if row["fen"] in unclaimed]
         if not rows:
             await session.rollback()
             await session.close()
