@@ -47,6 +47,9 @@ class FakeCloud:
     def jobs(self):
         return deepcopy(list(self.job_data.values()))
 
+    def run_resources(self):
+        return []
+
     def bucket(self):
         return deepcopy(self.bucket_data)
 

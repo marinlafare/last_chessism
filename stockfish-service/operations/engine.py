@@ -10,16 +10,15 @@ from enum import Enum
 import chess
 import chess.engine
 from fastapi import HTTPException
+from stockfish_core import THREADS, HASH_MIB, STALL_SECONDS
+from stockfish_core.analysis import configure, verify_binary
 
 # --- CORE CONFIGURATION ---
 
 STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/usr/local/bin/stockfish")
-THREADS = int(os.environ.get("STOCKFISH_THREADS", "1"))
-HASH_MB = int(os.environ.get("STOCKFISH_HASH_MB", "256"))
+HASH_MB = HASH_MIB
 ENGINE_COUNT = max(1, int(os.environ.get("STOCKFISH_ENGINE_COUNT", "4")))
-ANALYSE_TIMEOUT_SEC = float(os.environ.get("STOCKFISH_ANALYSE_TIMEOUT_SEC", "30"))
-SYZYGY_PATH = os.environ.get("STOCKFISH_SYZYGY_PATH", "")
-SYZYGY_PROBE_DEPTH = int(os.environ.get("STOCKFISH_SYZYGY_PROBE_DEPTH", "1"))
+ANALYSE_TIMEOUT_SEC = STALL_SECONDS
 
 
 def convert_to_serializable(value: Any) -> Any:
@@ -96,26 +95,9 @@ async def _start_engine(engine_number: int | None = None) -> tuple[Any, chess.en
     transport = None
     engine_uci = None
     try:
+        verify_binary(STOCKFISH_PATH)
         transport, engine_uci = await chess.engine.popen_uci([STOCKFISH_PATH])
-
-        if "Threads" in engine_uci.options:
-            await engine_uci.configure({"Threads": THREADS})
-        if "Hash" in engine_uci.options:
-            await engine_uci.configure({"Hash": HASH_MB})
-
-        extra_options = {}
-        if "UCI_ShowWDL" in engine_uci.options:
-            extra_options["UCI_ShowWDL"] = True
-        if "Analysis Contempt" in engine_uci.options:
-            extra_options["Analysis Contempt"] = "Off"
-        if SYZYGY_PATH and os.path.isdir(SYZYGY_PATH) and "SyzygyPath" in engine_uci.options:
-            extra_options["SyzygyPath"] = SYZYGY_PATH
-        if "SyzygyProbeDepth" in engine_uci.options:
-            extra_options["SyzygyProbeDepth"] = SYZYGY_PROBE_DEPTH
-        if extra_options:
-            await engine_uci.configure(extra_options)
-            if "SyzygyPath" in extra_options:
-                print(f"--- [ENGINE] Syzygy tablebases enabled: {SYZYGY_PATH} ---", flush=True)
+        await configure(engine_uci, THREADS, HASH_MB)
 
         label = f" {engine_number}" if engine_number is not None else ""
         print(

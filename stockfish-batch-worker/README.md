@@ -1,8 +1,8 @@
 # Stockfish Batch worker
 
-Standalone, finite analysis worker for Google Cloud Batch + Spot. It does **not**
+Standalone, finite analysis worker for Google Cloud Batch + Spot or Cloud Run Jobs. It does **not**
 start a web server, connect to Postgres/Redis, import results into Chessism, or
-change the existing `stockfish-service/`. Building or testing this folder does
+start the existing `stockfish-service/`. Building or testing this folder does
 not submit a cloud job. Cloud execution requires an explicit manual submission or
 a UI request handled by the [Compose controller](cloud_job/README.md).
 
@@ -10,6 +10,7 @@ a UI request handled by the [Compose controller](cloud_job/README.md).
 
 - `stockfish_batch/`: input checks, persistent engine pool, immutable checkpoints,
   local/GCS storage, CLI and signal handling.
+- `stockfish_core/`: shared local/Batch/Run research profile and UCI search setup.
 - `Dockerfile`, `requirements.txt`: pinned Python base, runtime dependencies,
   official Stockfish 16.1 Linux amd64 AVX2 binary verified by SHA-256.
 - `scripts/fetch_engine.py`: build-time download only; keeps engine source/license.
@@ -64,6 +65,15 @@ Default analysis: 4 independent engines, 1 thread each, 2,048 MiB hash each,
 Each engine stays alive across positions, but receives a new-game token for each
 FEN so search hash state is not carried between unrelated positions.
 Python orchestrates the engines; Stockfish's compiled binary does the search.
+
+Those standalone CLI defaults are retained for legacy benchmark scripts. New UI
+jobs explicitly use the shared research profile: **100,000 nodes, Threads=1,
+Hash=256 MiB, MultiPV=4**, WDL on, no Syzygy, identical verified Stockfish 16.1
+binary and `chess==1.11.2`. Local bulk DB requests enforce this profile too;
+the interactive live board retains its separate non-persisted request budget.
+Old saved cloud runs retain their checkpoint settings; historical DB results are
+not rewritten. Hardware-dependent timings are not part of reproducibility.
+See [Cloud Run operation and activation](cloud_job/README.md#cloud-run-backend).
 
 Successful records retain the existing local service's nested result shape:
 
@@ -224,6 +234,36 @@ claims. Imports are idempotent; changed checkpoints or preexisting scores fail
 closed. `import-receipt.json` is written only after complete imports and derived
 view refreshes succeed. Keep cloud results until this receipt and database
 receipts are verified, then perform scoped cleanup and finalize the paused job.
+Use these separate, resumable commands (no new compute is submitted):
+
+```sh
+PYTHONPATH=stockfish-batch-worker:. .venv-cloud/bin/python -m benchmark_vm16.large collect \
+  --directory stockfish-batch-worker/out/vm200-20261006d200
+PYTHONPATH=stockfish-batch-worker:. .venv-cloud/bin/python -m benchmark_vm16.large_finish inspect \
+  --directory stockfish-batch-worker/out/vm200-20261006d200
+PYTHONPATH=stockfish-batch-worker:. .venv-cloud/bin/python -m benchmark_vm16.large_finish cleanup \
+  --directory stockfish-batch-worker/out/vm200-20261006d200
+```
+
+`inspect` saves timing, memory, VM-lifecycle and warning-log evidence locally.
+`cleanup` rechecks the import receipt, database batch receipts, all 200,000 scored
+rows and absence of claims before deleting anything. It reuses the normal
+generation-scoped cleanup and removes only log streams proved wholly owned by
+this benchmark. Only verified cleanup marks the paused database job complete.
+Empty shared infrastructure and Google-required audit/billing history remain.
+If `collect` is still importing/refreshing summaries in another terminal, use
+`large_finish wait-cleanup` with the same directory instead of `cleanup`. It
+waits locally for at most 30 minutes for matching local/DB import receipts,
+then runs the same guarded cleanup. Watch `finish-status.json` in that directory;
+`complete` means both cloud cleanup and database finalization succeeded. On
+`failed`, inspect the importer before retrying; no missing receipt can authorize
+deletion. Keep the PC and database running during local import/finalization.
+If all scores are committed but the summary refresh failed, run
+`large_finish finalize-import` with the same directory. It verifies every batch
+receipt and zero remaining claims, retries only the derived summaries (with a
+15-minute per-statement ceiling rather than the import's two-minute ceiling),
+then runs guarded cleanup. It never resubmits cloud compute, reimports scores or
+increments counters again. It also reports progress/errors in `finish-status.json`.
 Failures retain checkpoints and reservations for inspection; never rerun
 `launch` or remove its at-most-once fence after an ambiguous response.
 

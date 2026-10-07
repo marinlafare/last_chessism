@@ -138,18 +138,16 @@ services:
         max-file: "2"
 
   stockfish-service:
-    build: ./stockfish-service
+    build:
+      context: .
+      dockerfile: stockfish-service/Dockerfile
     image: stockfish-service:latest
     environment:
-      - STOCKFISH_THREADS=${STOCKFISH_THREADS}
-      - STOCKFISH_HASH_MB=${STOCKFISH_HASH_MB}
+      - STOCKFISH_THREADS=1
+      - STOCKFISH_HASH_MB=256
       - STOCKFISH_ENGINE_COUNT=${STOCKFISH_ENGINE_COUNT:-4}
-      - STOCKFISH_ANALYSE_TIMEOUT_SEC=${STOCKFISH_ANALYSE_TIMEOUT_SEC}
-      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
-      - STOCKFISH_SYZYGY_PROBE_DEPTH=${STOCKFISH_SYZYGY_PROBE_DEPTH}
+      - STOCKFISH_ANALYSE_TIMEOUT_SEC=300
       - REDIS_HOST=${REDIS_HOST}
-    volumes:
-      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
 

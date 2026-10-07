@@ -29,6 +29,8 @@ ENDPOINTS = {
     "workflows": "https://workflows.googleapis.com/v1/",
     "executions": "https://workflowexecutions.googleapis.com/v1/",
     "run": "https://run.googleapis.com/v2/",
+    "run_inventory": "https://run.googleapis.com/apis/",
+    "serviceusage": "https://serviceusage.googleapis.com/v1beta1/",
 }
 
 
@@ -146,6 +148,35 @@ class Cloud:
     def jobs(self):
         return [job for page in self.pages("batch", f"projects/{PROJECT}/locations/-/jobs")
                 for job in page.get("jobs", [])]
+
+    def run_resources(self):
+        """Global v1 inventory, including execution/revision snapshots.
+
+        v2 rejects a wildcard location. v1 uses metadata.continue pagination,
+        not nextPageToken. An incomplete/unauthorized inventory is never empty.
+        """
+        result = []
+        for api, collection in (("run.googleapis.com", "jobs"), ("run.googleapis.com", "executions"),
+                                ("serving.knative.dev", "services"), ("serving.knative.dev", "revisions")):
+            params, seen = {}, set()
+            while True:
+                page = self.request("run_inventory", f"{api}/v1/namespaces/{PROJECT}/{collection}", params=params)
+                if page.get("unreachable") or page.get("unreachables"):
+                    raise CleanupError("Incomplete global Cloud Run inventory")
+                for item in page.get("items", []):
+                    meta = item.get("metadata", {})
+                    location = meta.get("labels", {}).get("cloud.googleapis.com/location")
+                    if not location or not meta.get("name"):
+                        raise CleanupError("Cloud Run inventory missing resource identity/location")
+                    result.append({**item, "name": f"projects/{PROJECT}/locations/{location}/{collection}/{meta['name']}"})
+                token = page.get("metadata", {}).get("continue")
+                if not token:
+                    break
+                if token in seen:
+                    raise CleanupError("Cloud Run inventory repeated continuation token")
+                seen.add(token)
+                params = {"continue": token}
+        return result
 
     def delete_job(self, job_id, region, uid):
         # Stable idempotency key for retries of this exact job incarnation.

@@ -3,6 +3,8 @@
 !requirements.txt
 !stockfish_batch/
 !stockfish_batch/*.py
+!stockfish_core/
+!stockfish_core/*.py
 !benchmark_fen_batches/
 !benchmark_fen_batches/__init__.py
 !benchmark_fen_batches/benchmark.py

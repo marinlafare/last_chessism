@@ -9,6 +9,7 @@ from stockfish_batch.checkpoints import digest, encode, make_contract
 from stockfish_batch.config import Config
 from stockfish_batch.storage import Storage
 from .recovery import RecoveryClient
+from stockfish_core import HASH_MIB, THREADS, ENGINE_SHA256
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,7 +22,7 @@ def configuration(run_id, count, nodes, seconds, *, stall_only=False):
     prefix = f"gs://{BUCKET}"
     return Config(input=f"{prefix}/inputs/ui-{run_id}/input.jsonl",
                   output=f"{prefix}/results/ui-{run_id}", max_positions=count,
-                  nodes=nodes, run_timeout=0 if stall_only else seconds - 60,
+                  nodes=nodes, hash_mb=HASH_MIB, threads=THREADS, run_timeout=0 if stall_only else seconds - 60,
                   stall_timeout=seconds if stall_only else 0,
                   upload_mode="background", batch_size=500, compact_results=True).validate()
 
@@ -79,6 +80,8 @@ def inspect_worker(local_image):
         "--security-opt=no-new-privileges", "--entrypoint=python", image_id, "-c", script))
     if metadata["worker_version"] != __version__:
         raise ValueError(f"Build the current worker ({__version__}) before enabling cloud analysis")
+    if metadata["engine_sha"] != ENGINE_SHA256 or metadata["chess_version"] != "1.11.2":
+        raise ValueError("Worker engine/library differs from the shared research profile")
     return image_id, metadata
 
 

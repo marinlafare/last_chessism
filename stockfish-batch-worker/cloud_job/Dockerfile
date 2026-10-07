@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir -r requirements.txt -r worker-requirements.txt &&
 COPY constants.py /app/constants.py
 COPY chessism_api /app/chessism_api
 COPY stockfish-batch-worker/stockfish_batch /app/stockfish-batch-worker/stockfish_batch
+COPY stockfish-batch-worker/stockfish_core /app/stockfish-batch-worker/stockfish_core
 COPY stockfish-batch-worker/cloud_job /app/stockfish-batch-worker/cloud_job
 COPY stockfish-batch-worker/cleaning_job /app/stockfish-batch-worker/cleaning_job
 COPY stockfish-batch-worker/batch /app/stockfish-batch-worker/batch

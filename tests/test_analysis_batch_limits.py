@@ -32,6 +32,15 @@ class AnalysisBatchLimitTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(size=size), self.assertRaises(ValueError):
                 AnalysisJobRequest(batch_size=size)
 
+    def test_research_settings_cannot_drift_through_local_api(self):
+        for model, kwargs in ((AnalysisJobRequest, {}), (AnalysisLoopJobRequest, {}),
+                              (PlayerAnalysisJobRequest, {"player_name": "test"}),
+                              (PlayerGameAnalysisConfirmRequest, {"plan_id": "test"})):
+            with self.subTest(model=model), self.assertRaises(ValueError):
+                model(**kwargs, nodes_limit=1_000_000)
+        live = FenAnalysisRequest(fens=["fen"], nodes_limit=250000, multipv=3)
+        self.assertEqual((live.nodes_limit, live.multipv), (250000, 3))
+
     def test_player_request_retains_five_hundred_limit(self):
         self.assertEqual(PlayerAnalysisJobRequest(player_name="test").batch_size, 500)
         with self.assertRaises(ValueError):

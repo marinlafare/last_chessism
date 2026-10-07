@@ -66,8 +66,17 @@ class WorkerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stalled_worker_exits_without_a_success_manifest(self):
         self.config = replace(self.config, run_timeout=0, stall_timeout=1)
-        with self.assertRaisesRegex(TimeoutError, "No meaningful progress"):
-            await self.execute(Factory(delay=5))
+        factory = Factory(delay=5)
+        # Both inactivity deadlines are one second. Depending on scheduling,
+        # either the overall-progress timeout or the TaskGroup's completed-FEN
+        # timeout can fire first; both must terminate and close every engine.
+        with self.assertRaises((TimeoutError, ExceptionGroup)) as raised:
+            await self.execute(factory)
+        if isinstance(raised.exception, ExceptionGroup):
+            timeouts, unexpected = raised.exception.split(TimeoutError)
+            self.assertIsNotNone(timeouts)
+            self.assertIsNone(unexpected)
+        self.assertEqual(factory.opened, factory.closed)
         self.assertFalse((self.output / "manifest.json").exists())
 
     async def test_engine_progress_cannot_hide_no_completed_fens(self):

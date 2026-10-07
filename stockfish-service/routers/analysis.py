@@ -8,11 +8,11 @@ import chess.engine
 import redis.asyncio as redis
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
+from stockfish_core.analysis import analyse, board_from_fen
 
 from operations.engine import (
     engine_pool,
     ANALYSE_TIMEOUT_SEC,
-    uci_newgame,
     clean_engine_result,
 )
 
@@ -64,8 +64,10 @@ class AnalysisRequest(BaseModel):
         max_length=MAX_ANALYSIS_BATCH_SIZE,
         description="List of FEN strings to analyze.",
     )
-    nodes_limit: int = Field(1_000_000, ge=1, le=100_000_000, description="Nodes limit per position.")
-    multipv: int = Field(4, ge=1, le=10, description="Number of principal variations to return.")
+    # Bulk database requests are fixed by the API research schemas. The live
+    # board uses the same engine but keeps its existing non-persisted budget.
+    nodes_limit: int = Field(100000, ge=1, le=100_000_000)
+    multipv: int = Field(4, ge=1, le=10)
     progress_job_id: str | None = Field(None, description="Optional ARQ job id for live progress.")
     progress_total: int | None = Field(None, ge=1, description="Total FEN count for the job.")
     progress_detail_prefix: str | None = Field(None, description="Optional loop label for live progress.")
@@ -73,7 +75,7 @@ class AnalysisRequest(BaseModel):
 
 def _board_from_fen(fen: str) -> chess.Board | None:
     try:
-        return chess.Board(fen)
+        return board_from_fen(fen)
     except ValueError:
         return None
 
@@ -172,20 +174,12 @@ async def analyze_fens_endpoint(request: AnalysisRequest) -> list[dict[str, Any]
                 await _write_progress(request, original_fen, False, f"batch fen {len(final_results)}/{len(request.fens)}")
                 continue
 
-            limit = chess.engine.Limit(nodes=request.nodes_limit)
-
             result = None
             last_error = None
             for _ in range(2):
                 try:
-                    await uci_newgame(engine)
                     result = await asyncio.wait_for(
-                        engine.analyse(
-                            board,
-                            limit=limit,
-                            info=chess.engine.Info.ALL,
-                            multipv=request.multipv
-                        ),
+                        analyse(engine, board, request.nodes_limit, request.multipv),
                         timeout=ANALYSE_TIMEOUT_SEC
                     )
                     last_error = None

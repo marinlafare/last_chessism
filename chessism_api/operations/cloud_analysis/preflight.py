@@ -8,6 +8,7 @@ def verify_clean_workspace(cloud):
     # This check also protects against manual jobs/images created outside the UI.
     inventories = (
         ("Batch jobs", cloud.jobs),
+        ("Cloud Run resources", cloud.run_resources),
         ("compute resources", cloud.resources),
         ("worker images", cloud.images),
         ("job files", lambda: cloud.objects("")),

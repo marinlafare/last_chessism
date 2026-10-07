@@ -58,6 +58,12 @@ class StorageTests(unittest.TestCase):
 
 
 class EngineTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        # Unit tests use a fake UCI process. Binary attestation is tested separately.
+        patcher = patch("stockfish_batch.engine.verify_binary")
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     async def test_engine_lifecycle_and_new_game_per_position(self):
         protocol, transport = AsyncMock(), MagicMock()
         protocol.id = {"name": "Stockfish 16.1"}

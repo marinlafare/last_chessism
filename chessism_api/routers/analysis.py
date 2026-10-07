@@ -1,6 +1,6 @@
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 import json
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 import httpx
@@ -44,7 +44,7 @@ class AnalysisJobRequest(BaseModel):
         ge=1,
         le=MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
     )
-    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
+    nodes_limit: Literal[100000] = DEFAULT_ANALYSIS_NODES
 
 
 class PlayerAnalysisJobRequest(AnalysisJobRequest):
@@ -60,11 +60,12 @@ class AnalysisLoopJobRequest(BaseModel):
     runs: int = Field(4, ge=1, le=100)
     batches: int = Field(500, ge=1, le=MAX_LOOP_ANALYSIS_BATCH_SIZE)
     cool_off: int = Field(300, ge=0, le=3_600)
-    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
+    nodes_limit: Literal[100000] = DEFAULT_ANALYSIS_NODES
 
 
 class FenAnalysisRequest(BaseModel):
     fens: list[str] = Field(..., min_length=1, max_length=20)
+    # Interactive board results are not inserted into the research database.
     nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1, le=100_000_000)
     multipv: int = Field(4, ge=1, le=10)
 
@@ -91,7 +92,7 @@ class PlayerGameAnalysisConfirmRequest(BaseModel):
     plan_id: str = Field(..., min_length=1)
     batch_size: int = Field(500, ge=1, le=MAX_LOOP_ANALYSIS_BATCH_SIZE)
     cool_off: int = Field(120, ge=0, le=3_600)
-    nodes_limit: int = Field(DEFAULT_ANALYSIS_NODES, ge=1)
+    nodes_limit: Literal[100000] = DEFAULT_ANALYSIS_NODES
 
 
 def _analysis_timeout(total_fens: int) -> int:

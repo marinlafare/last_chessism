@@ -5,11 +5,19 @@ MAX_CLOUD_FENS = 200_000
 MAX_CLOUD_RUNS = MAX_CLOUD_FENS // 1000
 
 
+class CloudVmCountRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    n_vms: int = Field(ge=1, le=10, strict=True)
+
+
 class CloudJobRequest(BaseModel):
     # Engine settings belong to the server, never to a submitted UI payload.
     model_config = ConfigDict(extra="forbid")
 
     mode: Literal["all", "player", "loop", "games"] = "all"
+    backend: Literal["batch_spot", "cloud_run"] = "batch_spot"
+    n_cpus: int = Field(4, ge=1, le=64, strict=True)
+    n_vms: int = Field(1, ge=1, le=10, strict=True)
     player_name: str = Field("", max_length=200)
     total_fens: int | None = Field(None, ge=1, le=MAX_CLOUD_FENS)
     positions_per_run: int = Field(1000, ge=1, le=1000)

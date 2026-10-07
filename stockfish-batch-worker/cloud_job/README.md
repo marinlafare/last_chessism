@@ -1,21 +1,55 @@
 # On-demand UI cloud analysis
 
-The Analyze Positions page has four independent cloud selection containers below
-the existing local containers. They use the same all/player/game-selection queries.
+The Analyze Positions page has two cloud selection cards below the existing
+local controls: **Cloud Run** and **Batch Spot**. Both support the same
+all/player/game/grouped-position selection queries.
 The UI/API never receive Google credentials or a Docker socket.
 
-## Selected backend: Batch Spot
+## Batch Spot: fixed-size multi-VM fleet
 
-After the 25,000-FEN platform comparison on October 6, 2026, Batch Spot remains
-the selected production backend: lower cost matters more than time to completion
-for this workload. Cloud Run was benchmark-only; it is not used by the UI
-controller. See the [comparison](../benchmark_platforms/README.md#first-completed-comparison-20261006ab01).
+Batch Spot is the lower-cost choice measured by the platform benchmark. Cloud
+Run is also implemented in the UI, with a separate `n_cpus` control. See the
+[comparison](../benchmark_platforms/README.md#first-completed-comparison-20261006ab01).
 
-Keep the existing baseline until another configuration is measured: one
-`n2d-standard-4` Spot VM, four independent one-thread Stockfish engines,
-100,000 nodes/FEN, and background checkpoints of up to 500 results. The
-200,000-FEN selection limit and 300-second no-completed-FEN watchdog remain
-unchanged. Selecting Batch does not authorize larger limits or a new cloud job.
+New Batch requests accept `n_vms` (1–10, default 1). Each VM is the tested
+`n2d-highcpu-16`: 16 vCPUs and 16 GiB RAM. A 12-GiB worker/container budget
+leaves 4 GiB for the OS/agents. Each runs 16 persistent **single-threaded**
+Stockfish engines, 100,000 nodes/FEN, 256-MiB hash, and background uploads of
+up to 500 results. The 200,000-FEN limit is for the **whole request**, not per VM.
+The 300-second no-completed-FEN watchdog is independent on each VM.
+
+The controller evenly partitions the reserved FEN list without duplicates,
+uploads one shared digest-pinned image and separate shard inputs, then starts
+one Batch job and one existing recovery-workflow execution per VM. The number
+of VMs is only reduced if there are fewer FENs than requested VMs. There is a
+shared work queue across the 16 engines **inside** each VM; cross-VM partitions
+are static and do not promise identical finish times or cross-VM work stealing.
+Each interrupted VM resumes its own checkpoints. Confirmed Google exit 50001
+does not consume its two-application-attempt allowance. Recovery remains in
+Google when the PC is off; local imports/cleanup resume when the PC returns.
+
+Quota checks cover the requested fleet's available regional CPU pool, global
+CPUs, instance count, external IPs and balanced-disk storage **before publishing**.
+Positive dedicated preemptible CPU quota replaces the N2D pool; zero/ungranted
+quota uses the standard pool, as in this project's successful tests. Google is
+still authoritative about Spot capacity and quota applicability. There is no
+fallback to STANDARD VMs or a larger machine. As checked on 2026-10-07, this
+project’s N2D quota was 16 CPUs: only one such VM could run concurrently.
+
+The durable `batch_multi_vm_v1` execution format preserves shard IDs, contracts,
+workflow ownership and receipts across restarts. Partial launch resumes only
+missing workflow owners. Cancellation reaches every unfinished shard. A manual
+retry keeps successful shards and restarts only failed/cancelled shards. All
+attempt records, results, control files and the shared image are cleaned
+together **after every VM has succeeded and all results/reports are saved**.
+Per-VM states and timing reports appear in the UI. Legacy saved single-VM jobs
+keep their original configuration/recovery format.
+
+Implementation: `cloud_job/batch_spot.py`, API `batch_spot_controller.py`,
+`batch_spot_results.py`, and database-only `batch_spot_retry.py`. Offline tests:
+`tests/test_batch_spot_analysis.py`, the sharded-import database tests, and the
+mocked browser test. A real multi-VM run still requires sufficient quota and a
+separately requested paid test; local tests do not establish cloud performance.
 
 The platform benchmark did **not** exercise preemption or the production
 recovery supervisor. Before a long unattended run, the next recommended gate is
@@ -33,23 +67,24 @@ The Compose controller runs on your PC using your existing `gcloud` login:
 1. The authenticated UI records a bounded request in PostgreSQL.
 2. The controller selects the whole request (up to 200,000 unscored FENs) using `FOR UPDATE SKIP LOCKED`,
    inserts durable cloud reservations, and commits **before uploading anything**.
-3. Before the single execution, it verifies that earlier Batch jobs, compute resources,
+3. Before fleet creation, it verifies that earlier Batch jobs, compute resources,
    repository images and live/noncurrent bucket objects are gone. Unexpected
    leftovers pause the job before upload; they are not blindly deleted because
    they may still be needed for another job's recovery. It then uploads an already-built worker image into a unique, job-owned Artifact
    Registry package and starts the [cloud-resident recovery workflow](RECOVERY.md).
-   It submits one digest-pinned Batch Spot task at a time, with separate counters
-   for confirmed Google preemptions and application failures.
+   It starts the VM shards concurrently, each with a digest-pinned Batch Spot
+   task and separate counters for Google preemptions and application failures.
 4. Every 15 seconds it checks for completed background uploads (500 results per
-   file; the final partial group is also uploaded). It validates input identity,
-   engine/settings contract, legal PVs, IDs and checksums before importing.
+   file; the final partial group is also uploaded). Up to four downloads overlap
+   with one transactional database writer, fairly across task shards. It validates
+   input identity, engine/settings contract, legal PVs, IDs and checksums before importing.
 5. FEN updates, continuations, database counters, imported-file receipts and
    reservation releases commit in **one transaction**. Results have exactly the
    existing `analysis_source='stockfish'` and normal score/PV/WDL fields.
 6. After Batch succeeds, the recovery workflow and any duplicate executions stop,
    and the final manifest exactly matches committed receipts,
-   derived game/score views are refreshed. A cleanup plan is persisted in the DB
-   before deletion. `cleaning_job` removes job metadata, checks that its compute
+   a cleanup plan is persisted in the DB before deletion. `cleaning_job` removes
+   job metadata, checks that its compute
    resources disappeared, hard-deletes the exact temporary object generations,
    and deletes the uploaded image last. No deletion confirmation is required.
 7. The worker uploads a small, contract-bound performance report. The controller
@@ -65,9 +100,68 @@ The Compose controller runs on your PC using your existing `gcloud` login:
    and severity counts are saved in the local DB before deletion, then rechecked
    immediately before deletion. Pending deletion is verified on subsequent ticks.
    API errors pause cleanup; no other cloud job starts while it is pending.
+9. Only after cloud cleanup does local game-summary refresh run. Completed run
+   details are compacted; global score/rating summaries refresh once per request.
+   The UI reports completion only after these local phases also finish. Ready
+   phase transitions proceed immediately; the 15-second interval applies to
+   waiting for external progress, not every step.
 
-All FENs feed one shared queue and four persistent single-thread engines. A faster
-engine takes the next available FEN rather than waiting for a fixed allocation.
+## Column-based history and bounded ingestion
+
+Cloud records use native PostgreSQL columns/typed arrays and explicit child
+tables, including launch, recovery and cleanup instructions. There are no JSON
+or JSONB columns in the cloud tables. Dictionary/JSON representations still exist
+at the Google/HTTP/file boundaries; the relational adapter verifies a lossless
+checksum when reading recovery documents. Unknown fields fail closed.
+
+`cloud_result_batch` retains one compact receipt per result file (normally up to
+500 FENs), not one history row per FEN. Task boundaries can add partial files.
+For example, one million FENs in full files produces 2,000 receipt rows. Input
+identities and result hash lists are stored in temporary packs of up to 500;
+they are pruned only after verified import, cloud cleanup and local summaries.
+Failed/recoverable runs retain those packs. Actual analysis stays in the normal
+FEN tables and is never duplicated in usage history.
+
+`cloud_phase_timing`, `cloud_usage`, and `cloud_execution_attempt` preserve phase,
+worker and provider-attempt measurements. Allocated VM memory and worker memory
+budget have distinct columns. Missing historical measurements remain NULL;
+worker runtime is **not** billed duration, and costs remain NULL until sourced
+estimates or billing reconciliation are added. The authenticated
+`GET /analysis/cloud/{job_id}/usage` route returns this local history without
+calling Google. Download-time sums represent overlapping I/O, not elapsed time.
+
+The importer keeps at most four pending downloads plus the current result file
+(up to 80 MiB of raw result bytes). Scores, counters, reservations and receipt
+commit atomically. A crash before COMMIT rolls back; after COMMIT, redelivery
+verifies the immutable receipt and cannot double-count results. Each transaction
+reads only the selected input packs, not the entire growing receipt history.
+
+For installations using the former JSON cloud columns, stop the API and
+cloud-controller before running the explicit local migration with the normal
+database environment and worker package path:
+
+```bash
+PYTHONPATH=stockfish-batch-worker python -m chessism_api.operations.cloud_analysis.migrate_columns
+PYTHONPATH=stockfish-batch-worker python -m chessism_api.operations.cloud_analysis.migrate_columns --apply --compact-completed
+```
+
+The first command is read-only. The second rejects active jobs, checksum-checks
+all documents inside a transaction before dropping old columns, backfills
+compact receipts/available metrics, and optionally prunes verified completed
+history. Repeat execution is safe. Start only the updated API/controller after
+the migration; old code expects the removed columns. Neither command starts or
+modifies Google resources.
+
+For the initial column schema's pending-cleanup report correction, stop the API
+and cloud-controller and run the migration command with
+`--repair-cleanup-resources` instead of `--apply`. This adds typed `kind`, `scope`
+and `name` child records, verifies saved document checksums and removes only the
+obsolete empty-array columns. It supports an already-paused cleanup run without
+changing its phase, imported results or cleanup targets. Resume that same job
+after restarting the updated services; no reanalysis is needed.
+
+Each VM's FENs feed one shared queue and 16 persistent single-thread engines. A
+faster engine takes the next available FEN rather than waiting for a fixed allocation.
 Uploads still contain up to 500 results, but do not trigger VM teardown. Only
 compact committed references remain in worker memory; full results are discarded
 after durable batch upload. Input/manifest limits support the 200,000-FEN cap.
@@ -83,7 +177,7 @@ Only one unfinished cloud request is admitted. A PostgreSQL transaction advisory
 lock rejects simultaneous submissions from different browser tabs/API processes
 with HTTP 409. Queued/running jobs and paused/waiting/failed recovery requests
 block other cloud selections; completed/cancelled/limit-reached history does not.
-The UI disables all four selection fieldsets while the cloud slot is occupied,
+The UI disables both cloud selection fieldsets while the cloud slot is occupied,
 including through final import and cleanup. Recovery actions remain available
 only for the blocking job. Local analysis is unaffected.
 
@@ -239,13 +333,15 @@ prefixes while it operates. Those names are owned by the corresponding job.
 
 ## Bounds and recovery
 
-- New requests (`execution_mode=single_vm_v1`) use one task for up to 200,000 FENs.
-  Loop/group counts multiply the selection size; they no longer launch separate
-  VMs. If some selected FENs are unavailable at reservation, the existing
+- New Batch requests (`execution_mode=batch_multi_vm_v1`) split up to 200,000
+  FENs across the selected `n_vms` (1–10, subject to available quota).
+  Loop/group counts multiply the selection size, not the VM count.
+  If some selected FENs are unavailable at reservation, the existing
   `limit_reached` status reports that fact without launching an extra VM. Already
   saved legacy requests keep their original chunk/recovery contract.
-- One `n2d-standard-4` Spot task for the whole request, 12 GiB task memory, four single-thread
-  Stockfish engines, 2 GiB hash each, MultiPV 4, no tablebases. Every new UI run
+- Each Batch VM is `n2d-highcpu-16` with 16 GiB RAM, a 12 GiB worker budget,
+  and sixteen single-thread Stockfish engines, 256 MiB hash each, MultiPV 4,
+  no tablebases. Every new UI run
   uses **100,000 nodes per FEN**, fixed by the server, not an editable request
   parameter. Local analysis page requests use the same 100,000-node default.
   Recovery preserves a previously launched run's exact checkpoint configuration.
@@ -324,3 +420,85 @@ and agent logs are not exported to Cloud Logging by default:
 `chessism_cloud_test` through `CHESSISM_CLOUD_TEST_DATABASE_URL`; it creates/drops
 random test schemas. Never use the application DB for these tests.
 Frontend tests: `node --test chessism_web/tests/cloudAnalysisForm.test.mjs`.
+
+## Cloud Run backend
+
+The analysis page has two cloud selection cards: **Cloud Run** and **Batch Spot**.
+Both cards are available; Batch Spot supports independently recoverable VM shards.
+Existing unfinished Batch jobs and their recovery controls remain visible.
+The Cloud Run card offers one FEN-selection dropdown for all positions, player
+positions, player games (with a frozen preview), or grouped selections. Only
+missing, unreserved FENs are selected. Changing the selection invalidates its
+preview; changing CPU concurrency preserves it. Choose `n_cpus` (1–64, default 4)
+for the maximum simultaneous **one-vCPU, 1-GiB tasks**. Small selections
+can use fewer CPUs. The input limit remains 200,000 FENs per UI request. The
+controller verifies regional CPU/memory quota before uploading; quotas are shared
+with other Cloud Run workloads and do not guarantee capacity or immediate start.
+
+The UI shows each workflow step from reservation through uploads, analysis/import,
+verification, cleanup and the final database-summary refresh. A successful Google
+execution or 100% imported FENs alone does not mean the job is done. Once the
+controller confirms completion, the display stays for ten seconds, then fades
+out. Historical completed/cancelled entries are hidden on page load. This is
+display-only: DB results, job records and performance reports are not deleted.
+Failed, paused and waiting jobs stay visible for recovery, including cleanup errors.
+
+Both production backends and local bulk database analysis use the shared
+`stockfish_core` profile: the pinned Stockfish 16.1 AVX2 binary and embedded NNUE,
+`chess==1.11.2`, 100,000 nodes, Threads=1, Hash=256 MiB, MultiPV=4, WDL on, no
+tablebases, and a fresh game token/reset between independent positions. No search
+time budget substitutes for the node limit. Five minutes without a completed
+FEN fails the worker; partial searches are not accepted as results. Existing
+checkpoint contracts and historical DB rows are not rewritten. The interactive
+live board keeps its existing non-persisted node/MultiPV request settings.
+
+The controller reserves the complete selection before launch and splits it into
+disjoint 500–5,000-FEN task inputs (the last can be smaller). Each task runs one
+engine and uploads every 500 results, plus its final partial file. Inputs/results
+live under `inputs/ui-<run>/tasks/<index>/` and `results/ui-<run>/tasks/<index>/`.
+One Cloud Run execution schedules all tasks; the PC is not required during
+analysis. Each task has one automatic retry and resumes its own immutable files.
+Cloud Run's seven-day per-task ceiling is a platform limit, not a per-FEN budget.
+The Batch Spot 50001 recovery workflow is not used by Cloud Run.
+
+The local controller imports independently available files from every task,
+validates checksums and original FEN identities, commits normal DB values and
+receipts atomically, and then releases those FEN claims. On restart it catches up.
+Final cleanup requires every task manifest, all committed receipts, and saved
+per-task performance reports. Local DB summaries refresh after cloud cleanup.
+Cleanup deletes only the known
+terminal Cloud Run job, exact object generations and the job-owned image. Shared
+logs, other jobs/services/revisions, and audit/billing records are protected.
+Google can retain deleted-resource tombstones and delayed log entries; cleanup
+does not promise to erase provider history. Failed/cancelled work retains results
+for an explicit billable retry (maximum three executions per logical run).
+
+`jobs:run` has no request-id/idempotency field. Before posting, the controller
+commits a durable submission fence. If the response is lost, it discovers the
+execution instead of submitting again. If no execution can be found, the job
+pauses safely for inspection; **do not reset its phase or create another job
+blindly**. Resume only repeats discovery. Cancellation is a durable UI request
+forwarded to the known execution, retaining checkpoints.
+
+### Activation and first test
+
+No IAM grants, remote deployment, or paid test is performed by building the code.
+Use an authenticated controller identity with Run job create/get/list/run/delete,
+execution get/list/cancel, operation get, quota read, and global Run inventory read
+(jobs/executions/services/revisions). It must act as the existing worker service
+account. Existing Storage/Artifact Registry/log-cleanup access remains necessary.
+Worker credentials stay attached to the task, never in the image or browser.
+Missing permissions fail closed; request scoped grants separately if needed.
+
+With no active or queued analysis work, rebuild the API, local workers, frontend,
+cloud-controller and cloud-worker-image together using Docker Compose. New worker
+version 1.4.0 is checked before publishing. Do not mix old local engines with the
+new profile. Building alone does not update running containers.
+
+Then use the Cloud Run card, start with **1,000 missing FENs and
+2 CPUs**, and inspect incremental progress, local import and cleanup. This next
+step is billable and must be explicitly requested. Test controller restart/offline
+catch-up and retry using a separate bounded workload before a long run. The
+offline suites `tests/test_cloud_run_analysis.py` and
+`stockfish-batch-worker/tests/test_cloud_run_cleanup.py` cover the safety boundaries
+without credentials; they do not replace a real provider integration test.

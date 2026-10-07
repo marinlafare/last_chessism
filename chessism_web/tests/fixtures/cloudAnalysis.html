@@ -9,19 +9,29 @@ import '/src/index.css'
 const job = { id: 'cloud-test', status: 'running', target: 2082, imported: 500,
   selection: { mode: 'games', player_name: 'magnuscarlsen' }, error: null,
   runs: [{ id: 'run-test', status: 'running', cloud_state: 'RUNNING', batch_jobs: ['batch-test'] }] }
-const state = window.cloudTest = { job, online: true, requests: [] }
+const state = window.cloudTest = { job, online: true, requests: [], previewCount: 2082,
+  history: [
+    { ...job, id: 'old-complete', status: 'complete', imported: 2082, runs: [{ ...job.runs[0], status: 'complete' }] },
+    { ...job, id: 'old-cancelled', status: 'cancelled', runs: [] },
+  ] }
 window.fetch = async (input, options = {}) => {
   const url = new URL(input, location.href), method = options.method || 'GET'
-  state.requests.push({ path: url.pathname, method })
+  state.requests.push({ path: url.pathname, method, body: options.body ? JSON.parse(options.body) : null })
   const reply = (value, status=200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
   if (url.pathname.endsWith('/analysis/cloud')) {
     if (method === 'POST') {
-      Object.assign(job, { id: 'next-job', status: 'queued', imported: 0, target: 1000, runs: [], selection: { mode: 'all' } })
+      const payload = JSON.parse(options.body)
+      Object.assign(job, { id: 'next-job', status: 'queued', imported: 0,
+        target: payload.mode === 'games' ? state.previewCount : payload.total_fens, runs: [], selection: payload })
       return reply({ id: job.id, status: job.status }, 202)
     }
     return reply({ controller_online: state.online, cloud_busy: job.status !== 'complete',
-      blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job] })
+      blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job, ...state.history] })
   }
+  if (url.pathname.endsWith('/analysis/player_games/preview')) {
+    return reply({ plan_id: 'a'.repeat(32), selected_games: 30, fens_to_analyze: state.previewCount })
+  }
+  if (url.pathname.endsWith('/analysis_counts')) return reply({ total_positions: 3000, analyzed_positions: 1000 })
   if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }
   throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
 }

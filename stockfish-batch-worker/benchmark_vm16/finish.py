@@ -129,6 +129,12 @@ def cleanup(directory, client):
     job = json.loads((directory / 'pre-cleanup-job.json').read_bytes())
     require(job['status']['state'] == 'SUCCEEDED' and job['name'].split('/')[-1] == plan['job'], 'Wrong saved job')
     instances = json.loads((directory / 'owned-vm-identities.json').read_bytes())
+    return cleanup_verified(directory, client, plan, job, instances)
+
+
+def cleanup_verified(directory, client, plan, job, instances):
+    """Common scoped deletion after the caller's benchmark-specific receipt gate."""
+    require(job['status']['state'] == 'SUCCEEDED' and job['name'].split('/')[-1] == plan['job'], 'Wrong saved job')
     owner = owners(job['uid'], instances)
     receipt_path = directory / 'cleanup-result.json'
     previous = json.loads(receipt_path.read_bytes()) if receipt_path.exists() else None
@@ -145,7 +151,7 @@ def cleanup(directory, client):
     save(directory, 'cleanup-result.json', result)
     print(json.dumps({'resource_cleanup': result}), flush=True)
     if not result.get('complete'):
-        return
+        return result
     idle(client)
     logs = {unquote(n.split('/logs/', 1)[1]) for n in client.logs()} & (TEST_LOGS | {'diagnostic-log', 'ping'})
     inspection = {log: inspect_log(client, log, owner) for log in sorted(logs)}
@@ -166,6 +172,7 @@ def cleanup(directory, client):
     final['log_cleanup'] = log_result
     save(directory, 'final-verification.json', final)
     print(json.dumps(final, indent=2))
+    return final
 
 
 def main():

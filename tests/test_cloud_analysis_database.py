@@ -71,6 +71,44 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as session:
             return (await session.scalars(select(CloudAnalysisRun))).one()
 
+    async def test_cloud_run_out_of_order_task_import_is_atomic_and_idempotent(self):
+        await self._sharded_import("cloud_run")
+
+    async def test_batch_fleet_out_of_order_import_is_atomic_and_idempotent(self):
+        await self._sharded_import("batch_spot")
+
+    async def _sharded_import(self, backend):
+        if backend == "cloud_run":
+            from cloud_job.cloud_run import config_for
+        else:
+            from cloud_job.batch_spot import config_for
+        run = await self.reserved_run(2)
+        config = config_for(run.id, 1)
+        tasks, payloads = [], []
+        for index, row in enumerate(run.positions):
+            contract = expected_contract(encode(row), [row], config, {
+                "engine_sha": "a" * 64, "worker_version": "1.4.0", "chess_version": "1.11.2"})
+            checkpoint = BatchCheckpoints(None, "", contract, [row], 500)
+            lines = ([{"multipv": i, "nodes": 100000, "score": 20-i,
+                       "wdl": [200, 700, 100], "pv": [move]}
+                      for i, move in enumerate(["e2e4", "d2d4", "g1f3", "c2c4"], 1)]
+                     if row["fen"] == self.fens[0] else {"score": 0, "pv": []})
+            record = checkpoint.prepare(row, {"fen": row["fen"], "is_valid": True, "analysis": lines}, 1)
+            tasks.append({"index": index, "start": index, "count": 1, "contract": contract})
+            payloads.append(encode({"fingerprint": contract["fingerprint"], "records": [record]}))
+        await controller.save_run(run.id, launch={"backend": backend, "tasks": tasks})
+        self.assertEqual(await importer.import_batch(run.id, payloads[1], 0, task_index=1), 1)
+        self.assertEqual(await importer.import_batch(run.id, payloads[1], 0, task_index=1), 0)
+        async with AsyncDBSession() as session:
+            self.assertEqual((await session.get(CloudAnalysisJob, run.job_id)).imported, 1)
+            self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 1)
+        self.assertEqual(await importer.import_batch(run.id, payloads[0], 0, task_index=0), 1)
+        async with AsyncDBSession() as session:
+            self.assertEqual((await session.get(CloudAnalysisJob, run.job_id)).imported, 2)
+            self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 0)
+            saved = await session.get(CloudAnalysisRun, run.id)
+            self.assertEqual(sorted(saved.receipts), ["tasks/000000/batches/000000.json", "tasks/000001/batches/000000.json"])
+
     async def results(self, run):
         config = configuration(run.id, len(run.positions), 1000000, 3600)
         raw_input = b"".join(encode(row) for row in run.positions)
@@ -280,6 +318,8 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(controller, "remove_logs", return_value={"complete": True}) as clean:
             await worker.tick()
             clean.assert_called_once()
+        with patch.object(controller, 'refresh_projections', new_callable=AsyncMock):
+            await worker.tick()
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisRun, run.id)
             self.assertEqual(saved.status, "complete")
@@ -296,13 +336,15 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
         redis.get.return_value = json.dumps({"game_links": [21, 22], "player_name": "player", "fens_to_analyze": 6967})
-        created = await create_cloud_job(CloudJobRequest(mode="games", plan_id="c" * 32), redis)
+        created = await create_cloud_job(CloudJobRequest(mode="games", plan_id="c" * 32, n_vms=2), redis)
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisJob, created["id"])
             self.assertEqual(saved.selection["game_links"], [21, 22])
             self.assertEqual(saved.selection["nodes"], 100_000)
             self.assertEqual(saved.selection["stall_timeout_seconds"], 300)
             self.assertEqual(saved.selection["total_fens"], 6967)
+            self.assertEqual(saved.selection["execution_mode"], "batch_multi_vm_v1")
+            self.assertEqual(saved.selection["n_vms"], 2)
             self.assertEqual(saved.target, 6967)
         listing = await cloud_jobs()
         self.assertTrue(listing["controller_online"])
@@ -310,6 +352,30 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(listing["blocking_job_id"], created["id"])
         public = next(job for job in listing["jobs"] if job["id"] == created["id"])
         self.assertNotIn("game_links", public["selection"])
+
+    async def test_batch_preflight_vm_count_can_change_without_releasing_or_reselecting_fens(self):
+        from fastapi import HTTPException
+        from chessism_api.operations.cloud_analysis.schemas import CloudVmCountRequest
+        from chessism_api.routers.cloud_analysis import revise_batch_vms
+        run = await self.reserved_run(2)
+        async with AsyncDBSession() as session, session.begin():
+            job = await session.get(CloudAnalysisJob, self.job.id)
+            job.status = "paused"
+            job.selection = {**job.selection, "execution_mode": "batch_multi_vm_v1", "n_vms": 2}
+        await revise_batch_vms(self.job.id, CloudVmCountRequest(n_vms=1))
+        async with AsyncDBSession() as session:
+            job = await session.get(CloudAnalysisJob, self.job.id)
+            self.assertEqual((job.status, job.selection["n_vms"]), ("queued", 1))
+            self.assertEqual((await session.get(CloudAnalysisRun, run.id)).positions, run.positions)
+            self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 2)
+        # Reject modification while the controller can advance, or once any
+        # durable launch configuration exists (including a paused publication).
+        with self.assertRaises(HTTPException):
+            await revise_batch_vms(self.job.id, CloudVmCountRequest(n_vms=2))
+        await controller.save_job(self.job.id, status="paused")
+        await controller.save_run(run.id, launch={"image_id": "pinned"}, status="publishing")
+        with self.assertRaises(HTTPException):
+            await revise_batch_vms(self.job.id, CloudVmCountRequest(n_vms=2))
 
     async def test_two_tabs_cannot_create_concurrent_cloud_jobs(self):
         from fastapi import HTTPException
@@ -423,17 +489,19 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await worker.tick()
         with patch.object(controller, "refresh_projections", new_callable=AsyncMock):
             await worker.tick()
-        with patch.object(controller, "prepare", return_value={"saved": "plan"}):
+        with patch.object(controller, "prepare", return_value={"version": 2, "jobs": []}):
             await worker.tick()
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisRun, run.id)
             self.assertEqual(saved.status, "cleaning")
-            self.assertEqual(saved.cleanup_plan, {"saved": "plan"})
+            self.assertEqual(saved.cleanup_plan, {"version": 2, "jobs": []})
         # Cleanup can resume using its plan even after Batch metadata disappears.
         cloud.job.side_effect = AssertionError("cleanup must use the persisted plan")
         with patch.object(controller, "cleaning_job", return_value={"complete": True}) as cleanup:
             await controller.Controller(cloud, "unused-local-image").tick()
             cleanup.assert_called_once()
+        with patch.object(controller, 'refresh_projections', new_callable=AsyncMock):
+            await worker.tick()
         async with AsyncDBSession() as session:
             self.assertEqual((await session.get(CloudAnalysisRun, run.id)).status, "complete")
             self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).imported, 2)

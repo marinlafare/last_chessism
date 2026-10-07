@@ -18,6 +18,7 @@ from cloud_job.launch import configuration, expected_contract, render, Client
 from cloud_job import launch
 from cleaning_job.cloud import CleanupError
 from stockfish_batch import __version__
+from stockfish_core import ENGINE_SHA256
 from stockfish_batch.checkpoints import BatchCheckpoints, digest, encode, parse_input
 
 
@@ -54,7 +55,7 @@ class CloudValidationTests(unittest.TestCase):
     def test_launch_requires_image_with_current_fen_compatibility(self):
         image_id = "sha256:" + "a" * 64
         for version in (__version__, "1.2.0"):
-            metadata = {"worker_version": version, "engine_sha": "b" * 64, "chess_version": "1.11.2"}
+            metadata = {"worker_version": version, "engine_sha": ENGINE_SHA256, "chess_version": "1.11.2"}
             with self.subTest(version=version), patch.object(launch, "docker", side_effect=[image_id, json.dumps(metadata)]):
                 if version == __version__:
                     self.assertEqual(launch.inspect_worker("local-image"), (image_id, metadata))
@@ -255,7 +256,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         job = SimpleNamespace(selection={**CloudJobRequest().model_dump(), "nodes": 1000000,
                                          "stall_timeout_seconds": 3600})
         cloud = Mock()
-        for method in ("jobs", "resources", "images", "objects"):
+        for method in ("jobs", "resources", "images", "objects", "run_resources"):
             getattr(cloud, method).return_value = []
         with patch.object(controller, "inspect_worker", return_value=("sha256:" + "b" * 64,
                   {"engine_sha": "a" * 64, "worker_version": "1.1.0", "chess_version": "1.11.2"})), \
@@ -270,14 +271,14 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
             "us-central1-docker.pkg.dev/chessism-production/chessism-workers/ui-test@sha256:" + "a" * 64, 300)
         commands = spec["taskGroups"][0]["taskSpec"]["runnables"][0]["container"]["commands"]
         self.assertEqual(commands[commands.index("--nodes") + 1], "100000")
-        self.assertEqual([call[0] for call in cloud.mock_calls], ["jobs", "resources", "images", "objects"])
+        self.assertEqual([call[0] for call in cloud.mock_calls], ["jobs", "run_resources", "resources", "images", "objects"])
 
     async def test_leftovers_prevent_image_publication_and_preserve_recovery_data(self):
         rows, _, _ = fixture()
         run = SimpleNamespace(id="a" * 32, positions=rows, status="preparing", launch={})
-        for kind in ("jobs", "resources", "images", "objects"):
+        for kind in ("jobs", "resources", "images", "objects", "run_resources"):
             cloud = Mock()
-            for method in ("jobs", "resources", "images", "objects"):
+            for method in ("jobs", "resources", "images", "objects", "run_resources"):
                 getattr(cloud, method).return_value = [{}] if method == kind else []
             with self.subTest(kind=kind), patch.object(controller, "inspect_worker") as inspect:
                 with self.assertRaisesRegex(CleanupError, "Previous cloud resources"):
@@ -306,7 +307,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
                  patch.object(controller, "save_run", new_callable=AsyncMock) as save:
                 await controller.Controller(cloud, "unused-image").advance(None, run)
                 self.assertTrue((Path(directory) / (plan["sha256"] + ".json")).is_file())
-                self.assertEqual(save.await_args.kwargs["status"], "complete")
+                self.assertEqual(save.await_args.kwargs["status"], "refreshing")
         self.assertFalse(cloud.job_data)
         self.assertFalse(cloud.object_data)
 

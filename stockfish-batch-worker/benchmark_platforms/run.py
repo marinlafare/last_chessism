@@ -130,7 +130,11 @@ def sample(rows):
 
 def source():
     # Fixed, completed corpus, read-only transaction and a statement timeout.
-    sql = ("SELECT json_build_object('positions', positions, 'status', status, 'active', "
+    sql = ("SELECT json_build_object('positions', (SELECT COALESCE(json_agg(item ORDER BY batch_ordinal, n), '[]'::json) FROM "
+           "(SELECT json_build_object('id', v.ident, 'fen', v.fen) AS item, p.ordinal AS batch_ordinal, v.n "
+           "FROM cloud_control_position p CROSS JOIN LATERAL unnest(p.id,p.fen) WITH ORDINALITY AS v(ident,fen,n) "
+           "WHERE p.document_id=cloud_analysis_run.positions_record_id) selected), "
+           "'details_pruned', details_pruned, 'status', status, 'active', "
            "(SELECT count(*) FROM cloud_analysis_job WHERE status NOT IN ('complete','cancelled','failed'))) "
            f"FROM cloud_analysis_run WHERE id='{SOURCE_RUN}';")
     result = subprocess.run([
@@ -140,6 +144,7 @@ def source():
     ], input=sql, text=True, capture_output=True, check=True, timeout=40, cwd=ROOT.parent)
     payload = json.loads(result.stdout)
     require(payload["active"] == 0 and payload["status"] == "complete", "Production cloud analysis is active")
+    require(not payload['details_pruned'], 'Completed-job FEN identities were compacted. Use a saved local benchmark input or select a fresh corpus.')
     return payload["positions"]
 
 

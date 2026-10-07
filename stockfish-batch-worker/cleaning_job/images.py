@@ -71,7 +71,7 @@ def blockers(cloud, plan, uris):
         return {}
     selected = {j["uid"] for j in plan["jobs"]}
     blocked = {}
-    for job in cloud.jobs():
+    for job in [*cloud.jobs(), *cloud.run_resources()]:
         if job.get("uid") in selected:
             continue
         for uri in uris:

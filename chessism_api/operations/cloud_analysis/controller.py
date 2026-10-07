@@ -22,11 +22,22 @@ from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CL
 from .importer import import_batch, refresh_projections, refresh_global_projections, validate_manifest
 from .preflight import verify_clean_workspace
 from .log_cleanup import plan_logs, remove_logs
+from . import history
 
 
 async def save_run(run_id, **changes):
     async with AsyncDBSession() as session, session.begin():
         run = await session.get(CloudAnalysisRun, run_id, with_for_update=True)
+        if 'status' in changes and changes['status'] != run.status:
+            await history.transition(session, run, run.status, changes['status'])
+            if changes['status'] == 'finalizing':
+                from chessism_api.database.cloud_codec import checksum
+                run.results_verified_at = datetime.now(timezone.utc)
+                run.completion_manifest_sha256 = checksum(changes.get('launch', run.launch)['manifest'])
+            elif changes['status'] == 'refreshing':
+                run.cleanup_completed_at = datetime.now(timezone.utc)
+        if 'launch' in changes:
+            await history.save_usage(session, run, changes['launch'])
         for key, value in changes.items():
             setattr(run, key, value)
 
@@ -61,6 +72,7 @@ async def reserve(job, limit):
                                positions=positions, launch={}, receipts={})
         session.add(run)
         await session.flush()
+        await history.transition(session, run, None, 'preparing')
         for offset in range(0, len(fens), 1000):
             await session.execute(insert(CloudFenClaim),
                 [{"fen": fen, "run_id": run.id} for fen in fens[offset:offset + 1000]])
@@ -74,6 +86,7 @@ class Controller:
         self.cloud, self.local_image = cloud, local_image
 
     async def tick(self):
+        self.continue_immediately = False
         async with AsyncDBSession() as session:
             job = (await session.scalars(select(CloudAnalysisJob).where(
                 CloudAnalysisJob.status.in_(["queued", "running", "paused"])
@@ -91,16 +104,21 @@ class Controller:
             await save_job(job.id, status="running", error=None)
             if run:
                 await self.advance(job, run)
+                async with AsyncDBSession() as session:
+                    state = await session.scalar(select(CloudAnalysisRun.status).where(CloudAnalysisRun.id == run.id))
+                self.continue_immediately = state != run.status and state not in {'failed'}
             elif job.imported >= job.target:
-                await refresh_global_projections()
+                async with history.timed_phase(job.id, 'global_summaries'):
+                    await refresh_global_projections()
                 await save_job(job.id, status="complete")
-            elif len(runs) >= (1 if job.selection.get("execution_mode") == "single_vm_v1" else
+            elif len(runs) >= (1 if job.selection.get("execution_mode") in {"single_vm_v1", "cloud_run_v1", "batch_multi_vm_v1"} else
                               job.selection["runs"] if job.selection["mode"] == "loop" else (job.target + 999) // 1000):
-                await refresh_global_projections()
+                async with history.timed_phase(job.id, 'global_summaries'):
+                    await refresh_global_projections()
                 await save_job(job.id, status="limit_reached", error="Selected results imported and cleaned. Some requested positions were unavailable when reserved; no extra VM was launched.")
             else:
                 limit = min(1000, job.target - job.imported)
-                if job.selection.get("execution_mode") == "single_vm_v1":
+                if job.selection.get("execution_mode") in {"single_vm_v1", "cloud_run_v1", "batch_multi_vm_v1"}:
                     limit = job.target - job.imported
                 elif job.selection["mode"] == "loop":
                     limit = min(limit, job.selection["positions_per_run"])
@@ -114,6 +132,16 @@ class Controller:
         return True
 
     async def advance(self, job, run):
+        if run.status == 'refreshing':
+            await refresh_projections(run.positions)
+            await history.compact_run(run.id)
+            return
+        if run.launch.get("multi_vm") or (job and job.selection.get("execution_mode") == "batch_multi_vm_v1"):
+            from .batch_spot_controller import advance
+            return await advance(self, job, run)
+        if run.launch.get("backend") == "cloud_run" or (job and job.selection.get("backend") == "cloud_run"):
+            from .cloud_run_controller import advance
+            return await advance(self, job, run)
         # Preserve an existing run's checkpoint contract on recovery; new runs
         # always use fixed system limits, never a client-provided setting.
         config = (Config(**run.launch["config"]).validate() if "config" in run.launch else
@@ -161,7 +189,6 @@ class Controller:
             await self.poll(run, config)
         elif run.status == "finalizing":
             validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
-            await refresh_projections(run.positions)
             await save_run(run.id, status="cleanup_planning", error=None)
         elif run.status == "cleanup_planning":
             validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
@@ -180,11 +207,9 @@ class Controller:
                 cloud=self.cloud, wait_seconds=0,
                 plan_directory=runtime.CLEANUP_ROOT)
             if result["complete"]:
-                await save_run(run.id, status="log_planning" if launch.get("workflow_version") == 2 else "complete", error=None)
+                await save_run(run.id, status="log_planning" if launch.get("workflow_version") == 2 else "refreshing", error=None)
         elif run.status == "log_planning":
-            async with AsyncDBSession() as session:
-                plans = (await session.scalars(select(CloudAnalysisRun.cleanup_plan).where(
-                    (CloudAnalysisRun.status == "complete") | (CloudAnalysisRun.id == run.id)))).all()
+            plans = await history.cleanup_plans(run.id)
             uids = {job["uid"] for plan in plans if plan for job in plan.get("jobs", [])}
             launch["log_cleanup_plan"] = await asyncio.to_thread(plan_logs, self.cloud, uids)
             await save_run(run.id, launch=launch, status="log_cleaning", error=None)
@@ -192,7 +217,7 @@ class Controller:
             validate_performance(launch.get("performance"), run.contract, config.workers)
             report = await asyncio.to_thread(remove_logs, self.cloud, launch["log_cleanup_plan"])
             launch["log_cleanup_report"] = report
-            await save_run(run.id, launch=launch, status="complete" if report["complete"] else "log_cleaning", error=None)
+            await save_run(run.id, launch=launch, status="refreshing" if report["complete"] else "log_cleaning", error=None)
         elif run.status == "failed":
             await save_job(job.id, status="failed", error=run.error)
         else:

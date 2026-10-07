@@ -20,13 +20,15 @@ from stockfish_batch.checkpoints import digest, encode, parse_input
 
 
 @asynccontextmanager
-async def database():
+async def database(*, statement_timeout_ms=120000):
+    require(type(statement_timeout_ms) is int and 1 <= statement_timeout_ms <= 900000,
+            'Database statement timeout must be bounded at 15 minutes')
     values = dotenv_values(ROOT.parent / '.env')
     url = host_database_url(values.get('DATABASE_URL'))
     os.environ['DATABASE_URL'] = url
     from chessism_api.database.engine import AsyncDBSession
     engine = create_async_engine(url, pool_pre_ping=True,
-        connect_args={'ssl': False, 'server_settings': {'statement_timeout': '120000', 'lock_timeout': '10000'}})
+        connect_args={'ssl': False, 'server_settings': {'statement_timeout': str(statement_timeout_ms), 'lock_timeout': '10000'}})
     AsyncDBSession.configure(bind=engine)
     try:
         yield AsyncDBSession
@@ -99,16 +101,33 @@ async def record_submission(plan, job):
 async def import_results(directory, plan):
     require((directory / 'report.json').is_file(), 'Validate complete results before importing')
     await check(plan, submitted=True)
-    async with database() as sessions:
-        from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
-        from chessism_api.operations.cloud_analysis.importer import (
-            import_batch, refresh_projections, refresh_global_projections, validate_manifest,
-        )
+    async with database():
+        from chessism_api.operations.cloud_analysis.importer import import_batch
         for index in range(plan['count'] // 500):
             raw = (directory / f'download/batches/{index:06d}.json').read_bytes()
             added = await import_batch(plan['db_run_id'], raw, index)
             if index % 20 == 0:
                 print(json.dumps({'event': 'import_batch', 'index': index, 'added': added}), flush=True)
+    return await finalize_import(directory, plan)
+
+
+async def finalize_import(directory, plan):
+    """Resume only derived views/receipt after all scores are already committed.
+
+    High-frequency global FENs can touch almost the entire games catalog. Keep
+    the ordinary import's two-minute timeout, but give these final full-catalog
+    statements a separate, bounded fifteen-minute ceiling. This never reimports
+    scores, increments counters, releases additional claims or submits compute.
+    """
+    report = json.loads((directory / 'report.json').read_bytes())
+    require(report.get('all_result_checksums_and_legal_pvs_verified') is True
+            and report.get('id') == plan['id'] and report.get('positions') == plan['count'], 'Invalid report')
+    await check(plan, submitted=True)
+    async with database(statement_timeout_ms=900000) as sessions:
+        from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
+        from chessism_api.operations.cloud_analysis.importer import (
+            refresh_projections, refresh_global_projections, validate_manifest,
+        )
         async with sessions() as session:
             run = await session.get(CloudAnalysisRun, plan['db_run_id'])
             job = await session.get(CloudAnalysisJob, plan['db_job_id'])
@@ -117,7 +136,9 @@ async def import_results(directory, plan):
             remaining = await session.scalar(select(func.count()).select_from(CloudFenClaim).where(CloudFenClaim.run_id == run.id))
             require(job.imported == plan['count'] and remaining == 0, 'Incomplete import; cleanup prohibited')
             positions = run.positions
+        print(json.dumps({'event': 'refreshing_game_player_summaries', 'statement_timeout_seconds': 900}), flush=True)
         await refresh_projections(positions)
+        print(json.dumps({'event': 'refreshing_global_summaries'}), flush=True)
         await refresh_global_projections()
         receipt = {'benchmark_id': plan['id'], 'db_job_id': plan['db_job_id'], 'db_run_id': plan['db_run_id'],
                    'imported': plan['count'], 'manifest_sha256': digest((directory / 'download/manifest.json').read_bytes()),
@@ -136,3 +157,55 @@ async def import_results(directory, plan):
 
 def execute(action, *args, **kwargs):
     return asyncio.run(action(*args, **kwargs))
+
+
+async def verify_import(directory, plan, *, cleanup=None):
+    """Recheck durable receipts and actual scores before deletion; finalize afterwards."""
+    from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen
+    from chessism_api.operations.cloud_analysis.importer import validate_manifest
+    receipt = json.loads((directory / 'import-receipt.json').read_bytes())
+    manifest_raw = (directory / 'download/manifest.json').read_bytes()
+    require(receipt.get('cleanup_ready') is True and receipt.get('database_receipts_verified') is True
+            and receipt.get('benchmark_id') == plan['id'] and receipt.get('db_run_id') == plan['db_run_id']
+            and receipt.get('db_job_id') == plan['db_job_id'] and receipt.get('imported') == plan['count']
+            and receipt.get('remaining_claims') == 0 and receipt.get('manifest_sha256') == digest(manifest_raw),
+            'Import receipt mismatch; cleanup prohibited')
+    async with database() as sessions, sessions() as session, session.begin():
+        job = await session.get(CloudAnalysisJob, plan['db_job_id'], with_for_update=True)
+        run = await session.get(CloudAnalysisRun, plan['db_run_id'], with_for_update=True)
+        require(job is not None and run is not None and run.job_id == job.id
+                and job.status in ('paused', 'complete') and run.status in ('benchmark', 'complete')
+                and job.selection.get('benchmark_id') == plan['id']
+                and run.launch.get('benchmark_id') == plan['id']
+                and run.launch.get('import_receipt') == receipt and run.contract == plan['contract']
+                and job.imported == plan['count'], 'Database import identity mismatch')
+        validate_manifest(json.loads(manifest_raw), run.positions, run.contract, run.receipts)
+        remaining = await session.scalar(select(func.count()).select_from(CloudFenClaim).where(CloudFenClaim.run_id == run.id))
+        require(remaining == 0, 'Reserved FENs remain; cleanup prohibited')
+        scored = 0
+        for offset in range(0, len(run.positions), 1000):
+            scored += await session.scalar(select(func.count()).select_from(Fen).where(
+                Fen.fen.in_([r['fen'] for r in run.positions[offset:offset + 1000]]), Fen.score.is_not(None)))
+        require(scored == plan['count'], 'Imported scores are missing; cleanup prohibited')
+        if cleanup is not None:
+            require(cleanup.get('complete') is True and not cleanup.get('remaining_jobs')
+                    and not cleanup.get('remaining_compute') and not cleanup.get('remaining_object_versions')
+                    and not cleanup.get('remaining_images'), 'Cloud cleanup is not verified')
+            run.status = job.status = 'complete'
+            run.error = job.error = None
+            run.launch = {**run.launch, 'cleanup_verification': cleanup}
+        return {'imported': job.imported, 'scored_fens_verified': scored,
+                'remaining_claims': remaining, 'job_status': job.status}
+
+
+async def import_receipt_ready(plan, receipt):
+    """Wait for the commit after the local receipt write, without loading FEN data."""
+    from chessism_api.database.models import CloudAnalysisRun
+    from chessism_api.database.cloud_codec import read_projection
+    async with database() as sessions, sessions() as session:
+        ref = await session.scalar(select(CloudAnalysisRun._launch_ref).where(
+            CloudAnalysisRun.id == plan['db_run_id'], CloudAnalysisRun.job_id == plan['db_job_id']))
+        connection = await session.connection()
+        saved = (await connection.run_sync(read_projection, ref, {'import_receipt'})).get('import_receipt') if ref else None
+        require(saved is None or saved == receipt, 'Database/local import receipts disagree')
+        return saved == receipt

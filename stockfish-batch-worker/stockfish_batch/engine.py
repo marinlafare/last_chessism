@@ -5,6 +5,7 @@ from enum import Enum
 import chess
 import chess.engine
 from .watchdog import progress_timeout
+from stockfish_core.analysis import board_from_fen, configure, analyse, verify_binary
 
 
 def serializable(value):
@@ -33,13 +34,11 @@ class Engine:
     async def __aenter__(self):
         try:
             async with asyncio.timeout(20):
+                verify_binary(self.config.engine)
                 self.transport, self.protocol = await chess.engine.popen_uci([self.config.engine])
                 if self.protocol.id.get("name") != "Stockfish 16.1":
                     raise ValueError(f"Expected Stockfish 16.1, got {self.protocol.id.get('name')!r}")
-                await self.protocol.configure({
-                    "Threads": self.config.threads, "Hash": self.config.hash_mb,
-                    "UCI_ShowWDL": True, "SyzygyPath": "", "SyzygyProbeLimit": 0,
-                })
+                await configure(self.protocol, self.config.threads, self.config.hash_mb)
             return self
         except BaseException:
             await self.__aexit__(None, None, None)
@@ -56,7 +55,7 @@ class Engine:
                 self.transport.close()
 
     async def analyse(self, row):
-        board = chess.Board(row["fen"])
+        board = board_from_fen(row["fen"])
         if board.is_game_over():
             score = chess.engine.Mate(0) if board.is_checkmate() else chess.engine.Cp(0)
             info = {"pv": [], "score": chess.engine.PovScore(score, board.turn)}
@@ -64,25 +63,13 @@ class Engine:
             # Streaming UCI info distinguishes a long search from a stuck engine.
             # Repeated messages/CPU activity alone are not evidence of progress.
             async with progress_timeout(self.config.stall_timeout) as advanced:
-                analysis = await self.protocol.analysis(
-                    board, chess.engine.Limit(nodes=self.config.nodes), multipv=self.config.multipv,
-                    game=object(), info=chess.engine.INFO_BASIC | chess.engine.INFO_SCORE | chess.engine.INFO_PV,
-                )
-                last_nodes = 0
-                with analysis:
-                    async for update in analysis:
-                        nodes = update.get("nodes", 0)
-                        if nodes > last_nodes:
-                            last_nodes = nodes
-                            advanced()
-                            self.progress_callback()
-                    await analysis.wait()
-                info = analysis.multipv
+                def progressed():
+                    advanced()
+                    self.progress_callback()
+                info = await analyse(self.protocol, board, self.config.nodes, self.config.multipv, progressed)
         else:
             # A distinct game token sends ucinewgame and resets hash between independent FENs.
             # SCORE includes WDL. Avoid parsing unused refutations/current-line data.
-            info = await asyncio.wait_for(self.protocol.analyse(
-                board, chess.engine.Limit(nodes=self.config.nodes), multipv=self.config.multipv,
-                game=object(), info=chess.engine.INFO_BASIC | chess.engine.INFO_SCORE | chess.engine.INFO_PV,
-            ), timeout=self.config.position_timeout)
+            info = await asyncio.wait_for(analyse(self.protocol, board, self.config.nodes, self.config.multipv),
+                                          timeout=self.config.position_timeout)
         return {"fen": row["fen"], "is_valid": True, "analysis": serializable(info)}

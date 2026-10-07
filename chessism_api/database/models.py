@@ -4,19 +4,24 @@ from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger,
     DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
-    SmallInteger, text, ForeignKeyConstraint, Text
+    SmallInteger, text, ForeignKeyConstraint, Text, Numeric
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
 
 Base = declarative_base()
+from .cloud_columns import register as register_cloud_columns
+from .cloud_codec import Document, Receipts, install as install_cloud_documents
+register_cloud_columns(Base.metadata)
 
 
 class CloudAnalysisJob(Base):
     __tablename__ = "cloud_analysis_job"
     id = Column(String(32), primary_key=True)
     status = Column(String(32), nullable=False, default="queued", index=True)
-    selection = Column(JSON, nullable=False)
+    CLOUD_DOCUMENTS = ('selection',)
+    _selection_ref = Column('selection_record_id', String(96))
+    selection = Document('selection', 'selection', dict)
     target = Column(Integer, nullable=False)
     imported = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -29,15 +34,97 @@ class CloudAnalysisRun(Base):
     id = Column(String(32), primary_key=True)
     job_id = Column(String(32), ForeignKey("cloud_analysis_job.id"), nullable=False, index=True)
     status = Column(String(32), nullable=False, default="preparing")
-    positions = Column(JSON, nullable=False)
-    # Immutable launch parameters and attempt names survive controller restarts.
-    launch = Column(JSON, nullable=False, default=dict)
-    receipts = Column(JSON, nullable=False, default=dict)
-    contract = Column(JSON)
+    CLOUD_DOCUMENTS = ('positions', 'launch', 'receipts', 'contract', 'cleanup_plan')
+    _positions_ref = Column('positions_record_id', String(96))
+    _launch_ref = Column('launch_record_id', String(96))
+    _receipts_ref = Column('receipts_record_id', String(96))
+    _contract_ref = Column('contract_record_id', String(96))
+    _cleanup_plan_ref = Column('cleanup_plan_record_id', String(96))
+    positions = Document('positions', 'positions', list)
+    launch = Document('launch', 'launch', dict)
+    receipts = Receipts('receipts', 'receipts', dict)
+    contract = Document('contract', 'contract')
     cloud_state = Column(String(32))
-    cleanup_plan = Column(JSON)
+    cleanup_plan = Document('cleanup_plan', 'cleanup')
     error = Column(Text)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    position_count = Column(Integer, nullable=False, default=0, server_default='0')
+    imported_count = Column(Integer, nullable=False, default=0, server_default='0')
+    details_pruned = Column(Boolean, nullable=False, default=False, server_default='false')
+    results_verified_at = Column(DateTime(timezone=True))
+    cleanup_completed_at = Column(DateTime(timezone=True))
+    completion_manifest_sha256 = Column(String(64))
+
+
+install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun))
+
+
+class CloudPhaseTiming(Base):
+    __tablename__ = 'cloud_phase_timing'
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), nullable=False, index=True)
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), index=True)
+    phase = Column(String(40), nullable=False)
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    finished_at = Column(DateTime(timezone=True))
+    duration_seconds = Column(Float)
+    outcome = Column(String(24), nullable=False, default='running')
+    error = Column(Text)
+
+
+class CloudResultBatch(Base):
+    __tablename__ = 'cloud_result_batch'
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), primary_key=True)
+    task_index = Column(Integer, primary_key=True)
+    batch_index = Column(Integer, primary_key=True)
+    object_name = Column(Text, nullable=False)
+    sha256 = Column(String(64), nullable=False)
+    receipt_sha256 = Column(String(64), nullable=False)
+    position_count = Column(Integer, nullable=False)
+    size_bytes = Column(BigInteger)
+    download_seconds = Column(Float)
+    validation_seconds = Column(Float)
+    transaction_seconds = Column(Float)
+    committed_at = Column(DateTime(timezone=True))
+    detail_record_id = Column(String(96))
+
+
+class CloudUsage(Base):
+    __tablename__ = 'cloud_usage'
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), primary_key=True)
+    task_index = Column(Integer, primary_key=True)
+    backend = Column(String(24), nullable=False)
+    cpu_count = Column(Integer)
+    memory_mib = Column(Integer)
+    worker_memory_mib = Column(Integer)
+    machine_type = Column(String(80))
+    worker_seconds = Column(Float)
+    analyzed_fens = Column(Integer)
+    peak_memory_bytes = Column(BigInteger)
+    cpu_busy_percent = Column(Float)
+    # Processing time is not billed time. Costs stay NULL until an explicit,
+    # sourced estimate or billing reconciliation exists.
+    estimated_cost = Column(Numeric(20, 8))
+    actual_cost = Column(Numeric(20, 8))
+    currency = Column(String(3))
+    price_source = Column(Text)
+    measured_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class CloudExecutionAttempt(Base):
+    __tablename__ = 'cloud_execution_attempt'
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), primary_key=True)
+    resource_uid = Column(String(160), primary_key=True)
+    task_index = Column(Integer, nullable=False)
+    backend = Column(String(24), nullable=False)
+    resource_name = Column(Text, nullable=False)
+    recovery_session = Column(Integer)
+    state = Column(String(32))
+    started_at = Column(DateTime(timezone=True))
+    finished_at = Column(DateTime(timezone=True))
+    reported_run_seconds = Column(Float)
+    last_exit_code = Column(Integer)
+    observed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
 
 class CloudFenClaim(Base):

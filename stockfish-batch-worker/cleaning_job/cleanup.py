@@ -110,6 +110,19 @@ def check_other_jobs(cloud, plan):
                                 or (any(char in path for char in "*?[") and root.startswith(reference)))
                     require(not overlaps,
                             f"{ident['id']} also references {prefix}; include all finished attempts together")
+    # Batch cleanup must not invalidate a Cloud Run job or saved execution.
+    for resource in cloud.run_resources():
+        for value in strings(resource):
+            for bucket, path in re.findall(r"gs://([^/\s\"'<>]+)(/[A-Za-z0-9_./*?\[\]-]*)?", value):
+                if bucket != BUCKET:
+                    continue
+                reference = re.split(r"[*?\[]", path, maxsplit=1)[0].strip("/")
+                for prefix in plan["prefixes"]:
+                    root = prefix.rstrip("/")
+                    require(not (not reference or reference == root or reference.startswith(prefix)
+                                 or root.startswith(reference + "/")
+                                 or (any(char in path for char in "*?[") and root.startswith(reference))),
+                            "Cloud Run resource references Batch checkpoint files")
 
 
 def check_bucket(cloud):

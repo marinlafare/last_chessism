@@ -50,7 +50,7 @@ async def serve(args):
             async def work():
                 while True:
                     await controller.tick()
-                    await asyncio.sleep(args.poll_seconds)
+                    await asyncio.sleep(0 if controller.continue_immediately else args.poll_seconds)
             work_task = asyncio.create_task(work())
             print("Cloud controller ready; queued UI jobs authorize billable launches. Ctrl+C stops polling, not running cloud jobs.", flush=True)
             try:

@@ -18,6 +18,7 @@ RUN --mount=type=bind,from=build,source=/wheels,target=/wheels \
 COPY --from=build /engine/stockfish /usr/local/bin/stockfish
 COPY --from=build /engine/source /usr/local/share/stockfish
 COPY stockfish_batch ./stockfish_batch
+COPY stockfish_core ./stockfish_core
 COPY benchmark_fen_batches ./benchmark_fen_batches
 RUN groupadd --gid 10001 worker && useradd --uid 10001 --gid worker --no-create-home worker
 USER 10001:10001
