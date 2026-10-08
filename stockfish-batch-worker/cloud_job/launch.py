@@ -129,8 +129,12 @@ class Client(RecoveryClient, Cloud):
         # Never adopt a coincidentally named job with different input/image/settings.
         actual = job["taskGroups"][0]["taskSpec"]
         expected = spec["taskGroups"][0]["taskSpec"]
-        actual_container = actual["runnables"][0]["container"]
-        expected_container = expected["runnables"][0]["container"]
-        if (any(actual_container.get(key) != value for key, value in expected_container.items())
-                or actual_container.get("entrypoint") or len(actual["runnables"]) != 1):
+        if len(actual['runnables']) != len(expected['runnables']):
             raise ValueError("Existing Batch job does not match durable launch parameters")
+        for observed, wanted in zip(actual['runnables'], expected['runnables']):
+            actual_container, expected_container = observed.get('container', {}), wanted['container']
+            if (any(actual_container.get(key) != value for key, value in expected_container.items())
+                    or actual_container.get('entrypoint')
+                    or any(observed.get(flag, False) for flag in ('background', 'ignoreExitStatus', 'alwaysRun'))
+                    or observed.get('timeout') or 'script' in observed or 'barrier' in observed):
+                raise ValueError('Existing Batch job does not match durable launch parameters')

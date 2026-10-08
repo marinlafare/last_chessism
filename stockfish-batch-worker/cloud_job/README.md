@@ -15,7 +15,8 @@ New Batch requests accept `n_vms` (1–10, default 1). Each VM is the tested
 `n2d-highcpu-16`: 16 vCPUs and 16 GiB RAM. A 12-GiB worker/container budget
 leaves 4 GiB for the OS/agents. Each runs 16 persistent **single-threaded**
 Stockfish engines, 100,000 nodes/FEN, 256-MiB hash, and background uploads of
-up to 500 results. The 200,000-FEN limit is for the **whole request**, not per VM.
+up to 500 results. The 500,000-FEN limit is for each **normal loop**, not per VM;
+each VM processes sequential work units of at most 50,000 FENs.
 The 300-second no-completed-FEN watchdog is independent on each VM.
 
 The controller evenly partitions the reserved FEN list without duplicates,
@@ -36,7 +37,7 @@ still authoritative about Spot capacity and quota applicability. There is no
 fallback to STANDARD VMs or a larger machine. As checked on 2026-10-07, this
 project’s N2D quota was 16 CPUs: only one such VM could run concurrently.
 
-The durable `batch_multi_vm_v1` execution format preserves shard IDs, contracts,
+The durable `batch_work_units_v1` execution format preserves unit IDs, contracts,
 workflow ownership and receipts across restarts. Partial launch resumes only
 missing workflow owners. Cancellation reaches every unfinished shard. A manual
 retry keeps successful shards and restarts only failed/cancelled shards. All
@@ -45,8 +46,10 @@ together **after every VM has succeeded and all results/reports are saved**.
 Per-VM states and timing reports appear in the UI. Legacy saved single-VM jobs
 keep their original configuration/recovery format.
 
-Implementation: `cloud_job/batch_spot.py`, API `batch_spot_controller.py`,
-`batch_spot_results.py`, and database-only `batch_spot_retry.py`. Offline tests:
+Implementation: `cloud_job/batch_spot.py`, `cloud_job/work_units.py`, API
+`work_units_controller.py`, `work_units_results.py`, and database-only
+`batch_spot_retry.py`. The original `batch_spot_controller.py` and
+`batch_spot_results.py` still handle saved legacy launches. Offline tests:
 `tests/test_batch_spot_analysis.py`, the sharded-import database tests, and the
 mocked browser test. A real multi-VM run still requires sufficient quota and a
 separately requested paid test; local tests do not establish cloud performance.
@@ -62,11 +65,59 @@ Keep machine-family/VM-count cost benchmarks separate from this recovery test.
 
 ## Lifecycle
 
+### Sequential loops over one frozen FEN set
+
+Batch Spot's **Times** control accepts 1–20 sequential loops (default 1).
+For position selections, **FENs per loop = 500,000, Times = 4** requests up to
+2,000,000 distinct FENs. For a game preview, Times divides the preview's existing
+FEN set; it does not multiply the games or repeat their analysis. Each resulting
+loop must fit the 500,000-FEN bound. Cloud Run is unchanged.
+
+The controller reserves the entire selection in local PostgreSQL before the
+first loop publishes anything. Selection is incremental in at most 50k-FEN
+transactions; a restart resumes those reservations. Once frozen, later loops
+never select replacements. If fewer eligible FENs are available, only that
+smaller set is processed, and empty loops are skipped. Local analysis skips all
+reserved positions, including future loops.
+
+Each loop follows the normal lifecycle below: preflight/quota checks, image
+publication, upload, execution, incremental import, verification, cloud cleanup,
+and database-summary refresh. The next loop cannot start until all these steps
+succeed. Future inputs remain local. Each loop retains its own reports and
+recovery state; a failure pauses progression rather than skipping the loop.
+The UI shows total and current-loop progress and **Stop after current loop**.
+Stopping completes any started loop and releases only unused local reservations.
+A failed or paused current loop still needs recovery before the stop can finish.
+
+The local controller must be online to transition between loops. Google's
+recovery workflow can finish the current loop while the PC is off, but does not
+start the next one. Quota applies to one loop's VM fleet, not all loops at once.
+There is no fixed monetary cap; every started loop incurs its normal charges.
+
+The `batch_sequence_v1` format uses two small native tables, `cloud_batch_sequence`
+(one row per request) and `cloud_batch_cycle` (one per loop). FEN input packs and
+claims reuse the bounded existing tables. No new JSON columns or Google IAM
+grants are needed. With no unfinished cloud requests, stop the API and controller,
+then run with the normal database environment:
+
+```bash
+PYTHONPATH=stockfish-batch-worker python -m chessism_api.operations.cloud_analysis.migrate_sequences
+```
+
+This additive, repeatable migration refuses active requests and makes no Google
+calls. Restart the updated API/controller together. Local verification lives in
+`tests/test_cloud_sequences.py`, `tests/test_cloud_sequences_database.py` and the
+mocked UI browser test. These tests do not establish live multi-loop performance.
+
+### Normal process (each loop)
+
 The Compose controller runs on your PC using your existing `gcloud` login:
 
 1. The authenticated UI records a bounded request in PostgreSQL.
-2. The controller selects the whole request (up to 200,000 unscored FENs) using `FOR UPDATE SKIP LOCKED`,
-   inserts durable cloud reservations, and commits **before uploading anything**.
+2. The controller selects unscored FENs using `FOR UPDATE SKIP LOCKED`, inserts
+   durable cloud reservations, and commits **before uploading anything**. Batch
+   requests reserve at most 50,000 per unit, up to 500,000 per loop; Cloud Run retains
+   its 200,000-FEN whole-request bound.
 3. Before fleet creation, it verifies that earlier Batch jobs, compute resources,
    repository images and live/noncurrent bucket objects are gone. Unexpected
    leftovers pause the job before upload; they are not blindly deleted because
@@ -101,10 +152,32 @@ The Compose controller runs on your PC using your existing `gcloud` login:
    immediately before deletion. Pending deletion is verified on subsequent ticks.
    API errors pause cleanup; no other cloud job starts while it is pending.
 9. Only after cloud cleanup does local game-summary refresh run. Completed run
-   details are compacted; global score/rating summaries refresh once per request.
+   details are compacted; global score/rating summaries refresh once per loop.
    The UI reports completion only after these local phases also finish. Ready
    phase transitions proceed immediately; the 15-second interval applies to
    waiting for external progress, not every step.
+
+Cleanup optimization (2026-10-08): independent inventories use up to four
+readers; nested readers share an eight-request bound per REST client. Log
+planning, whole-plan validation and post-deletion verification each combine
+the exact allowlisted names into one paginated
+[Google Logging OR query](https://docs.cloud.google.com/logging/docs/view/logging-query-language).
+There is still no time/instance filter that could hide unrelated entries.
+Each stream retains its fresh project-idle and ownership checks immediately
+before deletion. Job UID, object-generation and image-upload identity checks
+remain mandatory; inventories are not cached across deletion boundaries.
+Incomplete scans and failed readers abort, after all in-flight readers drain.
+Existing saved plans and retries use the same format; no migration is needed.
+
+For the previous test's five deletable streams plus two retained streams,
+the mocked lifecycle now needs eight logical log scans instead of 22 (actual
+page counts depend on volume). A read-only Google comparison across all nine
+allowlisted names returned identical 186-entry classifications in 2.052 seconds
+combined versus 11.068 seconds separately. This measures reads only, not a new
+end-to-end cleanup run. Recovery-workflow polling remains 60 seconds and the
+local waiting interval remains 15 seconds; no extra workflow step usage or new
+IAM permissions are introduced. Cleanup-only changes require rebuilding the
+host controller, not publishing a new Stockfish engine image.
 
 ## Column-based history and bounded ingestion
 
@@ -331,9 +404,73 @@ Only one controller may run per database (PostgreSQL session advisory lock).
 Do not manually upload images or submit jobs into its `ui-<run-id>` packages or
 prefixes while it operates. Those names are owned by the corresponding job.
 
+## Large Batch requests (up to 500,000 FENs)
+
+All new Batch requests use `batch_work_units_v1`: one user request,
+internally split into units of at most **50,000 FENs**, with **500-result files**.
+A 500,000-FEN request with one VM produces ten sequential container runnables
+inside one Google Batch task, on the **same n2d-highcpu-16 Spot VM**. More VMs split
+the selection evenly first; each VM runs its own ordered list of bounded units.
+The engine profile, 16-GiB VM/12-GiB container budgets, and five-minute analysis
+inactivity watchdog are unchanged. Cloud Run's limit stays at 200,000 FENs.
+
+Every input is reserved and uploaded before any supervisor is started. Once all
+supervisors are running, Google schedules the remaining units even if the PC is
+off. A preempted VM replays its ordered runnable list: `--skip-completed-unit`
+recognizes a completed unit by its matching immutable input/engine contract,
+completion manifest and performance report; unfinished units resume their saved
+500-result files. Missing or conflicting completion metadata never permits
+silent success. Existing Google-owned 50001 recovery and the two application
+attempts per VM remain in force; no new workflow deployment or IAM grants are
+needed. Container transitions add some overhead and are measured by Batch time,
+not the sum of successful unit worker timings.
+
+The parent record contains only a small unit index/proofs, not 500,000 FENs or a
+single giant manifest. Units use the existing bounded input/receipt tables, plus
+two native-column tables (`cloud_batch_unit`, `cloud_control_work_unit`); no JSON
+database columns are introduced. Incremental imports update the parent/UI count
+atomically with the job and FEN rows. Offline catch-up loads one unit at a time.
+Final verification matches every unit's durable proof, committed batch counts
+and released claims. **No unit files are deleted early.** All VM supervisors must
+stop before shared job/image/data cleanup. Object deletion uses at most eight
+generation-pinned requests concurrently, and remains resumable on error.
+Affected-game summaries run once after cloud cleanup; temporary local FEN detail
+is then compacted one unit per controller tick. The UI reports done only after
+cleanup and local summary finalization.
+
+Activation: with no queued/running/paused/failed cloud work, stop the API and cloud
+controller, run `python -m chessism_api.operations.cloud_analysis.migrate_work_units`
+with the normal database environment, then rebuild/recreate the API, controller
+and cloud-worker-image (worker **1.5.0**). The additive migration refuses active
+cloud requests and is repeatable; it does not create Google resources. Deploy the
+updated frontend with the API. Old <=200,000-FEN launches retain their saved mode.
+
+Preparation refreshes statistics for the small `cloud_fen_claim` table before
+each unit (including after a restart), avoiding stale empty-table estimates after
+the previous unit commits thousands of reservations. The main `fen` table is not
+analyzed. Selection still locks rows with `SKIP LOCKED`; a separate READ COMMITTED
+recheck excludes newly scored/claimed FENs using bounded 5,000-element array joins.
+Input validation and atomic claims/parent updates are unchanged.
+
+Read-only cloud inventories run at most four at a time, then quota/recovery/bucket
+checks run concurrently. All checks must succeed before local image inspection or
+any cloud write. Preparation records compact per-unit substep timings in the existing
+native-column `cloud_phase_timing` table (statistics, selection, recheck, encoding,
+validation, persistence, claims, commit). Timing writes happen only after releasing
+reservation locks and never invalidate committed work. No new migration is needed
+for these optimizations. A 10,000-FEN request uses one unit on one VM and exercises
+the same preparation path; the stale-statistics multi-unit case also has an isolated
+PostgreSQL regression test in `test_cloud_work_units_database`.
+
+Offline tests: `tests.test_cloud_work_units`,
+`stockfish-batch-worker/tests/test_work_unit.py`, and the opt-in
+`tests.test_cloud_work_units_database` suite use fake cloud calls; the latter
+requires the same isolated `chessism_cloud_test` database as existing DB tests.
+These do not replace the next user-launched, paid 500,000-FEN integration test.
+
 ## Bounds and recovery
 
-- New Batch requests (`execution_mode=batch_multi_vm_v1`) split up to 200,000
+- Previously saved Batch requests (`execution_mode=batch_multi_vm_v1`) split up to 200,000
   FENs across the selected `n_vms` (1–10, subject to available quota).
   Loop/group counts multiply the selection size, not the VM count.
   If some selected FENs are unavailable at reservation, the existing
@@ -373,7 +510,8 @@ prefixes while it operates. Those names are owned by the corresponding job.
 - For game jobs, use Preview to freeze latest/oldest/date-range/fair-range game
   selection. The server derives the FEN target from that saved preview's missing
   positions; there is no editable maximum-FEN field for game selections. Empty
-  or over-200,000-FEN selections are rejected, never silently truncated. Select
+  or over-limit selections (500,000 for Batch; 200,000 for Cloud Run) are rejected,
+  never silently truncated. Select
   fewer games and preview again if the existing safety limit is exceeded.
 - Closing the browser has no effect on the host controller. Stopping the controller
   does **not** cancel a running cloud task. Restart it to resume imports/cleanup.
@@ -491,8 +629,8 @@ Worker credentials stay attached to the task, never in the image or browser.
 Missing permissions fail closed; request scoped grants separately if needed.
 
 With no active or queued analysis work, rebuild the API, local workers, frontend,
-cloud-controller and cloud-worker-image together using Docker Compose. New worker
-version 1.4.0 is checked before publishing. Do not mix old local engines with the
+cloud-controller and cloud-worker-image together using Docker Compose. Worker
+version 1.5.0 is checked before publishing. Do not mix old local engines with the
 new profile. Building alone does not update running containers.
 
 Then use the Cloud Run card, start with **1,000 missing FENs and

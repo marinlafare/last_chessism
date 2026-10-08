@@ -90,7 +90,7 @@ class CloudValidationTests(unittest.TestCase):
 
     def test_bounded_request_and_player_validation(self):
         self.assertEqual(CloudJobRequest(mode="loop", runs=3, positions_per_run=500).target, 1500)
-        for kwargs in ({"total_fens": 200001}, {"runs": 201}, {"positions_per_run": 1001}, {"nodes": 10000001},
+        for kwargs in ({"total_fens": 500001}, {"runs": 501}, {"positions_per_run": 1001}, {"nodes": 10000001},
                        {"stall_timeout_seconds": 3601}, {"max_task_seconds": 900},
                        {"mode": "player"}, {"mode": "games"}):
             with self.assertRaises(ValueError):
@@ -181,7 +181,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         redis = AsyncMock()
         request = CloudJobRequest(mode="games", plan_id="a" * 32)
         with patch.object(cloud_analysis, "AsyncDBSession") as database:
-            for count in (None, "6967", -1, 0, 200001, True):
+            for count in (None, "6967", -1, 0, 500001, True):
                 redis.get.return_value = json.dumps({"game_links": [1], "fens_to_analyze": count})
                 with self.subTest(count=count), self.assertRaises(HTTPException) as raised:
                     await cloud_analysis.create_cloud_job(request, redis)
@@ -271,7 +271,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
             "us-central1-docker.pkg.dev/chessism-production/chessism-workers/ui-test@sha256:" + "a" * 64, 300)
         commands = spec["taskGroups"][0]["taskSpec"]["runnables"][0]["container"]["commands"]
         self.assertEqual(commands[commands.index("--nodes") + 1], "100000")
-        self.assertEqual([call[0] for call in cloud.mock_calls], ["jobs", "run_resources", "resources", "images", "objects"])
+        self.assertCountEqual([call[0] for call in cloud.mock_calls], ["jobs", "run_resources", "resources", "images", "objects"])
 
     async def test_leftovers_prevent_image_publication_and_preserve_recovery_data(self):
         rows, _, _ = fixture()

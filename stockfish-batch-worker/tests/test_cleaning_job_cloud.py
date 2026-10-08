@@ -220,11 +220,13 @@ class CloudAdapterTests(unittest.TestCase):
 
     def test_compute_all_four_types_and_warning_handling(self):
         collections = ("instances", "disks", "instanceGroupManagers", "instanceTemplates")
-        replies = [{"items": {"zones/us-central1-c": {kind: [{"name": kind + "-one"}]}}} for kind in collections]
-        with patch.object(self.cloud, "request", side_effect=replies) as request:
+        def reply(service, path, **kwargs):
+            kind = path.rsplit('/', 1)[1]
+            return {"items": {"zones/us-central1-c": {kind: [{"name": kind + "-one"}]}}}
+        with patch.object(self.cloud, "request", side_effect=reply) as request:
             resources = self.cloud.resources()
         self.assertEqual([r["kind"] for r in resources], list(collections))
-        self.assertEqual([c.args[1] for c in request.call_args_list],
+        self.assertCountEqual([c.args[1] for c in request.call_args_list],
                          [f"projects/{PROJECT}/aggregated/{kind}" for kind in collections])
         with patch.object(self.cloud, "request", return_value={"items": {"regions/one": {"warning": {"code": "NO_RESULTS_ON_PAGE"}}}}):
             self.assertEqual(self.cloud.resources(), [])

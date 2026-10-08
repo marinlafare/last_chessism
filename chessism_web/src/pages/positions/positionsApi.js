@@ -23,3 +23,4 @@ export const resumeCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURI
 export const retryCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/retry-cloud`, {})
 export const cancelCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/cancel`, {})
 export const reviseCloudVms = (id, n_vms) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/vms`, { n_vms })
+export const stopCloudRepeating = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/stop-repeating`, {})

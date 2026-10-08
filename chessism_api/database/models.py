@@ -59,6 +59,35 @@ class CloudAnalysisRun(Base):
 install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun))
 
 
+class CloudBatchUnit(Base):
+    """Small parent/child index; FEN identities stay in bounded existing runs."""
+    __tablename__ = 'cloud_batch_unit'
+    root_run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), primary_key=True)
+    unit_index = Column(Integer, primary_key=True)
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), nullable=False, unique=True)
+    vm_index = Column(Integer, nullable=False)
+    position_count = Column(Integer, nullable=False)
+
+
+class CloudBatchSequence(Base):
+    """One frozen input set, consumed by sequential normal cloud lifecycles."""
+    __tablename__ = 'cloud_batch_sequence'
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), primary_key=True)
+    repeat_count = Column(Integer, nullable=False)
+    requested_count = Column(Integer, nullable=False)
+    reserved_count = Column(Integer, nullable=False, default=0)
+    frozen_at = Column(DateTime(timezone=True))
+    stop_requested = Column(Boolean, nullable=False, default=False)
+
+
+class CloudBatchCycle(Base):
+    __tablename__ = 'cloud_batch_cycle'
+    job_id = Column(String(32), ForeignKey('cloud_batch_sequence.job_id'), primary_key=True)
+    cycle_index = Column(Integer, primary_key=True)
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), nullable=False, unique=True)
+    target_count = Column(Integer, nullable=False)
+
+
 class CloudPhaseTiming(Base):
     __tablename__ = 'cloud_phase_timing'
     id = Column(BigInteger, primary_key=True, autoincrement=True)

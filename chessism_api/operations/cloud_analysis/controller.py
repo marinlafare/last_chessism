@@ -17,7 +17,7 @@ from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
 from stockfish_batch.storage import MAX_MANIFEST_BYTES
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
+from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from .importer import import_batch, refresh_projections, refresh_global_projections, validate_manifest
 from .preflight import verify_clean_workspace
@@ -33,7 +33,12 @@ async def save_run(run_id, **changes):
             if changes['status'] == 'finalizing':
                 from chessism_api.database.cloud_codec import checksum
                 run.results_verified_at = datetime.now(timezone.utc)
-                run.completion_manifest_sha256 = checksum(changes.get('launch', run.launch)['manifest'])
+                launch = changes.get('launch', run.launch)
+                if launch.get('workflow_version') == 3:
+                    from .work_units_results import proof
+                    run.completion_manifest_sha256 = checksum(proof(launch))
+                else:
+                    run.completion_manifest_sha256 = checksum(launch['manifest'])
             elif changes['status'] == 'refreshing':
                 run.cleanup_completed_at = datetime.now(timezone.utc)
         if 'launch' in changes:
@@ -51,6 +56,14 @@ async def save_job(job_id, **changes):
 
 
 async def reserve(job, limit):
+    if job.selection.get('execution_mode') == 'batch_work_units_v1':
+        async with AsyncDBSession() as session, session.begin():
+            run = CloudAnalysisRun(id=uuid4().hex, job_id=job.id, status='preparing',
+                                   positions=[], launch={}, receipts={})
+            session.add(run)
+            await session.flush()
+            await history.transition(session, run, None, 'preparing')
+        return
     from chessism_api.database.ask_db import (
         get_fens_for_analysis, get_player_fens_for_analysis, get_game_set_fens_for_analysis,
     )
@@ -97,21 +110,27 @@ class Controller:
                 # A transfer/API error is NOT evidence that its VM stopped.
                 # Do not start another billable VM until this job is resumed.
                 return False
-            runs = (await session.scalars(select(CloudAnalysisRun).where(
-                CloudAnalysisRun.job_id == job.id).order_by(CloudAnalysisRun.created_at))).all()
+            sequence_mode = job.selection.get('execution_mode') == 'batch_sequence_v1'
+            runs = [] if sequence_mode else (await session.scalars(select(CloudAnalysisRun).where(
+                CloudAnalysisRun.job_id == job.id,
+                ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at))).all()
         run = next((item for item in runs if item.status != "complete"), None)
         try:
             await save_job(job.id, status="running", error=None)
+            if sequence_mode:
+                from .sequence import tick
+                await tick(self, job)
+                return True
             if run:
                 await self.advance(job, run)
                 async with AsyncDBSession() as session:
                     state = await session.scalar(select(CloudAnalysisRun.status).where(CloudAnalysisRun.id == run.id))
-                self.continue_immediately = state != run.status and state not in {'failed'}
+                self.continue_immediately = self.continue_immediately or (state != run.status and state not in {'failed'})
             elif job.imported >= job.target:
                 async with history.timed_phase(job.id, 'global_summaries'):
                     await refresh_global_projections()
                 await save_job(job.id, status="complete")
-            elif len(runs) >= (1 if job.selection.get("execution_mode") in {"single_vm_v1", "cloud_run_v1", "batch_multi_vm_v1"} else
+            elif len(runs) >= (1 if job.selection.get("execution_mode") in {"single_vm_v1", "cloud_run_v1", "batch_multi_vm_v1", "batch_work_units_v1"} else
                               job.selection["runs"] if job.selection["mode"] == "loop" else (job.target + 999) // 1000):
                 async with history.timed_phase(job.id, 'global_summaries'):
                     await refresh_global_projections()
@@ -132,6 +151,9 @@ class Controller:
         return True
 
     async def advance(self, job, run):
+        if job is not None and job.selection.get('execution_mode') == 'batch_work_units_v1':
+            from .work_units_controller import advance
+            return await advance(self, job, run)
         if run.status == 'refreshing':
             await refresh_projections(run.positions)
             await history.compact_run(run.id)

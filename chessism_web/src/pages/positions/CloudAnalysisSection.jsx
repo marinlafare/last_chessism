@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createCloudAnalysis, fetchCloudAnalysis, resumeCloudAnalysis, retryCloudAnalysis, cancelCloudAnalysis,
-  previewPlayerGameAnalysis, fetchPlayerAnalysisCounts, reviseCloudVms,
+  previewPlayerGameAnalysis, fetchPlayerAnalysisCounts, reviseCloudVms, stopCloudRepeating,
 } from './positionsApi'
 import { cloudDefaults, cloudRunDefaults, cloudPayload, cloudGamePreview, cloudBound, cloudGameSelectionError,
-  MAX_CLOUD_FENS, MAX_CLOUD_RUNS, MAX_BATCH_VMS } from './cloudAnalysisForm'
+  cloudLimit, MAX_BATCH_VMS, MAX_BATCH_REPEATS } from './cloudAnalysisForm'
 import { DEFAULT_ANALYSIS_NODES } from './positionPageSupport'
 import { blockingCloudJob, cloudIsBusy } from './cloudJobState'
 import CloudFenProgress from './CloudFenProgress'
@@ -92,6 +92,22 @@ export default function CloudAnalysisSection({ onProgress }) {
             <strong>{job.selection.backend === 'cloud_run' ? 'Cloud Run' : 'Batch Spot'} · {job.selection.mode} {job.selection.player_name} — {progress.label}</strong>
             <small>{job.id}</small>
             <CloudFenProgress job={job} />
+            {job.sequence && <div className="cloud-sequence-progress">
+              {!job.sequence.frozen ? <p>Reserving one fixed FEN set: {job.sequence.reserved.toLocaleString('en-US')} / {job.sequence.requested.toLocaleString('en-US')}.
+                No loop starts until selection is frozen.</p> : <>
+                <p>Fixed set: {job.sequence.reserved.toLocaleString('en-US')} FENs (requested {job.sequence.requested.toLocaleString('en-US')}).
+                  {' '}{job.runs.filter((run) => run.positions > 0 && run.status === 'complete').length} loops completed;
+                  {' '}{job.runs.filter((run) => run.positions > 0).length} nonempty loops.</p>
+                {active && <><p>Loop {job.runs.indexOf(active) + 1} of {job.sequence.times} — {progress.label}</p>
+                  <CloudFenProgress job={{ ...job, target: active.positions, imported: active.imported, runs: [active] }} /></>}
+              </>}
+              {['queued', 'running', 'paused', 'waiting', 'failed'].includes(job.status) && <button type="button"
+                className="btn btn-secondary" disabled={busy || job.sequence.stop_requested}
+                onClick={() => action(() => stopCloudRepeating(job.id))}>
+                {job.sequence.stop_requested ? 'Remaining loops will not start' : 'Stop after current loop'}
+              </button>}
+              <small>Next loops require the local controller. Paused/failed current loops still need recovery.</small>
+            </div>}
             <CloudJobSteps job={job} />
             {active?.cloud_state && <small>Cloud execution: {active.cloud_state} (compute only, not the full workflow).</small>}
             {job.runs.map((run) => <CloudPerformanceSummary key={run.id} run={run} />)}
@@ -106,7 +122,7 @@ export default function CloudAnalysisSection({ onProgress }) {
                 {' '}{vm.preemptions} Google interruptions · {vm.application_failures}/2 application failures</li>
             ))}</ul>}
             {job.error && <p className="status-banner warn">{job.error}</p>}
-            {job.status === 'paused' && active?.status === 'preparing' && job.selection.execution_mode === 'batch_multi_vm_v1' && (
+            {job.status === 'paused' && active?.status === 'preparing' && ['batch_multi_vm_v1', 'batch_work_units_v1'].includes(job.selection.execution_mode) && (
               <div>
                 <label>VM count for retrying preflight
                   <input className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1"
@@ -145,6 +161,7 @@ export default function CloudAnalysisSection({ onProgress }) {
 
 function CloudSelection({ backend, disabled, create, job, fading }) {
   const isRun = backend === 'cloud_run'
+  const maximum = cloudLimit(backend)
   const title = isRun ? 'Cloud Run' : 'Batch Spot'
   const id = isRun ? 'cloud-run' : 'cloud-batch'
   const [mode, setMode] = useState('all')
@@ -156,7 +173,7 @@ function CloudSelection({ backend, disabled, create, job, fading }) {
   const change = (key, value) => {
     setForm((current) => ({ ...current, [key]: value }))
     // Concurrency does not change the frozen FEN selection.
-    if (!['n_cpus', 'n_vms'].includes(key)) { setPreview(null); setInspection(null) }
+    if (!['n_cpus', 'n_vms', 'times'].includes(key)) { setPreview(null); setInspection(null) }
     setError('')
   }
   const changeMode = (value) => {
@@ -187,6 +204,8 @@ function CloudSelection({ backend, disabled, create, job, fading }) {
     }}>
       <h3 id={`${id}-title`}>{title.toUpperCase()}</h3>
       <p>Choose your FEN set and {isRun ? 'CPU concurrency' : 'number of Spot VMs'}. Only missing, unreserved FENs are selected.</p>
+      {!isRun && <p>Each loop uses work units of at most 50,000 FENs. Google can finish that loop while your PC is off.
+        The next loop waits for local import, verification, cleanup and database refresh. Uploads stay at 500 results.</p>}
       {job && <div className={fading ? 'cloud-job-fading' : ''}>
         <p role="status">Current job: {cloudJobProgress(job).label}</p><CloudFenProgress job={job} />
       </div>}
@@ -216,6 +235,8 @@ function CloudSelection({ backend, disabled, create, job, fading }) {
           {' '}{Number(form.n_vms) * 16} vCPUs requested. Up to {MAX_BATCH_VMS} VMs, subject to quota;
           insufficient quota pauses before launch. Fewer VMs are used only when there are fewer FENs than VMs.</small>
       </>}
+      {!isRun && <>{field('times', mode === 'games' ? 'Divide FEN set into loops' : 'Times (sequential loops)', MAX_BATCH_REPEATS)}
+        <small>1–{MAX_BATCH_REPEATS} loops; at most 500,000 FENs per loop. All loops share one frozen selection.</small></>}
       {mode === 'loop' && <label>Scope
         <select className="text-input" value={form.scope} onChange={(event) => change('scope', event.target.value)}>
           <option value="all">All positions</option><option value="player">Player</option>
@@ -249,15 +270,15 @@ function CloudSelection({ backend, disabled, create, job, fading }) {
         </>}
         {!(form.selection === 'range' && form.allGames) && field('games', 'Games', 50000)}
       </>}
-      {mode === 'loop' ? <>{field('positions', 'Positions per group', 1000)}{field('runs', 'Groups (combined into one job)', MAX_CLOUD_RUNS)}</>
-        : mode !== 'games' && field('total', 'Positions', MAX_CLOUD_FENS)}
+      {mode === 'loop' ? <>{field('positions', 'Positions per group', 1000)}{field('runs', 'Groups (combined into one job)', maximum / 1000)}</>
+        : mode !== 'games' && field('total', !isRun && Number(form.times) > 1 ? 'FENs per loop' : 'Positions', maximum)}
       {mode === 'games' && <button className="btn btn-secondary" type="button"
         disabled={loading || !form.player.trim()} onClick={inspect}>Preview games</button>}
       {preview && <p>Frozen preview: {preview.selected_games} games, {preview.fens_to_analyze} missing FENs.
-        The system sets the FEN count from this selection. Selections over {MAX_CLOUD_FENS.toLocaleString('en-US')} FENs cannot be submitted.</p>}
+        The system sets the FEN count from this selection. Selections over {(maximum * (isRun ? 1 : Number(form.times))).toLocaleString('en-US')} FENs cannot be submitted.</p>}
       <small>{cloudBound(mode, form, preview)}</small>
       {error && <p role="alert" className="status-banner warn">{error}</p>}
-      <button className="btn" type="submit" disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview))}>
+      <button className="btn" type="submit" disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview, backend, form.times))}>
         Create {title} job — billable
       </button>
       </fieldset>

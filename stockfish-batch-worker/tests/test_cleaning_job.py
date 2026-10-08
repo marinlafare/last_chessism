@@ -5,6 +5,8 @@ import io
 import json
 from pathlib import Path
 import tempfile
+import threading
+import time
 import unittest
 from unittest.mock import patch
 
@@ -102,6 +104,37 @@ class CleanupTests(unittest.TestCase):
         self.assertEqual(plan["jobs"][0]["uid"], job()["uid"])
         self.assertEqual(plan["sha256"], cleanup.digest(plan))
         self.assertEqual(self.cloud.writes, [])
+
+    def test_parallel_object_deletes_are_bounded_generation_pinned_and_resumable(self):
+        self.cloud.object_data = [obj(f'results/run-one/batches/{i:06d}.json', str(i + 10)) for i in range(20)]
+        plan = cleanup.prepare(self.cloud, ['batch-one'])
+        original = self.cloud.delete_object
+        active, peak, fail = 0, 0, True
+        lock = threading.Lock()
+        def remove(value):
+            nonlocal active, peak, fail
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(.02)
+                with lock:
+                    if fail and value['generation'] == '13':
+                        fail = False
+                        raise CleanupError('transient delete failure')
+                    original(value)
+            finally:
+                with lock: active -= 1
+        self.cloud.delete_object = remove
+        with self.assertRaisesRegex(CleanupError, 'transient'):
+            cleanup.apply(self.cloud, plan, wait_seconds=0)
+        self.assertEqual(active, 0)
+        self.assertGreater(peak, 1)
+        self.assertLessEqual(peak, 8)
+        self.assertTrue(cleanup.apply(self.cloud, plan, wait_seconds=0)['complete'])
+        removed = [(w[1], w[2]) for w in self.cloud.writes if w[0] == 'object']
+        self.assertEqual(len(removed), 20)
+        self.assertEqual(set(removed), {(o['name'], o['generation']) for o in plan['objects']})
 
     def test_execute_is_unattended_scoped_and_resumable(self):
         other = obj("results/run-one-extra/keep.json")

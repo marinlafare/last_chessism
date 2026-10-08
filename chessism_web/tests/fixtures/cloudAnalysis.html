@@ -33,6 +33,7 @@ window.fetch = async (input, options = {}) => {
   }
   if (url.pathname.endsWith('/analysis_counts')) return reply({ total_positions: 3000, analyzed_positions: 1000 })
   if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }
+  if (url.pathname.endsWith('/stop-repeating')) { job.sequence.stop_requested = true; return reply({ id: job.id }, 202) }
   throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
 }
 createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection))

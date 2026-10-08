@@ -93,7 +93,7 @@ services:
     cap_add: [SETUID, SETGID, KILL]
     security_opt: [no-new-privileges:true]
     cpus: "1.0"
-    # Large single-VM selections can carry up to 200,000 manifest references.
+    # Legacy runs hold <=200k references; larger requests use bounded 50k units.
     mem_limit: 2g
     pids_limit: 128
     tmpfs:

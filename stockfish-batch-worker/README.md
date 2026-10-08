@@ -54,7 +54,10 @@ keys. Six-field inputs retain their supplied counters. All input is validated
 before any search or output writes. Invalid chess positions, other field counts,
 duplicate IDs, empty inputs and oversized inputs fail the whole task.
 The default cap is 20 positions. Standard modes support up to 1,000; the UI's
-`--compact-results` background-batch mode supports up to 200,000 on one VM.
+`--compact-results` background-batch mode supports up to 200,000 per invocation.
+The application supports up to 500,000 FENs per Batch request by scheduling
+bounded 50,000-FEN invocations sequentially on each VM, retaining 500-result
+files. See [large Batch requests](cloud_job/README.md#large-batch-requests-up-to-500000-fens).
 Input is capped at 96 MiB and completion manifests at 80 MiB. Compact mode keeps
 only committed references in memory and writes a `performance.json` summary for
 local preservation before cloud cleanup.

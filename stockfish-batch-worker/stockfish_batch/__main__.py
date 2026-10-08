@@ -16,7 +16,7 @@ def has_timeout(error):
     return isinstance(error, TimeoutError)
 
 
-async def execute(config):
+async def execute(config, *, skip_completed_unit=False):
     task = asyncio.current_task()
     loop = asyncio.get_running_loop()
     received = []
@@ -31,6 +31,11 @@ async def execute(config):
     for number in signals:
         loop.add_signal_handler(number, stop, number)
     try:
+        if skip_completed_unit:
+            from .work_unit import completed
+            if await asyncio.to_thread(completed, config):
+                emit('unit_already_complete', total=config.max_positions)
+                return 0
         await run(config)
         return 0
     except asyncio.CancelledError:
@@ -48,7 +53,10 @@ async def execute(config):
 
 
 def main():
-    return asyncio.run(execute(parse_args()))
+    argv = sys.argv[1:]
+    skip = '--skip-completed-unit' in argv
+    argv = [value for value in argv if value != '--skip-completed-unit']
+    return asyncio.run(execute(parse_args(argv), skip_completed_unit=skip))
 
 
 if __name__ == "__main__":

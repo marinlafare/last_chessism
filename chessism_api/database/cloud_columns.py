@@ -130,12 +130,15 @@ schema('task', **fields('index start count recovery_session', int), **fields('ru
        config=SCHEMAS['config'], contract=SCHEMAS['contract'], spec=SCHEMAS['spec'],
        recovery_summary=SCHEMAS['recovery'], batch_status=SCHEMAS['batch_status'])
 schema('vm_status', **fields('index positions preemptions application_failures', int), state=str)
+schema('work_unit', index=int, vm_index=int, count=int, run_id=str,
+       config=SCHEMAS['config'], contract=SCHEMAS['contract'],
+       manifest_sha256=str, verified=bool, refreshed=bool, performance=SCHEMAS['performance'])
 schema('launch', **fields('backend benchmark_id image image_id profile run_job run_operation run_uid uid recovery_execution'),
        **fields('n_cpus n_vms recovery_session workflow_version', int), multi_vm=bool,
        jobs=[str], prior_jobs=[str], prior_uids=Children('uid', mapping=True),
        config=SCHEMAS['config'], spec=SCHEMAS['spec'], recovery_summary=SCHEMAS['recovery'],
        run_execution=SCHEMAS['identity'], run_executions=Children('identity'),
-       tasks=Children('task'), quota=Children('quota', mapping=True),
+       tasks=Children('task'), units=Children('work_unit'), quota=Children('quota', mapping=True),
        batch_status=SCHEMAS['batch_status'], execution_summary=SCHEMAS['execution'],
        manifest=SCHEMAS['manifest'], task_manifests=Children('manifest'),
        performance=SCHEMAS['performance'], task_performance=Children('performance'),

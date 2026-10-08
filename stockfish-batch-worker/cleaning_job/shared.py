@@ -5,6 +5,7 @@ from urllib.parse import unquote
 
 from .cloud import PROJECT, REPOSITORY
 from .cleanup import require
+from .parallel import read_parallel
 
 TEST_LOGS = frozenset({
     "batch_agent_logs", "batch_task_logs", "GCEGuestAgent", "GCEGuestAgentManager",
@@ -13,8 +14,9 @@ TEST_LOGS = frozenset({
 
 
 def idle_project(cloud):
-    require(not cloud.jobs(), "Shared cleanup requires no Batch jobs anywhere in this dedicated test project")
-    require(not cloud.resources(), "Shared cleanup requires no VMs, disks, templates or managed instance groups")
+    jobs, resources = read_parallel(cloud.jobs, cloud.resources)
+    require(not jobs, "Shared cleanup requires no Batch jobs anywhere in this dedicated test project")
+    require(not resources, "Shared cleanup requires no VMs, disks, templates or managed instance groups")
 
 
 def cleanup_shared(cloud, *, images=(), logs=(), execute=False, dedicated_test_project=False):

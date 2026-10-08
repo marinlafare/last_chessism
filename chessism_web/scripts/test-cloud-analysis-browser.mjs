@@ -89,6 +89,7 @@ try {
   await assert("Date.now() - window.cloudTest.doneSeenAt >= 9900 && document.body.textContent.includes('No active cloud jobs.')")
   await assert("!document.querySelector('.cloud-job-indicator')")
   await assert("document.querySelector('input[max=\"64\"]').value === '4' && document.querySelector('input[aria-label=\"Spot VMs (n_vms)\"]').value === '1'")
+  await assert("document.querySelector('form[aria-labelledby=\"cloud-batch-title\"] input[max=\"500000\"]') !== null && document.querySelector('form[aria-labelledby=\"cloud-run-title\"] input[max=\"200000\"]') !== null")
   await evaluate(`window.cloudUiSetValue = (selector, value) => {
     const element = document.querySelector(selector)
     const prototype = element.tagName === 'SELECT' ? HTMLSelectElement.prototype : HTMLInputElement.prototype
@@ -161,6 +162,27 @@ try {
     {index:0,positions:1041,state:'RECOVERING',preemptions:2,application_failures:0},
     {index:1,positions:1041,state:'RUNNING',preemptions:0,application_failures:0}]}]`)
   await waitFor(`document.querySelector('ul[aria-label="Batch VM progress"]')?.textContent.includes('VM 1: RECOVERING')`)
+  // Repetition is one fixed set, with normal loops; all writes stay in the fixture.
+  await evaluate("window.cloudTest.job.status = 'complete'")
+  await waitFor("document.querySelectorAll('fieldset:disabled').length === 0")
+  await evaluate(`window.cloudUiSetValue('form[aria-labelledby="cloud-batch-title"] select[aria-label="FEN selection"]', 'player')`)
+  await evaluate(`window.cloudUiSetValue('form[aria-labelledby="cloud-batch-title"] input[max="20"]', '4')`)
+  await evaluate(`window.cloudUiSetValue('form[aria-labelledby="cloud-batch-title"] input[max="500000"]', '500000')`)
+  await assert(`document.querySelector('form[aria-labelledby="cloud-batch-title"]').textContent.includes('fixed set of up to 2,000,000')`)
+  await evaluate(`document.querySelector('form[aria-labelledby="cloud-batch-title"] button[type=submit]').click()`)
+  await waitFor("window.cloudCreates().length === 3")
+  await assert("window.cloudCreates()[2].body.repeat_count === 4 && window.cloudCreates()[2].body.total_fens === 500000")
+  await evaluate(`Object.assign(window.cloudTest.job, {status:'running', target:2000000, imported:500000,
+    sequence:{times:4,requested:2000000,reserved:2000000,frozen:true,stop_requested:false},
+    runs:[0,1,2,3].map(i=>({id:'cycle'+i,status:i===0?'refreshing':'reserved',positions:500000,imported:i===0?500000:0,batch_jobs:[]}))})`)
+  await waitFor("document.querySelector('.cloud-sequence-progress')?.textContent.includes('Loop 1 of 4')")
+  await assert("document.querySelector('.cloud-job .cloud-step[aria-current=step]').textContent.includes('Refresh database totals') && document.querySelectorAll('fieldset:disabled').length === 2")
+  await assert("!document.querySelector('.cloud-job-indicator--success')")
+  await evaluate("window.cloudTest.job.runs[0].status='complete'; window.cloudTest.job.runs[1].status='preparing'")
+  await waitFor("document.querySelector('.cloud-sequence-progress').textContent.includes('Loop 2 of 4')")
+  await evaluate("Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Stop after current loop').click()")
+  await waitFor("Array.from(document.querySelectorAll('button')).some(b=>b.textContent==='Remaining loops will not start' && b.disabled)")
+  await assert("window.cloudTest.requests.filter(r=>r.path.endsWith('/stop-repeating')).length === 1 && window.cloudCreates().length === 3")
   await send('browsingContext.setViewport', { context, viewport: { width: 390, height: 844 } })
   await assert("getComputedStyle(document.querySelector('.cloud-analysis-grid')).gridTemplateColumns.split(' ').length === 1")
   console.log('PASS: workflow stages/glow/fade, both backend FEN selectors, CPU/VM bounds, frozen previews, Batch payloads/per-VM recovery, cross-backend locks and mobile layout.')

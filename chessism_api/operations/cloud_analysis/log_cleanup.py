@@ -10,6 +10,7 @@ from urllib.parse import quote, unquote
 from cleaning_job.cloud import PROJECT, PROJECT_NUMBER, CleanupError
 from cleaning_job.cleanup import digest, require
 from cleaning_job.shared import TEST_LOGS, idle_project
+from cleaning_job.parallel import read_parallel
 
 ELIGIBLE_LOGS = TEST_LOGS | {"diagnostic-log", "ping"}
 
@@ -40,27 +41,40 @@ def owned_instances(cloud, uids):
     return owned
 
 
-def inspect_stream(cloud, log, owned):
-    require(log in ELIGIBLE_LOGS, "Log stream is not allowlisted")
-    query = f'logName="projects/{PROJECT}/logs/{quote(log, safe="")}"'
-    count, unrelated, levels = 0, False, Counter()
+def inspect_streams(cloud, logs, owned):
+    """One paginated, unfiltered-in-time scan for all selected log names.
+
+    Keep the deletion scope identical: no instance/time filter may hide an old
+    unrelated entry. Missing/unexpected log names fail closed, never disappear
+    into an apparent empty stream. Counts are streamed, not buffered entries.
+    """
+    logs = sorted(set(logs))
+    require(set(logs) <= ELIGIBLE_LOGS, "Log stream is not allowlisted")
+    summaries = {log: {"entries": 0, "unrelated": False, "severities": Counter()} for log in logs}
+    if not logs:
+        return summaries
+    names = {f'projects/{PROJECT}/logs/{quote(log, safe="")}': log for log in logs}
+    query = '(' + ' OR '.join(f'logName="{name}"' for name in names) + ')'
     for entry in cloud.log_entries(query, default_bucket=True):
-        count += 1
-        unrelated |= instance_identity(entry) not in owned
-        levels[entry.get("severity", "DEFAULT")] += 1
-    return {"entries": count, "unrelated": unrelated, "severities": dict(levels)}
+        require(entry.get('logName') in names, 'Log scan returned a missing/unexpected stream identity')
+        summary = summaries[names[entry['logName']]]
+        summary['entries'] += 1
+        summary['unrelated'] |= instance_identity(entry) not in owned
+        summary['severities'][entry.get('severity', 'DEFAULT')] += 1
+    return {log: {**summary, 'severities': dict(summary['severities'])} for log, summary in summaries.items()}
+
+
+def inspect_stream(cloud, log, owned):
+    return inspect_streams(cloud, [log], owned)[log]
 
 
 def plan_logs(cloud, uids):
     idle_project(cloud)
-    owned = owned_instances(cloud, uids)
+    owned, names = read_parallel(lambda: owned_instances(cloud, uids), cloud.logs)
     plan = {"version": 1, "project": PROJECT, "instances": sorted(owned),
             "streams": {}, "retained": {}}
-    for name in cloud.logs():
-        log = unquote(name.split("/logs/", 1)[1])
-        if log not in ELIGIBLE_LOGS:
-            continue
-        summary = inspect_stream(cloud, log, owned)
+    logs = {unquote(name.split('/logs/', 1)[1]) for name in names} & ELIGIBLE_LOGS
+    for log, summary in inspect_streams(cloud, logs, owned).items():
         if summary["entries"]:
             target = plan["retained"] if summary["unrelated"] else plan["streams"]
             target[log] = summary
@@ -75,15 +89,16 @@ def remove_logs(cloud, plan):
     idle_project(cloud)
     owned = set(plan["instances"])
     # Validate ALL targets before deleting the first stream.
-    for log in plan["streams"]:
-        if inspect_stream(cloud, log, owned)["unrelated"]:
+    summaries = inspect_streams(cloud, plan['streams'], owned)
+    for log, summary in summaries.items():
+        if summary["unrelated"]:
             raise CleanupError("Log acquired unrelated entries; entire stream retained: " + log)
     for log in plan["streams"]:
         idle_project(cloud)
         if inspect_stream(cloud, log, owned)["unrelated"]:
             raise CleanupError("Log acquired unrelated entries; entire stream retained: " + log)
         cloud.delete_log(log)
-    remaining = [log for log in plan["streams"] if inspect_stream(cloud, log, owned)["entries"]]
+    remaining = [log for log, summary in inspect_streams(cloud, plan['streams'], owned).items() if summary['entries']]
     return {"complete": not remaining, "deleted": sorted(set(plan["streams"]) - set(remaining)),
             "remaining": remaining, "retained_shared": sorted(plan["retained"]),
             "note": "Only verified owned streams in global _Default. Audit, billing, monitoring history and other log buckets remain."}

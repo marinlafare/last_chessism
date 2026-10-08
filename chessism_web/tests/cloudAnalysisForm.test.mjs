@@ -87,7 +87,7 @@ test('stall timeout is system-owned for every cloud mode, including stale form d
 
 test('invalid or oversized game previews cannot submit and are never silently capped', () => {
   assert.match(cloudBound('games', cloudDefaults), /Preview games/)
-  for (const count of [undefined, null, '6967', -1, 0, 200001, 2.5]) {
+  for (const count of [undefined, null, '6967', -1, 0, 500001, 2.5]) {
     const preview = { plan_id: 'a'.repeat(32), fens_to_analyze: count }
     assert.ok(cloudGameSelectionError(preview))
     assert.throws(() => cloudPayload('games', cloudDefaults, preview))
@@ -98,9 +98,9 @@ test('invalid or oversized game previews cannot submit and are never silently ca
 })
 
 test('cloud jobs keep the total selection bound across a VM fleet', () => {
-  assert.equal(MAX_CLOUD_FENS, 200000)
-  assert.equal(MAX_CLOUD_RUNS, 200)
-  for (const count of [10001, 199999, 200000]) {
+  assert.equal(MAX_CLOUD_FENS, 500000)
+  assert.equal(MAX_CLOUD_RUNS, 500)
+  for (const count of [10001, 199999, 200000, 500000]) {
     const preview = { plan_id: 'a'.repeat(32), fens_to_analyze: count }
     assert.equal(cloudGameSelectionError(preview), '')
     assert.equal(cloudPayload('games', cloudDefaults, preview).plan_id, preview.plan_id)
@@ -111,7 +111,9 @@ test('cloud jobs keep the total selection bound across a VM fleet', () => {
   const loop = { ...cloudDefaults, positions: 1000, runs: 200 }
   assert.equal(cloudPayload('loop', loop).runs, 200)
   assert.match(cloudBound('loop', loop), /One cloud request for 200,000 FENs/)
-  assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 200001 }), /200,000-FEN/)
+  assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 500001 }), /500,000-FEN/)
+  assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 200001 }, 'cloud_run'), /200,000-FEN/)
+  assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'cloud_run', total: 500000 }), /200,000/)
   assert.match(cloudBound('games', cloudDefaults, { plan_id: 'a'.repeat(32), fens_to_analyze: 2082 }), /One cloud request for 2,082 FENs/)
 })
 
@@ -135,4 +137,24 @@ test('workload disclosure includes bounded retries but no false runtime or spend
   assert.match(cloudBound('all', { ...cloudDefaults, total: 1500 }), /One cloud request for 1,500 FENs.*preemptions retry automatically.*two attempts total/)
   assert.match(cloudBound('loop', { ...cloudDefaults, runs: 3 }), /One cloud request for 3,000 FENs/)
   assert.match(cloudBound('all', cloudDefaults), /No fixed task-hour or monetary cap/)
+})
+
+test('sequential Batch loops reserve one set without multiplying the game preview', () => {
+  const form = { ...cloudDefaults, player: 'hikaru', total: 500000, times: '4' }
+  const payload = cloudPayload('player', form)
+  assert.equal(payload.total_fens, 500000)
+  assert.equal(payload.repeat_count, 4)
+  assert.match(cloudBound('player', form), /fixed set of up to 2,000,000.*4 sequential loops.*500,000 FENs/)
+  assert.match(cloudBound('player', form), /later loops never select replacements/)
+  assert.match(cloudBound('player', form), /cleanup → database refresh process before the next/)
+  assert.equal(Object.hasOwn(cloudPayload('all', cloudDefaults), 'repeat_count'), false)
+  assert.equal(Object.hasOwn(cloudPayload('all', { ...cloudRunDefaults, times: 4 }), 'repeat_count'), false)
+  const preview = { plan_id: 'a'.repeat(32), fens_to_analyze: 1800000 }
+  assert.equal(cloudGameSelectionError(preview, 'batch_spot', 4), '')
+  assert.match(cloudBound('games', form, preview), /1,800,000.*4 sequential loops.*450,000 FENs/)
+  assert.equal(Object.hasOwn(cloudPayload('games', form, preview), 'total_fens'), false)
+  assert.throws(() => cloudPayload('games', { ...form, times: 3 }, preview), /safety limit/)
+  for (const times of [0, 21, 1.5, '', 'bad']) {
+    assert.throws(() => cloudPayload('all', { ...cloudDefaults, times }), /sequential loops/)
+  }
 })

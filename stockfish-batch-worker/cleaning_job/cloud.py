@@ -13,6 +13,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlencode
 from urllib.request import Request, urlopen
 import uuid
+from .parallel import read_parallel
 
 PROJECT = "chessism-production"
 PROJECT_NUMBER = "276704059200"
@@ -95,8 +96,15 @@ class Cloud:
     def __init__(self, gcloud="gcloud"):
         self.gcloud = gcloud
         self.tokens = AccessTokens(gcloud)
+        # Nested inventory readers and the existing eight object deleters share
+        # one bound. Thread pools must not multiply simultaneous HTTP requests.
+        self._request_slots = threading.BoundedSemaphore(8)
 
     def request(self, service, path, *, method="GET", params=None, missing_ok=False, body=None):
+        with self._request_slots:
+            return self._request(service, path, method=method, params=params, missing_ok=missing_ok, body=body)
+
+    def _request(self, service, path, *, method="GET", params=None, missing_ok=False, body=None):
         url = ENDPOINTS[service] + path
         if params:
             url += "?" + urlencode(params)
@@ -155,9 +163,8 @@ class Cloud:
         v2 rejects a wildcard location. v1 uses metadata.continue pagination,
         not nextPageToken. An incomplete/unauthorized inventory is never empty.
         """
-        result = []
-        for api, collection in (("run.googleapis.com", "jobs"), ("run.googleapis.com", "executions"),
-                                ("serving.knative.dev", "services"), ("serving.knative.dev", "revisions")):
+        def read(api, collection):
+            result = []
             params, seen = {}, set()
             while True:
                 page = self.request("run_inventory", f"{api}/v1/namespaces/{PROJECT}/{collection}", params=params)
@@ -176,7 +183,11 @@ class Cloud:
                     raise CleanupError("Cloud Run inventory repeated continuation token")
                 seen.add(token)
                 params = {"continue": token}
-        return result
+            return result
+        readers = [lambda api=api, collection=collection: read(api, collection)
+                   for api, collection in (("run.googleapis.com", "jobs"), ("run.googleapis.com", "executions"),
+                                           ("serving.knative.dev", "services"), ("serving.knative.dev", "revisions"))]
+        return [item for group in read_parallel(*readers) for item in group]
 
     def delete_job(self, job_id, region, uid):
         # Stable idempotency key for retries of this exact job incarnation.
@@ -204,8 +215,8 @@ class Cloud:
                             params={"generation": obj["generation"], "ifGenerationMatch": obj["generation"]})
 
     def resources(self):
-        resources = []
-        for collection in ("instances", "disks", "instanceGroupManagers", "instanceTemplates"):
+        def read(collection):
+            resources = []
             path = f"projects/{PROJECT}/aggregated/{collection}"
             for page in self.pages("compute", path):
                 for scope, group in page.get("items", {}).items():
@@ -214,7 +225,10 @@ class Cloud:
                         raise CleanupError(f"Incomplete Compute inventory: {collection}/{scope}")
                     for resource in group.get(collection, []):
                         resources.append({**resource, "kind": collection, "scope": scope})
-        return resources
+            return resources
+        readers = [lambda collection=collection: read(collection)
+                   for collection in ("instances", "disks", "instanceGroupManagers", "instanceTemplates")]
+        return [item for group in read_parallel(*readers) for item in group]
 
     def images(self):
         return [item for page in self.pages("artifacts", f"{ARTIFACT_PARENT}/dockerImages")

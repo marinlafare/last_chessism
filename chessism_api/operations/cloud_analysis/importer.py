@@ -8,7 +8,7 @@ from sqlalchemy import delete, select, text, update
 from . import runtime  # Set up the standalone package path for the host controller.
 from stockfish_batch.checkpoints import BatchCheckpoints, digest
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch
+from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
 from chessism_api.database import cloud_columns
 from chessism_api.database.cloud_codec import read_document, write_document, checksum
 from chessism_api.operations.analysis import _format_engine_results
@@ -125,6 +125,10 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
             .values(imported=CloudAnalysisJob.imported + len(formatted)))
         await session.execute(update(CloudAnalysisRun).where(CloudAnalysisRun.id == run_id)
             .values(imported_count=CloudAnalysisRun.imported_count + len(formatted)))
+        root = await session.scalar(select(CloudBatchUnit.root_run_id).where(CloudBatchUnit.run_id == run_id))
+        if root:
+            await session.execute(update(CloudAnalysisRun).where(CloudAnalysisRun.id == root)
+                .values(imported_count=CloudAnalysisRun.imported_count + len(formatted)))
         detail = f'{run_id}:batch:{key["task_index"]}:{index}'
         await connection.run_sync(write_document, detail, 'receipt', receipt)
         session.add(CloudResultBatch(**key, object_name=name, sha256=receipt['sha256'],
@@ -162,3 +166,22 @@ async def refresh_global_projections():
     from chessism_api.database.ask_db import refresh_scored_position_summary, refresh_scored_rating_summary
     await refresh_scored_position_summary()
     await refresh_scored_rating_summary()
+
+
+async def refresh_unit_projections(run_ids):
+    """Deduplicate affected games in SQL; never materialize the parent FEN set."""
+    from chessism_api.database.ask_db import refresh_game_analysis_summary
+    async with AsyncDBSession() as session:
+        refs = (await session.scalars(select(CloudAnalysisRun._positions_ref).where(
+            CloudAnalysisRun.id.in_(run_ids)))).all()
+        if len(refs) != len(set(run_ids)) or not all(refs):
+            raise ValueError('Missing work-unit input references')
+        links = (await session.scalars(text('''
+            SELECT DISTINCT gfa.game_link
+            FROM cloud_control_position p
+            CROSS JOIN LATERAL unnest(p.fen) selected(fen)
+            JOIN game_fen_association gfa ON gfa.fen_fen = selected.fen
+            WHERE p.document_id = ANY(CAST(:refs AS text[]))
+        '''), {'refs': refs})).all()
+    if links:
+        await refresh_game_analysis_summary(links, strict=True)

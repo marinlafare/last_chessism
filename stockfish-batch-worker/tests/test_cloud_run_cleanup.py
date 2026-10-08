@@ -101,10 +101,16 @@ class CleanupTests(unittest.TestCase):
     def test_global_inventory_uses_v1_continuation_and_keeps_snapshots(self):
         cloud = Cloud()
         row = {"kind": "Job", "metadata": {"name": "other", "uid": "uid", "labels": {"cloud.googleapis.com/location": "us-east1"}}}
-        with patch.object(cloud, "request", side_effect=[{"items": [row], "metadata": {"continue": "next"}}, {}, {}, {}, {}]) as request:
+        def reply(service, path, **kwargs):
+            if path.endswith('/jobs') and not kwargs.get('params'):
+                return {"items": [row], "metadata": {"continue": "next"}}
+            return {}
+        with patch.object(cloud, "request", side_effect=reply) as request:
             values = cloud.run_resources()
         self.assertEqual(values[0]["name"], f"projects/{PROJECT}/locations/us-east1/jobs/other")
-        self.assertEqual(request.call_args_list[1].kwargs["params"], {"continue": "next"})
+        job_calls = [c for c in request.call_args_list if c.args[1].endswith('/jobs')]
+        self.assertEqual(len(request.call_args_list), 5)
+        self.assertEqual(job_calls[1].kwargs["params"], {"continue": "next"})
         with patch.object(cloud, "request", return_value={"items": [{"metadata": {}}]}):
             with self.assertRaises(CleanupError): cloud.run_resources()
 

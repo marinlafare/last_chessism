@@ -221,11 +221,11 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(saved.target, count)
                 self.assertEqual(saved.selection["total_fens"], count)
             await controller.save_job(created["id"], status="complete")
-        redis.get.return_value = json.dumps({"game_links": [21, 22], "fens_to_analyze": 200001})
+        redis.get.return_value = json.dumps({"game_links": [21, 22], "fens_to_analyze": 500001})
         with self.assertRaises(HTTPException) as raised:
             await create_cloud_job(request, redis)
         self.assertEqual(raised.exception.status_code, 409)
-        self.assertIn("200,000", raised.exception.detail)
+        self.assertIn("500,000", raised.exception.detail)
         async with AsyncDBSession() as session:
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudAnalysisJob)), 4)
 
@@ -343,7 +343,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved.selection["nodes"], 100_000)
             self.assertEqual(saved.selection["stall_timeout_seconds"], 300)
             self.assertEqual(saved.selection["total_fens"], 6967)
-            self.assertEqual(saved.selection["execution_mode"], "batch_multi_vm_v1")
+            self.assertEqual(saved.selection["execution_mode"], "batch_work_units_v1")
             self.assertEqual(saved.selection["n_vms"], 2)
             self.assertEqual(saved.target, 6967)
         listing = await cloud_jobs()

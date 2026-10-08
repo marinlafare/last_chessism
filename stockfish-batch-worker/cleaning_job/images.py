@@ -3,6 +3,7 @@
 import re
 
 from .cloud import CleanupError, REPOSITORY
+from .parallel import read_parallel
 
 
 def validate_uri(uri):
@@ -71,7 +72,8 @@ def blockers(cloud, plan, uris):
         return {}
     selected = {j["uid"] for j in plan["jobs"]}
     blocked = {}
-    for job in [*cloud.jobs(), *cloud.run_resources()]:
+    jobs, run_resources = read_parallel(cloud.jobs, cloud.run_resources)
+    for job in [*jobs, *run_resources]:
         if job.get("uid") in selected:
             continue
         for uri in uris:

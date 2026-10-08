@@ -1,5 +1,6 @@
 """Fail closed before publishing if earlier cloud work has not been cleaned."""
 from cleaning_job.cloud import CleanupError
+from cleaning_job.parallel import read_parallel as parallel_checks
 
 
 def verify_clean_workspace(cloud):
@@ -13,7 +14,8 @@ def verify_clean_workspace(cloud):
         ("worker images", cloud.images),
         ("job files", lambda: cloud.objects("")),
     )
-    leftovers = [f"{len(items)} {kind}" for kind, read in inventories if (items := read())]
+    results = parallel_checks(*(read for _, read in inventories))
+    leftovers = [f"{len(items)} {kind}" for (kind, _), items in zip(inventories, results) if items]
     if leftovers:
         raise CleanupError("Previous cloud resources remain: " + ", ".join(leftovers) +
                            ". Finish recovery/cleanup before starting another chunk; nothing new was uploaded.")
