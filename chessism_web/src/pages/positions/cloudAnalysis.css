@@ -1,0 +1,44 @@
+.cloud-analysis { grid-column: 1 / -1; padding: 1.25rem; border: 1px solid #35525a; border-radius: 12px; }
+.cloud-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.cloud-selection, .cloud-job { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; background: #142322; border-radius: 8px; }
+.cloud-selection label { display: flex; flex-direction: column; gap: .4rem; }
+.cloud-selection fieldset { display: flex; flex-direction: column; flex: 1; gap: .75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
+.cloud-selection fieldset:disabled { opacity: .55; }
+.cloud-selection fieldset:disabled button { cursor: not-allowed; }
+.cloud-selection--pending { border: 1px dashed #526669; background: #172322; }
+.cloud-selection--pending > .btn:disabled { opacity: .55; cursor: not-allowed; }
+.cloud-pending-notice { align-self: flex-start; padding: .35rem .65rem; border-radius: 6px; background: #283a3c; color: #c5d2d4; }
+.cloud-busy-notice { padding: .75rem; border-left: 3px solid #9c7ab4; background: #1b2c2b; }
+.cloud-fen-progress { display: flex; flex-direction: column; gap: .5rem; }
+.cloud-fen-count { display: flex; justify-content: space-between; gap: .5rem; }
+.cloud-fen-label { display: inline-flex; align-items: center; gap: .7rem; }
+.cloud-job-indicator { display: inline-block; flex: 0 0 14px; width: 14px; height: 14px; border-radius: 50%; background: #94a3b8; }
+.cloud-job-indicator--running { background: #ff922b; box-shadow: 0 0 8px 2px #ff922b80; animation: cloud-job-glow 2s ease-in-out infinite; }
+.cloud-job-indicator--success { background: #4ade80; box-shadow: 0 0 8px 2px #4ade8066; }
+.cloud-job-indicator--attention { background: #facc15; }
+.cloud-job-indicator--error { background: #f87171; }
+@keyframes cloud-job-glow {
+  0%, 100% { box-shadow: 0 0 6px 1px #ff922b66; }
+  50% { box-shadow: 0 0 14px 4px #ff922b99; }
+}
+@media (prefers-reduced-motion: reduce) { .cloud-job-indicator--running { animation: none; } }
+.cloud-fen-progress progress { appearance: none; width: 100%; height: 16px; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: #9c7ab4; }
+.cloud-fen-progress progress::-webkit-progress-bar { background: #283a3c; }
+.cloud-fen-progress progress::-webkit-progress-value { background: #9c7ab4; }
+.cloud-fen-progress progress::-moz-progress-bar { background: #9c7ab4; }
+.cloud-selection .btn { margin-top: auto; }
+.cloud-job { margin-top: 1rem; }
+.cloud-job progress { width: 100%; }
+.cloud-job small { overflow-wrap: anywhere; }
+.cloud-job-steps { display: grid; gap: .4rem; margin: .5rem 0; padding-left: 1.5rem; }
+.cloud-step { padding: .25rem .5rem; border-radius: 4px; }
+.cloud-step small { margin-left: .75rem; }
+.cloud-step--current { background: #314144; border-left: 3px solid #b194c4; }
+.cloud-step--attention { background: #453626; border-left: 3px solid #ddb676; }
+.cloud-step--complete { color: #9bd5b6; }
+.cloud-step--pending { color: #a9b9bd; }
+.cloud-job-fading { animation: cloud-job-fade .4s ease-out forwards; pointer-events: none; }
+@keyframes cloud-job-fade { to { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cloud-job-fading { animation: none; opacity: 0; } }
+.cloud-analysis small { color: #a9b9bd; }
+@media (max-width: 800px) { .cloud-analysis-grid { grid-template-columns: 1fr; } }

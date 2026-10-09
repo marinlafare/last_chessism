@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Matrix constructor smoke fixture</title></head>
+<body><div id="root"></div><script type="module">
+// Isolated UI fixture: every request is mocked; production APIs are never used.
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import MatricesConstructor from '/src/pages/MatricesConstructor.jsx'
+import '/src/index.css'
+
+const fields = ['moves', 'elapsed_seconds', 'mode', 'result'].map((key) => ({
+  key, label: key, source: 'game', encoding: key === 'mode' ? 'dictionary' : 'numeric',
+  storage_dtype: key === 'moves' ? 'int32' : 'float32', default: true, label_allowed: true,
+}))
+const catalog = { limits: { maximum_rows: 5000000 }, row_types: [{
+  key: 'game_player', label: 'Player-game', description: 'One row per player and game', sources: ['game'],
+  filters: { players: true, dates: true, modes: true, minimum_moves: true, analyzed_only: true }, columns: fields,
+}] }
+window.matrixTest = { definitions: [], requests: [], pending: [], holdLists: false, holdEstimates: false }
+window.confirm = () => true
+const state = window.matrixTest
+const response = (payload, status = 200) => new Response(status === 204 ? null : JSON.stringify(payload), {
+  status, headers: { 'Content-Type': 'application/json' },
+})
+window.fetch = async (input, options = {}) => {
+  const url = new URL(input, location.href)
+  const method = options.method || 'GET'
+  state.requests.push({ method, url: url.pathname + url.search })
+  if (url.pathname.endsWith('/catalog')) return response(catalog)
+  if (url.pathname.endsWith('/estimate')) {
+    const payload = { matching_rows: 100, selected_rows: 100, row_limit: 100000, definition_bytes: 502 }
+    if (state.holdEstimates) return new Promise((resolve) => state.pending.push({ resolve, payload, signal: options.signal }))
+    return response(payload)
+  }
+  if (url.pathname.endsWith('/preview')) {
+    const limit = Number(url.searchParams.get('limit')) || 50
+    const columns = fields.map((field) => ({ ...field, role: 'features', encoding: field.key === 'mode' ? 'source_category' : 'numeric' }))
+    return response({
+      columns, rows: Array.from({ length: limit }, (_, i) => [20 + i, i === 0 ? null : i + 30, 'bullet', 0.5]),
+      offset: 0, dimensions: 2, shape: [limit, columns.length], row_limit: 100000,
+      more_matching_rows: true, materialized: false,
+    })
+  }
+  if (url.pathname.endsWith('/matrices') && method === 'POST') {
+    const config = JSON.parse(options.body)
+    const definition = {
+      id: crypto.randomUUID(), name: config.name, row_type: config.row_type, config,
+      storage_kind: 'definition', status: 'saved', feature_count: config.feature_columns.length,
+      label_count: config.label_columns.length, definition_bytes: 502, created_at: new Date().toISOString(),
+    }
+    state.definitions.unshift(definition)
+    return response(definition, 201)
+  }
+  if (url.pathname.endsWith('/matrices')) {
+    const offset = Number(url.searchParams.get('offset')) || 0
+    const payload = { definitions: state.definitions.slice(offset, offset + 1), has_more: offset + 1 < state.definitions.length, legacy_snapshot_count: 0 }
+    if (state.holdLists) return new Promise((resolve) => state.pending.push({ resolve, payload, signal: options.signal }))
+    return response(payload)
+  }
+  if (method === 'DELETE' && url.pathname.includes('/definitions/')) {
+    state.definitions = state.definitions.filter((item) => item.id !== url.pathname.split('/').at(-1))
+    return response(null, 204)
+  }
+  throw new Error('Unexpected request: ' + method + ' ' + url.pathname)
+}
+// Intentionally resolve even aborted requests: the UI must discard stale results.
+state.release = () => state.pending.splice(0).forEach((pending) => {
+  state.lastAborted = pending.signal?.aborted
+  pending.resolve(response(pending.payload))
+})
+createRoot(document.getElementById('root')).render(React.createElement(MatricesConstructor))
+</script></body></html>

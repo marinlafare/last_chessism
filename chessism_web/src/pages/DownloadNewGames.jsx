@@ -1,67 +1,21 @@
 import { useEffect, useState } from 'react'
+import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
-
-const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
-const DOWNLOAD_JOB_STORAGE_KEY = 'chessism:download-new-games:download-job'
-
-async function sendPlayerAction(path, playerName) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_name: playerName })
-  })
-
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
-
-async function fetchJobStatus(jobId) {
-  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`)
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
-
-function loadStoredJob(storageKey) {
-  if (typeof window === 'undefined') return null
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || 'null')
-    return parsed?.jobId ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function storeJob(storageKey, job) {
-  if (typeof window === 'undefined') return
-  if (!job?.jobId) {
-    window.localStorage.removeItem(storageKey)
-    return
-  }
-  window.localStorage.setItem(storageKey, JSON.stringify(job))
-}
-
-function isTerminalJobStatus(status) {
-  const phase = status?.progress?.phase
-  return status?.status === 'complete' || status?.status === 'not_found' || phase === 'complete' || phase === 'failed'
-}
-
-function formatStatusMessage(value) {
-  if (!value) return ''
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
+import {
+  DOWNLOAD_JOB_STORAGE_KEY,
+  UPDATE_JOB_STORAGE_KEY,
+  formatStatusMessage,
+  isTerminalJobStatus,
+  loadStoredJob,
+  storeJob
+} from '../services/gameJobService'
+import {
+  downloadPlayerGames,
+  fetchGameJobStatus,
+  updatePlayerGames,
+} from './download-new-games/downloadNewGamesApi'
 
 function renderUpdateProgress(status) {
   const progress = status?.progress
@@ -108,7 +62,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(downloadJob.jobId)
+        const status = await fetchGameJobStatus(downloadJob.jobId)
         if (cancelled) return
         setDownloadJobStatus(status)
 
@@ -142,7 +96,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(updateJob.jobId)
+        const status = await fetchGameJobStatus(updateJob.jobId)
         if (cancelled) return
         setUpdateJobStatus(status)
 
@@ -180,7 +134,7 @@ function DownloadNewGames() {
     setDownloadLoading(true)
     setDownloadResult('')
     try {
-      const payload = await sendPlayerAction('/games', player)
+      const payload = await downloadPlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
@@ -208,7 +162,7 @@ function DownloadNewGames() {
     setUpdateResult('')
     setUpdateJobStatus(null)
     try {
-      const payload = await sendPlayerAction('/games/update', player)
+      const payload = await updatePlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(UPDATE_JOB_STORAGE_KEY, job)
@@ -225,7 +179,7 @@ function DownloadNewGames() {
   }
 
   return (
-    <div className="page-frame">
+    <div className="page-frame download-games-page">
       <SideRail />
       <div className="home-shell">
         <Header />

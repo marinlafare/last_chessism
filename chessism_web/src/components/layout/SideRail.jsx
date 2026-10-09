@@ -5,6 +5,8 @@ function SideRail() {
     { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
     { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
     { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
+    { href: '/research', label: 'Research', short: 'R' },
+    { href: '/backups', label: 'Backups', short: 'B' },
     { href: '/add_games', label: 'Add Games', short: '+' }
   ]
 
@@ -19,7 +21,7 @@ function SideRail() {
           {navItems.map((item) => (
             <a
               key={item.href}
-              className={`rail-btn ${path === item.href ? 'active' : ''}`}
+              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/')) ? 'active' : ''}`}
               href={item.href}
               title={item.label}
             >

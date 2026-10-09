@@ -1,9 +1,10 @@
 # local
 .virtual_documents/
 .codex
-backups/
+/backups/
 db_backup/
 db_data/
+research_data/
 api_logs/
 logs/
 tablebases/
@@ -147,6 +148,7 @@ celerybeat.pid
 .env
 .envrc
 .venv
+.venv-cloud/
 env/
 venv/
 ENV/

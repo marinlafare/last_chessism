@@ -1,0 +1,39 @@
+{
+  "taskGroups": [{
+    "taskCount": "1",
+    "parallelism": "1",
+    "taskCountPerNode": "1",
+    "taskSpec": {
+      "computeResource": {"cpuMilli": "4000", "memoryMib": "12288"},
+      "maxRunDuration": "900s",
+      "maxRetryCount": 0,
+      "runnables": [{
+        "container": {
+          "imageUri": "__IMAGE_DIGEST__",
+          "commands": [
+            "--input", "__INPUT_URI__", "--output", "__OUTPUT_URI__",
+            "--workers", "4", "--threads", "1", "--hash-mb", "2048",
+            "--memory-mib", "12288", "--nodes", "1000000", "--multipv", "4",
+            "--max-positions", "20", "--position-timeout", "60", "--run-timeout", "840"
+          ],
+          "options": "--user=10001:10001 --cap-drop=ALL --security-opt=no-new-privileges --read-only --tmpfs=/tmp:rw,noexec,nosuid,size=64m"
+        }
+      }]
+    }
+  }],
+  "allocationPolicy": {
+    "instances": [{"policy": {
+      "machineType": "n2d-standard-4", "provisioningModel": "SPOT",
+      "bootDisk": {"image": "batch-debian", "sizeGb": "30", "type": "pd-balanced"}
+    }}],
+    "location": {"allowedLocations": ["regions/us-central1"]},
+    "serviceAccount": {"email": "chessism-batch-worker@chessism-production.iam.gserviceaccount.com"},
+    "network": {"networkInterfaces": [{
+      "network": "projects/chessism-production/global/networks/default",
+      "subnetwork": "projects/chessism-production/regions/us-central1/subnetworks/default"
+    }]},
+    "labels": {"app": "chessism", "purpose": "stockfish-smoke"}
+  },
+  "labels": {"app": "chessism", "purpose": "stockfish-smoke"},
+  "logsPolicy": {"destination": "CLOUD_LOGGING"}
+}

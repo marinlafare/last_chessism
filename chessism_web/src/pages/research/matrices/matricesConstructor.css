@@ -1,0 +1,338 @@
+.matrix-main {
+  display: grid;
+  gap: 16px;
+}
+
+.matrix-build-row.matrix-definition-build-row { grid-template-columns: minmax(200px, 1fr) auto auto auto; }
+.matrix-definition-scope { margin: 0; color: var(--muted); font-size: 12px; }
+.matrix-definition-columns { display: grid; gap: 5px; overflow-wrap: anywhere; }
+.matrix-definition-actions { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+@media (max-width: 900px) {
+  .matrix-build-row.matrix-definition-build-row { grid-template-columns: 1fr 1fr; }
+  .matrix-definition-build-row label { grid-column: 1 / -1; }
+}
+
+.matrix-hero,
+.matrix-panel {
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.matrix-hero {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.matrix-hero h1 {
+  margin: 4px 0;
+}
+
+.matrix-hero p:last-child,
+.matrix-sources,
+.matrix-empty {
+  color: var(--muted);
+}
+
+.matrix-back {
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.matrix-row-types {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.matrix-row-types button {
+  display: grid;
+  gap: 5px;
+  min-height: 90px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: #070c11;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+
+.matrix-row-types button.active,
+.matrix-filter-actions button.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.matrix-row-types span,
+.matrix-column span,
+.matrix-artifact span,
+.matrix-filter-grid span,
+.matrix-build-row span {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.matrix-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(130px, 1fr));
+  gap: 10px;
+}
+
+.matrix-filter-grid label,
+.matrix-build-row label {
+  display: grid;
+  gap: 6px;
+}
+
+.matrix-filter-grid .matrix-wide {
+  grid-column: span 2;
+}
+
+.matrix-filter-grid input,
+.matrix-build-row input {
+  min-height: 40px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #05090d;
+  color: var(--text);
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.matrix-filter-grid input:disabled {
+  opacity: 0.35;
+}
+
+.matrix-filter-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.matrix-filter-actions button {
+  padding: 7px 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: #080d12;
+  color: var(--muted);
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.matrix-filter-actions label {
+  display: flex;
+  gap: 6px;
+  color: var(--text);
+}
+
+.matrix-column-head,
+.matrix-column {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 70px 70px;
+  align-items: center;
+  gap: 8px;
+}
+
+.matrix-column-head {
+  padding: 0 12px 7px;
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.matrix-column-head span:first-child {
+  text-align: left;
+}
+
+.matrix-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.matrix-column {
+  min-height: 55px;
+  padding: 9px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #070c11;
+}
+
+.matrix-column > div {
+  display: grid;
+  gap: 3px;
+}
+
+.matrix-column input {
+  justify-self: center;
+  accent-color: var(--accent);
+}
+
+.matrix-build-row {
+  display: grid;
+  grid-template-columns: minmax(240px, 1fr) auto auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.matrix-estimate {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.matrix-estimate article {
+  display: grid;
+  gap: 5px;
+  padding: 11px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: #05090d;
+  text-align: center;
+}
+
+.matrix-estimate span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.matrix-estimate strong,
+.matrix-artifact-result {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.matrix-estimate p {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+}
+
+.matrix-artifact-list {
+  display: grid;
+  gap: 9px;
+}
+
+.matrix-artifact {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: #070c11;
+}
+
+.matrix-artifact-head,
+.matrix-artifact-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.matrix-artifact-head > div {
+  display: grid;
+  gap: 3px;
+}
+
+.matrix-state {
+  padding: 4px 7px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.matrix-state.complete,
+.matrix-state.running {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.matrix-state.failed,
+.matrix-error {
+  color: var(--danger);
+}
+
+.matrix-artifact-result {
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.matrix-artifact-result code {
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.matrix-delete {
+  justify-self: end;
+  border: 0;
+  background: transparent;
+  color: var(--danger);
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.matrix-inspect-button {
+  justify-self: start;
+  padding: 6px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #05090d;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+@media (max-width: 980px) {
+  .matrix-row-types,
+  .matrix-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .matrix-filter-grid,
+  .matrix-estimate {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 620px) {
+  .matrix-hero,
+  .matrix-build-row {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .matrix-filter-grid,
+  .matrix-estimate {
+    grid-template-columns: 1fr;
+  }
+
+  .matrix-filter-grid .matrix-wide {
+    grid-column: auto;
+  }
+}

@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
-sqlalchemy
+sqlalchemy[asyncio]
 asyncpg
 pydantic
 httpx
@@ -9,3 +9,4 @@ requests
 python-chess
 arq[redis]
 argon2-cffi
+numpy>=1.26,<3

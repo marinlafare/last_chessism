@@ -1,0 +1,8 @@
+title: Chessism Batch Recovery
+description: Create/read/cancel Batch jobs and read task failures. Google cancellation requires jobs.delete; no VM administration or result deletion.
+stage: GA
+includedPermissions:
+  - batch.jobs.create
+  - batch.jobs.get
+  - batch.jobs.delete
+  - batch.tasks.get

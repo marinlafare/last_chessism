@@ -1,0 +1,61 @@
+.research-hub-main {
+  display: grid;
+  gap: 16px;
+}
+
+.research-hub-hero,
+.research-hub-card {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.research-hub-hero {
+  padding: 22px;
+}
+
+.research-hub-hero h1,
+.research-hub-card h2 {
+  margin: 5px 0;
+}
+
+.research-hub-hero p:last-child,
+.research-hub-card p {
+  color: var(--muted);
+}
+
+.research-hub-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.research-hub-card {
+  display: grid;
+  min-height: 230px;
+  padding: 22px;
+  color: var(--text);
+  text-decoration: none;
+  transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
+}
+
+.research-hub-card:hover {
+  border-color: var(--accent);
+  background: #111a20;
+  transform: translateY(-2px);
+}
+
+.research-hub-card strong {
+  align-self: end;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+@media (max-width: 980px) {
+  .research-hub-grid {
+    grid-template-columns: 1fr;
+  }
+}

@@ -2,6 +2,7 @@ import asyncio
 import re
 from urllib.parse import urlparse
 import asyncpg
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
@@ -9,6 +10,546 @@ from chessism_api.database.models import Base
 
 async_engine = None
 AsyncDBSession = sessionmaker(expire_on_commit=False, class_=AsyncSession)
+
+FEN_SCHEMA_ADVISORY_LOCK = 731_946_205
+
+ENGINE_SUMMARY_LEGACY_COLUMNS = (
+    "positions",
+    "positive_positions",
+    "negative_positions",
+    "equal_positions",
+    "transitions",
+    "cp_gain_events",
+    "cp_loss_events",
+    "player_cp_sum",
+    "total_cp_gain",
+    "total_cp_loss",
+    "opponent_move_cp_gain",
+    "opponent_move_cp_loss",
+    "tablebase_winning",
+    "tablebase_drawing",
+    "tablebase_losing",
+    "refreshed_at",
+)
+
+
+async def _reshape_game_player_engine_summary(connection: asyncpg.Connection) -> bool:
+    """Replace the legacy wide cache with one compact player-game score row."""
+    table_exists = await connection.fetchval(
+        "SELECT to_regclass('public.game_player_engine_summary') IS NOT NULL"
+    )
+    if not table_exists:
+        return False
+
+    columns = {
+        str(row["column_name"])
+        for row in await connection.fetch("""
+            SELECT column_name
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'game_player_engine_summary'
+        """)
+    }
+    required_definitions = {
+        "player_name": "VARCHAR",
+        "analyzed_player_moves": "INTEGER NOT NULL DEFAULT 0",
+        "own_move_cp_gain": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "own_move_cp_loss": "DOUBLE PRECISION NOT NULL DEFAULT 0",
+        "game_efficiency": "DOUBLE PRECISION",
+        "mean_win_percent_loss": "DOUBLE PRECISION",
+        "median_win_percent_loss": "DOUBLE PRECISION",
+        "blunder_count": "INTEGER NOT NULL DEFAULT 0",
+        "mate_for_positions": "INTEGER NOT NULL DEFAULT 0",
+        "mate_against_positions": "INTEGER NOT NULL DEFAULT 0",
+        "final_player_cp": "DOUBLE PRECISION",
+        "result": "VARCHAR(8)",
+        "end_by": "VARCHAR(40)",
+    }
+    additive_score_columns = {
+        "game_efficiency",
+        "mean_win_percent_loss",
+        "median_win_percent_loss",
+    }
+    requires_cache_reset = bool(
+        {"link", "color", "mate_for", "mate_against", *ENGINE_SUMMARY_LEGACY_COLUMNS}
+        & columns
+    ) or any(
+        name not in columns and name not in additive_score_columns
+        for name in required_definitions
+    )
+
+    async with connection.transaction():
+        for old_name, new_name in (
+            ("link", "game_link"),
+            ("color", "player_color"),
+            ("mate_for", "mate_for_positions"),
+            ("mate_against", "mate_against_positions"),
+        ):
+            if old_name in columns and new_name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary "
+                    f"RENAME COLUMN {old_name} TO {new_name}"
+                )
+                columns.remove(old_name)
+                columns.add(new_name)
+
+        for column_name, definition in required_definitions.items():
+            if column_name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary "
+                    f"ADD COLUMN {column_name} {definition}"
+                )
+                columns.add(column_name)
+
+        if requires_cache_reset:
+            # This relation is a rebuildable cache. Clearing it avoids mixing
+            # legacy formulas with the player-only Lichess classification.
+            await connection.execute("TRUNCATE TABLE game_player_engine_summary")
+
+        for column_name in ENGINE_SUMMARY_LEGACY_COLUMNS:
+            if column_name in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_engine_summary DROP COLUMN {column_name}"
+                )
+
+        for column_name in ("player_name", "result", "end_by"):
+            await connection.execute(
+                f"ALTER TABLE game_player_engine_summary "
+                f"ALTER COLUMN {column_name} SET NOT NULL"
+            )
+
+        legacy_game_fks = await connection.fetch("""
+            SELECT conname
+            FROM pg_constraint
+            WHERE conrelid = 'game_player_engine_summary'::regclass
+              AND confrelid = 'game'::regclass
+              AND contype = 'f'
+        """)
+        for row in legacy_game_fks:
+            constraint_name = str(row["conname"]).replace('"', '""')
+            await connection.execute(
+                "ALTER TABLE game_player_engine_summary "
+                f'DROP CONSTRAINT "{constraint_name}"'
+            )
+
+        player_fk_exists = await connection.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'game_player_engine_summary'::regclass
+                  AND conname = 'fk_game_player_engine_summary_player'
+            )
+        """)
+        if not player_fk_exists:
+            await connection.execute("""
+                ALTER TABLE game_player_engine_summary
+                ADD CONSTRAINT fk_game_player_engine_summary_player
+                FOREIGN KEY (player_name) REFERENCES player(player_name)
+            """)
+
+        game_player_fk_exists = await connection.fetchval("""
+            SELECT EXISTS (
+                SELECT 1 FROM pg_constraint
+                WHERE conrelid = 'game_player_engine_summary'::regclass
+                  AND conname = 'fk_game_player_engine_summary_game_player'
+            )
+        """)
+        if not game_player_fk_exists:
+            await connection.execute("""
+                ALTER TABLE game_player_engine_summary
+                ADD CONSTRAINT fk_game_player_engine_summary_game_player
+                FOREIGN KEY (game_link, player_color)
+                REFERENCES game_player(link, color)
+                ON DELETE CASCADE
+            """)
+
+        await connection.execute("""
+            CREATE INDEX IF NOT EXISTS ix_game_player_engine_summary_player_game
+            ON game_player_engine_summary (player_name, game_link)
+        """)
+    return requires_cache_reset
+
+
+async def _reshape_player_salience_schema(connection: asyncpg.Connection) -> bool:
+    """Migrate the rebuildable salience projection to occurrence-based scoring."""
+    table_exists = await connection.fetchval(
+        "SELECT to_regclass('public.game_player_salience') IS NOT NULL"
+    )
+    if not table_exists:
+        return False
+    columns = {
+        str(row["column_name"]): str(row["is_nullable"])
+        for row in await connection.fetch("""
+            SELECT column_name, is_nullable
+            FROM information_schema.columns
+            WHERE table_schema = 'public'
+              AND table_name = 'game_player_salience'
+        """)
+    }
+    legacy_formula = "position_count" in columns
+    async with connection.transaction():
+        for name in (
+            "position_occurrence_count",
+            "unique_position_count",
+            "repeated_position_count",
+        ):
+            if name not in columns:
+                await connection.execute(
+                    f"ALTER TABLE game_player_salience "
+                    f"ADD COLUMN {name} INTEGER NOT NULL DEFAULT 0"
+                )
+        if "depth_weight_sum" not in columns:
+            await connection.execute(
+                "ALTER TABLE game_player_salience "
+                "ADD COLUMN depth_weight_sum DOUBLE PRECISION"
+            )
+        if "weighted_numerator" not in columns:
+            await connection.execute(
+                "ALTER TABLE game_player_salience "
+                "ADD COLUMN weighted_numerator DOUBLE PRECISION"
+            )
+        if legacy_formula:
+            # These rows used a distinct-position formula and must never be
+            # mixed with the occurrence-based canonical score.
+            await connection.execute("DELETE FROM game_player_salience")
+            await connection.execute("DELETE FROM player_position_frequency")
+            await connection.execute("""
+                UPDATE player_salience_summary
+                SET status = 'stale', source_game_count = 0,
+                    source_position_count = 0, effective_game_count = 0,
+                    error = NULL
+            """)
+            legacy_constraint = await connection.fetchval("""
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'game_player_salience'::regclass
+                  AND conname = 'game_player_salience_position_count'
+            """)
+            if legacy_constraint:
+                await connection.execute("""
+                    ALTER TABLE game_player_salience
+                    DROP CONSTRAINT game_player_salience_position_count
+                """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience DROP COLUMN position_count
+            """)
+
+        # Only legacy nullable columns need backfilling. Current schemas must
+        # not scan every player's games and acquire an ALTER lock at startup.
+        if columns.get("depth_weight_sum") != "NO":
+            await connection.execute("""
+                UPDATE game_player_salience
+                SET depth_weight_sum = CASE
+                        WHEN position_occurrence_count <= 16 THEN
+                            0.25 * position_occurrence_count
+                            + (0.75 / 16.0)
+                              * position_occurrence_count
+                              * (position_occurrence_count + 1) / 2.0
+                        ELSE position_occurrence_count - 5.625
+                    END
+                WHERE depth_weight_sum IS NULL
+            """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience
+                ALTER COLUMN depth_weight_sum SET NOT NULL
+            """)
+        if columns.get("weighted_numerator") != "NO":
+            await connection.execute("""
+                UPDATE game_player_salience
+                SET weighted_numerator = salience * depth_weight_sum
+                WHERE weighted_numerator IS NULL
+            """)
+            await connection.execute("""
+                ALTER TABLE game_player_salience
+                ALTER COLUMN weighted_numerator SET NOT NULL
+            """)
+
+        constraints = {
+            str(row["conname"])
+            for row in await connection.fetch("""
+                SELECT conname
+                FROM pg_constraint
+                WHERE conrelid = 'game_player_salience'::regclass
+            """)
+        }
+        additions = {
+            "game_player_salience_occurrence_count": (
+                "CHECK (position_occurrence_count > 0)"
+            ),
+            "game_player_salience_unique_count": (
+                "CHECK (unique_position_count > 0 "
+                "AND unique_position_count <= position_occurrence_count)"
+            ),
+            "game_player_salience_repeated_count": (
+                "CHECK (repeated_position_count = "
+                "position_occurrence_count - unique_position_count)"
+            ),
+            "game_player_salience_components_positive": (
+                "CHECK (weighted_numerator > 0 AND depth_weight_sum > 0)"
+            ),
+        }
+        for name, definition in additions.items():
+            if name not in constraints:
+                await connection.execute(
+                    f"ALTER TABLE game_player_salience "
+                    f"ADD CONSTRAINT {name} {definition}"
+                )
+    reverse_index_exists = await connection.fetchval(
+        "SELECT to_regclass('public.ix_player_position_frequency_fen_player') "
+        "IS NOT NULL"
+    )
+    if reverse_index_exists:
+        await connection.execute(
+            "DROP INDEX CONCURRENTLY public.ix_player_position_frequency_fen_player"
+        )
+        print("Removed unused reverse player-position frequency index.")
+    return legacy_formula
+
+
+async def _ensure_fen_analysis_schema(
+    *,
+    user: str,
+    password: str | None,
+    host: str,
+    port: int,
+    database: str,
+) -> int:
+    """Apply small, idempotent FEN schema additions without a migration service."""
+    connection = await asyncpg.connect(
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        database=database,
+    )
+    migrated_no_move_games = 0
+    try:
+        await connection.execute("SELECT pg_advisory_lock($1)", FEN_SCHEMA_ADVISORY_LOCK)
+        reshaped_engine_summaries = await _reshape_game_player_engine_summary(connection)
+        if reshaped_engine_summaries:
+            print("Player engine summary cache reshaped; rows will rebuild on demand.")
+        reshaped_salience = await _reshape_player_salience_schema(connection)
+        if reshaped_salience:
+            print("Player salience cache reshaped; occurrence-based rows require backfill.")
+        redundant_fen_index_exists = await connection.fetchval(
+            "SELECT to_regclass('public.ix_fen_fen') IS NOT NULL"
+        )
+        if redundant_fen_index_exists:
+            # fen_pkey is an equivalent unique btree on fen(fen). Run outside
+            # an explicit transaction so normal reads and writes remain
+            # available while PostgreSQL invalidates the redundant index.
+            await connection.execute(
+                "DROP INDEX CONCURRENTLY IF EXISTS public.ix_fen_fen"
+            )
+            print("Removed redundant ix_fen_fen; fen_pkey remains authoritative.")
+        existing_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'fen'
+                  AND column_name = ANY($1::text[])
+            """, [
+                "piece_count",
+                "analysis_source",
+                "tablebase_wdl",
+                "tablebase_dtz",
+                "analyzed_at",
+            ])
+        }
+        column_definitions = {
+            "piece_count": "SMALLINT",
+            "analysis_source": "VARCHAR(32)",
+            "tablebase_wdl": "SMALLINT",
+            "tablebase_dtz": "INTEGER",
+            "analyzed_at": "TIMESTAMPTZ",
+        }
+        missing_columns = [
+            (column_name, data_type)
+            for column_name, data_type in column_definitions.items()
+            if column_name not in existing_columns
+        ]
+        if missing_columns:
+            # Keep all additions under one relation lock. Releasing the lock
+            # between statements would let long-running analysis leases jump in.
+            async with connection.transaction():
+                for column_name, data_type in missing_columns:
+                    await connection.execute(
+                        f"ALTER TABLE fen ADD COLUMN {column_name} {data_type}"
+                    )
+        # This index is intentionally partial. Existing rows can use the immutable
+        # FEN expression until piece_count is filled lazily, avoiding a 47M-row
+        # table rewrite. CONCURRENTLY keeps ongoing Stockfish writes available.
+        index_exists = await connection.fetchval(
+            "SELECT to_regclass('public.ix_fen_pending_tablebase') IS NOT NULL"
+        )
+        if not index_exists:
+            await connection.execute("""
+                CREATE INDEX CONCURRENTLY ix_fen_pending_tablebase
+                ON fen (n_games DESC, fen)
+                WHERE score IS NULL
+                  AND COALESCE(analysis_source, '') <> 'tablebase_unavailable'
+                  AND COALESCE(
+                        piece_count,
+                        char_length(translate(split_part(fen, ' ', 1), '12345678/', ''))
+                      ) <= 5
+            """)
+        # Supports the "most repeated pending FENs" view and the same priority
+        # order used by global analysis selection without scanning the FEN table.
+        await connection.execute("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_fen_unscored_n_games_desc
+            ON fen (n_games DESC)
+            WHERE score IS NULL
+        """)
+        player_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'player'
+                  AND column_name = ANY($1::text[])
+            """, ["deleted_at", "timezone", "timezone_source"])
+        }
+        for column_name, data_type in (
+            ("deleted_at", "TIMESTAMPTZ"),
+            ("timezone", "VARCHAR(64)"),
+            ("timezone_source", "VARCHAR(32)"),
+        ):
+            if column_name not in player_columns:
+                await connection.execute(
+                    f"ALTER TABLE player ADD COLUMN {column_name} {data_type}"
+                )
+
+        game_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'game'
+                  AND column_name = ANY($1::text[])
+            """, ["fens_processing", "rules", "initial_setup"])
+        }
+        game_column_definitions = {
+            "fens_processing": "BOOLEAN NOT NULL DEFAULT FALSE",
+            "rules": "VARCHAR(32) NOT NULL DEFAULT 'chess'",
+            "initial_setup": "VARCHAR(128)",
+        }
+        for column_name, definition in game_column_definitions.items():
+            if column_name not in game_columns:
+                await connection.execute(
+                    f"ALTER TABLE game ADD COLUMN {column_name} {definition}"
+                )
+
+        fen_pipeline_columns = {
+            str(row["column_name"])
+            for row in await connection.fetch("""
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'fen_pipeline_summary'
+                  AND column_name = ANY($1::text[])
+            """, ["analyzable_games", "excluded_games"])
+        }
+        for column_name in ("analyzable_games", "excluded_games"):
+            if column_name not in fen_pipeline_columns:
+                await connection.execute(
+                    "ALTER TABLE fen_pipeline_summary "
+                    f"ADD COLUMN {column_name} BIGINT NOT NULL DEFAULT 0"
+                )
+
+        await connection.execute("""
+            CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_game_fen_association_game_order
+            ON game_fen_association (game_link, n_move, move_color)
+        """)
+
+        # Zero-move records are not chess games that can participate in any
+        # position analysis. Preserve only their stable ID and original start
+        # time so future archive downloads do not keep re-importing them.
+        async with connection.transaction():
+            await connection.execute("""
+                CREATE TEMPORARY TABLE migrated_no_move_scope (
+                    game_id BIGINT NOT NULL,
+                    player_name VARCHAR NOT NULL,
+                    year INTEGER NOT NULL,
+                    month INTEGER NOT NULL,
+                    PRIMARY KEY (game_id, player_name)
+                ) ON COMMIT DROP
+            """)
+            await connection.execute("""
+                INSERT INTO migrated_no_move_scope (game_id, player_name, year, month)
+                SELECT g.link, players.player_name, g.year, g.month
+                FROM game g
+                CROSS JOIN LATERAL (VALUES (g.white), (g.black)) players(player_name)
+                WHERE g.n_moves = 0
+                ON CONFLICT DO NOTHING
+            """)
+            await connection.execute("""
+                INSERT INTO no_moves_games (game_id, played_at)
+                SELECT
+                    g.link,
+                    COALESCE(
+                        g.played_at,
+                        make_timestamptz(
+                            g.year, g.month, g.day,
+                            g.hour, g.minute, g.second,
+                            'UTC'
+                        )
+                    )
+                FROM game g
+                WHERE g.n_moves = 0
+                ON CONFLICT (game_id) DO UPDATE
+                SET played_at = EXCLUDED.played_at
+            """)
+            await connection.execute("""
+                DELETE FROM game_fen_association association
+                USING game game_row
+                WHERE association.game_link = game_row.link
+                  AND game_row.n_moves = 0
+            """)
+            await connection.execute("""
+                DELETE FROM moves move_row
+                USING game game_row
+                WHERE move_row.link = game_row.link
+                  AND game_row.n_moves = 0
+            """)
+            delete_result = await connection.execute(
+                "DELETE FROM game WHERE n_moves = 0"
+            )
+            migrated_no_move_games = int(delete_result.rsplit(" ", 1)[-1])
+            await connection.execute("""
+                UPDATE months ledger
+                SET n_games = counts.n_games
+                FROM (
+                    SELECT
+                        scope.player_name,
+                        scope.year,
+                        scope.month,
+                        COUNT(game_row.link)::int AS n_games
+                    FROM (
+                        SELECT DISTINCT player_name, year, month
+                        FROM migrated_no_move_scope
+                    ) scope
+                    LEFT JOIN game game_row
+                      ON game_row.year = scope.year
+                     AND game_row.month = scope.month
+                     AND (
+                         game_row.white = scope.player_name
+                         OR game_row.black = scope.player_name
+                     )
+                    GROUP BY scope.player_name, scope.year, scope.month
+                ) counts
+                WHERE ledger.player_name = counts.player_name
+                  AND ledger.year = counts.year
+                  AND ledger.month = counts.month
+            """)
+    finally:
+        try:
+            await connection.execute("SELECT pg_advisory_unlock($1)", FEN_SCHEMA_ADVISORY_LOCK)
+        finally:
+            await connection.close()
+    return migrated_no_move_games
 
 async def init_db(connection_string: str):
     """
@@ -77,8 +618,30 @@ async def init_db(connection_string: str):
             # Ensure database tables exist using the async engine
             async with async_engine.begin() as conn:
                 print("Ensuring database tables exist...")
+                # Multiple API/worker containers start from the same image. Keep
+                # their metadata checks sequential so a newly introduced table
+                # cannot be created concurrently by two containers.
+                await conn.execute(
+                    text("SELECT pg_advisory_xact_lock(:lock_id)"),
+                    {"lock_id": FEN_SCHEMA_ADVISORY_LOCK},
+                )
+                definitions_missing = not await conn.scalar(text(
+                    "SELECT to_regclass('public.matrix_definition') IS NOT NULL"
+                ))
                 await conn.run_sync(Base.metadata.create_all)
+                if definitions_missing:
+                    from chessism_api.database.matrix_definitions import import_snapshot_definitions
+                    imported = await import_snapshot_definitions(conn)
+                    print(f"Imported {imported} legacy matrix recipes; original snapshots preserved.")
                 print("Database tables checked/created.")
+            migrated_no_move_games = await _ensure_fen_analysis_schema(
+                user=db_user,
+                password=db_password,
+                host=db_host,
+                port=db_port,
+                database=db_name,
+            )
+            print("Incremental FEN analysis schema checked/created.")
             
             # If successful, break the loop
             print("Database connection successful.")
@@ -97,4 +660,16 @@ async def init_db(connection_string: str):
     else: # This 'else' block runs if the 'for' loop completes without 'break'
         raise RuntimeError("Database connection failed after all retries. The database may be down.")
     AsyncDBSession.configure(bind=async_engine)
+    if migrated_no_move_games:
+        # Refresh only projections whose game counts changed. FEN rows and
+        # scored-position summaries are deliberately untouched.
+        from chessism_api.database.ask_db import (
+            refresh_database_summary_game_counts,
+            refresh_main_character_mode_summary,
+        )
+        await refresh_database_summary_game_counts()
+        await refresh_main_character_mode_summary()
+        print(
+            f"Migrated {migrated_no_move_games} zero-move games to no_moves_games."
+        )
     print("Asynchronous database initialization complete.")

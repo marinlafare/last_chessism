@@ -1,0 +1,2440 @@
+import gzip
+import inspect
+import json
+import os
+import sys
+import tempfile
+import unittest
+from datetime import date, datetime, timezone
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import httpx
+from sqlalchemy.dialects import postgresql
+
+os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stockfish-service"))
+
+import chess
+import operations.engine as stockfish_engine
+from chessism_api.database import ask_db, models
+from chessism_api.operations import (
+    analysis,
+    analysis_backups,
+    database_backups,
+    database_restore_tests,
+    player_analytics,
+    player_deletion,
+    player_game_scores,
+    player_game_explorer,
+    player_hero_analytics,
+    player_hero_efficiency,
+    player_salience,
+    tablebase,
+)
+from chessism_api.operations.ingestion_pipeline import fen_orchestrator as fens
+from chessism_api.operations.ingestion_pipeline import jobs as games
+from chessism_api.operations.player_timezone import resolve_player_timezone
+from chessism_api.database.ask_db import (
+    _player_fens_for_analysis_stmt,
+    fair_sample_player_games_by_month,
+    get_player_fen_score_counts,
+    get_top_fens_unscored,
+)
+from chessism_api.operations.ingestion_pipeline.fen_core import (
+    aggregate_fen_data,
+    count_expected_fen_positions,
+    count_fen_pieces,
+    split_balanced,
+)
+from chessism_api.operations.ingestion_pipeline.game_importer import (
+    insert_games_months_moves_and_players,
+)
+from chessism_api.operations.ingestion_pipeline.pgn import (
+    create_game_dict,
+    create_moves_table,
+    get_moves_data,
+    get_pgn_item,
+)
+from operations.engine import EnginePool, clean_engine_result, convert_to_serializable
+from chessism_api.routers.analysis import (
+    AnalysisJobRequest,
+    AnalysisLoopJobRequest,
+    PlayerGamePreviewRequest,
+    PlayerGameScopeRequest,
+    _player_game_date_bounds,
+    api_preview_player_game_analysis,
+)
+from chessism_api.routers import jobs as jobs_router
+from arq.jobs import JobStatus
+
+
+class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
+    def test_pgn_header_lookup_matches_the_exact_header(self):
+        pgn = '[UTCDate "2024.07.03"]\n[Date "2024.07.02"]\n'
+
+        self.assertEqual(get_pgn_item(pgn, "Date"), "2024.07.02")
+
+    def test_move_table_rejects_missing_clocks_without_mutating_inputs(self):
+        moves = ["e4", "e5", "Nf3"]
+        times = []
+
+        with self.assertRaisesRegex(ValueError, "Every played half-move"):
+            create_moves_table(
+                "https://www.chess.com/game/live/123",
+                times,
+                moves,
+                time_bonus=0,
+            )
+
+        self.assertEqual(moves, ["e4", "e5", "Nf3"])
+        self.assertEqual(times, [])
+
+    def test_crlf_pgn_move_section_is_parsed(self):
+        game = {
+            "url": "https://www.chess.com/game/live/123",
+            "time_control": "600",
+            "pgn": (
+                '[Date "2024.07.02"]\r\n\r\n'
+                '1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} '
+                '2. Nf3 {[%clk 0:09:55]} Nc6 {[%clk 0:09:54]} 1-0'
+            ),
+        }
+
+        move_count, moves = get_moves_data(game)
+
+        self.assertEqual(move_count, 2)
+        self.assertEqual(moves["white_moves"], ["e4", "Nf3"])
+        self.assertEqual(moves["black_moves"], ["e5", "Nc6"])
+
+    def test_partial_clock_annotations_are_rejected(self):
+        game = {
+            "url": "https://www.chess.com/game/live/123",
+            "time_control": "600",
+            "pgn": (
+                '[Date "2024.07.02"]\n\n'
+                '1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} '
+                '2. Nf3 {[%clk 0:09:55]} Nc6 1-0'
+            ),
+        }
+
+        with self.assertRaisesRegex(ValueError, "3 clocks for 4 moves"):
+            get_moves_data(game)
+
+    def test_zero_move_game_is_returned_as_a_tombstone_candidate(self):
+        game = {
+            "url": "https://www.chess.com/game/live/987",
+            "time_control": "60",
+            "pgn": '[Date "2026.09.28"]\n\n1-0',
+        }
+
+        move_count, moves = get_moves_data(game)
+
+        self.assertEqual(move_count, 0)
+        self.assertIsNone(moves)
+
+    def test_game_without_clock_annotations_is_discarded(self):
+        pgn = "\n".join([
+            '[Date "2024.07.02"]',
+            '[StartTime "10:00:00"]',
+            '[EndDate "2024.07.02"]',
+            '[EndTime "10:05:00"]',
+            "",
+            "1. e4 e5 2. Nf3 Nc6 1-0",
+        ])
+        raw_game = {
+            "url": "https://www.chess.com/game/live/123",
+            "time_control": "600",
+            "white": {"username": "White", "rating": 1500, "result": "win"},
+            "black": {"username": "Black", "rating": 1400, "result": "checkmated"},
+            "eco": "https://www.chess.com/openings/Kings-Pawn-Game",
+            "pgn": pgn,
+        }
+
+        result = create_game_dict(raw_game)
+
+        self.assertFalse(result)
+
+    def test_game_without_a_valid_date_is_discarded_without_crashing_import(self):
+        raw_game = {
+            "url": "https://www.chess.com/game/live/125",
+            "time_control": "600",
+            "white": {"username": "White", "rating": 1500, "result": "win"},
+            "black": {
+                "username": "Black",
+                "rating": 1400,
+                "result": "checkmated",
+            },
+            "pgn": "1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} 1-0",
+        }
+
+        self.assertFalse(create_game_dict(raw_game))
+
+    def test_game_with_clock_annotation_for_every_move_is_kept(self):
+        pgn = "\n".join([
+            '[Date "2024.07.02"]',
+            '[StartTime "10:00:00"]',
+            '[EndDate "2024.07.02"]',
+            '[EndTime "10:05:00"]',
+            "",
+            (
+                "1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} "
+                "2. Nf3 {[%clk 0:09:55]} Nc6 {[%clk 0:09:54]} 1-0"
+            ),
+        ])
+        raw_game = {
+            "url": "https://www.chess.com/game/live/123",
+            "time_control": "600",
+            "white": {"username": "White", "rating": 1500, "result": "win"},
+            "black": {"username": "Black", "rating": 1400, "result": "checkmated"},
+            "eco": "https://www.chess.com/openings/Kings-Pawn-Game",
+            "pgn": pgn,
+        }
+
+        result = create_game_dict(raw_game)
+
+        self.assertIsInstance(result, dict)
+        self.assertEqual(result["n_moves"], 2)
+        self.assertEqual(result["moves_data"]["white_time_left"], [600.0, 595.0])
+        self.assertEqual(result["rules"], "chess")
+        self.assertFalse(result["fens_done"])
+
+    def test_variant_game_is_preserved_but_excluded_from_standard_fens(self):
+        pgn = "\n".join([
+            '[Date "2024.07.02"]',
+            '[StartTime "10:00:00"]',
+            '[EndDate "2024.07.02"]',
+            '[EndTime "10:05:00"]',
+            "",
+            "1. e4 {[%clk 0:10:00]} e5 {[%clk 0:09:59]} 1-0",
+        ])
+        raw_game = {
+            "url": "https://www.chess.com/game/live/124",
+            "time_control": "600",
+            "rules": "chess960",
+            "initial_setup": "nrbkrqnb/pppppppp/8/8/8/8/PPPPPPPP/NRBKRQNB w KQkq -",
+            "white": {"username": "White", "rating": 1500, "result": "win"},
+            "black": {"username": "Black", "rating": 1400, "result": "checkmated"},
+            "eco": "https://www.chess.com/openings/Birds-Opening",
+            "pgn": pgn,
+        }
+
+        result = create_game_dict(raw_game)
+
+        self.assertEqual(result["rules"], "chess960")
+        self.assertEqual(result["initial_setup"], raw_game["initial_setup"])
+        self.assertTrue(result["fens_done"])
+
+    async def test_invalid_game_does_not_queue_orphan_moves_or_mutate_input(self):
+        formatted_game = {
+            "link": 123,
+            "moves_data": {
+                "link": 123,
+                "white_moves": ["e4"],
+                "black_moves": ["e5"],
+                "white_reaction_times": [0.0],
+                "black_reaction_times": [0.0],
+                "white_time_left": [0.0],
+                "black_time_left": [0.0],
+            },
+        }
+
+        with patch(
+            "chessism_api.operations.ingestion_pipeline.game_importer.insert_game_bundle",
+            new_callable=AsyncMock,
+        ) as insert_game_bundle:
+            result = await insert_games_months_moves_and_players(
+                [formatted_game],
+                "white",
+            )
+
+        insert_game_bundle.assert_not_awaited()
+        self.assertIn("moves_data", formatted_game)
+        self.assertIn("No new data", result)
+
+    async def test_successful_empty_archives_are_recorded(self):
+        progress = AsyncMock()
+        with (
+            patch.object(
+                games,
+                "download_months",
+                new_callable=AsyncMock,
+                return_value={2026: {1: []}},
+            ),
+            patch.object(
+                games,
+                "sync_player_months",
+                new_callable=AsyncMock,
+            ) as sync_months,
+        ):
+            result = await games._download_format_and_insert(
+                "hikaru",
+                ["2026-1"],
+                progress,
+                no_games_message="no games",
+            )
+
+        self.assertEqual(result, "no games")
+        sync_months.assert_awaited_once_with("hikaru", {(2026, 1)})
+
+    async def test_import_progress_finishes_at_total_after_persistence(self):
+        progress = AsyncMock()
+        with (
+            patch.object(
+                games,
+                "download_months",
+                new_callable=AsyncMock,
+                return_value={2026: {1: [{"url": "game"}]}},
+            ),
+            patch.object(
+                games,
+                "format_games",
+                new_callable=AsyncMock,
+                return_value=[{"link": 1}],
+            ),
+            patch.object(
+                games,
+                "insert_games_months_moves_and_players",
+                new_callable=AsyncMock,
+                return_value="saved",
+            ),
+            patch.object(
+                games,
+                "sync_player_months",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await games._download_format_and_insert(
+                "hikaru",
+                ["2026-1"],
+                progress,
+                no_games_message="no games",
+            )
+
+        progress.assert_awaited_with(
+            "complete",
+            3,
+            3,
+            "Saved 1 games and queued position extraction.",
+        )
+
+
+class FenAggregationTests(unittest.TestCase):
+    def test_fen_primary_key_does_not_declare_a_duplicate_index(self):
+        fen_column = models.Fen.__table__.c.fen
+        index_names = {index.name for index in models.Fen.__table__.indexes}
+
+        self.assertTrue(fen_column.primary_key)
+        self.assertNotIn("ix_fen_fen", index_names)
+
+    def test_expected_fen_positions_counts_only_played_half_moves(self):
+        self.assertEqual(
+            count_expected_fen_positions([
+                {"white_move": "e4", "black_move": "e5"},
+                {"white_move": "Nf3", "black_move": "--"},
+                {"white_move": None, "black_move": "Nc6"},
+            ]),
+            4,
+        )
+
+    def test_split_balanced_always_returns_requested_chunk_count(self):
+        self.assertEqual(split_balanced([1, 2], 4), [[1], [2], [], []])
+
+    def test_aggregation_deduplicates_associations_and_exact_counters(self):
+        base = {
+            "game_link": 1,
+            "fen_fen": "8/8/8/8/8/8/8/K6k w - -",
+            "n_move": 1,
+            "move_color": "white",
+        }
+        associations = [
+            {**base, "move_counter_string": "#1_10"},
+            {**base, "move_counter_string": "#1_10"},
+            {**base, "n_move": 2, "move_counter_string": "#1_1"},
+        ]
+
+        fens, unique_associations = aggregate_fen_data(associations)
+
+        self.assertEqual(fens[0]["moves_counter"], "#1_10#1_1")
+        self.assertEqual(len(unique_associations), 2)
+        self.assertNotIn("move_counter_string", unique_associations[0])
+        self.assertEqual(fens[0]["piece_count"], 2)
+
+    def test_piece_count_ignores_fen_digits_and_metadata(self):
+        self.assertEqual(
+            count_fen_pieces("8/8/8/3k4/8/8/3Q4/3K4 w - -"),
+            3,
+        )
+
+
+class PlayerSalienceTests(unittest.TestCase):
+    def test_depth_weight_reaches_full_strength_at_ply_sixteen(self):
+        self.assertEqual(player_salience.position_depth_weight(0), 0.25)
+        self.assertAlmostEqual(player_salience.position_depth_weight(8), 0.625)
+        self.assertEqual(player_salience.position_depth_weight(16), 1.0)
+        self.assertEqual(player_salience.position_depth_weight(80), 1.0)
+
+    def test_position_salience_penalizes_corpus_and_intra_game_repetition(self):
+        self.assertAlmostEqual(player_salience.position_salience(10, 1), 0.1)
+        self.assertAlmostEqual(player_salience.position_salience(10, 2), 0.05)
+        self.assertAlmostEqual(player_salience.position_salience(1, 3), 1 / 3)
+
+    def test_weighted_accuracy_deduplicates_repeated_game_mass(self):
+        rows = [
+            *({"accuracy": 100.0, "salience": 0.05} for _ in range(20)),
+            {"accuracy": 60.0, "salience": 1.0},
+        ]
+
+        self.assertAlmostEqual(player_salience.salience_weighted_accuracy(rows), 80.0)
+
+    def test_salience_schema_separates_player_state_from_game_values(self):
+        summary_columns = set(models.PlayerSalienceSummary.__table__.columns.keys())
+        frequency_columns = set(models.PlayerPositionFrequency.__table__.columns.keys())
+        pending_columns = set(models.PlayerSaliencePendingGame.__table__.columns.keys())
+        game_columns = set(models.GamePlayerSalience.__table__.columns.keys())
+
+        self.assertEqual(
+            summary_columns,
+            {
+                "player_name", "status", "source_game_count",
+                "source_position_count", "effective_game_count", "error",
+            },
+        )
+        self.assertEqual(
+            frequency_columns,
+            {
+                "player_name", "player_color", "fen_fen",
+                "games_with_position", "total_occurrences",
+            },
+        )
+        self.assertEqual(
+            pending_columns,
+            {"player_name", "game_link", "player_color"},
+        )
+        self.assertEqual(
+            game_columns,
+            {
+                "game_link", "player_color", "player_name", "salience",
+                "weighted_numerator", "depth_weight_sum",
+                "position_occurrence_count", "unique_position_count",
+                "repeated_position_count",
+            },
+        )
+
+
+class DatabaseBackupPolicyTests(unittest.TestCase):
+    def test_restore_server_preserves_recovery_sensitive_limits(self):
+        options = database_restore_tests._postgres_start_options(Path("/tmp/socket"))
+
+        self.assertNotIn("max_connections", options)
+        self.assertNotIn("max_worker_processes", options)
+        self.assertNotIn("max_wal_senders", options)
+        self.assertNotIn("max_prepared_transactions", options)
+        self.assertNotIn("max_locks_per_transaction", options)
+
+    def test_restore_worker_accepts_arq_job_metadata(self):
+        signature = inspect.signature(
+            database_restore_tests.run_database_restore_test_job
+        )
+
+        self.assertTrue(any(
+            parameter.kind is inspect.Parameter.VAR_KEYWORD
+            for parameter in signature.parameters.values()
+        ))
+
+    def test_first_database_backup_is_full(self):
+        backup_type, _reason = database_backups.choose_backup_type(
+            [],
+            archive_gap=False,
+        )
+        self.assertEqual(backup_type, "full")
+
+    def test_pgbackrest_progress_uses_factual_byte_counts(self):
+        progress = database_backups._parse_pgbackrest_progress([{
+            "status": {
+                "lock": {
+                    "backup": {
+                        "held": True,
+                        "size": 1_000,
+                        "size-cplt": 275,
+                    },
+                },
+            },
+        }])
+
+        self.assertEqual(progress, (1_000, 275))
+
+    def test_pgbackrest_progress_is_absent_without_active_backup(self):
+        progress = database_backups._parse_pgbackrest_progress([{
+            "status": {
+                "lock": {
+                    "backup": {
+                        "held": False,
+                        "size": 1_000,
+                        "size-cplt": 1_000,
+                    },
+                },
+            },
+        }])
+
+        self.assertIsNone(progress)
+
+    def test_healthy_recent_chain_uses_incremental_backup(self):
+        now = datetime(2026, 10, 2, tzinfo=timezone.utc)
+        backups = [{
+            "type": "full",
+            "timestamp": {"stop": int(datetime(2026, 9, 28, tzinfo=timezone.utc).timestamp())},
+        }]
+        backup_type, _reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=False,
+            now=now,
+        )
+        self.assertEqual(backup_type, "incr")
+
+    def test_legacy_full_forces_one_block_enabled_full_backup(self):
+        backups = [{
+            "type": "full",
+            "timestamp": {"stop": int(datetime(2026, 10, 1, tzinfo=timezone.utc).timestamp())},
+        }]
+        backup_type, reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=False,
+            active_full_storage_mode=None,
+            now=datetime(2026, 10, 2, tzinfo=timezone.utc),
+        )
+
+        self.assertEqual(backup_type, "full")
+        self.assertIn("Block-incremental", reason)
+
+    def test_active_full_mode_is_matched_by_backup_id(self):
+        repository_rows = [
+            {
+                "label": "20261001-010101F",
+                "type": "full",
+                "timestamp": {"stop": 100},
+            },
+            {
+                "label": "20261002-010101F",
+                "type": "full",
+                "timestamp": {"stop": 200},
+            },
+        ]
+        catalog_rows = [
+            {
+                "backup_id": "20261001-010101F",
+                "type": "full",
+                "storage_mode": database_backups.LEGACY_STORAGE_MODE,
+            },
+            {
+                "backup_id": "20261002-010101F",
+                "type": "full",
+                "storage_mode": database_backups.BACKUP_STORAGE_MODE,
+            },
+        ]
+
+        self.assertEqual(
+            database_backups._active_full_storage_mode(repository_rows, catalog_rows),
+            database_backups.BACKUP_STORAGE_MODE,
+        )
+
+    def test_legacy_cleanup_targets_only_old_full_chains(self):
+        rows = [
+            {
+                "backup_id": "new-block-full",
+                "type": "full",
+                "storage_mode": database_backups.BACKUP_STORAGE_MODE,
+            },
+            {"backup_id": "old-incremental", "type": "incr"},
+            {"backup_id": "old-legacy-full", "type": "full"},
+        ]
+
+        self.assertEqual(
+            database_backups._legacy_full_backup_ids(
+                rows,
+                protected_backup_id="new-block-full",
+            ),
+            ["old-legacy-full"],
+        )
+
+    def test_ten_incrementals_start_a_new_full_chain(self):
+        full_stop = int(datetime(2026, 9, 28, tzinfo=timezone.utc).timestamp())
+        backups = [{"type": "full", "timestamp": {"stop": full_stop}}]
+        backups.extend(
+            {"type": "incr", "timestamp": {"stop": full_stop + index + 1}}
+            for index in range(10)
+        )
+        backup_type, _reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=False,
+            now=datetime(2026, 10, 2, tzinfo=timezone.utc),
+        )
+        self.assertEqual(backup_type, "full")
+
+    def test_archive_gap_always_starts_a_new_full_chain(self):
+        backups = [{
+            "type": "full",
+            "timestamp": {"stop": int(datetime.now(timezone.utc).timestamp())},
+        }]
+        backup_type, _reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=True,
+        )
+        self.assertEqual(backup_type, "full")
+
+    def test_seven_day_old_chain_starts_a_new_full_backup(self):
+        backups = [{
+            "type": "full",
+            "timestamp": {"stop": int(datetime(2026, 9, 25, tzinfo=timezone.utc).timestamp())},
+        }]
+        backup_type, _reason = database_backups.choose_backup_type(
+            backups,
+            archive_gap=False,
+            now=datetime(2026, 10, 2, tzinfo=timezone.utc),
+        )
+        self.assertEqual(backup_type, "full")
+
+    def test_backup_usage_measurement_separates_live_wal_and_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            backup = root / "database" / "pgbackrest" / "backup"
+            archive = root / "database" / "pgbackrest" / "archive"
+            fen_analysis = root / "fen-analysis"
+            research = root / "research"
+            for directory in (backup, archive, fen_analysis, research):
+                directory.mkdir(parents=True)
+            (backup / "base").write_bytes(b"b" * 11)
+            (archive / "wal").write_bytes(b"w" * 13)
+            (fen_analysis / "fens").write_bytes(b"f" * 17)
+            (research / "matrix").write_bytes(b"r" * 19)
+            (root / "metadata").write_bytes(b"m" * 23)
+
+            with (
+                patch.object(database_backups, "APP_BACKUP_ROOT", root),
+                patch.object(database_backups, "PGBACKREST_BACKUP_DIRECTORY", backup),
+                patch.object(database_backups, "PGBACKREST_ARCHIVE_DIRECTORY", archive),
+                patch.object(database_backups, "FEN_ANALYSIS_BACKUP_ROOT", fen_analysis),
+                patch.object(database_backups, "RESEARCH_BACKUP_ROOT", research),
+            ):
+                usage = database_backups._measure_application_usage()
+
+        self.assertEqual(usage["database_backup_bytes"], 11)
+        self.assertEqual(usage["archived_wal_bytes"], 13)
+        self.assertEqual(usage["fen_analysis_bytes"], 17)
+        self.assertEqual(usage["research_bytes"], 19)
+        self.assertEqual(usage["other_bytes"], 23)
+        self.assertEqual(usage["total_bytes"], 83)
+
+    def test_restore_probe_accepts_a_complete_postgres_15_database(self):
+        database_restore_tests._validate_probe({
+            "database": "chessism_db",
+            "server_version_num": 150015,
+            "missing_relations": [],
+            "fen_primary_key_valid": True,
+            "redundant_fen_index_present": False,
+            "database_summary": {"games": 10, "positions": 100},
+            "pipeline_summary": {
+                "parsed_games": 10,
+                "fen_extracted_games": 9,
+                "tablebase_marked_games": 8,
+            },
+            "scored_summary": {"total_positions": 100},
+        })
+
+    def test_restore_probe_rejects_an_incomplete_schema(self):
+        with self.assertRaisesRegex(RuntimeError, "missing"):
+            database_restore_tests._validate_probe({
+                "database": "chessism_db",
+                "server_version_num": 150015,
+                "missing_relations": ["fen"],
+                "fen_primary_key_valid": True,
+            })
+
+    def test_restore_result_is_persisted_on_the_exact_catalog_row(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            catalog_path = Path(temporary) / "catalog.json"
+            catalog_path.write_text(json.dumps({
+                "schema_version": 2,
+                "backups": [
+                    {"backup_id": "latest", "restore_tested": False},
+                    {"backup_id": "older", "restore_tested": False},
+                ],
+            }), encoding="utf-8")
+
+            with patch.object(
+                database_restore_tests,
+                "BACKUP_CATALOG_PATH",
+                catalog_path,
+            ):
+                rows = database_restore_tests._catalog_with_restore_result(
+                    backup_id="latest",
+                    status="success",
+                    completed_at="2026-10-02T22:00:00+00:00",
+                    elapsed_seconds=12.34,
+                    error_message=None,
+                )
+
+            self.assertTrue(rows[0]["restore_tested"])
+            self.assertEqual(rows[0]["restore_test_status"], "success")
+            self.assertFalse(rows[1]["restore_tested"])
+
+    def test_restore_startup_cleanup_removes_only_rehearsal_workspaces(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            stale_directory = root / "rehearsal-interrupted-job"
+            stale_directory.mkdir()
+            (stale_directory / "large-restored-file").write_text(
+                "temporary",
+                encoding="utf-8",
+            )
+            stale_file = root / "rehearsal-incomplete-marker"
+            stale_file.write_text("temporary", encoding="utf-8")
+            preserved = root / "keep-this-file"
+            preserved.write_text("important", encoding="utf-8")
+
+            with patch.object(
+                database_restore_tests,
+                "RESTORE_TEST_ROOT",
+                root,
+            ):
+                removed = database_restore_tests.cleanup_stale_restore_workspaces()
+
+            self.assertEqual(
+                removed,
+                ["rehearsal-incomplete-marker", "rehearsal-interrupted-job"],
+            )
+            self.assertFalse(stale_directory.exists())
+            self.assertFalse(stale_file.exists())
+            self.assertEqual(preserved.read_text(encoding="utf-8"), "important")
+
+
+class PlayerHeroAnalyticsTests(unittest.TestCase):
+    def test_game_explorer_validates_and_labels_chart_bins(self):
+        clause, params, label = player_game_explorer._selection_clause(
+            "weekday_hour", None, 1, 9
+        )
+
+        self.assertIn("ISODOW", clause)
+        self.assertIn("HOUR", clause)
+        self.assertEqual(params, {"weekday": 1, "hour": 9})
+        self.assertEqual(label, "Monday · 09:00")
+        _, date_params, _ = player_game_explorer._selection_clause(
+            "date", "2026-09-20", None, None
+        )
+        self.assertEqual(date_params["target_date"], date(2026, 9, 20))
+        with self.assertRaises(ValueError):
+            player_game_explorer._selection_clause("hour", None, None, 24)
+
+    def test_game_score_formats_board_positions_clocks_and_mover_accuracy(self):
+        rows = [
+            {
+                "n_move": 1, "ply": 1, "move_color": "white", "move": "e4",
+                "fen": "rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq - 0 2",
+                "score": 40.0, "analysis_source": "stockfish", "next_moves": "e7e5 g1f3",
+                "white_time_left": 299.0, "black_time_left": 300.0,
+                "white_reaction_time": 1.0, "black_reaction_time": 0.0,
+                "tablebase_wdl": None, "tablebase_dtz": None,
+            },
+        ]
+
+        moves = player_game_explorer._format_moves(rows)
+
+        self.assertEqual(moves[0]["uci"], "e2e4")
+        self.assertEqual(moves[0]["fen_before"], chess.STARTING_FEN)
+        self.assertEqual(len(moves[0]["fen_after"].split()), 6)
+        self.assertEqual(moves[0]["clock"]["white_time_left"], 299.0)
+        self.assertEqual(moves[0]["evaluation_after"]["white_cp"], 40.0)
+        self.assertEqual(moves[0]["move_accuracy"], 100.0)
+
+    def test_daily_cp_points_have_only_date_and_summed_game_cp(self):
+        points = player_hero_analytics._daily_cp_points([
+            {"date_game_init": date(2026, 9, 20), "game_cp": -123.456},
+            {"date_game_init": date(2026, 9, 21), "game_cp": 45},
+        ])
+
+        self.assertEqual(points, [
+            ["2026-09-20", -123.46],
+            ["2026-09-21", 45.0],
+        ])
+        self.assertTrue(all(len(point) == 2 for point in points))
+
+    def test_daily_efficiency_points_have_only_date_and_mean_efficiency(self):
+        points = player_hero_efficiency.daily_efficiency_points([
+            {"date_game_init": date(2026, 9, 20), "game_efficiency": 87.456},
+            {"date_game_init": date(2026, 9, 21), "game_efficiency": None},
+        ])
+
+        self.assertEqual(points, [["2026-09-20", 87.46]])
+        self.assertTrue(all(len(point) == 2 for point in points))
+
+    def test_game_player_engine_summary_keeps_only_player_game_score_fields(self):
+        columns = set(models.GamePlayerEngineSummary.__table__.columns.keys())
+
+        self.assertEqual(columns, {
+            "game_link", "player_name", "player_color", "analyzed_player_moves",
+            "own_move_cp_gain", "own_move_cp_loss", "game_efficiency",
+            "mean_win_percent_loss", "median_win_percent_loss", "blunder_count",
+            "mate_for_positions", "mate_against_positions", "final_player_cp",
+            "result", "end_by",
+        })
+        self.assertNotIn("player_cp_sum", columns)
+        self.assertNotIn("opponent_move_cp_gain", columns)
+        self.assertNotIn("tablebase_winning", columns)
+
+    def test_lichess_blunder_uses_winning_chance_loss_not_fixed_cp_loss(self):
+        self.assertTrue(player_hero_analytics.is_lichess_blunder(100, -100))
+        self.assertFalse(player_hero_analytics.is_lichess_blunder(50, -50))
+
+    def test_lichess_winning_chances_are_symmetric_and_cap_at_1000_cp(self):
+        positive = player_hero_analytics.lichess_winning_chances(250)
+        negative = player_hero_analytics.lichess_winning_chances(-250)
+
+        self.assertAlmostEqual(positive, -negative)
+        self.assertEqual(
+            player_hero_analytics.lichess_winning_chances(2_000),
+            player_hero_analytics.lichess_winning_chances(1_000),
+        )
+        self.assertEqual(
+            player_hero_analytics.lichess_winning_chances(1_000_000),
+            player_hero_analytics.lichess_winning_chances(1_000),
+        )
+
+    def test_lichess_move_accuracy_is_player_oriented_and_bounded(self):
+        self.assertEqual(player_game_scores.lichess_move_accuracy(20, 80), 100.0)
+        small_error = player_game_scores.lichess_move_accuracy(20, -20)
+        major_error = player_game_scores.lichess_move_accuracy(200, -300)
+
+        self.assertGreater(small_error, major_error)
+        self.assertGreaterEqual(major_error, 0.0)
+        self.assertLessEqual(small_error, 100.0)
+
+    def test_efficiency_modes_accept_exact_mode_combinations(self):
+        self.assertEqual(
+            player_hero_efficiency.normalize_efficiency_modes("rapid,bullet"),
+            ("bullet", "rapid"),
+        )
+        self.assertEqual(
+            player_hero_efficiency.normalize_efficiency_modes("all"),
+            ("bullet", "blitz", "rapid"),
+        )
+        with self.assertRaises(ValueError):
+            player_hero_efficiency.normalize_efficiency_modes("daily")
+
+    def test_lichess_blunder_copies_forced_mate_boundaries(self):
+        self.assertTrue(
+            player_hero_analytics.is_lichess_blunder(-700, -9_000, "cp", "mate")
+        )
+        self.assertFalse(
+            player_hero_analytics.is_lichess_blunder(-701, -9_000, "cp", "mate")
+        )
+        self.assertTrue(
+            player_hero_analytics.is_lichess_blunder(9_000, 700, "mate", "cp")
+        )
+        self.assertFalse(
+            player_hero_analytics.is_lichess_blunder(9_000, 701, "mate", "cp")
+        )
+
+    def test_activity_rows_can_be_aggregated_after_grouping_by_mode(self):
+        rows = [
+            {
+                "mode": "bullet", "weekday": 1, "hour": 8,
+                "games": 3, "wins": 2, "draws": 0, "losses": 1,
+            },
+            {
+                "mode": "blitz", "weekday": 1, "hour": 8,
+                "games": 2, "wins": 0, "draws": 1, "losses": 1,
+            },
+        ]
+
+        summary = player_hero_analytics._summarize_activity_rows(rows)
+
+        self.assertEqual(summary["total_games"], 5)
+        self.assertEqual(summary["weekdays"][0]["games"], 5)
+        self.assertEqual(summary["hours"][8]["wins"], 2)
+        self.assertEqual(summary["weekday_hours"][8]["draws"], 1)
+        self.assertEqual(summary["hours"][8]["proportion"], 1.0)
+
+    def test_measure_rows_can_be_aggregated_after_grouping_by_mode(self):
+        base = {key: 0 for key in player_hero_analytics.MEASURE_KEYS}
+        rows = [
+            {
+                **base, "mode": "bullet", "weekday": 2, "hour": 9,
+                "positions": 3, "transitions": 2,
+                "player_cp_sum": 90, "total_cp_gain": 50, "total_cp_loss": 20,
+            },
+            {
+                **base, "mode": "rapid", "weekday": 2, "hour": 9,
+                "positions": 2, "transitions": 1,
+                "player_cp_sum": -10, "total_cp_gain": 5, "total_cp_loss": 15,
+            },
+        ]
+
+        summary = player_hero_analytics._summarize_measure_rows(rows)
+
+        self.assertEqual(summary["weekdays"][1]["positions"], 5)
+        self.assertEqual(summary["hours"][9]["player_cp_average"], 16.0)
+        self.assertEqual(summary["weekday_hours"][33]["net_cp_change"], 20.0)
+
+    def test_measure_coverage_sums_mode_rows(self):
+        coverage = player_hero_analytics._summarize_measure_coverage([
+            {"total_games": 10, "eligible_games": 7, "scored_positions": 210},
+            {"total_games": 4, "eligible_games": 3, "scored_positions": 80},
+        ])
+
+        self.assertEqual(coverage, {
+            "total_games": 14,
+            "eligible_games": 10,
+            "excluded_games": 4,
+            "scored_positions": 290,
+        })
+
+    def test_country_with_even_zone_count_uses_two_center_zones(self):
+        resolved = resolve_player_timezone({"country": "MX", "location": None})
+
+        self.assertEqual(resolved.source, "country_center")
+        self.assertTrue(resolved.estimated)
+        self.assertEqual(len(resolved.zones), 2)
+
+    def test_location_can_resolve_one_country_zone(self):
+        resolved = resolve_player_timezone({"country": "MX", "location": "Mexico City"})
+
+        self.assertEqual(resolved.zones, ("America/Mexico_City",))
+        self.assertEqual(resolved.source, "location")
+
+    def test_black_player_scores_and_signed_cp_change_are_inverted(self):
+        rows = [
+            {
+                "n_move": 1, "ply": 1, "move_color": "white", "move": "e4",
+                "reaction_time": 1.0, "time_left": 59.0, "fen": "fen-1",
+                "score": -20.0, "analysis_source": "stockfish",
+                "wdl_win": 200.0, "wdl_draw": 300.0, "wdl_loss": 500.0,
+            },
+            {
+                "n_move": 1, "ply": 2, "move_color": "black", "move": "e5",
+                "reaction_time": 1.0, "time_left": 59.0, "fen": "fen-2",
+                "score": -80.0, "analysis_source": "stockfish",
+                "wdl_win": 100.0, "wdl_draw": 200.0, "wdl_loss": 700.0,
+            },
+        ]
+
+        positions = player_hero_analytics._format_game_positions(rows, "black")
+
+        self.assertEqual(positions[0]["player_score"], 20.0)
+        self.assertEqual(positions[1]["player_score"], 80.0)
+        self.assertEqual(positions[1]["cp_change"], 60.0)
+        self.assertEqual(positions[1]["cp_gain"], 60.0)
+        self.assertEqual(positions[1]["cp_loss"], 0)
+
+    def test_empty_measure_bucket_uses_null_cp_values(self):
+        bucket = player_hero_analytics._finalize_measure(
+            player_hero_analytics._measure_bucket(hour=3)
+        )
+
+        self.assertFalse(bucket["has_cp_data"])
+        self.assertFalse(bucket["has_cp_transitions"])
+        self.assertIsNone(bucket["player_cp_sum"])
+        self.assertIsNone(bucket["total_cp_gain"])
+        self.assertIsNone(bucket["total_cp_loss"])
+        self.assertIsNone(bucket["net_cp_change"])
+
+
+class TablebaseAnalysisTests(unittest.TestCase):
+    def test_tablebase_scores_are_stored_from_white_perspective(self):
+        white_to_move = chess.Board("8/8/8/8/8/2K5/4Q3/7k w - -")
+        black_to_move = chess.Board("8/8/8/8/8/2K5/4Q3/7k b - -")
+
+        white_win = tablebase._tablebase_score_payload(white_to_move, 2)
+        black_win = tablebase._tablebase_score_payload(black_to_move, 2)
+        cursed_win = tablebase._tablebase_score_payload(white_to_move, 1)
+
+        self.assertEqual(white_win["score"], 1_000.0)
+        self.assertEqual(white_win["wdl_win"], 1_000.0)
+        self.assertEqual(black_win["score"], -1_000.0)
+        self.assertEqual(black_win["wdl_loss"], 1_000.0)
+        self.assertEqual(cursed_win["score"], 0.0)
+        self.assertEqual(cursed_win["wdl_draw"], 1_000.0)
+
+    def test_tablebase_probe_persists_exact_metadata(self):
+        row = {
+            "fen": "8/8/8/8/8/2K5/4Q3/7k w - -",
+            "piece_count": 3,
+        }
+        fake_tablebase = MagicMock()
+        fake_tablebase.get_wdl.return_value = 2
+        fake_tablebase.get_dtz.return_value = 7
+
+        with patch.object(tablebase, "_best_tablebase_move", return_value="d2d5"):
+            solved, unavailable = tablebase._probe_batch_sync(fake_tablebase, [row])
+
+        self.assertEqual(unavailable, [])
+        self.assertEqual(solved[0]["tablebase_wdl"], 2)
+        self.assertEqual(solved[0]["tablebase_dtz"], 7)
+        self.assertEqual(solved[0]["next_moves"], "d2d5")
+        self.assertEqual(solved[0]["score"], 1_000.0)
+
+
+class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
+    async def test_scoped_handoff_refreshes_ratings_even_without_a_solved_fen(self):
+        fake_tablebase = MagicMock()
+
+        with (
+            patch.object(tablebase.os.path, "isdir", return_value=True),
+            patch.object(
+                tablebase.chess.syzygy,
+                "open_tablebase",
+                return_value=fake_tablebase,
+            ),
+            patch.object(
+                tablebase,
+                "_lease_tablebase_batch",
+                new_callable=AsyncMock,
+                return_value=(None, []),
+            ),
+            patch.object(tablebase, "_write_progress", new_callable=AsyncMock),
+            patch.object(
+                tablebase,
+                "refresh_scored_rating_summary",
+                new_callable=AsyncMock,
+            ) as refresh_rating,
+        ):
+            result = await tablebase.analyze_tablebase_positions(
+                {"redis": MagicMock(), "job_id": "tablebase-job"},
+                game_links=[11, 12],
+                candidate_count=1,
+            )
+
+        self.assertEqual(result["solved"], 0)
+        refresh_rating.assert_awaited_once_with()
+        fake_tablebase.close.assert_called_once_with()
+
+    async def test_failed_job_preserves_its_last_progress_counts(self):
+        redis = MagicMock()
+        redis.get = AsyncMock(return_value=json.dumps({
+            "total": 1_575,
+            "processed": 1_000,
+            "failed": 12,
+        }).encode("utf-8"))
+        redis.set = AsyncMock()
+
+        with (
+            patch.object(
+                tablebase,
+                "analyze_tablebase_positions",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("summary update failed"),
+            ),
+            self.assertRaisesRegex(RuntimeError, "summary update failed"),
+        ):
+            await tablebase.run_tablebase_analysis_job(
+                {"redis": redis, "job_id": "tablebase-job"},
+            )
+
+        progress_payload = json.loads(redis.set.await_args_list[0].args[1])
+        self.assertEqual(progress_payload["phase"], "failed")
+        self.assertEqual(progress_payload["total"], 1_575)
+        self.assertEqual(progress_payload["processed"], 1_000)
+        self.assertEqual(progress_payload["failed"], 12)
+
+
+class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
+    def test_ingestion_modules_stay_below_one_thousand_lines(self):
+        pipeline_root = (
+            Path(__file__).resolve().parents[1]
+            / "chessism_api"
+            / "operations"
+            / "ingestion_pipeline"
+        )
+        oversized = {
+            path.name: len(path.read_text(encoding="utf-8").splitlines())
+            for path in pipeline_root.glob("*.py")
+            if len(path.read_text(encoding="utf-8").splitlines()) > 1_000
+        }
+
+        self.assertEqual(oversized, {})
+
+    async def test_pending_games_queue_one_automatic_pipeline(self):
+        redis = MagicMock()
+        redis.get = AsyncMock(return_value=None)
+        redis.set = AsyncMock(return_value=True)
+        redis.delete = AsyncMock()
+        redis.enqueue_job = AsyncMock(return_value=SimpleNamespace(job_id="fen-job"))
+
+        with (
+            patch.object(
+                fens,
+                "_get_remaining_fens_count_committed",
+                new_callable=AsyncMock,
+                return_value=125,
+            ),
+            patch.object(
+                fens,
+                "release_fen_processing_claims",
+                new_callable=AsyncMock,
+                return_value=0,
+            ),
+            patch.object(
+                fens,
+                "start_ingestion_run",
+                new_callable=AsyncMock,
+                return_value="ingestion-run",
+            ),
+        ):
+            result = await fens.ensure_fen_pipeline_enqueued(redis)
+
+        self.assertEqual(result["status"], "queued")
+        self.assertEqual(result["job_id"], "fen-job")
+        redis.enqueue_job.assert_awaited_once_with(
+            "run_fen_pipeline",
+            total_games_to_process=125,
+            batch_size=1_000,
+            num_workers=3,
+            ingestion_run_id="ingestion-run",
+            player_name=None,
+            trigger="automatic",
+            _queue_name="pipeline_queue",
+        )
+
+    async def test_active_pipeline_is_reused_instead_of_duplicated(self):
+        redis = MagicMock()
+        redis.get = AsyncMock(return_value=b"active-fen-job")
+        redis.enqueue_job = AsyncMock()
+
+        class FakeJob:
+            def __init__(self, job_id, *_args, **_kwargs):
+                self.job_id = job_id
+
+            async def status(self):
+                return JobStatus.in_progress
+
+        with (
+            patch.object(
+                fens,
+                "_get_remaining_fens_count_committed",
+                new_callable=AsyncMock,
+                return_value=50,
+            ),
+            patch.object(fens, "Job", FakeJob),
+        ):
+            result = await fens.ensure_fen_pipeline_enqueued(redis)
+
+        self.assertEqual(result["status"], "already_active")
+        self.assertEqual(result["job_id"], "active-fen-job")
+        redis.enqueue_job.assert_not_awaited()
+
+    async def test_game_ingestion_automatically_starts_fen_extraction(self):
+        operation = AsyncMock(return_value="DATA UPDATED FOR hikaru")
+        redis = MagicMock()
+
+        with (
+            patch.object(games, "_write_game_job_progress", new_callable=AsyncMock),
+            patch.object(
+                games,
+                "start_ingestion_run",
+                new_callable=AsyncMock,
+                return_value="ingestion-run",
+            ),
+            patch.object(games, "start_ingestion_stage", new_callable=AsyncMock),
+            patch.object(games, "finish_ingestion_stage", new_callable=AsyncMock),
+            patch.object(
+                games,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "queued",
+                    "job_id": "fen-job",
+                    "pending_games": 12,
+                },
+            ) as ensure_pipeline,
+        ):
+            result = await games._run_game_job(
+                {"redis": redis, "job_id": "games-job"},
+                {"player_name": "Hikaru"},
+                operation=operation,
+                fallback_job_id="games-job",
+                queued_detail="Queued update for {player_name}.",
+            )
+
+        ensure_pipeline.assert_awaited_once_with(
+            redis,
+            ingestion_run_id="ingestion-run",
+            player_name="hikaru",
+            trigger="automatic",
+        )
+        self.assertIn("Automatic FEN extraction queued for 12 games", result)
+
+    async def test_finished_pass_queues_follow_up_for_games_arriving_mid_run(self):
+        redis = MagicMock()
+        context = {"redis": redis, "job_id": "fen-job"}
+
+        with (
+            patch.object(fens, "_run_fen_pipeline", new_callable=AsyncMock),
+            patch.object(fens, "_write_fen_pipeline_progress", new_callable=AsyncMock),
+            patch.object(fens, "_release_fen_pipeline_coordination", new_callable=AsyncMock),
+            patch.object(fens, "reset_stage_progress", new_callable=AsyncMock),
+            patch.object(fens, "increment_stage_progress", new_callable=AsyncMock),
+            patch.object(
+                fens,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "queued",
+                    "job_id": "follow-up",
+                    "pending_games": 3,
+                },
+            ) as ensure_pipeline,
+            patch.object(
+                fens,
+                "ensure_tablebase_analysis_enqueued",
+                new_callable=AsyncMock,
+                return_value={"status": "up_to_date", "job_id": None, "pending": 0},
+            ) as ensure_tablebase,
+        ):
+            await fens.run_fen_pipeline(
+                context,
+                total_games_to_process=10,
+                batch_size=1_000,
+                num_workers=3,
+            )
+
+        ensure_pipeline.assert_awaited_once_with(
+            redis,
+            batch_size=1_000,
+            num_workers=3,
+            ingestion_run_id=None,
+            player_name=None,
+            trigger="automatic",
+        )
+        ensure_tablebase.assert_awaited_once_with(
+            redis,
+            game_links=[],
+            ingestion_run_id=None,
+        )
+
+    async def test_validation_only_failures_do_not_retry_forever(self):
+        redis = MagicMock()
+        context = {"redis": redis, "job_id": "fen-job"}
+
+        with (
+            patch.object(
+                fens,
+                "_run_fen_pipeline",
+                new_callable=AsyncMock,
+                return_value={
+                    "claimed_games": 2,
+                    "successful_games": 0,
+                    "failed_games": 2,
+                },
+            ),
+            patch.object(fens, "_write_fen_pipeline_progress", new_callable=AsyncMock),
+            patch.object(fens, "_release_fen_pipeline_coordination", new_callable=AsyncMock),
+            patch.object(fens, "reset_stage_progress", new_callable=AsyncMock),
+            patch.object(fens, "increment_stage_progress", new_callable=AsyncMock),
+            patch.object(
+                fens,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+            ) as ensure_pipeline,
+        ):
+            result = await fens.run_fen_pipeline(
+                context,
+                total_games_to_process=2,
+                batch_size=1_000,
+                num_workers=3,
+            )
+
+        self.assertEqual(result["failed_games"], 2)
+        ensure_pipeline.assert_not_awaited()
+
+    async def test_drained_fen_and_tablebase_pipeline_queues_salience(self):
+        redis = MagicMock()
+        context = {"redis": redis, "job_id": "fen-job"}
+
+        with (
+            patch.object(fens, "_run_fen_pipeline", new_callable=AsyncMock),
+            patch.object(fens, "_write_fen_pipeline_progress", new_callable=AsyncMock),
+            patch.object(fens, "_release_fen_pipeline_coordination", new_callable=AsyncMock),
+            patch.object(fens, "reset_stage_progress", new_callable=AsyncMock),
+            patch.object(fens, "increment_stage_progress", new_callable=AsyncMock),
+            patch.object(
+                fens,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "up_to_date",
+                    "job_id": None,
+                    "pending_games": 0,
+                },
+            ),
+            patch.object(
+                fens,
+                "ensure_tablebase_analysis_enqueued",
+                new_callable=AsyncMock,
+                return_value={"status": "up_to_date", "job_id": None, "pending": 0},
+            ),
+            patch.object(
+                fens,
+                "enqueue_stale_player_salience_jobs",
+                new_callable=AsyncMock,
+                return_value=[{"player_name": "hikaru", "status": "queued"}],
+            ) as enqueue_salience,
+            patch.object(
+                fens,
+                "refresh_scored_rating_summary",
+                new_callable=AsyncMock,
+            ) as refresh_rating,
+        ):
+            await fens.run_fen_pipeline(
+                context,
+                total_games_to_process=10,
+                batch_size=1_000,
+                num_workers=3,
+            )
+
+        enqueue_salience.assert_awaited_once_with(redis)
+        refresh_rating.assert_awaited_once_with()
+
+    async def test_fen_progress_stays_active_until_tablebase_handoff_is_ready(self):
+        redis = MagicMock()
+        context = {"redis": redis, "job_id": "fen-job"}
+
+        with (
+            patch.object(
+                fens,
+                "_run_fen_pipeline",
+                new_callable=AsyncMock,
+                return_value={
+                    "claimed_games": 2,
+                    "successful_games": 2,
+                    "failed_games": 0,
+                    "successful_game_links": [11, 12],
+                },
+            ),
+            patch.object(
+                fens,
+                "_write_fen_pipeline_progress",
+                new_callable=AsyncMock,
+            ) as write_progress,
+            patch.object(
+                fens,
+                "_release_fen_pipeline_coordination",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                fens,
+                "reset_stage_progress",
+                new_callable=AsyncMock,
+            ) as reset_progress,
+            patch.object(
+                fens,
+                "increment_stage_progress",
+                new_callable=AsyncMock,
+            ),
+            patch.object(
+                fens,
+                "ensure_fen_pipeline_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "up_to_date",
+                    "job_id": None,
+                    "pending_games": 0,
+                },
+            ),
+            patch.object(
+                fens,
+                "ensure_tablebase_analysis_enqueued",
+                new_callable=AsyncMock,
+                return_value={
+                    "status": "queued",
+                    "job_id": "tablebase-job",
+                    "pending": 8,
+                },
+            ) as ensure_tablebase,
+        ):
+            await fens.run_fen_pipeline(
+                context,
+                total_games_to_process=2,
+                batch_size=1_000,
+                num_workers=3,
+            )
+
+        ensure_tablebase.assert_awaited_once_with(
+            redis,
+            game_links=[11, 12],
+            ingestion_run_id=None,
+        )
+        phases = [call.kwargs["phase"] for call in write_progress.await_args_list]
+        self.assertEqual(phases, ["complete"])
+        self.assertEqual(reset_progress.await_args.kwargs["phase"], "discovering_tablebase")
+
+    async def test_scoped_tablebase_enqueue_avoids_global_candidate_scan(self):
+        redis = MagicMock()
+        redis.get = AsyncMock(return_value=None)
+        redis.set = AsyncMock(return_value=True)
+        redis.enqueue_job = AsyncMock(
+            return_value=SimpleNamespace(job_id="tablebase-job")
+        )
+
+        with (
+            patch.object(
+                tablebase,
+                "count_tablebase_candidates",
+                new_callable=AsyncMock,
+                return_value=8,
+            ) as count_candidates,
+            patch.object(tablebase, "_write_progress", new_callable=AsyncMock),
+        ):
+            result = await tablebase.ensure_tablebase_analysis_enqueued(
+                redis,
+                game_links=[11, 12],
+            )
+
+        self.assertEqual(result["status"], "queued")
+        count_candidates.assert_awaited_once_with([11, 12])
+        redis.enqueue_job.assert_awaited_once_with(
+            "run_tablebase_analysis_job",
+            max_positions=None,
+            batch_size=1_000,
+            candidate_count=8,
+            game_links=[11, 12],
+            ingestion_run_id=None,
+            _queue_name="pipeline_queue",
+        )
+
+
+class FenIngestionSummaryTests(unittest.TestCase):
+    def test_ingestion_delta_counts_only_new_rows_and_changed_appearances(self):
+        before = {
+            "positions": 100,
+            "equal_appearances": 20,
+            "small_appearances": 30,
+            "clear_appearances": 40,
+            "decisive_appearances": 50,
+            "mate_appearances": 60,
+        }
+        after = {
+            "positions": 112,
+            "equal_appearances": 22,
+            "small_appearances": 35,
+            "clear_appearances": 40,
+            "decisive_appearances": 51,
+            "mate_appearances": 63,
+        }
+
+        self.assertEqual(
+            ask_db.fen_ingestion_summary_delta(before, after),
+            {
+                "new_positions": 12,
+                "equal_appearances": 2,
+                "small_appearances": 5,
+                "clear_appearances": 0,
+                "decisive_appearances": 1,
+                "mate_appearances": 3,
+            },
+        )
+
+
+class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
+    def test_analysis_job_batch_is_capped_at_stockfish_service_limit(self):
+        request = AnalysisJobRequest(batch_size=analysis.MAX_GLOBAL_ANALYSIS_BATCH_SIZE)
+
+        self.assertEqual(request.batch_size, 1000)
+        self.assertEqual(AnalysisJobRequest().batch_size, 500)
+        with self.assertRaises(ValueError):
+            AnalysisJobRequest(batch_size=1001)
+
+    def test_analysis_loop_accepts_1000_batch_maximum(self):
+        request = AnalysisLoopJobRequest(
+            scope="all",
+            positions_per_run=20_000,
+            runs=4,
+            batches=1_000,
+            cool_off=300,
+        )
+
+        self.assertEqual(request.batches, 1_000)
+        self.assertEqual(request.positions_per_run * request.runs, 80_000)
+        with self.assertRaises(ValueError):
+            AnalysisLoopJobRequest(batches=1_001)
+
+    def test_player_game_date_range_is_inclusive_and_validated(self):
+        request = PlayerGameScopeRequest(
+            player_name="hikaru",
+            selection_mode="range",
+            date_from=date(2026, 1, 1),
+            date_to=date(2026, 1, 31),
+        )
+        date_from, date_to_exclusive = _player_game_date_bounds(request)
+
+        self.assertEqual(date_from.isoformat(), "2026-01-01T00:00:00+00:00")
+        self.assertEqual(date_to_exclusive.isoformat(), "2026-02-01T00:00:00+00:00")
+
+        invalid = PlayerGameScopeRequest(
+            player_name="hikaru",
+            selection_mode="range",
+            date_from=date(2026, 2, 1),
+            date_to=date(2026, 1, 1),
+        )
+        with self.assertRaisesRegex(Exception, "Start date"):
+            _player_game_date_bounds(invalid)
+
+    def test_fair_range_balances_games_across_calendar_months(self):
+        rows = []
+        link = 1
+        for month in range(1, 5):
+            for day in (1, 10, 20):
+                rows.append({
+                    "link": link,
+                    "played_at": datetime(2026, month, day, tzinfo=timezone.utc),
+                })
+                link += 1
+
+        selected, sampling = fair_sample_player_games_by_month(rows, 4)
+
+        self.assertEqual(len(selected), 4)
+        self.assertEqual(
+            [row["played_at"].month for row in selected],
+            [1, 2, 3, 4],
+        )
+        self.assertEqual(sampling["available_periods"], 4)
+        self.assertEqual(sampling["sampled_periods"], 4)
+
+    def test_fair_range_spreads_small_sample_over_full_history(self):
+        rows = [
+            {
+                "link": month,
+                "played_at": datetime(2026, month, 15, tzinfo=timezone.utc),
+            }
+            for month in range(1, 7)
+        ]
+
+        selected, sampling = fair_sample_player_games_by_month(rows, 3)
+
+        self.assertEqual(
+            [row["played_at"].month for row in selected],
+            [1, 4, 6],
+        )
+        self.assertEqual(sampling["available_periods"], 6)
+        self.assertEqual(sampling["sampled_periods"], 3)
+
+    def test_fair_range_request_is_valid_without_dates(self):
+        request = PlayerGamePreviewRequest(
+            player_name="hikaru",
+            selection_mode="fair_range",
+            game_limit=200,
+        )
+
+        self.assertEqual(request.selection_mode, "fair_range")
+        self.assertEqual(_player_game_date_bounds(request), (None, None))
+
+    async def test_player_game_preview_freezes_exact_game_ids_in_redis(self):
+        redis = MagicMock()
+        redis.set = AsyncMock()
+        scope = {
+            "player_name": "hikaru",
+            "games_with_fens": 300,
+            "complete_games": 20,
+            "incomplete_games": 280,
+            "earliest_game": None,
+            "latest_game": None,
+        }
+        preview = {
+            "player_name": "hikaru",
+            "game_links": [3, 2, 1],
+            "selected_games": 3,
+            "position_occurrences": 250,
+            "analyzed_occurrences": 50,
+            "unscored_occurrences": 200,
+            "unique_fens": 220,
+            "analyzed_unique_fens": 40,
+            "fens_to_analyze": 180,
+        }
+        request = PlayerGamePreviewRequest(
+            player_name="Hikaru",
+            selection_mode="latest",
+            game_limit=3,
+        )
+
+        with (
+            patch(
+                "chessism_api.routers.analysis.get_player_game_analysis_scope",
+                new_callable=AsyncMock,
+                return_value=scope,
+            ),
+            patch(
+                "chessism_api.routers.analysis.preview_player_games_for_analysis",
+                new_callable=AsyncMock,
+                return_value=preview,
+            ),
+        ):
+            result = await api_preview_player_game_analysis(request, redis)
+
+        self.assertEqual(result["selected_games"], 3)
+        self.assertEqual(result["fens_to_analyze"], 180)
+        self.assertNotIn("game_links", result)
+        saved_plan = json.loads(redis.set.await_args.args[1])
+        self.assertEqual(saved_plan["game_links"], [3, 2, 1])
+
+    async def test_fair_range_preview_uses_balanced_selection_order(self):
+        redis = MagicMock()
+        redis.set = AsyncMock()
+        request = PlayerGamePreviewRequest(
+            player_name="Hikaru",
+            selection_mode="fair_range",
+            game_limit=12,
+        )
+        scope = {
+            "player_name": "hikaru",
+            "games_with_fens": 100,
+            "complete_games": 10,
+            "incomplete_games": 90,
+            "earliest_game": "2020-01-01T00:00:00+00:00",
+            "latest_game": "2026-01-01T00:00:00+00:00",
+        }
+        preview = {
+            "player_name": "hikaru",
+            "game_links": list(range(1, 13)),
+            "selected_games": 12,
+            "fens_to_analyze": 500,
+            "tablebase_fens": 0,
+            "available_periods": 72,
+            "sampled_periods": 12,
+        }
+
+        with (
+            patch(
+                "chessism_api.routers.analysis.get_player_game_analysis_scope",
+                new_callable=AsyncMock,
+                return_value=scope,
+            ),
+            patch(
+                "chessism_api.routers.analysis.preview_player_games_for_analysis",
+                new_callable=AsyncMock,
+                return_value=preview,
+            ) as preview_query,
+        ):
+            result = await api_preview_player_game_analysis(request, redis)
+
+        self.assertEqual(result["selection_order"], "fair_range")
+        self.assertEqual(result["sampled_periods"], 12)
+        preview_query.assert_awaited_once_with(
+            "hikaru",
+            order="fair_range",
+            game_limit=12,
+            date_from=None,
+            date_to_exclusive=None,
+        )
+
+    async def test_engine_client_error_is_not_retried_forever(self):
+        request = httpx.Request("POST", analysis.ENGINE_URL)
+        response = httpx.Response(422, request=request, text="invalid batch")
+        client = AsyncMock()
+        client.post.return_value = response
+
+        with self.assertRaises(analysis.EngineServiceRequestError):
+            await analysis._call_engine_service(
+                client,
+                analysis.ENGINE_URL,
+                ["fen-1"],
+                100,
+            )
+
+    def test_engine_result_formatting_keeps_best_line_and_continuations(self):
+        engine_output = [{
+            "fen": "fen-1",
+            "is_valid": True,
+            "analysis": [
+                {"score": 25, "pv": ["e2e4", "e7e5"], "wdl": [500, 400, 100]},
+                {"score": 12, "pv": ["d2d4"]},
+            ],
+        }]
+
+        rows, continuations = analysis._format_engine_results(engine_output)
+
+        self.assertEqual(rows[0]["next_moves"], "e2e4 e7e5")
+        self.assertEqual(rows[0]["wdl_win"], 500)
+        self.assertEqual(continuations[0]["rank"], 2)
+        self.assertEqual(continuations[0]["move"], "d2d4")
+
+    async def test_analysis_concurrency_does_not_claim_more_than_target(self):
+        requested_batch_sizes = []
+
+        class FakeSession:
+            execute = AsyncMock()
+            commit = AsyncMock()
+            rollback = AsyncMock()
+            close = AsyncMock()
+
+        async def fetch_batch(limit):
+            requested_batch_sizes.append(limit)
+            start = sum(requested_batch_sizes[:-1])
+            return FakeSession(), [f"fen-{index}" for index in range(start, start + limit)]
+
+        async def call_engine(client, url, fens, nodes, **kwargs):
+            return [
+                {
+                    "fen": fen,
+                    "is_valid": True,
+                    "analysis": {"score": 0, "pv": [], "time": 0.01},
+                }
+                for fen in fens
+            ]
+
+        with (
+            patch.object(analysis, "ANALYSIS_CONCURRENCY", 3),
+            patch.object(analysis, "_call_engine_service", side_effect=call_engine),
+            patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
+            patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),
+            patch.object(analysis, "_refresh_scored_projections_after_analysis", new_callable=AsyncMock),
+            patch.object(
+                analysis.fen_interface,
+                "update_fen_analysis_data",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await analysis._run_analysis_job(
+                {},
+                total_fens_to_process=5,
+                batch_size=3,
+                nodes_limit=100,
+                fetch_batch=fetch_batch,
+                timing_source="test",
+                job_id="TEST",
+                fallback_arq_job_id="test",
+                no_more_message="done",
+            )
+
+        self.assertEqual(sum(requested_batch_sizes), 5)
+        self.assertTrue(all(size <= 3 for size in requested_batch_sizes))
+
+    async def test_worker_clamps_legacy_oversized_batch_payloads(self):
+        requested_batch_sizes = []
+
+        class FakeSession:
+            execute = AsyncMock()
+            commit = AsyncMock()
+            rollback = AsyncMock()
+            close = AsyncMock()
+
+        async def fetch_batch(limit):
+            requested_batch_sizes.append(limit)
+            return FakeSession(), [f"fen-{index}" for index in range(limit)]
+
+        async def call_engine(client, url, fens, nodes, **kwargs):
+            return [
+                {
+                    "fen": fen,
+                    "is_valid": True,
+                    "analysis": {"score": 0, "pv": [], "time": 0.01},
+                }
+                for fen in fens
+            ]
+
+        with (
+            patch.object(analysis, "ANALYSIS_CONCURRENCY", 1),
+            patch.object(analysis, "_call_engine_service", side_effect=call_engine),
+            patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
+            patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),
+            patch.object(analysis, "_refresh_scored_projections_after_analysis", new_callable=AsyncMock),
+            patch.object(
+                analysis.fen_interface,
+                "update_fen_analysis_data",
+                new_callable=AsyncMock,
+            ),
+        ):
+            await analysis._run_analysis_job(
+                {},
+                total_fens_to_process=501,
+                batch_size=1_000,
+                nodes_limit=100,
+                fetch_batch=fetch_batch,
+                timing_source="test",
+                job_id="TEST",
+                fallback_arq_job_id="test",
+                no_more_message="done",
+            )
+
+        self.assertEqual(requested_batch_sizes, [500, 1])
+
+    async def test_analysis_loop_runs_four_passes_with_three_cool_offs(self):
+        run_result = {
+            "processed": 20_000,
+            "engine_processed": 20_000,
+            "failed": 0,
+            "failed_batches": 0,
+        }
+
+        with (
+            patch.object(
+                analysis,
+                "_run_analysis_job",
+                new_callable=AsyncMock,
+                side_effect=[run_result] * 4,
+            ) as run_job,
+            patch.object(analysis, "_reset_job_progress", new_callable=AsyncMock),
+            patch.object(analysis, "_write_job_progress", new_callable=AsyncMock),
+            patch.object(
+                analysis,
+                "_refresh_scored_projections_after_analysis",
+                new_callable=AsyncMock,
+            ),
+            patch.object(analysis.asyncio, "sleep", new_callable=AsyncMock) as cool_off,
+        ):
+            result = await analysis.run_analysis_loop_job(
+                {},
+                scope="all",
+                runs=4,
+                positions_per_run=20_000,
+                batches=500,
+                cool_off=300,
+                nodes_limit=1_000_000,
+            )
+
+        self.assertEqual(run_job.await_count, 4)
+        self.assertEqual(cool_off.await_count, 3)
+        cool_off.assert_awaited_with(300)
+        self.assertEqual(result["processed"], 80_000)
+        self.assertEqual(result["runs"], 4)
+        self.assertTrue(all(
+            call.kwargs["max_batch_size"] == 1_000
+            for call in run_job.await_args_list
+        ))
+
+    async def test_player_game_completion_chunks_work_and_refreshes_frozen_games(self):
+        run_result = {
+            "processed": 5_000,
+            "engine_processed": 5_000,
+            "failed": 0,
+            "failed_batches": 0,
+        }
+        completion = {
+            "selected_games": 200,
+            "fully_analyzed_games": 200,
+            "incomplete_games": 0,
+        }
+
+        with (
+            patch.object(
+                analysis,
+                "count_game_set_fens_for_analysis",
+                new_callable=AsyncMock,
+                return_value=10_000,
+            ),
+            patch.object(
+                analysis,
+                "analyze_tablebase_positions",
+                new_callable=AsyncMock,
+                return_value={"processed": 0, "solved": 0, "unavailable": 0},
+            ),
+            patch.object(
+                analysis,
+                "_run_analysis_job",
+                new_callable=AsyncMock,
+                side_effect=[run_result, run_result],
+            ) as run_job,
+            patch.object(analysis, "_reset_job_progress", new_callable=AsyncMock),
+            patch.object(analysis, "_write_job_progress", new_callable=AsyncMock),
+            patch.object(analysis, "refresh_game_analysis_summary", new_callable=AsyncMock),
+            patch.object(
+                analysis,
+                "get_game_set_analysis_completion",
+                new_callable=AsyncMock,
+                return_value=completion,
+            ),
+            patch.object(
+                analysis,
+                "_refresh_scored_projections_after_analysis",
+                new_callable=AsyncMock,
+            ),
+            patch.object(analysis.asyncio, "sleep", new_callable=AsyncMock) as cool_off,
+        ):
+            result = await analysis.run_player_games_analysis_job(
+                {},
+                player_name="hikaru",
+                game_links=[3, 2, 1],
+                planned_fens=10_000,
+                batch_size=500,
+                nodes_limit=1_000_000,
+                cool_off=120,
+                chunk_size=5_000,
+            )
+
+        self.assertEqual(run_job.await_count, 2)
+        cool_off.assert_awaited_once_with(120)
+        self.assertEqual(result["processed"], 10_000)
+        self.assertEqual(result["fully_analyzed_games"], 200)
+
+
+class AnalysisSelectionTests(unittest.TestCase):
+    def test_player_fen_query_locks_rows_before_satisfying_limit(self):
+        statement = _player_fens_for_analysis_stmt("lafareto", 500)
+        sql = str(
+            statement.compile(
+                dialect=postgresql.dialect(),
+                compile_kwargs={"literal_binds": True},
+            )
+        ).upper()
+
+        self.assertIn("EXISTS (SELECT", sql)
+        self.assertIn("LIMIT 500 FOR UPDATE OF FEN SKIP LOCKED", sql)
+        self.assertNotIn("GROUP BY", sql)
+
+
+class AnalysisJobsApiTests(unittest.IsolatedAsyncioTestCase):
+    async def test_analysis_jobs_lists_running_and_queued_from_server_queue(self):
+        redis = MagicMock()
+        redis.zrange = AsyncMock(return_value=[(b"queued-job", 2), (b"running-job", 1)])
+        redis.get = AsyncMock(side_effect=[None, json.dumps({
+            "total": 20_000,
+            "processed": 14_000,
+            "phase": "analyzing",
+        })])
+
+        statuses = {
+            "queued-job": JobStatus.queued,
+            "running-job": JobStatus.in_progress,
+        }
+
+        class FakeJob:
+            def __init__(self, job_id, *_args, **_kwargs):
+                self.job_id = job_id
+
+            async def status(self):
+                return statuses[self.job_id]
+
+            async def info(self):
+                return SimpleNamespace(
+                    function="run_analysis_loop_job",
+                    args=(),
+                    kwargs={"scope": "all", "positions_per_run": 5_000, "runs": 4},
+                    job_try=None,
+                    enqueue_time=None,
+                    score=None,
+                )
+
+        with patch.object(jobs_router, "Job", FakeJob):
+            response = await jobs_router.api_get_analysis_jobs(redis)
+
+        payload = json.loads(response.body)
+        self.assertEqual(
+            [job["job_id"] for job in payload["jobs"]],
+            ["running-job", "queued-job"],
+        )
+        self.assertEqual(payload["jobs"][0]["progress"]["processed"], 14_000)
+
+    async def test_delete_endpoint_refuses_to_delete_running_analysis(self):
+        redis = MagicMock()
+        redis.eval = AsyncMock()
+
+        job = MagicMock()
+        job.status = AsyncMock(return_value=JobStatus.in_progress)
+
+        with (
+            patch.object(jobs_router, "KNOWN_QUEUES", ("analysis_queue",)),
+            patch.object(jobs_router, "Job", return_value=job),
+            self.assertRaisesRegex(Exception, "already started"),
+        ):
+            await jobs_router.api_delete_queued_analysis_job("running-job", redis)
+
+        redis.eval.assert_not_awaited()
+
+
+class EnginePoolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_pool_leases_four_independent_engines(self):
+        created = []
+
+        class FakeEngine:
+            def __init__(self, number):
+                self.number = number
+                self.quit = AsyncMock()
+
+        async def start_engine(number):
+            transport = MagicMock()
+            engine = FakeEngine(number)
+            created.append((transport, engine))
+            return transport, engine
+
+        with patch.object(stockfish_engine, "_start_engine", side_effect=start_engine):
+            pool = EnginePool(size=4)
+            await pool.initialize()
+
+            self.assertEqual(pool.status()["workers"], {
+                "total": 4,
+                "busy": 0,
+                "idle": 4,
+            })
+
+            async with pool.acquire() as first:
+                async with pool.acquire() as second:
+                    async with pool.acquire() as third:
+                        async with pool.acquire() as fourth:
+                            slots = [first, second, third, fourth]
+                            self.assertEqual(
+                                {slot.number for slot in slots},
+                                {1, 2, 3, 4},
+                            )
+                            self.assertEqual(
+                                len({id(slot.engine) for slot in slots}),
+                                4,
+                            )
+                            self.assertEqual(pool.status()["workers"]["busy"], 4)
+
+            self.assertEqual(pool.status()["workers"]["idle"], 4)
+            await pool.shutdown()
+
+        for transport, engine in created:
+            engine.quit.assert_awaited_once()
+            transport.close.assert_called_once()
+
+
+class FenAnalysisBackupTests(unittest.TestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.backup_directory = Path(self.temporary_directory.name)
+
+    def test_backup_filename_validation_blocks_path_traversal(self):
+        with patch.object(analysis_backups, "BACKUP_DIR", self.backup_directory):
+            valid = analysis_backups._backup_path(
+                "fen-analysis-20240703T120000_000001Z.jsonl.gz"
+            )
+            self.assertEqual(valid.parent, self.backup_directory)
+
+            with self.assertRaisesRegex(ValueError, "Invalid"):
+                analysis_backups._backup_path(
+                    "../fen-analysis-20240703T120000_000001Z.jsonl.gz"
+                )
+
+    def test_compressed_backup_records_round_trip(self):
+        backup_path = self.backup_directory / (
+            "fen-analysis-20240703T120000_000001Z.jsonl.gz"
+        )
+        header = {
+            "type": "metadata",
+            "format": analysis_backups.BACKUP_FORMAT,
+            "version": analysis_backups.BACKUP_VERSION,
+            "records": 1,
+        }
+        record = {
+            "type": "fen_analysis",
+            "fen": "8/8/8/8/8/8/8/K6k w - - 0 1",
+            "score": 0.25,
+            "next_moves": "a1a2",
+            "wdl_win": 200,
+            "wdl_draw": 700,
+            "wdl_loss": 100,
+            "continuations": [{"rank": 2, "move": "a1b1", "score": 0.1}],
+        }
+        with gzip.open(backup_path, "wt", encoding="utf-8") as output:
+            output.write(json.dumps(header) + "\n")
+            output.write(json.dumps(record) + "\n")
+
+        loaded_header, loaded_records = analysis_backups._backup_records(backup_path)
+
+        self.assertEqual(loaded_header, header)
+        self.assertEqual(list(loaded_records), [record])
+
+    def test_backup_listing_uses_sidecar_metadata_and_newest_first(self):
+        older_name = "fen-analysis-20240703T120000_000001Z.jsonl.gz"
+        newer_name = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
+        for filename in (older_name, newer_name):
+            backup_path = self.backup_directory / filename
+            backup_path.write_bytes(b"backup")
+            analysis_backups._atomic_write_json(
+                analysis_backups._metadata_path(backup_path),
+                {
+                    "filename": filename,
+                    "created_at": "2024-07-03T12:00:00+00:00",
+                    "records": 42,
+                    "bytes": 6,
+                    "sha256": "abc123",
+                },
+            )
+
+        with (
+            patch.object(analysis_backups, "BACKUP_DIR", self.backup_directory),
+            patch.object(analysis_backups, "_require_external_backup_volume"),
+        ):
+            backups = analysis_backups.list_fen_analysis_backups()
+
+        self.assertEqual([item["filename"] for item in backups], [newer_name, older_name])
+        self.assertEqual(backups[0]["records"], 42)
+        self.assertEqual(backups[0]["sha256"], "abc123")
+
+    def test_latest_incremental_backup_uses_saved_snapshot_cutoff(self):
+        filename = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
+        backup_path = self.backup_directory / filename
+        backup_path.write_bytes(b"backup")
+        analysis_backups._atomic_write_json(
+            analysis_backups._metadata_path(backup_path),
+            {
+                "filename": filename,
+                "created_at": "2024-07-04T12:00:00+00:00",
+                "snapshot_cutoff": "2024-07-05T13:30:00+00:00",
+                "records": 42,
+            },
+        )
+
+        with patch.object(analysis_backups, "BACKUP_DIR", self.backup_directory):
+            selected_path, _, cutoff = analysis_backups._latest_incremental_backup()
+
+        self.assertEqual(selected_path, backup_path)
+        self.assertEqual(cutoff.isoformat(), "2024-07-05T13:30:00+00:00")
+
+
+class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temporary_directory.cleanup)
+        self.backup_directory = Path(self.temporary_directory.name)
+
+    async def test_incremental_backup_updates_same_file_and_adds_only_changes(self):
+        filename = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
+        backup_path = self.backup_directory / filename
+        created_at = "2024-07-04T12:00:00+00:00"
+        original_records = [
+            {
+                "type": "fen_analysis",
+                "fen": "4k3/8/8/8/8/8/8/4K3 w - - 0 1",
+                "score": 0.0,
+                "continuations": [],
+            },
+            {
+                "type": "fen_analysis",
+                "fen": "8/4k3/8/8/8/8/8/4K3 w - - 0 1",
+                "score": 10.0,
+                "continuations": [],
+            },
+        ]
+        with gzip.open(backup_path, "wt", encoding="utf-8") as output:
+            output.write(json.dumps({
+                "type": "metadata",
+                "format": analysis_backups.BACKUP_FORMAT,
+                "version": analysis_backups.BACKUP_VERSION,
+                "created_at": created_at,
+                "records": 2,
+            }) + "\n")
+            for record in original_records:
+                output.write(json.dumps(record) + "\n")
+
+        metadata = {
+            "filename": filename,
+            "created_at": created_at,
+            "snapshot_cutoff": created_at,
+            "records": 2,
+            "bytes": backup_path.stat().st_size,
+            "sha256": analysis_backups._sha256(backup_path),
+        }
+        analysis_backups._atomic_write_json(
+            analysis_backups._metadata_path(backup_path),
+            metadata,
+        )
+        changed_records = {
+            original_records[0]["fen"]: {
+                **original_records[0],
+                "score": 25.0,
+            },
+            "8/8/4k3/8/8/8/8/4K3 w - - 0 1": {
+                "type": "fen_analysis",
+                "fen": "8/8/4k3/8/8/8/8/4K3 w - - 0 1",
+                "score": -15.0,
+                "continuations": [],
+            },
+        }
+        session_context = MagicMock()
+        session_context.__aenter__ = AsyncMock(return_value=MagicMock())
+        session_context.__aexit__ = AsyncMock(return_value=False)
+
+        with (
+            patch.object(analysis_backups, "AsyncDBSession", return_value=session_context),
+            patch.object(
+                analysis_backups,
+                "_collect_analysis_records",
+                AsyncMock(return_value=changed_records),
+            ),
+            patch.object(analysis_backups, "record_application_usage"),
+        ):
+            result = await analysis_backups._update_fen_analysis_backup(
+                {},
+                backup_path,
+                metadata,
+                datetime.fromisoformat(created_at),
+                datetime.fromisoformat("2024-07-05T12:00:00+00:00"),
+            )
+
+        _, saved_records_iterator = analysis_backups._backup_records(backup_path)
+        saved_records = {
+            record["fen"]: record for record in saved_records_iterator
+        }
+        self.assertEqual(result["filename"], filename)
+        self.assertEqual(result["records"], 3)
+        self.assertEqual(result["added_records"], 1)
+        self.assertEqual(result["updated_records"], 1)
+        self.assertEqual(saved_records[original_records[0]["fen"]]["score"], 25.0)
+        self.assertEqual(len(saved_records), 3)
+        self.assertEqual(
+            list(self.backup_directory.glob("fen-analysis-*.jsonl.gz")),
+            [backup_path],
+        )
+
+
+class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
+    async def test_player_coverage_includes_complete_games_and_fen_occurrences(self):
+        query_result = MagicMock()
+        query_result.mappings.return_value.first.return_value = {
+            "total_games": 120,
+            "analyzed_games": 45,
+            "total_positions": 6_400,
+            "analyzed_positions": 3_200,
+            "unscored_positions": 3_200,
+            "latest_rating": 3_225,
+            "latest_rating_mode": "blitz",
+            "latest_rating_at": datetime(2026, 8, 11, 18, 30, tzinfo=timezone.utc),
+        }
+        session = AsyncMock()
+        session.execute.return_value = query_result
+        session_context = MagicMock()
+        session_context.__aenter__ = AsyncMock(return_value=session)
+        session_context.__aexit__ = AsyncMock(return_value=False)
+
+        with patch(
+            "chessism_api.database.ask_db.AsyncDBSession",
+            return_value=session_context,
+        ):
+            coverage = await get_player_fen_score_counts("hikaru")
+
+        self.assertEqual(coverage["total_games"], 120)
+        self.assertEqual(coverage["analyzed_games"], 45)
+        self.assertEqual(coverage["total_fens"], 6_400)
+        self.assertEqual(coverage["analyzed_fens"], 3_200)
+        self.assertEqual(coverage["total_positions"], coverage["total_fens"])
+        self.assertEqual(coverage["analyzed_positions"], coverage["analyzed_fens"])
+        self.assertEqual(coverage["latest_rating"], 3_225)
+        self.assertEqual(coverage["latest_rating_mode"], "blitz")
+        self.assertEqual(coverage["latest_rating_at"], "2026-08-11T18:30:00+00:00")
+        sql = str(session.execute.await_args.args[0])
+        self.assertIn("played_at IS NOT NULL", sql)
+        self.assertIn("ORDER BY played_at DESC", sql)
+        self.assertNotIn("link DESC", sql)
+
+    async def test_most_repeated_unscored_query_matches_partial_index_order(self):
+        expected = [{"fen": "8/8/8/8/8/8/8/K6k w - - 0 1", "n_games": 10, "score": None}]
+
+        with patch(
+            "chessism_api.database.ask_db.open_async_request",
+            new=AsyncMock(return_value=expected),
+        ) as request:
+            result = await get_top_fens_unscored(6, offset=5)
+
+        self.assertEqual(result, expected)
+        sql = request.await_args.args[0]
+        self.assertIn("score IS NULL", sql)
+        self.assertIn("n_games DESC", sql)
+        self.assertNotIn("fen ASC", sql)
+        self.assertIn("OFFSET :offset", sql)
+        self.assertEqual(request.await_args.kwargs["params"], {"limit": 6, "offset": 5})
+
+
+class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):
+    def test_filters_are_normalized_and_form_a_stable_cache_key(self):
+        filters = player_analytics.normalize_player_analytics_filters(
+            "  HiKaRu ",
+            "Blitz",
+            date(2024, 1, 2),
+            date(2024, 2, 3),
+        )
+
+        self.assertEqual(filters, {
+            "player": "hikaru",
+            "mode": "blitz",
+            "date_from": "2024-01-02",
+            "date_to": "2024-02-03",
+        })
+        self.assertEqual(
+            player_analytics.player_analytics_cache_key("engine", filters),
+            "chessism:player_analytics:v1:engine:hikaru:blitz:2024-01-02:2024-02-03",
+        )
+
+    def test_invalid_date_range_is_rejected_before_querying(self):
+        with self.assertRaisesRegex(ValueError, "Start date"):
+            player_analytics.normalize_player_analytics_filters(
+                "hikaru",
+                "all",
+                date(2024, 2, 3),
+                date(2024, 1, 2),
+            )
+
+    async def test_query_returns_compact_json_with_scope_metadata(self):
+        result = MagicMock()
+        result.scalar.return_value = '{"phase_quality": [{"phase": "Opening"}]}'
+        session = AsyncMock()
+        session.execute.return_value = result
+        session_context = MagicMock()
+        session_context.__aenter__ = AsyncMock(return_value=session)
+        session_context.__aexit__ = AsyncMock(return_value=False)
+        filters = {
+            "player": "hikaru",
+            "mode": "all",
+            "date_from": None,
+            "date_to": None,
+        }
+
+        with patch.object(
+            player_analytics,
+            "AsyncDBSession",
+            return_value=session_context,
+        ):
+            payload = await player_analytics.get_player_engine_insights(filters)
+
+        self.assertEqual(payload["player_name"], "hikaru")
+        self.assertEqual(payload["filters"]["mode"], "all")
+        self.assertEqual(payload["phase_quality"][0]["phase"], "Opening")
+        self.assertIn("generated_at", payload)
+        session.execute.assert_awaited_once()
+
+    def test_queries_are_aggregated_and_outputs_are_bounded(self):
+        self.assertIn("summary.is_fully_analyzed", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LAG(f.score)", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LIMIT 2000", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertNotIn("'fen'", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LIMIT 240", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LIMIT 12", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LIMIT 5000", player_analytics.PLAYING_PATTERNS_SQL)
+        self.assertIn("LEAST(20", player_analytics.PLAYING_PATTERNS_SQL)
+
+
+class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
+    @staticmethod
+    def _session_context(session):
+        context = MagicMock()
+        context.__aenter__ = AsyncMock(return_value=session)
+        context.__aexit__ = AsyncMock(return_value=False)
+        return context
+
+    async def test_preview_classifies_shell_opponents_as_exclusive(self):
+        player_result = MagicMock()
+        player_result.mappings.return_value.first.return_value = {
+            "player_name": "hikaru",
+            "joined": 1,
+            "deleted_at": None,
+        }
+        counts_result = MagicMock()
+        counts_result.mappings.return_value.first.return_value = {
+            "total_games": 100,
+            "exclusive_games": 75,
+            "shared_games": 25,
+            "fen_associations": 4_000,
+            "analyzed_fen_associations": 1_500,
+        }
+        session = AsyncMock()
+        session.execute.side_effect = [player_result, counts_result]
+
+        with patch.object(
+            player_deletion,
+            "AsyncDBSession",
+            return_value=self._session_context(session),
+        ):
+            preview = await player_deletion.get_player_deletion_preview("Hikaru")
+
+        self.assertTrue(preview["is_main_player"])
+        self.assertEqual(preview["exclusive_games"], 75)
+        self.assertEqual(preview["shared_games"], 25)
+        self.assertEqual(preview["fen_rows_deleted"], 0)
+        self.assertEqual(preview["analysis_rows_deleted"], 0)
+        classification_sql = str(session.execute.await_args_list[1].args[0])
+        self.assertIn("COALESCE(opponent.joined, 0) = 0", classification_sql)
+        self.assertIn("COALESCE(opponent.joined, 0) <> 0", classification_sql)
+
+    async def test_game_batch_updates_frequency_but_never_deletes_fens(self):
+        links_result = MagicMock()
+        links_result.scalars.return_value.all.return_value = [101, 102]
+        update_result = MagicMock()
+        delete_result = MagicMock()
+        delete_result.rowcount = 2
+        session = AsyncMock()
+        session.execute.side_effect = [
+            links_result,
+            update_result,
+            update_result,
+            update_result,
+            delete_result,
+        ]
+
+        with patch.object(
+            player_deletion,
+            "AsyncDBSession",
+            return_value=self._session_context(session),
+        ):
+            deleted = await player_deletion._delete_exclusive_game_batch("hikaru", [101, 102])
+
+        self.assertEqual(deleted, 2)
+        session.commit.assert_awaited_once()
+        sql = "\n".join(str(call.args[0]) for call in session.execute.await_args_list)
+        self.assertIn("UPDATE fen current_fen", sql)
+        self.assertIn("DELETE FROM game_fen_association", sql)
+        self.assertIn("DELETE FROM moves", sql)
+        self.assertIn("DELETE FROM game", sql)
+        self.assertNotIn("DELETE FROM fen\n", sql)
+        self.assertNotIn("DELETE FROM fen_continuation", sql)
+
+    async def test_demotion_keeps_the_player_identity_as_a_deleted_shell(self):
+        remaining_result = MagicMock()
+        remaining_result.scalar.return_value = 0
+        mutation_result = MagicMock()
+        updated_result = MagicMock()
+        updated_result.rowcount = 1
+        session = AsyncMock()
+        session.execute.side_effect = [
+            remaining_result,
+            mutation_result,
+            mutation_result,
+            mutation_result,
+            mutation_result,
+            mutation_result,
+            mutation_result,
+            mutation_result,
+            updated_result,
+        ]
+
+        with patch.object(
+            player_deletion,
+            "AsyncDBSession",
+            return_value=self._session_context(session),
+        ):
+            await player_deletion._demote_player("hikaru")
+
+        sql = "\n".join(str(call.args[0]) for call in session.execute.await_args_list)
+        self.assertIn("UPDATE player", sql)
+        self.assertIn("joined = 0", sql)
+        self.assertIn("deleted_at = CURRENT_TIMESTAMP", sql)
+        self.assertIn("DELETE FROM game_player_salience", sql)
+        self.assertIn("DELETE FROM player_position_frequency", sql)
+        self.assertIn("DELETE FROM player_salience_pending_game", sql)
+        self.assertIn("DELETE FROM player_salience_summary", sql)
+        self.assertNotIn("DELETE FROM player WHERE", sql)
+        session.commit.assert_awaited_once()
+
+
+class StockfishSerializationTests(unittest.TestCase):
+    def test_negative_mate_score_preserves_its_sign(self):
+        score = chess.engine.PovScore(chess.engine.Mate(-2), chess.WHITE)
+
+        self.assertEqual(convert_to_serializable(score), -9998)
+
+    def test_nested_move_keys_are_json_serializable(self):
+        move = chess.Move.from_uci("e2e4")
+
+        result = clean_engine_result(
+            {"refutation": {move: [move]}},
+            original_fen="fen-1",
+            is_valid=True,
+        )
+
+        self.assertEqual(
+            result["analysis"]["refutation"],
+            {"e2e4": ["e2e4"]},
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

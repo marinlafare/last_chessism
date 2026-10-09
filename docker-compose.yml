@@ -14,6 +14,22 @@ services:
       - AUTH_GATE_COOKIE_NAME=${AUTH_GATE_COOKIE_NAME}
       - AUTH_GATE_TTL_MINUTES=${AUTH_GATE_TTL_MINUTES}
       - STOCKFISH_STATUS_URL=${STOCKFISH_STATUS_URL}
+      - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
+      - ALGORITHM_FREE_FLOOR_BYTES=20000000000
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - DATABASE_BACKUP_APP_ID=chessism
+      - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
+      - DATABASE_BACKUP_QUOTA_BYTES=200000000000
+      - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
+      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
+      - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=${MATRIX_ARTIFACT_DISPLAY_DIR:-/home/jon/Desktop/workshop/last_chessism/research_data/matrices}
+      - MATRIX_FREE_FLOOR_BYTES=${MATRIX_FREE_FLOOR_BYTES:-20000000000}
     networks:
       - chessism_net
     depends_on:
@@ -24,7 +40,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
+      - ./research_data:/research-data
       - ./api_logs:/app/logs
+      - /main-monitor-db-backups:/backup-volume
 
   chessism-web:
     build: ./chessism_web
@@ -44,32 +62,122 @@ services:
       chessism-api:
         condition: service_started
 
+  # Build/check the cloud execution image, then exit. Never runs local analysis.
+  cloud-worker-image:
+    build: ./stockfish-batch-worker
+    image: chessism-stockfish-batch:fen-compat-v1
+    platform: linux/amd64
+    entrypoint: ["python", "-c"]
+    command: ["import stockfish_batch; print('Cloud worker image ready: ' + stockfish_batch.__version__)"]
+    restart: "no"
+    network_mode: none
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.25"
+    mem_limit: 128m
+    pids_limit: 32
+
+  cloud-controller:
+    build:
+      context: .
+      dockerfile: stockfish-batch-worker/cloud_job/Dockerfile
+    image: chessism-cloud-controller:latest
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    read_only: true
+    # Bootstrap drops UID/GID; Docker's root init needs KILL to forward SIGTERM.
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    security_opt: [no-new-privileges:true]
+    cpus: "1.0"
+    # Legacy runs hold <=200k references; larger requests use bounded 50k units.
+    mem_limit: 2g
+    pids_limit: 128
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=128m,mode=1777
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CLOUD_WORKER_IMAGE: chessism-stockfish-batch:fen-compat-v1
+      CLOUD_CLEANUP_DIRECTORY: /tmp/chessism-cloud-cleanup
+    volumes:
+      # Read-only mount still permits Docker API operations: trusted controller only.
+      - type: bind
+        source: ${CLOUD_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${CLOUD_GCLOUD_CONFIG_DIR:-${HOME}/.config/gcloud}
+        target: /host-gcloud
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
+      chessism-api:
+        condition: service_started
+      cloud-worker-image:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "python", "-m", "cloud_job.run_compose", "--check-health"]
+      interval: 20s
+      timeout: 5s
+      start_period: 5m
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "2m"
+        max-file: "2"
+
   stockfish-service:
-    build: ./stockfish-service
+    build:
+      context: .
+      dockerfile: stockfish-service/Dockerfile
     image: stockfish-service:latest
     environment:
-      - STOCKFISH_THREADS=${STOCKFISH_THREADS}
-      - STOCKFISH_HASH_MB=${STOCKFISH_HASH_MB}
-      - STOCKFISH_ANALYSE_TIMEOUT_SEC=${STOCKFISH_ANALYSE_TIMEOUT_SEC}
-      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
-      - STOCKFISH_SYZYGY_PROBE_DEPTH=${STOCKFISH_SYZYGY_PROBE_DEPTH}
+      - STOCKFISH_THREADS=1
+      - STOCKFISH_HASH_MB=256
+      - STOCKFISH_ENGINE_COUNT=${STOCKFISH_ENGINE_COUNT:-4}
+      - STOCKFISH_ANALYSE_TIMEOUT_SEC=300
       - REDIS_HOST=${REDIS_HOST}
-    volumes:
-      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
 
   db:
-    image: postgres:15
+    build:
+      context: .
+      dockerfile: postgres-backup/Dockerfile
+      target: database
+    image: chessism-postgres:15-backup
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
-    command: ["postgres", "-c", "max_wal_size=4GB", "-c", "checkpoint_timeout=15min"]
+    command:
+      - postgres
+      - -c
+      - max_wal_size=4GB
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - archive_mode=on
+      - -c
+      - archive_command=/usr/local/bin/pgbackrest-chessism-archive-push %p
     ports:
       - "5433:5432"
     volumes:
       - ./db_data:/var/lib/postgresql/data
+      - /main-monitor-db-backups:/backup-volume
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - postgres_socket:/var/run/postgresql
     networks:
       - chessism_net
     healthcheck:
@@ -82,8 +190,6 @@ services:
     image: redis:7-alpine
     container_name: redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
-    ports:
-      - "6379:6379"
     networks:
       - chessism_net
     volumes:
@@ -102,7 +208,10 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=analysis_queue
-      - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY}
+      - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY:-4}
+      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
+    volumes:
+      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
     depends_on:
@@ -113,6 +222,38 @@ services:
       stockfish-service:
         condition: service_started
 
+  # Read-only host telemetry; automatically records active Stockfish jobs.
+  analysis-telemetry:
+    build: .
+    image: chessism-api:latest
+    command: python -m analysis_telemetry.watcher --output-root /recordings --interval 15
+    restart: unless-stopped
+    user: "${ANALYSIS_TELEMETRY_UID:-1000}:${ANALYSIS_TELEMETRY_GID:-1000}"
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.10"
+    mem_limit: 128m
+    pids_limit: 32
+    environment:
+      - REDIS_HOST=redis
+      - PYTHONDONTWRITEBYTECODE=1
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./dev_tools/analysis_telemetry:/app/analysis_telemetry:ro
+      - ./research_data/analysis_telemetry:/recordings
+      - /sys/devices/system/cpu:/host-cpu:ro
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+
   worker-games:
     build: .
     image: chessism-api:latest
@@ -121,6 +262,127 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=games_queue
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
+    volumes:
+      - /main-monitor-db-backups:/backup-volume
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-research:
+    build: .
+    image: chessism-api:latest
+    command: arq worker.WorkerSettings
+    cpus: "1.00"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=research_queue
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - COEFFICIENT_RESEARCH_DIR=/backup-volume/chessism/research
+      - COEFFICIENT_RESEARCH_DISPLAY_DIR=/main-monitor-db-backups/chessism/research
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
+      - MATRIX_ARTIFACT_DISPLAY_DIR=${MATRIX_ARTIFACT_DISPLAY_DIR:-/home/jon/Desktop/workshop/last_chessism/research_data/matrices}
+      - MATRIX_FREE_FLOOR_BYTES=${MATRIX_FREE_FLOOR_BYTES:-20000000000}
+    volumes:
+      - ./research_data:/research-data
+      - /main-monitor-db-backups:/backup-volume
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-algorithms:
+    build: .
+    image: chessism-api:latest
+    command: arq chessism_api.operations.research_algorithms.worker.WorkerSettings
+    cpus: "1.00"
+    mem_limit: 1g
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
+      - ALGORITHM_FREE_FLOOR_BYTES=20000000000
+      - OPENBLAS_NUM_THREADS=1
+      - OMP_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - NUMEXPR_NUM_THREADS=1
+    volumes:
+      - ./research_data:/research-data
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-salience:
+    build: .
+    image: chessism-api:latest
+    command: arq worker.WorkerSettings
+    cpus: "0.50"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=salience_queue
+    networks:
+      - chessism_net
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+
+  worker-backup:
+    build:
+      context: .
+      dockerfile: postgres-backup/Dockerfile
+      target: backup-worker
+    image: chessism-backup-worker:latest
+    command: arq worker.WorkerSettings
+    user: postgres
+    cpus: "1.00"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - REDIS_HOST=${REDIS_HOST}
+      - QUEUE_NAME=backup_queue
+      - MATRIX_ARTIFACT_DIR=/research-data/matrices
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - DATABASE_BACKUP_APP_ID=chessism
+      - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
+      - DATABASE_BACKUP_QUOTA_BYTES=200000000000
+      - BACKUP_FREE_FLOOR_BYTES=150000000000
+      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
+      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
+      - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
+      - PGBACKREST_STANZA=chessism
+      - CHESSISM_ARCHIVE_GAP_PATH=/var/spool/pgbackrest/chessism-archive-gap
+      - DATABASE_RESTORE_TEST_ROOT=/restore-test
+      - DATABASE_RESTORE_TEST_HEADROOM_BYTES=15000000000
+      - DATABASE_RESTORE_TEST_TIMEOUT_SECONDS=21600
+      - RESTORE_TEST_DB_USER=${POSTGRES_USER}
+      - RESTORE_TEST_DB_NAME=${POSTGRES_DB}
+    volumes:
+      - ./research_data:/research-data:ro
+      - ./db_data:/var/lib/postgresql/data:ro
+      - /main-monitor-db-backups:/backup-volume
+      - pgbackrest_spool:/var/spool/pgbackrest
+      - postgres_socket:/var/run/postgresql
+      - database_restore_test:/restore-test
     networks:
       - chessism_net
     depends_on:
@@ -186,10 +448,21 @@ services:
     image: chessism-api:latest
     container_name: pipeline-worker
     command: arq worker.WorkerSettings
+    # Direct tablebase probing is fast but CPU-bound. Keep thermal/system
+    # headroom while the four reproducible Stockfish engines are active.
+    cpus: "0.50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
+      - STOCKFISH_SYZYGY_PATH=${STOCKFISH_SYZYGY_PATH}
+    volumes:
+      - /main-monitor-db-backups:/backup-volume
+      - ./syzygy:/syzygy:ro
     networks:
       - chessism_net
     depends_on:
@@ -204,3 +477,6 @@ volumes:
   redis_data:
   db_data:
   chessism_web_node_modules:
+  pgbackrest_spool:
+  postgres_socket:
+  database_restore_test:

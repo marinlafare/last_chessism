@@ -1,0 +1,10 @@
+@import '../games/games.css';
+
+.download-games-page main {
+  display: grid;
+  gap: 18px;
+}
+
+.download-games-page .games-actions {
+  margin-top: 0;
+}

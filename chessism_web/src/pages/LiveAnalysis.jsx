@@ -1,20 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import './live-analysis/liveAnalysis.css'
 import { Chess } from 'chess.js'
 import { Chessboard } from 'react-chessboard'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
+import { formatNumber } from '../utils/formatters'
+import { analyzeLiveFen as requestLiveAnalysis } from './live-analysis/liveAnalysisApi'
 
 const START_FEN = new Chess().fen()
 const LIVE_ANALYSIS_NODES = 250_000
 const LIVE_ANALYSIS_MULTIPV = 3
-
-const formatNumber = (value) => {
-  const numeric = Number(value ?? 0)
-  if (!Number.isFinite(numeric)) return '0'
-  return numeric.toLocaleString('en-US')
-}
 
 const getAnalysisLines = (result) => {
   const analysis = result?.analysis
@@ -58,26 +54,6 @@ const moveToSan = (fen, move) => {
   } catch {
     return text
   }
-}
-
-async function analyzeLiveFen(fen, signal) {
-  const response = await fetch(`${API_BASE_URL}/analysis/fen`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    signal,
-    body: JSON.stringify({
-      fens: [fen],
-      nodes_limit: LIVE_ANALYSIS_NODES,
-      multipv: LIVE_ANALYSIS_MULTIPV
-    })
-  })
-  const payload = await response.json().catch(() => ({}))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return Array.isArray(payload) ? payload[0] : payload
 }
 
 function LiveAnalysis() {
@@ -145,7 +121,12 @@ function LiveAnalysis() {
       setLoading(true)
       setError('')
       try {
-        const payload = await analyzeLiveFen(fen, controller.signal)
+        const payload = await requestLiveAnalysis(
+          fen,
+          LIVE_ANALYSIS_NODES,
+          LIVE_ANALYSIS_MULTIPV,
+          { signal: controller.signal },
+        )
         setAnalysis(payload)
       } catch (err) {
         if (err?.name !== 'AbortError') {
