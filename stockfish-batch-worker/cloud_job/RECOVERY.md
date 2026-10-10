@@ -7,6 +7,17 @@ while the PC is off; local imports and final cleanup resume when the PC returns.
 Workflows obtains short-lived credentials from its dedicated service account;
 it does not depend on the host's cached access token or a downloaded key.
 
+New UI Batch requests use `sequence_v2`: the host uploads every bounded cycle's
+input before launching one execution. `cloud_sequence` calls `recover_batch`
+inline for each cycle's tasks and advances after cloud completion without the
+local host. Legacy calls still route directly to `recover_batch`. See the
+[automatic sequence lifecycle](README.md#automatic-cloud-tasks-over-one-frozen-fen-set).
+The plan/owner/state live under the first unit's `inputs/ui-…/sequence-N/` prefix,
+inside existing read/write/cleanup permissions. Plan payload bytes are SHA-256
+bound; cycle descriptions are loaded individually to bound Workflows memory.
+No large FEN manifests are loaded by Workflows. Small contract/performance proofs
+gate advancement; full local receipt verification still gates deletion.
+
 ## Policy
 
 - Native Batch retries are zero, avoiding a shared retry counter.

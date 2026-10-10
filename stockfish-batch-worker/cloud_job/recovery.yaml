@@ -3,6 +3,26 @@
 main:
   params: [args]
   steps:
+    - route:
+        switch:
+          - condition: '${map.get(args, "mode") == "sequence_v2"}'
+            steps:
+              - sequence:
+                  call: cloud_sequence
+                  args: {args: '${args}'}
+                  result: result
+              - sequence_done:
+                  return: '${result}'
+    - legacy:
+        call: recover_batch
+        args: {args: '${args}'}
+        result: result
+    - done:
+        return: '${result}'
+
+recover_batch:
+  params: [args]
+  steps:
     - test_mode:
         switch:
           - condition: '${map.get(args, "mode") == "access_test"}'
@@ -88,12 +108,16 @@ main:
         call: write_state
         args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
     - check_cancel:
+        call: sequence_cancel
+        args: {bucket: '${bucket}', args: '${args}'}
+        result: sequence_cancellation
+    - read_local_cancel:
         call: read_object
         args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
         result: cancellation
     - cancel_before_launch:
         switch:
-          - condition: '${cancellation != null}'
+          - condition: '${cancellation != null or sequence_cancellation != null}'
             next: cancelled
           - condition: '${map.get(args, "mode") == "control_test"}'
             raise: "Control test must never launch a Batch job"
@@ -115,6 +139,10 @@ main:
         call: write_state
         args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
     - cancel_poll:
+        call: sequence_cancel
+        args: {bucket: '${bucket}', args: '${args}'}
+        result: sequence_cancellation
+    - local_cancel_poll:
         call: read_object
         args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
         result: cancellation
@@ -132,9 +160,9 @@ main:
             next: succeeded
           - condition: '${response.body.status.state == "CANCELLED"}'
             next: cancelled
-          - condition: '${cancellation != null and response.body.status.state == "FAILED"}'
+          - condition: '${(cancellation != null or sequence_cancellation != null) and response.body.status.state == "FAILED"}'
             next: cancelled
-          - condition: '${cancellation != null and response.body.status.state != "CANCELLING"}'
+          - condition: '${(cancellation != null or sequence_cancellation != null) and response.body.status.state != "CANCELLING"}'
             next: cancel_job
           - condition: '${response.body.status.state == "FAILED"}'
             next: task_failure
@@ -413,3 +441,280 @@ access_test:
                   body: '${map.get(error, "body")}'
     - unexpected_success:
         raise: "Unexpected cancellation success for absent diagnostic job"
+
+# A single durable execution advances all cycles. Recovery remains a subworkflow
+# in this execution, so no new Workflows-invoker or Compute IAM grant is needed.
+cloud_sequence:
+  params: [args]
+  steps:
+    - validate:
+        switch:
+          - condition: '${not(text.match_regex(args.run_id, "^[a-f0-9]{32}$")) or args.session < 1 or args.session > 3 or not(text.match_regex(args.plan_hash, "^[a-f0-9]{64}$"))}'
+            raise: "Invalid sequence identity"
+    - initialize:
+        assign:
+          - bucket: "chessism-batch-276704059200-us-central1"
+          - control: '${"inputs/ui-" + args.run_id + "/sequence-" + string(args.session) + "/"}'
+          - execution: '${"projects/chessism-production/locations/us-central1/workflows/chessism-batch-recovery/executions/" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}'
+    - read_plan:
+        call: read_sealed
+        args: {bucket: '${bucket}', name: '${control + "plan.json"}', checksum: '${args.plan_checksum}'}
+        result: plan
+    - validate_plan:
+        switch:
+          - condition: '${plan.version != 2 or plan.control_id != args.run_id or plan.session != args.session or len(plan.cycles) < 1 or len(plan.cycles) > 20 or plan.n_vms < 1 or plan.n_vms > 10}'
+            raise: "Invalid sequence plan"
+    - claim:
+        try:
+          call: http.post
+          args:
+            url: '${"https://storage.googleapis.com/upload/storage/v1/b/" + bucket + "/o"}'
+            query: {uploadType: "media", name: '${control + "owner.json"}', ifGenerationMatch: "0"}
+            auth: {type: OAuth2}
+            headers: {Content-Type: "application/json"}
+            body: {execution: '${execution}', plan_hash: '${args.plan_hash}'}
+        except:
+          as: error
+          steps:
+            - read_owner:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "owner.json"}'}
+                result: owner
+            - already_owned:
+                switch:
+                  - condition: '${owner != null and owner.plan_hash == args.plan_hash and owner.execution != execution}'
+                    return: {status: "DUPLICATE", owner: '${owner.execution}'}
+                  - condition: '${owner != null and owner.plan_hash == args.plan_hash and owner.execution == execution}'
+                    next: initialize_state
+            - claim_failed:
+                raise: '${error}'
+    - initialize_state:
+        assign:
+          - state:
+              version: 2
+              run_id: '${args.run_id}'
+              session: '${args.session}'
+              execution: '${execution}'
+              plan_hash: '${args.plan_hash}'
+              status: "RUNNING"
+              completed_cycles: 0
+              total_cycles: '${len(plan.cycles)}'
+              stop_acknowledged: false
+    - accepted:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - cycles:
+        for:
+          value: descriptor
+          index: index
+          in: '${plan.cycles}'
+          steps:
+            - read_cancel:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
+                result: cancellation
+            - read_stop:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "stop.json"}'}
+                result: stop
+            - obey_signals:
+                switch:
+                  - condition: '${cancellation != null}'
+                    assign:
+                      - state.status: "CANCELLED"
+                      - state.stop_acknowledged: true
+                    next: break
+                  - condition: '${stop != null}'
+                    assign:
+                      - state.status: "STOPPED"
+                      - state.stop_acknowledged: true
+                    next: break
+            - load_cycle:
+                call: read_sealed
+                args: {bucket: '${bucket}', name: '${control + "cycle-" + string(index) + ".json"}', checksum: '${descriptor.checksum}'}
+                result: cycle
+            - validate_cycle:
+                switch:
+                  - condition: '${cycle.run_id != descriptor.run_id or cycle.count != descriptor.count or cycle.count < 1 or cycle.count > 1000000 * plan.n_vms or len(cycle.tasks) < 1 or len(cycle.tasks) > plan.n_vms}'
+                    raise: "Invalid bounded cycle"
+            - task_results:
+                assign:
+                  - outcomes: []
+            - workers:
+                parallel:
+                  shared: [outcomes]
+                  concurrency_limit: '${plan.n_vms}'
+                  for:
+                    value: task
+                    index: task_index
+                    in: '${cycle.tasks}'
+                    steps:
+                      - load_task:
+                          call: sequence_task_definition
+                          args: {task: '${task}', bucket: '${bucket}', name: '${control + "task-" + string(index) + "-" + string(task_index) + ".json"}'}
+                          result: definition
+                      - run_task:
+                          call: sequence_task
+                          args: {task: '${definition}', bucket: '${bucket}', control: '${control}'}
+                          result: outcome
+                      - remember_outcome:
+                          assign:
+                            - outcomes: '${list.concat(outcomes, outcome)}'
+            - check_results:
+                for:
+                  value: outcome
+                  in: '${outcomes}'
+                  steps:
+                    - unsuccessful:
+                        switch:
+                          - condition: '${outcome != "SUCCEEDED"}'
+                            assign:
+                              - state.status: '${if(outcome == "CANCELLED", "CANCELLED", "FAILED")}'
+                            next: break
+            - check_cycle_terminal:
+                switch:
+                  - condition: '${state.status != "RUNNING"}'
+                    next: break
+            - advance:
+                assign:
+                  - state.completed_cycles: '${index + 1}'
+                  - cycle: null
+            - save_progress:
+                call: write_state
+                args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+            - release_interval:
+                switch:
+                  - condition: '${index + 1 < len(plan.cycles)}'
+                    steps:
+                      - let_batch_release_compute:
+                          call: sys.sleep
+                          args: {seconds: 60}
+    - succeeded:
+        switch:
+          - condition: '${state.status == "RUNNING"}'
+            assign:
+              - state.status: "SUCCEEDED"
+    - save_terminal:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - done:
+        return: '${state}'
+
+# New plans reference per-VM definitions; previously saved inline plans remain
+# valid for explicit recovery without changing their frozen FEN memberships.
+sequence_task_definition:
+  params: [task, bucket, name]
+  steps:
+    - legacy:
+        switch:
+          - condition: '${map.get(task, "spec") != null}'
+            return: '${task}'
+    - load:
+        call: read_sealed
+        args: {bucket: '${bucket}', name: '${name}', checksum: '${task.checksum}'}
+        result: definition
+    - identity:
+        switch:
+          - condition: '${definition.run_id != task.run_id}'
+            raise: "VM definition identity changed"
+    - done:
+        return: '${definition}'
+
+sequence_task:
+  params: [task, bucket, control]
+  steps:
+    - bounded_units:
+        switch:
+          - condition: '${len(task.checks) < 1 or len(task.checks) > 20 or len(task.spec.taskGroups[0].taskSpec.runnables) != len(task.checks)}'
+            raise: "Invalid bounded VM work units"
+    - validate_unit_sizes:
+        for:
+          value: check
+          in: '${task.checks}'
+          steps:
+            - size:
+                switch:
+                  - condition: '${check.count < 1 or check.count > 50000}'
+                    raise: "Invalid bounded VM work unit size"
+    - recover:
+        switch:
+          - condition: '${not(task.skip)}'
+            steps:
+              - args:
+                  assign:
+                    - task.sequence_control: '${control}'
+              - run:
+                  call: recover_batch
+                  args: {args: '${task}'}
+                  result: result
+              - failure:
+                  switch:
+                    - condition: '${result.status != "SUCCEEDED"}'
+                      return: '${result.status}'
+    # Do not load multi-megabyte FEN manifests into Workflows. The successful
+    # worker writes its manifest before its small performance/contract proof.
+    # Full receipt/hash verification remains mandatory locally before deletion.
+    - verify_units:
+        for:
+          value: check
+          in: '${task.checks}'
+          steps:
+            - path:
+                switch:
+                  - condition: '${not(text.match_regex(check.output, "^gs://chessism-batch-276704059200-us-central1/results/ui-[a-f0-9]{32}$"))}'
+                    raise: "Invalid result prefix"
+            - result_name:
+                assign:
+                  - name: '${text.substring(check.output, len("gs://") + len(bucket) + 1, len(check.output))}'
+            - contract:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${name + "/contract.json"}'}
+                result: contract
+            - report:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${name + "/performance.json"}'}
+                result: report
+            - validate:
+                switch:
+                  - condition: '${contract == null or report == null or contract.fingerprint != check.fingerprint or report.fingerprint != check.fingerprint or report.position_count != check.count or contract.position_count != check.count or report.analyzed_this_attempt + report.resumed != check.count}'
+                    raise: "Successful task lacks matching completion proof"
+            - manifest:
+                call: request
+                args:
+                  method: "GET"
+                  url: '${"https://storage.googleapis.com/storage/v1/b/" + bucket + "/o/" + text.url_encode(name + "/manifest.json")}'
+                result: metadata
+            - manifest_nonempty:
+                switch:
+                  - condition: '${int(metadata.body.size) <= 0}'
+                    raise: "Empty completion manifest"
+    - done:
+        return: "SUCCEEDED"
+
+sequence_cancel:
+  params: [bucket, args]
+  steps:
+    - legacy:
+        switch:
+          - condition: '${map.get(args, "sequence_control") == null}'
+            return: null
+    - read:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${args.sequence_control + "cancel.json"}'}
+        result: cancellation
+    - done:
+        return: '${cancellation}'
+
+read_sealed:
+  params: [bucket, name, checksum]
+  steps:
+    - load:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${name}'}
+        result: envelope
+    - validate:
+        switch:
+          - condition: '${envelope == null or base64.encode(hash.compute_checksum(text.encode(envelope.payload), "SHA256")) != checksum}'
+            raise: "Uploaded sequence plan changed; refusing submission"
+    - done:
+        return: '${json.decode(envelope.payload)}'

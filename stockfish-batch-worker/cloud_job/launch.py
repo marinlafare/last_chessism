@@ -9,6 +9,7 @@ from stockfish_batch.checkpoints import digest, encode, make_contract
 from stockfish_batch.config import Config
 from stockfish_batch.storage import Storage
 from .recovery import RecoveryClient
+from .sequencing import SequenceClient
 from stockfish_core import HASH_MIB, THREADS, ENGINE_SHA256
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -92,7 +93,7 @@ def expected_contract(raw, rows, config, metadata):
     return {**contract, "fingerprint": digest(encode(contract))}
 
 
-class Client(RecoveryClient, Cloud):
+class Client(SequenceClient, RecoveryClient, Cloud):
     def storage(self):
         from google.cloud import storage
         from google.auth.transport.requests import AuthorizedSession

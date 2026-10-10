@@ -223,6 +223,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
             async with self.engine.begin() as c:await c.run_sync(upgrade)
         await controller.save_job(self.job.id,status='complete')
         async with self.engine.begin() as c:
+            await c.execute(text('DROP TABLE cloud_sequence_control'))
             await c.execute(text('DROP TABLE cloud_batch_cycle'))
             await c.execute(text('DROP TABLE cloud_batch_sequence'))
         for _ in range(2):

@@ -1,30 +1,52 @@
-import { useCallback } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './home/home.css'
-import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MainCharactersCarousel from './home/MainCharactersCarousel'
 import { DashboardSummaryPanel } from './home/Hero'
-import StatusPanel from './home/StatusPanel'
 import ProofPoints from './home/ProofPoints'
-import { usePoll } from '../hooks/usePoll'
-import { fetchStatus } from './home/homeApi'
+import { playerFromLocation, playerHomeHref } from '../services/navigation'
 
-function Home() {
-  const statusFetcher = useCallback(fetchStatus, [])
-  const status = usePoll(statusFetcher, 10000)
+const PlayerWorkspace = lazy(() => import('./players/PlayerWorkspace'))
+
+function Home({ locationKey = `${window.location.pathname}${window.location.search}` }) {
+  const selectedPlayer = playerFromLocation(locationKey)
+  const playerSection = useRef(null)
+  const pendingScroll = useRef(false)
+  const [scrollRequest, setScrollRequest] = useState(0)
+  const selectPlayer = useCallback((name) => {
+    const href = playerHomeHref(name)
+    if (`${window.location.pathname}${window.location.search}` !== href) {
+      window.history.pushState(null, '', href)
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    }
+    pendingScroll.current = true
+    setScrollRequest(value => value + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!pendingScroll.current || !playerSection.current) return
+    pendingScroll.current = false
+    playerSection.current.focus({ preventScroll: true })
+    playerSection.current.scrollIntoView({ block: 'start',
+      behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' })
+  }, [selectedPlayer, scrollRequest])
 
   return (
     <div className="page-frame home-page">
       <SideRail />
       <div className="home-shell">
-        <Header />
         <main>
-          <div className="home-top-grid">
-            <MainCharactersCarousel />
-            <StatusPanel {...status} />
+          <div className="home-overview">
+            <DashboardSummaryPanel />
+            <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer} />
           </div>
-          <DashboardSummaryPanel />
+          <section className="home-player-workspace" id="selected-player" ref={playerSection}
+            tabIndex={-1} aria-label={selectedPlayer ? `Player workspace: ${selectedPlayer}` : 'Player workspace'}>
+            {selectedPlayer ? <Suspense fallback={<p role="status">Loading player workspace…</p>}>
+              <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={selectPlayer} />
+            </Suspense> : <p className="home-player-empty">Select a Main Character to explore their profile and analysis here.</p>}
+          </section>
           <ProofPoints />
         </main>
         <Footer />

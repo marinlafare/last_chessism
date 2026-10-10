@@ -1,19 +1,17 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import { fetchDashboardSummary } from './homeApi'
 
 export function DashboardSummaryPanel() {
   const [generalities, setGeneralities] = useState(null)
-  const [timeControls, setTimeControls] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
 
     fetchDashboardSummary({ signal: controller.signal })
-      .then(([generalitiesPayload, timeControlsPayload]) => {
+      .then((generalitiesPayload) => {
         setGeneralities(generalitiesPayload)
-        setTimeControls(timeControlsPayload)
         setError('')
       })
       .catch((err) => {
@@ -24,11 +22,6 @@ export function DashboardSummaryPanel() {
 
     return () => controller.abort()
   }, [])
-
-  const modeTotal = useMemo(() => {
-    if (!timeControls) return 0
-    return ['bullet', 'blitz', 'rapid'].reduce((sum, key) => sum + Number(timeControls[key] || 0), 0)
-  }, [timeControls])
 
   const metrics = [
     { label: 'Main Players', value: generalities?.main_characters },
@@ -48,25 +41,6 @@ export function DashboardSummaryPanel() {
         ))}
       </div>
 
-      <div className="mode-summary">
-        <div className="mode-summary-head">
-          <span>Time Controls</span>
-          <strong>{formatNumber(modeTotal)}</strong>
-        </div>
-        {['bullet', 'blitz', 'rapid'].map((mode) => {
-          const value = Number(timeControls?.[mode] || 0)
-          const width = modeTotal ? Math.max(3, (value / modeTotal) * 100) : 0
-          return (
-            <div className="mode-row" key={mode}>
-              <span>{mode}</span>
-              <div className="mode-track">
-                <div className={`mode-fill ${mode}`} style={{ width: `${width}%` }} />
-              </div>
-              <strong>{timeControls ? formatNumber(value) : '-'}</strong>
-            </div>
-          )
-        })}
-      </div>
       {error ? <p className="result-line">{error}</p> : null}
     </div>
   )

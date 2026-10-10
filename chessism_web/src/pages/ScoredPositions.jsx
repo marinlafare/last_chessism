@@ -4,6 +4,7 @@ import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
+import { ratingScatterBounds } from './scored-positions/ratingScatter'
 import {
   fetchAdvantageByRating,
   fetchBackupJobStatus,
@@ -73,6 +74,7 @@ const buildCountTicks = (maxValue, targetTickCount = 8) => {
 
 function RatingScatterChart({ payload }) {
   const points = Array.isArray(payload?.ratings) ? payload.ratings : []
+  const { minRating, maxRating, maxIndex } = useMemo(() => ratingScatterBounds(points), [points])
   if (!points.length) {
     return <p className="result-line">No fully analyzed game ratings yet.</p>
   }
@@ -82,12 +84,9 @@ function RatingScatterChart({ payload }) {
   const margin = { top: 18, right: 24, bottom: 72, left: 54 }
   const plotWidth = width - margin.left - margin.right
   const plotHeight = height - margin.top - margin.bottom
-  const minRating = Math.min(...points.map((point) => Number(point.rating || 0)))
-  const maxRating = Math.max(...points.map((point) => Number(point.rating || 0)))
-  const maxIndex = Math.max(1, ...points.map((point) => Number(point.x_index || 0)))
   const ratingSpan = Math.max(1, maxRating - minRating)
   const xTicks = buildCountTicks(maxIndex)
-  const yTicks = [minRating, Math.round((minRating + maxRating) / 2), maxRating]
+  const yTicks = [...new Set([minRating, Math.round((minRating + maxRating) / 2), maxRating])]
   const xFor = (index) => margin.left + (Number(index || 0) / maxIndex) * plotWidth
   const yFor = (rating) => margin.top + plotHeight - ((Number(rating || 0) - minRating) / ratingSpan) * plotHeight
 
@@ -183,7 +182,7 @@ function ScoredPositions() {
 
   const maxRatingBucketPositions = useMemo(() => {
     const buckets = Array.isArray(selectedRatingData?.buckets) ? selectedRatingData.buckets : []
-    return Math.max(1, ...buckets.map((bucket) => Number(bucket.positions || 0)))
+    return buckets.reduce((max, bucket) => Math.max(max, Number(bucket.positions || 0)), 1)
   }, [selectedRatingData])
 
   const latestBackup = backups[0] || null

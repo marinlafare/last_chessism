@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import { fetchTopMainCharacters } from './homeApi'
+import { isPlainClick, normalizePlayer, playerHomeHref } from '../../services/navigation'
 
 const TIME_CONTROLS = ['bullet', 'blitz', 'rapid']
 const PLAYER_PAGE_SIZE = 50
@@ -13,7 +14,7 @@ const getDisplayName = (player) => {
 
 const getPlayerRating = (player) => Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0)
 
-function MainCharactersCarousel() {
+function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
   const [selectedMode, setSelectedMode] = useState('bullet')
   const [players, setPlayers] = useState([])
   const [page, setPage] = useState(1)
@@ -96,11 +97,18 @@ function MainCharactersCarousel() {
             ))
           : pagePlayers.map((player, index) => {
               const playerName = String(player?.player_name || '').trim()
-              const profileHref = `/players?player=${encodeURIComponent(playerName)}`
+              const profileHref = playerHomeHref(playerName)
+              const selected = normalizePlayer(playerName) === selectedPlayer
               const absoluteIndex = pageStart + index
 
               return (
-                <a className="character-rating-row" href={profileHref} key={playerName || index}>
+                <a className={`character-rating-row${selected ? ' selected' : ''}`} href={profileHref}
+                  key={playerName || index} aria-current={selected ? 'true' : undefined}
+                  onClick={event => {
+                    if (!onSelectPlayer || !isPlainClick(event)) return
+                    event.preventDefault()
+                    onSelectPlayer(playerName)
+                  }}>
                   <span className="character-rating-rank">#{absoluteIndex + 1}</span>
                   <span className="character-rating-name">{getDisplayName(player)}</span>
                   <strong className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>

@@ -1,7 +1,11 @@
 import { useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Games from './pages/Games'
-import Players from './pages/Players'
+import SystemStatus from './pages/SystemStatus'
+import { normalizePath } from './services/navigation'
+// These existing shared card styles are also used by Games/Main Characters.
+// Keep them available before the player workspace is first lazy-loaded.
+import './pages/players/players.css'
 import DownloadNewGames from './pages/DownloadNewGames'
 import MainCharacters from './pages/MainCharacters'
 import SecondaryCharacter from './pages/SecondaryCharacter'
@@ -28,6 +32,7 @@ const APP_PATHS = new Set([
   '/',
   '/games',
   '/players',
+  '/system_status',
   '/add_games',
   '/download_new_games',
   '/main_characters',
@@ -45,8 +50,6 @@ const APP_PATHS = new Set([
   '/research/salience',
   '/backups'
 ])
-
-const normalizePath = (pathname) => pathname.replace(/\/+$/, '') || '/'
 
 const getLocationKey = () => `${normalizePath(window.location.pathname)}${window.location.search}`
 
@@ -188,12 +191,12 @@ function AdminOnlineStatus({ account }) {
 }
 
 function SuperadminSystem({ account, locationKey, path, onLogout }) {
-  let page = <Home />
+  let page = <Home locationKey={locationKey} />
 
   if (path === '/games' || path.startsWith('/games/')) {
     page = <Games />
-  } else if (path === '/players') {
-    page = <Players />
+  } else if (path === '/system_status') {
+    page = <SystemStatus />
   } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {
@@ -224,7 +227,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
 
   return (
     <>
-      <div className="app-route-transition" key={locationKey}>
+      <div className="app-route-transition" key={path === '/' ? 'home' : locationKey}>
         {page}
       </div>
       <div className="superadmin-account-controls">
@@ -244,6 +247,10 @@ function App() {
   const path = locationKey.split('?')[0]
 
   useEffect(() => {
+    // Canonicalize old direct player URLs without adding a Back-history entry.
+    if (window.location.pathname.replace(/\/+$/, '') === '/players') {
+      window.history.replaceState(window.history.state, '', `/${window.location.search}${window.location.hash}`)
+    }
     const handlePopState = () => setLocationKey(getLocationKey())
     const handleInternalNavigation = (event) => {
       if (
@@ -264,7 +271,7 @@ function App() {
       event.preventDefault()
       const nextLocationKey = `${normalizePath(url.pathname)}${url.search}`
       if (nextLocationKey !== getLocationKey()) {
-        window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
+        window.history.pushState(null, '', `${normalizePath(url.pathname)}${url.search}${url.hash}`)
       }
       setLocationKey(nextLocationKey)
       window.scrollTo({ top: 0, left: 0, behavior: 'auto' })

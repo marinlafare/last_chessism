@@ -569,3 +569,19 @@
   min-height: 34px;
   border-radius: 6px;
 }
+
+/* The workspace is lazy-loaded, so its responsive rules must travel with it
+   rather than relying on global CSS loaded before this stylesheet. */
+@media (max-width: 1100px) {
+  .players-top-grid .players-profile-layout { grid-template-columns: 132px minmax(0, 1fr); }
+  .players-position-summary { grid-column: 1 / -1; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .players-top-grid .players-profile-layout { grid-template-columns: 1fr; }
+  .players-profile-navigation-section > .section-head { align-items: stretch; flex-direction: column; }
+  .players-position-summary { grid-column: auto; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .players-profile-avatar-box { min-height: 150px; }
+  .players-profile-actions, .player-delete-heading, .player-delete-actions { align-items: stretch; flex-direction: column; }
+  .player-delete-preview-grid { grid-template-columns: 1fr; }
+  .players-mode-activity-row { grid-template-columns: 1fr; gap: 5px; }
+}

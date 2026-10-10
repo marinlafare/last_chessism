@@ -55,19 +55,43 @@ class WorkUnitPlanTests(unittest.TestCase):
         work_units.verify_job(spec, spec)
 
     def test_vm_distribution_balanced_and_limits_fail_closed(self):
-        for count in (1, 499, 50001, 200001, 499999, 500000):
+        for count in (1, 499, 50001, 200001, 499999, 500000, 1000000):
             for n in (1, 2, 3, 10):
                 units = work_units.ranges(count, n)
                 self.assertEqual(sum(size for _, size in units), count)
                 self.assertTrue(all(1 <= size <= 50000 for _, size in units))
                 totals = [sum(size for vm, size in units if vm == i) for i in range(min(count, n))]
                 self.assertLessEqual(max(totals) - min(totals), 1)
-        for count in (0, -1, True, 500001):
+        for count in (0, -1, True, 1000001):
             with self.assertRaises(ValueError): work_units.ranges(count, 1)
         for n in (0, True, 11):
             with self.assertRaises(ValueError): work_units.ranges(500000, n)
         self.assertEqual(CloudJobRequest(total_fens=500000).target, 500000)
         with self.assertRaises(ValueError): CloudJobRequest(backend='cloud_run', total_fens=200001)
+
+    def test_two_vms_keep_one_million_each_in_bounded_units(self):
+        run = fixture(1963096, 2)
+        self.assertEqual([t['count'] for t in run.launch['tasks']], [981548,981548])
+        self.assertEqual(len(run.launch['units']), 40)
+        for task in run.launch['tasks']:
+            spec = task['spec']
+            self.assertEqual(len(spec['taskGroups'][0]['taskSpec']['runnables']), 20)
+            work_units.verify_job(spec, spec)
+        self.assertEqual(len(work_units.ranges(2000000, 2)), 40)
+        with self.assertRaises(ValueError): work_units.ranges(2000001, 2)
+        with self.assertRaises(ValueError):
+            work_units.spec_for(run.launch['units'][:21], IMAGE)
+
+    def test_per_vm_workflow_documents_remain_small_at_maximum_fleet_size(self):
+        from cloud_job.sequencing import cycle_document, sealed
+        run = fixture(10000000, 10)
+        run.position_count = 10000000
+        for task in run.launch['tasks']:
+            task['recovery_session'] = 1
+        document = cycle_document(run)
+        for task in document['tasks']:
+            # Per-VM documents, not a giant fleet payload, enter each branch.
+            self.assertLess(len(sealed(task)[0]), 64 * 1024)
 
     def test_modified_order_skipped_units_or_unsafe_runnable_rejected(self):
         spec = fixture().launch['tasks'][0]['spec']

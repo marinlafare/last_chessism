@@ -29,7 +29,50 @@ window.fetch = async (input, options = {}) => {
       blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job, ...state.history] })
   }
   if (url.pathname.endsWith('/analysis/player_games/preview')) {
+    state.previewForm = JSON.parse(options.body)
     return reply({ plan_id: 'a'.repeat(32), selected_games: 30, fens_to_analyze: state.previewCount })
+  }
+  const drafts = url.pathname.split('/analysis/cloud/drafts')[1]
+  if (drafts !== undefined) {
+    if (drafts === '/current') return reply(state.draft?.submitted_job_id ? null : state.draft || null)
+    if (drafts === '') {
+      state.draft = state.draft && !state.draft.submitted_job_id ? state.draft : {
+        id: 'd'.repeat(32), revision: 1, entries: [], preview: null, max_fens: 10000000, max_entries: 100,
+      }
+      return reply(state.draft, 201)
+    }
+    const body = options.body ? JSON.parse(options.body) : {}, draft = state.draft
+    if (drafts.endsWith('/entries')) {
+      const form = state.previewForm
+      const entry = { id: body.replace_entry_id || `entry-${draft.revision}`, player_name: form.player_name,
+        selection_mode: form.selection_mode, selection_order: form.selection_mode === 'oldest' ? 'oldest' : 'latest',
+        requested_games: form.game_limit, date_from: form.date_from, date_to: form.date_to,
+        selected_games: 30, preview_fens: state.previewCount }
+      const index = draft.entries.findIndex(e => e.id === body.replace_entry_id)
+      if (index >= 0) draft.entries[index] = entry
+      else draft.entries.push(entry)
+      draft.revision++; draft.preview = null
+      return reply(draft)
+    }
+    if (drafts.endsWith('/remove')) {
+      const entryId = drafts.split('/').at(-2)
+      draft.entries = draft.entries.filter(e => e.id !== entryId)
+      draft.revision++; draft.preview = null
+      return reply(draft)
+    }
+    if (drafts.endsWith('/preview')) {
+      draft.preview = { revision: draft.revision, unique_games: draft.entries.length * 30,
+        unique_missing_fens: draft.entries.length > 1 ? 1300000 : 800000, claimed_fens: 0,
+        fens_to_analyze: draft.entries.length > 1 ? 1300000 : 800000, within_limit: true }
+      return reply(draft)
+    }
+    if (drafts.endsWith('/submit')) {
+      if (job.status !== 'complete') return reply({ detail: 'Cloud job still active' }, 409)
+      Object.assign(job, { id: 'combined-job', status: 'queued', imported: 0, target: draft.preview.fens_to_analyze,
+        runs: [], sequence: null, selection: { backend: 'batch_spot', mode: 'games', player_name: '' } })
+      draft.submitted_job_id = job.id
+      return reply({ id: job.id, status: job.status, target: job.target }, 202)
+    }
   }
   if (url.pathname.endsWith('/analysis_counts')) return reply({ total_positions: 3000, analyzed_positions: 1000 })
   if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }

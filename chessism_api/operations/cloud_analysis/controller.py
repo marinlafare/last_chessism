@@ -110,7 +110,7 @@ class Controller:
                 # A transfer/API error is NOT evidence that its VM stopped.
                 # Do not start another billable VM until this job is resumed.
                 return False
-            sequence_mode = job.selection.get('execution_mode') == 'batch_sequence_v1'
+            sequence_mode = job.selection.get('execution_mode') in {'batch_sequence_v1', 'batch_sequence_v2'}
             runs = [] if sequence_mode else (await session.scalars(select(CloudAnalysisRun).where(
                 CloudAnalysisRun.job_id == job.id,
                 ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at))).all()
@@ -118,7 +118,10 @@ class Controller:
         try:
             await save_job(job.id, status="running", error=None)
             if sequence_mode:
-                from .sequence import tick
+                if job.selection['execution_mode'] == 'batch_sequence_v2':
+                    from .auto_sequence import tick
+                else:
+                    from .sequence import tick
                 await tick(self, job)
                 return True
             if run:

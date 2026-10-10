@@ -78,6 +78,9 @@ class ExploreGamesRequest(BaseModel):
     hour: int | None = Field(None, ge=0, le=23)
     analyzed_only: bool = True
     minimum_game_moves_exclusive: int | None = Field(None, ge=0, le=1_000)
+    salience_min: float | None = Field(None, ge=0, le=1, allow_inf_nan=False)
+    salience_max: float | None = Field(None, ge=0, le=1, allow_inf_nan=False)
+    timezone: str | None = Field(None, min_length=1, max_length=64)
     limit: int = Field(30, ge=1, le=100)
     cursor: str | None = Field(None, max_length=512)
 
@@ -355,8 +358,10 @@ async def api_get_player_daily_salience_accuracy(
     date_from: date | None = Query(None),
     date_to: date | None = Query(None),
     timezone: str | None = Query(None, min_length=1, max_length=64),
+    salience_min: float | None = Query(None, ge=0, le=1, allow_inf_nan=False),
+    salience_max: float | None = Query(None, ge=0, le=1, allow_inf_nan=False),
 ) -> JSONResponse:
-    """Return salience-weighted Accuracy and effective games per local day."""
+    """Filter game salience before computing daily accuracy; bounds are raw 0–1 values."""
     return await _hero_analytics_response(
         get_player_daily_salience_accuracy,
         player_name,
@@ -364,6 +369,8 @@ async def api_get_player_daily_salience_accuracy(
         date_from,
         date_to,
         timezone,
+        salience_min,
+        salience_max,
     )
 
 
@@ -414,6 +421,9 @@ async def api_explore_player_games(
         hour=request.hour,
         analyzed_only=request.analyzed_only,
         minimum_game_moves_exclusive=request.minimum_game_moves_exclusive,
+        salience_min=request.salience_min,
+        salience_max=request.salience_max,
+        timezone_name=request.timezone,
         limit=request.limit,
         cursor=request.cursor,
     )

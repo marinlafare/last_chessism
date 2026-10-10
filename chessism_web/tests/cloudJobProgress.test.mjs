@@ -2,12 +2,106 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   cloudJobDone, cloudJobProgress, cloudJobIndicator, cloudJobDisplayState, reconcileCloudJobDisplay,
+  cloudActiveRun, cloudTaskLabel,
   CLOUD_DONE_VISIBLE_MS, CLOUD_DONE_FADE_MS,
 } from '../src/pages/positions/cloudJobProgress.js'
 
 const jobAt = (phase, status = 'running') => ({
   id: 'job', status, imported: 1000, target: 1000,
   runs: [{ status: phase, cloud_state: 'SUCCEEDED' }],
+})
+
+const sequenceAtSix = () => ({
+  id: 'sequence', status: 'running', target: 4000000, imported: 2760000,
+  sequence: { automatic: true, phase: 'running', times: 8, cloud_completed: 5, cloud_status: 'RUNNING' },
+  runs: Array.from({ length: 8 }, (_, index) => ({
+    id: `cycle-${index}`, positions: 500000,
+    status: index < 5 ? 'finalizing' : index === 5 ? 'running' : 'cloud_queued',
+    cloud_state: index < 5 ? 'SUCCEEDED' : index === 5 ? 'RUNNING' : 'PENDING',
+    imported: index < 5 ? 500000 : index === 5 ? 260000 : 0,
+  })),
+})
+
+test('task six is selected ahead of five tasks awaiting shared cleanup', () => {
+  const job = sequenceAtSix()
+  assert.equal(cloudActiveRun(job), job.runs[5])
+  assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), 'Cloud processing: task 6 of 8 — RUNNING')
+  assert.equal(cloudActiveRun(job).imported, 260000)
+  assert.equal(cloudJobDone(job), false)
+})
+
+test('cloud compute takes precedence over earlier local import catch-up', () => {
+  const job = sequenceAtSix()
+  Object.assign(job.runs[0], { status: 'running', imported: 100000 })
+  assert.equal(cloudActiveRun(job), job.runs[5])
+  for (const state of ['QUEUED', 'SCHEDULED', 'RETRYING', 'RECOVERING']) {
+    job.runs[5].cloud_state = state
+    assert.equal(cloudActiveRun(job), job.runs[5])
+    assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), `Cloud processing: task 6 of 8 — ${state}`)
+  }
+})
+
+test('the next unstarted task is explicitly waiting, not running or the previous finished task', () => {
+  const job = sequenceAtSix()
+  Object.assign(job.runs[5], { status: 'finalizing', cloud_state: 'SUCCEEDED', imported: 500000 })
+  job.sequence.cloud_completed = 6
+  assert.equal(cloudActiveRun(job), job.runs[6])
+  assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), 'Next cloud task: task 7 of 8 — waiting to start')
+})
+
+test('cloud success shows local catch-up and verification without calling them cloud execution', () => {
+  const job = sequenceAtSix()
+  job.sequence.cloud_status = 'SUCCEEDED'
+  job.sequence.cloud_completed = 8
+  job.runs.forEach(run => Object.assign(run, { status: 'finalizing', cloud_state: 'SUCCEEDED', imported: 500000 }))
+  Object.assign(job.runs[2], { status: 'running', imported: 100000 })
+  assert.equal(cloudActiveRun(job), job.runs[2])
+  assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), 'Local import: task 3 of 8 — cloud analysis finished')
+  job.runs[2].imported = 500000
+  assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), 'Local verification: task 3 of 8 — cloud analysis finished')
+  job.runs[2].status = 'finalizing'
+  assert.equal(cloudActiveRun(job), undefined)
+  assert.equal(cloudJobDone(job), false)
+})
+
+test('failed or stopped cloud sequences do not suggest future pending tasks will start', () => {
+  const job = sequenceAtSix()
+  job.status = 'failed'
+  job.sequence.cloud_status = 'FAILED'
+  job.runs[5].cloud_state = 'FAILED'
+  assert.equal(cloudActiveRun(job), job.runs[5])
+  assert.equal(cloudTaskLabel(job, cloudActiveRun(job)), 'Cloud task 6 of 8 — FAILED')
+  Object.assign(job.runs[5], { cloud_state: 'SUCCEEDED', status: 'finalizing' })
+  job.sequence.cloud_status = 'STOPPED'
+  assert.equal(cloudActiveRun(job), undefined)
+})
+
+test('shared cleanup and final refresh never show an old task as the active cloud task', () => {
+  const job = sequenceAtSix()
+  for (const phase of ['cleanup_planning', 'cleaning', 'log_planning', 'log_cleaning', 'refreshing', 'complete']) {
+    job.sequence.phase = phase
+    assert.equal(cloudActiveRun(job), undefined, phase)
+    assert.equal(cloudJobDone(job), false, phase)
+  }
+})
+
+test('single jobs and legacy sequences keep their existing active-run behavior', () => {
+  const job = jobAt('finalizing')
+  job.runs.push({ status: 'running' })
+  assert.equal(cloudActiveRun(job), job.runs[0])
+  job.sequence = { automatic: false }
+  assert.equal(cloudActiveRun(job), job.runs[0])
+  job.runs[0].status = 'complete'
+  assert.equal(cloudActiveRun(job), job.runs[1])
+  assert.equal(cloudActiveRun({}), undefined)
+})
+
+test('automatic sequence progress does not stop at the first imported cycle', () => {
+  const job = {...jobAt('finalizing'), sequence:{automatic:true,phase:'running'}}
+  assert.equal(cloudJobProgress(job).steps[5].state,'current')
+  job.sequence.phase='cleaning'
+  assert.equal(cloudJobProgress(job).steps[7].state,'current')
+  assert.equal(cloudJobDone(job),false)
 })
 
 test('indicator stays orange through startup, analysis, import, cleanup and final DB refresh', () => {

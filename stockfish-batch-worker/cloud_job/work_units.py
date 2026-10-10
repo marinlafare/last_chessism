@@ -3,15 +3,15 @@ from copy import deepcopy
 
 from . import batch_spot
 
-MAX_JOB_FENS = 500_000
+MAX_FENS_PER_VM = 1_000_000
 UNIT_FENS = 50_000
 
 
 def ranges(count, n_vms):
-    if type(count) is not int or not 1 <= count <= MAX_JOB_FENS:
-        raise ValueError('Batch work-unit request requires 1–500,000 FENs')
     if type(n_vms) is not int or not 1 <= n_vms <= batch_spot.MAX_VMS:
         raise ValueError('Invalid VM count')
+    if type(count) is not int or not 1 <= count <= MAX_FENS_PER_VM * n_vms:
+        raise ValueError('Batch work-unit request exceeds 1,000,000 FENs per VM')
     n_vms = min(count, n_vms)
     size, extra = divmod(count, n_vms)
     result = []
@@ -26,7 +26,8 @@ def ranges(count, n_vms):
 
 def spec_for(units, image):
     from stockfish_batch.config import Config
-    if not units or len(units) > 10 or any(not 1 <= u['count'] <= UNIT_FENS for u in units):
+    if (not units or len(units) > MAX_FENS_PER_VM // UNIT_FENS
+            or any(type(u['count']) is not int or not 1 <= u['count'] <= UNIT_FENS for u in units)):
         raise ValueError('Invalid bounded VM work units')
     if len({u['run_id'] for u in units}) != len(units):
         raise ValueError('Repeated work unit')

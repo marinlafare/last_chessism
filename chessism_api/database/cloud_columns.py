@@ -130,7 +130,7 @@ schema('task', **fields('index start count recovery_session', int), **fields('ru
        config=SCHEMAS['config'], contract=SCHEMAS['contract'], spec=SCHEMAS['spec'],
        recovery_summary=SCHEMAS['recovery'], batch_status=SCHEMAS['batch_status'])
 schema('vm_status', **fields('index positions preemptions application_failures', int), state=str)
-schema('work_unit', index=int, vm_index=int, count=int, run_id=str,
+schema('work_unit', index=int, vm_index=int, count=int, run_id=str, uploaded=bool,
        config=SCHEMAS['config'], contract=SCHEMAS['contract'],
        manifest_sha256=str, verified=bool, refreshed=bool, performance=SCHEMAS['performance'])
 schema('launch', **fields('backend benchmark_id image image_id profile run_job run_operation run_uid uid recovery_execution'),

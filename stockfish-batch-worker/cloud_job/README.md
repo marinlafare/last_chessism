@@ -15,13 +15,14 @@ New Batch requests accept `n_vms` (1–10, default 1). Each VM is the tested
 `n2d-highcpu-16`: 16 vCPUs and 16 GiB RAM. A 12-GiB worker/container budget
 leaves 4 GiB for the OS/agents. Each runs 16 persistent **single-threaded**
 Stockfish engines, 100,000 nodes/FEN, 256-MiB hash, and background uploads of
-up to 500 results. The 500,000-FEN limit is for each **normal loop**, not per VM;
-each VM processes sequential work units of at most 50,000 FENs.
+up to 500 results. Each new automatic cycle assigns at most **1,000,000 FENs
+per VM**; each VM processes up to twenty sequential work units of at most
+50,000 FENs, without releasing the VM between units.
 The 300-second no-completed-FEN watchdog is independent on each VM.
 
 The controller evenly partitions the reserved FEN list without duplicates,
 uploads one shared digest-pinned image and separate shard inputs, then starts
-one Batch job and one existing recovery-workflow execution per VM. The number
+one Batch job per VM, supervised within one cloud-sequence execution. The number
 of VMs is only reduced if there are fewer FENs than requested VMs. There is a
 shared work queue across the 16 engines **inside** each VM; cross-VM partitions
 are static and do not promise identical finish times or cross-VM work stealing.
@@ -65,51 +66,113 @@ Keep machine-family/VM-count cost benchmarks separate from this recovery test.
 
 ## Lifecycle
 
-### Sequential loops over one frozen FEN set
+### Automatic cloud tasks over one frozen FEN set
 
-Batch Spot's **Times** control accepts 1–20 sequential loops (default 1).
-For position selections, **FENs per loop = 500,000, Times = 4** requests up to
-2,000,000 distinct FENs. For a game preview, Times divides the preview's existing
-FEN set; it does not multiply the games or repeat their analysis. Each resulting
-loop must fit the 500,000-FEN bound. Cloud Run is unchanged.
+Enter **Total FEN positions**, not Times. Batch still accepts at most 10,000,000
+FENs overall. Each cycle holds at most `n_vms × 1,000,000` FENs. For example,
+2,000,000 uses one cycle with two VMs (1,000,000 each), or two cycles with one VM.
+1,963,096 with two VMs uses one cycle of 981,548 FENs per VM. Larger selections
+advance to further cycles automatically. Game previews are divided, never
+multiplied. Cloud Run retains its 200,000-FEN bound. Saved cycle records and
+legacy explicit 500k loops keep their original partitioning on recovery.
 
-The controller reserves the entire selection in local PostgreSQL before the
-first loop publishes anything. Selection is incremental in at most 50k-FEN
-transactions; a restart resumes those reservations. Once frozen, later loops
-never select replacements. If fewer eligible FENs are available, only that
-smaller set is processed, and empty loops are skipped. Local analysis skips all
-reserved positions, including future loops.
+The local controller freezes and reserves the entire selection in bounded 50k
+transactions, publishes one shared image, and uploads **all** inputs before
+launch. It uploads small immutable, checksum-bound cycle definitions and a plan.
+VM specifications are sealed in separate `task-{cycle}-{vm}.json` files so each
+Workflows branch loads only its own bounded definition, not the entire fleet.
+Previously saved inline definitions remain readable. Deploy the updated workflow
+source together with API/controller code; no new IAM permissions, engine image
+build or database migration is needed for this sizing change.
+One Google Workflows execution owns the sequence. It runs each cycle's VM fleet,
+verifies its small completion proofs, then advances without waiting for local
+imports. There is a 60-second interval between cycles for Batch's asynchronous
+compute teardown; quota/capacity scheduling remains Google's responsibility.
 
-Each loop follows the normal lifecycle below: preflight/quota checks, image
-publication, upload, execution, incremental import, verification, cloud cleanup,
-and database-summary refresh. The next loop cannot start until all these steps
-succeed. Future inputs remain local. Each loop retains its own reports and
-recovery state; a failure pauses progression rather than skipping the loop.
-The UI shows total and current-loop progress and **Stop after current loop**.
-Stopping completes any started loop and releases only unused local reservations.
-A failed or paused current loop still needs recovery before the stop can finish.
+Keep the PC on until the UI explicitly says **Safe to turn off your PC**. This
+requires a validated durable owner/state acknowledgement from Google, not just
+a successful submit HTTP response. Once acknowledged, Google advances later
+tasks and runs preemption recovery while the PC is offline. Batch tears down
+compute as tasks finish. Inputs, results and the image remain stored (billable)
+until Docker returns, catches up, verifies every receipt and performs one shared
+cleanup. Normal online imports continue while subsequent cloud tasks run.
 
-The local controller must be online to transition between loops. Google's
-recovery workflow can finish the current loop while the PC is off, but does not
-start the next one. Quota applies to one loop's VM fleet, not all loops at once.
-There is no fixed monetary cap; every started loop incurs its normal charges.
+**Stop after current task** must reach Google before the next task starts; the
+UI distinguishes requested from acknowledged. **Cancel** cancels active Batch
+tasks too. Failed/stopped sequences retain claims and checkpoints for explicit
+retry; successful tasks are not recomputed. Confirmed preemptions still do not
+consume the two-application-attempt allowance. Unexpected workflow failure pauses
+local orchestration rather than blindly starting another sequence.
 
-The `batch_sequence_v1` format uses two small native tables, `cloud_batch_sequence`
-(one row per request) and `cloud_batch_cycle` (one per loop). FEN input packs and
-claims reuse the bounded existing tables. No new JSON columns or Google IAM
-grants are needed. With no unfinished cloud requests, stop the API and controller,
-then run with the normal database environment:
+`batch_sequence_v2` reuses `cloud_batch_sequence` / `cloud_batch_cycle` and adds
+one small native-column `cloud_sequence_control` row per request plus an upload
+flag per work unit. No new JSON columns, permanent VM, Scheduler, or IAM grant
+is needed. Existing `batch_sequence_v1` jobs retain their original host-driven
+behavior; already-started jobs are never converted.
+
+Activation, with no unfinished cloud requests: deploy `recovery.yaml` to the
+existing workflow/service account with labels `recovery_schema=1,sequence_schema=2`;
+stop API/controller; run the additive, repeatable migration with the normal DB
+environment; then start the updated API/controller together:
 
 ```bash
-PYTHONPATH=stockfish-batch-worker python -m chessism_api.operations.cloud_analysis.migrate_sequences
+PYTHONPATH=stockfish-batch-worker python -m chessism_api.operations.cloud_analysis.migrate_auto_sequences
 ```
 
-This additive, repeatable migration refuses active requests and makes no Google
-calls. Restart the updated API/controller together. Local verification lives in
-`tests/test_cloud_sequences.py`, `tests/test_cloud_sequences_database.py` and the
-mocked UI browser test. These tests do not establish live multi-loop performance.
+Tests: `test_cloud_auto_sequences.py`, `test_cloud_auto_sequences_database.py`,
+legacy sequence regressions and the mocked browser fixture. Database tests must
+explicitly use the disposable `chessism_cloud_test` database. Mocked tests and a
+successful workflow deployment do not prove live offline cloud handoff. A small,
+separately authorized two-task offline run is the next validation gate before a
+multi-million-FEN request. Compute/storage/workflow charges continue while offline;
+there is no total-runtime or monetary cap.
 
-### Normal process (each loop)
+### Combined player-game drafts
+
+In the Batch Spot card, **Build combined player-game job** opens a shared draft.
+Start a draft, preview a player's games with the existing selection filters, and
+**Add selection**. Repeat for other players or date ranges. Entries can be edited
+(requiring a new individual preview) or removed. **Preview combined selection**
+counts the union of unique game IDs and unique missing, unreserved FEN keys; it
+does not add the individual preview counts. The union is counted in PostgreSQL,
+not by loading all FENs into API memory.
+
+Draft edits and previews are allowed while another cloud job runs; they never
+launch Google work or reserve FENs. Exact game references and filters persist in
+three new native-column tables (`cloud_game_draft`, `cloud_game_draft_entry`,
+`cloud_game_draft_game`), independent of the temporary Redis preview token after
+an entry is added. One open draft is shared by authorized superusers. Revision
+checks protect against edits from stale tabs. At most 100 selections are allowed
+per draft; the existing 10-million-FEN job limit is unchanged.
+
+Submitting requires a current combined preview, an online host controller, and
+no unfinished cloud job. The server rechecks eligible FEN counts; a lower count
+is accepted, but an increase requires a fresh preview. Submission is idempotent
+by draft ID and atomically records a normal `games` / `batch_sequence_v2` job and
+its source draft. That existing controller reserves and freezes the selection,
+uploads all inputs, and runs cycles of at most 1,000,000 FENs **per VM** (the final
+cycle can be smaller). Changing VM count updates the displayed cycle breakdown
+without deleting, reselecting or invalidating the saved draft. One FEN can
+benefit many games/players, with no duplicated
+engine work. Existing 50k work units, 500-result files, offline handoff, Google
+preemption recovery, incremental import and verified final cleanup are unchanged.
+
+Activation: run `python -m chessism_api.operations.cloud_analysis.migrate_game_drafts`
+with the normal database environment, then deploy the API and frontend. The
+migration creates only the three draft tables and is safe during an existing
+cloud run. No controller restart, worker image upload, Google deployment or IAM
+change is needed. Keep the PC on until **Safe to turn off your PC** appears for
+each newly submitted job, just as before.
+
+Tests: `test_cloud_game_drafts.py`, `test_cloud_game_drafts_database.py` (only the
+isolated `chessism_cloud_test` DB), `cloudGameDraft.test.mjs`, and the mocked
+`test-cloud-analysis-browser.mjs` fixture. None starts paid cloud work.
+
+### Import and cleanup lifecycle
+
+For automatic sequences, the following import/verification steps run per task,
+but shared cleanup and final global-summary refresh happen once for the whole
+request. They do not block Google from starting its next cycle.
 
 The Compose controller runs on your PC using your existing `gcloud` login:
 
@@ -152,7 +215,7 @@ The Compose controller runs on your PC using your existing `gcloud` login:
    immediately before deletion. Pending deletion is verified on subsequent ticks.
    API errors pause cleanup; no other cloud job starts while it is pending.
 9. Only after cloud cleanup does local game-summary refresh run. Completed run
-   details are compacted; global score/rating summaries refresh once per loop.
+   details are compacted; global score/rating summaries refresh once per request.
    The UI reports completion only after these local phases also finish. Ready
    phase transitions proceed immediately; the 15-second interval applies to
    waiting for external progress, not every step.
@@ -404,10 +467,11 @@ Only one controller may run per database (PostgreSQL session advisory lock).
 Do not manually upload images or submit jobs into its `ui-<run-id>` packages or
 prefixes while it operates. Those names are owned by the corresponding job.
 
-## Large Batch requests (up to 500,000 FENs)
+## Bounded work units within large Batch requests
 
-All new Batch requests use `batch_work_units_v1`: one user request,
-internally split into units of at most **50,000 FENs**, with **500-result files**.
+The `batch_work_units_v1` implementation underpins the automatic sequences above:
+each user request is internally split into units of at most **50,000 FENs**,
+with **500-result files**.
 A 500,000-FEN request with one VM produces ten sequential container runnables
 inside one Google Batch task, on the **same n2d-highcpu-16 Spot VM**. More VMs split
 the selection evenly first; each VM runs its own ordered list of bounded units.
@@ -421,8 +485,8 @@ recognizes a completed unit by its matching immutable input/engine contract,
 completion manifest and performance report; unfinished units resume their saved
 500-result files. Missing or conflicting completion metadata never permits
 silent success. Existing Google-owned 50001 recovery and the two application
-attempts per VM remain in force; no new workflow deployment or IAM grants are
-needed. Container transitions add some overhead and are measured by Batch time,
+attempts per VM remain in force. The million-FEN-per-VM change requires the updated
+workflow source but no additional IAM grants. Container transitions add some overhead and are measured by Batch time,
 not the sum of successful unit worker timings.
 
 The parent record contains only a small unit index/proofs, not 500,000 FENs or a
@@ -510,7 +574,7 @@ These do not replace the next user-launched, paid 500,000-FEN integration test.
 - For game jobs, use Preview to freeze latest/oldest/date-range/fair-range game
   selection. The server derives the FEN target from that saved preview's missing
   positions; there is no editable maximum-FEN field for game selections. Empty
-  or over-limit selections (500,000 for Batch; 200,000 for Cloud Run) are rejected,
+  or over-limit selections (10,000,000 for automatic Batch sequences; 200,000 for Cloud Run) are rejected,
   never silently truncated. Select
   fewer games and preview again if the existing safety limit is exceeded.
 - Closing the browser has no effect on the host controller. Stopping the controller

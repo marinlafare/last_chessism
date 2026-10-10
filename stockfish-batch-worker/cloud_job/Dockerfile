@@ -24,6 +24,7 @@ COPY stockfish-batch-worker/stockfish_core /app/stockfish-batch-worker/stockfish
 COPY stockfish-batch-worker/cloud_job /app/stockfish-batch-worker/cloud_job
 COPY stockfish-batch-worker/cleaning_job /app/stockfish-batch-worker/cleaning_job
 COPY stockfish-batch-worker/batch /app/stockfish-batch-worker/batch
+COPY stockfish-batch-worker/cloud_billing /app/stockfish-batch-worker/cloud_billing
 
 # The launcher drops to the mounted config owner's UID before reading credentials
 # or running the controller. SETUID/SETGID are needed for bootstrap; Compose's

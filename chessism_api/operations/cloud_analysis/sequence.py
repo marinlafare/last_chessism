@@ -32,7 +32,14 @@ async def initialize(job, sequence):
     async with AsyncDBSession() as session, session.begin():
         if await session.scalar(select(CloudBatchCycle.run_id).where(CloudBatchCycle.job_id == job.id).limit(1)):
             return
-        for index, count in enumerate(cycle_sizes(sequence.requested_count, sequence.repeat_count)):
+        from cloud_job.sequencing import MODE as AUTO_MODE, cycle_sizes as auto_sizes
+        sizes = (auto_sizes(sequence.requested_count, job.selection['n_vms']) if job.selection.get('execution_mode') == AUTO_MODE
+                 else cycle_sizes(sequence.requested_count, sequence.repeat_count))
+        # Saved cycle records are never repartitioned on a restart. For an
+        # uninitialized request, keep the progress denominator in sync as well.
+        sequence.repeat_count = len(sizes)
+        session.add(sequence)
+        for index, count in enumerate(sizes):
             run = CloudAnalysisRun(id=uuid4().hex, job_id=job.id, status='pending',
                                    positions=[], receipts={}, launch={})
             session.add(run)
@@ -101,7 +108,8 @@ async def stop_unstarted(job_id):
     """Only untouched local loops: release claims without any cloud deletion."""
     async with AsyncDBSession() as session, session.begin():
         sequence = await session.get(CloudBatchSequence, job_id, with_for_update=True)
-        if not sequence.stop_requested:
+        job = await session.get(CloudAnalysisJob, job_id)
+        if not sequence.stop_requested and not job.selection.get('cancel_requested'):
             raise ValueError('Stopping loops requires explicit user intent')
         roots = (await session.scalars(select(CloudAnalysisRun).join(
             CloudBatchCycle, CloudBatchCycle.run_id == CloudAnalysisRun.id)

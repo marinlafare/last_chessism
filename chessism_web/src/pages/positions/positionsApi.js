@@ -24,3 +24,10 @@ export const retryCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIC
 export const cancelCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/cancel`, {})
 export const reviseCloudVms = (id, n_vms) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/vms`, { n_vms })
 export const stopCloudRepeating = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/stop-repeating`, {})
+const draftPath = (id) => `/analysis/cloud/drafts/${encodeURIComponent(id)}`
+export const fetchCloudDraft = () => getJson('/analysis/cloud/drafts/current')
+export const createCloudDraft = () => postJson('/analysis/cloud/drafts', {})
+export const saveCloudDraftEntry = (id, payload) => postJson(`${draftPath(id)}/entries`, payload)
+export const removeCloudDraftEntry = (id, entry, revision) => postJson(`${draftPath(id)}/entries/${encodeURIComponent(entry)}/remove`, { revision })
+export const previewCloudDraft = (id, revision) => postJson(`${draftPath(id)}/preview`, { revision })
+export const submitCloudDraft = (id, payload) => postJson(`${draftPath(id)}/submit`, payload)

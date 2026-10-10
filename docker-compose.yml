@@ -137,6 +137,45 @@ services:
         max-size: "2m"
         max-file: "2"
 
+  # On-demand billing export reads; deliberately separate from active job control.
+  cloud-billing:
+    build:
+      context: .
+      dockerfile: stockfish-batch-worker/cloud_job/Dockerfile
+    image: chessism-cloud-billing:latest
+    entrypoint: ["python", "-m", "cloud_billing.serve"]
+    platform: linux/amd64
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID, KILL]
+    security_opt: [no-new-privileges:true]
+    cpus: "0.25"
+    mem_limit: 384m
+    pids_limit: 64
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m,mode=1777
+    volumes:
+      - type: bind
+        source: ${CLOUD_GCLOUD_CONFIG_DIR:-${HOME}/.config/gcloud}
+        target: /host-gcloud
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - chessism_net
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"
+
   stockfish-service:
     build:
       context: .

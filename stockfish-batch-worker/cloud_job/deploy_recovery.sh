@@ -53,4 +53,4 @@ done
 "$CHESSISM_GCLOUD" workflows deploy chessism-batch-recovery \
   --project=chessism-production --location=us-central1 \
   --source="$CHESSISM_RECOVERY_DIR/recovery.yaml" --service-account="$CHESSISM_RECOVERY_SA" \
-  --labels=app=chessism,recovery_schema=1 --quiet --format='yaml(name,state,revisionId)'
+  --labels=app=chessism,recovery_schema=1,sequence_schema=2 --quiet --format='yaml(name,state,revisionId)'

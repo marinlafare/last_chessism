@@ -4,7 +4,7 @@ from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger,
     DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
-    SmallInteger, text, ForeignKeyConstraint, Text, Numeric
+    SmallInteger, text, ForeignKeyConstraint, Text, Numeric, Date
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
@@ -56,6 +56,46 @@ class CloudAnalysisRun(Base):
     completion_manifest_sha256 = Column(String(64))
 
 
+class CloudGameDraft(Base):
+    """A shared, durable selection builder; never authorizes work until submitted."""
+    __tablename__ = 'cloud_game_draft'
+    id = Column(String(32), primary_key=True)
+    revision = Column(Integer, nullable=False, default=1)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    submitted_job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), unique=True)
+    preview_revision = Column(Integer)
+    preview_fens = Column(Integer)
+    preview_missing_fens = Column(Integer)
+    preview_claimed_fens = Column(Integer)
+    preview_games = Column(Integer)
+    previewed_at = Column(DateTime(timezone=True))
+
+
+class CloudGameDraftEntry(Base):
+    __tablename__ = 'cloud_game_draft_entry'
+    id = Column(String(32), primary_key=True)
+    draft_id = Column(String(32), ForeignKey('cloud_game_draft.id', ondelete='CASCADE'), nullable=False, index=True)
+    ordinal = Column(Integer, nullable=False)
+    player_name = Column(String(200), nullable=False)
+    selection_mode = Column(String(24), nullable=False)
+    selection_order = Column(String(24), nullable=False)
+    requested_games = Column(Integer)
+    date_from = Column(Date)
+    date_to = Column(Date)
+    selected_games = Column(Integer, nullable=False)
+    preview_fens = Column(Integer, nullable=False)
+    __table_args__ = (UniqueConstraint('draft_id', 'ordinal'),)
+
+
+class CloudGameDraftGame(Base):
+    """Exact game identities, not copies of their positions or engine results."""
+    __tablename__ = 'cloud_game_draft_game'
+    entry_id = Column(String(32), ForeignKey('cloud_game_draft_entry.id', ondelete='CASCADE'), primary_key=True)
+    game_link = Column(BigInteger, primary_key=True)
+    ordinal = Column(Integer, nullable=False)
+
+
 install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun))
 
 
@@ -86,6 +126,25 @@ class CloudBatchCycle(Base):
     cycle_index = Column(Integer, primary_key=True)
     run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), nullable=False, unique=True)
     target_count = Column(Integer, nullable=False)
+
+
+class CloudSequenceControl(Base):
+    """Small native-column checkpoint for cloud-owned sequencing; no FEN payloads."""
+    __tablename__ = 'cloud_sequence_control'
+    job_id = Column(String(32), ForeignKey('cloud_batch_sequence.job_id'), primary_key=True)
+    phase = Column(String(32), nullable=False, default='preparing')
+    control_run_id = Column(String(32), nullable=False)
+    session = Column(Integer, nullable=False, default=1)
+    image_id = Column(String(80))
+    image = Column(Text)
+    plan_sha256 = Column(String(64))
+    execution = Column(Text)
+    accepted_at = Column(DateTime(timezone=True))
+    remote_status = Column(String(32))
+    completed_cycles = Column(Integer, nullable=False, default=0)
+    import_cursor = Column(Integer, nullable=False, default=0)
+    failure_import_cursor = Column(Integer)
+    stop_acknowledged = Column(Boolean, nullable=False, default=False)
 
 
 class CloudPhaseTiming(Base):

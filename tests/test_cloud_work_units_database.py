@@ -281,8 +281,8 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await controller.save_job(self.job.id, status='complete')
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
-        for count, mode in ((10000, 'batch_work_units_v1'), (200000, 'batch_work_units_v1'),
-                            (200001, 'batch_work_units_v1'), (500000, 'batch_work_units_v1')):
+        for count, mode in ((10000, 'batch_sequence_v2'), (200000, 'batch_sequence_v2'),
+                            (200001, 'batch_sequence_v2'), (500000, 'batch_sequence_v2')):
             created = await create_cloud_job(CloudJobRequest(total_fens=count), AsyncMock())
             async with AsyncDBSession() as session:
                 job = await session.get(CloudAnalysisJob, created['id'])

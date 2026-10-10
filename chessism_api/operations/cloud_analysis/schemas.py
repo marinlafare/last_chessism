@@ -2,9 +2,21 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_CLOUD_FENS = 500_000
+MAX_BATCH_FENS_PER_VM = 1_000_000
 MAX_CLOUD_RUN_FENS = 200_000
-MAX_CLOUD_RUNS = MAX_CLOUD_FENS // 1000
 MAX_BATCH_REPEATS = 20
+MAX_BATCH_TOTAL_FENS = MAX_CLOUD_FENS * MAX_BATCH_REPEATS
+MAX_CLOUD_RUNS = MAX_BATCH_TOTAL_FENS // 1000
+
+
+def batch_cycle_count(total, n_vms):
+    """Automatic cycles only; legacy saved loops retain their original sizing."""
+    if type(total) is not int or not 1 <= total <= MAX_BATCH_TOTAL_FENS:
+        raise ValueError('Select 1–10,000,000 Batch FENs')
+    if type(n_vms) is not int or not 1 <= n_vms <= 10:
+        raise ValueError('Invalid VM count')
+    capacity = MAX_BATCH_FENS_PER_VM * n_vms
+    return (total + capacity - 1) // capacity
 
 
 class CloudVmCountRequest(BaseModel):
@@ -23,7 +35,7 @@ class CloudJobRequest(BaseModel):
     # Stored in the native sequence table, not the legacy selection document.
     repeat_count: int = Field(1, ge=1, le=MAX_BATCH_REPEATS, strict=True, exclude=True)
     player_name: str = Field("", max_length=200)
-    total_fens: int | None = Field(None, ge=1, le=MAX_CLOUD_FENS)
+    total_fens: int | None = Field(None, ge=1, le=MAX_BATCH_TOTAL_FENS)
     positions_per_run: int = Field(1000, ge=1, le=1000)
     runs: int = Field(1, ge=1, le=MAX_CLOUD_RUNS)
     plan_id: str | None = Field(None, pattern=r"^[a-f0-9]{32}$")
@@ -32,6 +44,8 @@ class CloudJobRequest(BaseModel):
     def validate_selection(self):
         if self.backend == 'cloud_run' and self.repeat_count != 1:
             raise ValueError('Sequential loops are available only for Batch Spot')
+        if self.repeat_count > 1 and self.mode != 'games' and self.target > MAX_CLOUD_FENS:
+            raise ValueError('Legacy repeated requests are limited to 500,000 FENs per loop; submit a total instead')
         self.player_name = self.player_name.strip()
         if self.mode == "all":
             self.player_name = ""

@@ -10,14 +10,18 @@ from sqlalchemy import case, func, literal_column, select
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudControllerHeartbeat,
     CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudBatchUnit,
-    CloudBatchSequence, CloudBatchCycle)
-from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, CloudVmCountRequest, MAX_CLOUD_FENS, MAX_CLOUD_RUN_FENS
+    CloudBatchSequence, CloudBatchCycle, CloudSequenceControl, CloudGameDraft, CloudGameDraftEntry)
+from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, CloudVmCountRequest, MAX_CLOUD_FENS, MAX_CLOUD_RUN_FENS, MAX_BATCH_TOTAL_FENS, batch_cycle_count
 from chessism_api.operations.cloud_analysis.admission import blocking_job, require_available
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.cloud_codec import read_projection
+from .cloud_game_drafts import router as game_drafts_router
+from .cloud_billing import router as billing_router
 
 router = APIRouter()
+router.include_router(game_drafts_router, prefix='/drafts')
+router.include_router(billing_router, prefix='/billing')
 
 
 async def controller_online(session):
@@ -47,6 +51,20 @@ async def cloud_jobs():
           .order_by(CloudBatchCycle.cycle_index, CloudAnalysisRun.created_at, CloudAnalysisRun.id))).all() if jobs else []
         sequences = {row.job_id: row for row in (await session.scalars(select(CloudBatchSequence)
                      .where(CloudBatchSequence.job_id.in_([job.id for job in jobs])))).all()} if jobs else {}
+        controls = {row.job_id: row for row in (await session.scalars(select(CloudSequenceControl)
+                    .where(CloudSequenceControl.job_id.in_([job.id for job in jobs])))).all()} if jobs else {}
+        combined = {}
+        if jobs:
+            sources = (await session.execute(select(CloudGameDraft.submitted_job_id,
+                CloudGameDraft.id, CloudGameDraftEntry.player_name)
+                .join(CloudGameDraftEntry, CloudGameDraftEntry.draft_id == CloudGameDraft.id)
+                .where(CloudGameDraft.submitted_job_id.in_([job.id for job in jobs]))
+                .order_by(CloudGameDraftEntry.ordinal))).all()
+            for job_id, draft_id, player in sources:
+                entry = combined.setdefault(job_id, {'draft_id': draft_id, 'players': [], 'selections': 0})
+                entry['selections'] += 1
+                if player not in entry['players']:
+                    entry['players'].append(player)
         finalized = set((await session.scalars(select(CloudPhaseTiming.run_id).where(
             CloudPhaseTiming.job_id.in_(sequences), CloudPhaseTiming.phase == 'global_summaries',
             CloudPhaseTiming.outcome == 'complete', CloudPhaseTiming.finished_at.is_not(None)))).all()) if sequences else set()
@@ -62,13 +80,23 @@ async def cloud_jobs():
             "id": job.id, "status": job.status, "selection": {
                 key: value for key, value in job.selection.items() if key != "game_links"
             }, "target": job.target, "imported": job.imported,
+            "combined_selection": combined.get(job.id),
             "created_at": job.created_at, "error": job.error,
             "sequence": ({'times': sequences[job.id].repeat_count,
                 'requested': sequences[job.id].requested_count,
                 'reserved': sequences[job.id].reserved_count,
                 'frozen': sequences[job.id].frozen_at is not None,
-                'stop_requested': sequences[job.id].stop_requested} if job.id in sequences else None),
+                'stop_requested': sequences[job.id].stop_requested,
+                'automatic': job.selection.get('execution_mode') == 'batch_sequence_v2',
+                'phase': controls[job.id].phase if job.id in controls else 'selecting',
+                'cloud_status': controls[job.id].remote_status if job.id in controls else None,
+                'cloud_completed': controls[job.id].completed_cycles if job.id in controls else 0,
+                'session': controls[job.id].session if job.id in controls else 1,
+                'stop_acknowledged': controls[job.id].stop_acknowledged if job.id in controls else False,
+                'safe_to_power_off': bool(job.id in controls and controls[job.id].accepted_at
+                    and controls[job.id].remote_status in {'RUNNING', 'SUCCEEDED'})} if job.id in sequences else None),
             "runs": [{"id": run.id, "status": ('refreshing' if run.job_id in sequences
+                      and job.selection.get('execution_mode') != 'batch_sequence_v2'
                       and run.status == 'complete' and run.positions and run.id not in finalized else run.status),
                       "cloud_state": run.cloud_state,
                       "positions": run.positions, "imported": run.imported,
@@ -87,6 +115,7 @@ async def cloud_jobs():
 async def create_cloud_job(data: CloudJobRequest, redis: ArqRedis = Depends(get_redis_pool)):
     selection = data.model_dump()
     repeats = data.repeat_count
+    automatic = data.backend == 'batch_spot' and repeats == 1
     selection["nodes"] = DEFAULT_ANALYSIS_NODES
     selection["stall_timeout_seconds"] = CLOUD_STALL_TIMEOUT_SECONDS
     selection["execution_mode"] = "cloud_run_v1" if data.backend == "cloud_run" else "batch_work_units_v1"
@@ -106,7 +135,7 @@ async def create_cloud_job(data: CloudJobRequest, redis: ArqRedis = Depends(get_
             raise HTTPException(409, "Game preview has no valid FEN count; preview again")
         if target == 0:
             raise HTTPException(409, "No missing FENs in this game selection")
-        maximum = MAX_CLOUD_RUN_FENS if data.backend == 'cloud_run' else MAX_CLOUD_FENS * repeats
+        maximum = MAX_CLOUD_RUN_FENS if data.backend == 'cloud_run' else MAX_BATCH_TOTAL_FENS if automatic else MAX_CLOUD_FENS * repeats
         if target > maximum:
             raise HTTPException(409, f"This selection needs {target:,} FENs, exceeding the "
                                 f"{maximum:,}-FEN cloud safety limit. Select fewer games "
@@ -116,6 +145,9 @@ async def create_cloud_job(data: CloudJobRequest, redis: ArqRedis = Depends(get_
     selection["total_fens"] = target
     if repeats > 1:
         selection['execution_mode'] = 'batch_sequence_v1'
+    elif automatic:
+        selection['execution_mode'] = 'batch_sequence_v2'
+        repeats = batch_cycle_count(target, data.n_vms)
     async with AsyncDBSession() as session:
         if not await controller_online(session):
             raise HTTPException(409, "Cloud controller is offline; start it with Docker Compose")
@@ -123,7 +155,7 @@ async def create_cloud_job(data: CloudJobRequest, redis: ArqRedis = Depends(get_
         job = CloudAnalysisJob(id=uuid4().hex, selection=selection, target=target,
                                imported=0, status="queued")
         session.add(job)
-        if repeats > 1:
+        if repeats > 1 or automatic:
             await session.flush()
             session.add(CloudBatchSequence(job_id=job.id, repeat_count=repeats, requested_count=target))
         await session.commit()
@@ -177,6 +209,8 @@ async def stop_repeating(job_id: str):
         if not sequence or not job or job.status not in {'queued', 'running', 'paused', 'waiting', 'failed'}:
             raise HTTPException(409, 'No active Batch sequence')
         sequence.stop_requested = True
+        if job.selection.get('execution_mode') == 'batch_sequence_v2' and job.status == 'paused':
+            job.status = 'queued'  # Forward the durable signal even after a local transfer error.
     return {'id': job_id, 'status': 'stop_after_current_loop'}
 
 
@@ -210,6 +244,14 @@ async def retry_cloud_job(job_id: str):
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
         if not job or job.status != "failed":
             raise HTTPException(409, "Only a failed cloud job can be retried")
+        if job.selection.get('execution_mode') == 'batch_sequence_v2':
+            from chessism_api.operations.cloud_analysis.auto_sequence_retry import retry
+            try:
+                await retry(session, job)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            await session.commit()
+            return {'id': job_id, 'status': 'queued'}
         run = (await session.scalars(select(CloudAnalysisRun).where(
             CloudAnalysisRun.job_id == job.id, CloudAnalysisRun.status == "failed"
         ).with_for_update())).one()
@@ -262,6 +304,11 @@ async def cancel_cloud_job(job_id: str):
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
         if not job or job.status not in {"running", "paused"}:
             raise HTTPException(409, "Only active supervised cloud jobs can be cancelled")
+        if job.selection.get('execution_mode') == 'batch_sequence_v2':
+            job.selection = {**job.selection, 'cancel_requested': True}
+            job.status = 'running'
+            await session.commit()
+            return {'id': job_id, 'status': 'cancellation_requested'}
         run = (await session.scalars(select(CloudAnalysisRun).where(
             CloudAnalysisRun.job_id == job.id, CloudAnalysisRun.status.in_(["running", "run_discover", "submitting"])
         ))).one_or_none()

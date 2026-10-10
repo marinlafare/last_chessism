@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Scored positions isolated UI test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import ScoredPositions from '/src/pages/ScoredPositions.jsx'
+import '/src/index.css'
+
+const count = Number(new URLSearchParams(location.search).get('count') || 0)
+const state = window.scoredTest = { errors: [], requests: [] }
+window.addEventListener('error', e => state.errors.push(e.message))
+window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
+window.fetch = async (input, options = {}) => {
+  const pathname = new URL(input, location.href).pathname.replace(/^\/api/, '')
+  const method = options.method || 'GET'
+  state.requests.push({ pathname, method })
+  if (method !== 'GET') throw new Error('No writes allowed in this test')
+  const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
+  if (pathname === '/fens/scored/overview') return reply({ scored_positions: 4000000, unscored_fens: 1000000 })
+  if (pathname === '/fens/scored/games/overview') return reply({ fully_analyzed_games: count, incomplete_games: 10 })
+  if (pathname === '/fens/scored/advantage_by_rating') {
+    await new Promise(resolve => setTimeout(resolve, 200))
+    return reply({ groups: [], ratings: Array.from({ length: count }, (_, i) => ({
+      link: i, x_index: i + 1, rating: 1000 + i % 2201, group: ['bad', 'medium', 'great'][i % 3],
+    })) })
+  }
+  if (pathname === '/fens/pending/repeated') return reply({ rows: [], page: 1, page_size: 5 })
+  if (pathname === '/analysis/backups') return reply({ backups: [] })
+  throw new Error(`Unexpected request ${pathname}; no production requests allowed`)
+}
+createRoot(document.getElementById('root')).render(React.createElement(ScoredPositions))
+</script></body></html>

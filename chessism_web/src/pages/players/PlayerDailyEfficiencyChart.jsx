@@ -1,6 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { fetchDailyEfficiency, fetchDailySalienceAccuracy } from './playerAnalysisApi'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
+import DailySalienceRange from './DailySalienceRange'
+import DailyYearBands from './DailyYearBands'
+import { buildYearScale, yearAtX } from './dailyYearNavigation'
+import { relativeDailySalience, filterDailySalience } from './dailySalience'
+import './daily-salience.css'
 
 const WIDTH = 1200
 const HEIGHT = 250
@@ -20,49 +25,21 @@ function seriesYears(points) {
   return [...new Set(years)].sort((left, right) => Number(left) - Number(right))
 }
 
-function efficiencyPoints(points, selectedYear, salienceReady) {
+function efficiencyPoints(points, salienceReady) {
   return (points || [])
-    .filter(([date]) => selectedYear === 'all' || String(date).startsWith(`${selectedYear}-`))
     .map(([date, weightedAccuracy, unweightedAccuracy, dailySalience, games]) => ({
       date,
       gameEfficiency: Number(weightedAccuracy),
       unweightedAccuracy: Number.isFinite(Number(unweightedAccuracy))
         ? Number(unweightedAccuracy)
         : Number(weightedAccuracy),
-      dailySalience: salienceReady && Number.isFinite(Number(dailySalience))
+      dailySalience: salienceReady && dailySalience !== null && dailySalience !== undefined
+        && Number.isFinite(Number(dailySalience))
         ? Math.max(0, Number(dailySalience))
         : null,
       games: Number.isFinite(Number(games)) ? Number(games) : null,
       timestamp: Date.parse(`${date}T00:00:00Z`),
     }))
-}
-
-function saliencePointPresentation(points) {
-  if (!points.length) return []
-  const positive = points
-    .map((point) => point.dailySalience)
-    .filter((value) => value !== null && value > 0)
-    .sort((left, right) => left - right)
-  if (!positive.length) {
-    return points.map((point) => ({ ...point, radius: 4, opacity: 1 }))
-  }
-  const capIndex = Math.max(0, Math.ceil(positive.length * 0.9) - 1)
-  const salienceCap = Math.max(positive[capIndex] || 1, Number.EPSILON)
-  const presented = points.map((point) => ({
-    ...point,
-    radius: 2.75 + 6.25 * Math.sqrt(Math.min(point.dailySalience / salienceCap, 1)),
-    opacity: 1,
-  }))
-  const renderOrder = []
-  for (let index = 0; index < presented.length; index += 5) {
-    const group = presented.slice(index, index + 5)
-      .sort((left, right) => right.dailySalience - left.dailySalience)
-    const denominator = Math.max(1, group.length - 1)
-    group.forEach((point, rank) => {
-      renderOrder.push({ ...point, opacity: 0.2 + 0.8 * (rank / denominator) })
-    })
-  }
-  return renderOrder
 }
 
 function axisDate(timestamp, span) {
@@ -113,30 +90,25 @@ function buildPlot(points) {
       y: PLOT_TOP + ((scale.maximum - value) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
     })
   }
-  if (!points.length) return { points: [], renderPoints: [], xTicks: [], yTicks }
+  if (!points.length) return { points: [], xTicks: [], yTicks, yearBands: [] }
 
-  const start = points[0].timestamp
-  const end = points.at(-1).timestamp
+  const { start, end, bands: yearBands } = buildYearScale(points, PLOT_LEFT, PLOT_RIGHT)
   const timeSpread = Math.max(1, end - start)
   const plotted = points.map((point) => ({
     ...point,
-    x: points.length === 1
-      ? (PLOT_LEFT + PLOT_RIGHT) / 2
-      : PLOT_LEFT + ((point.timestamp - start) / timeSpread) * (PLOT_RIGHT - PLOT_LEFT),
+    x: PLOT_LEFT + ((point.timestamp - start) / timeSpread) * (PLOT_RIGHT - PLOT_LEFT),
     y: PLOT_BOTTOM
       - ((point.gameEfficiency - scale.minimum) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
   }))
-  const xTicks = points.length === 1
-    ? [{ label: axisDate(start, 0), x: (PLOT_LEFT + PLOT_RIGHT) / 2 }]
-    : Array.from({ length: 7 }, (_, index) => {
-      const ratio = index / 6
-      const timestamp = start + ratio * timeSpread
-      return {
-        label: axisDate(timestamp, timeSpread),
-        x: PLOT_LEFT + ratio * (PLOT_RIGHT - PLOT_LEFT),
-      }
-    })
-  return { points: plotted, renderPoints: saliencePointPresentation(plotted), xTicks, yTicks }
+  const xTicks = Array.from({ length: 7 }, (_, index) => {
+    const ratio = index / 6
+    const timestamp = start + ratio * timeSpread
+    return {
+      label: axisDate(timestamp, timeSpread),
+      x: PLOT_LEFT + ratio * (PLOT_RIGHT - PLOT_LEFT),
+    }
+  })
+  return { points: plotted, xTicks, yTicks, yearBands }
 }
 
 function efficiencyBand(value) {
@@ -149,23 +121,61 @@ function efficiencyBand(value) {
 export default function PlayerDailyEfficiencyChart({ availableModes, playerName, onSelectPoint }) {
   const [activeModes, setActiveModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [selectedYear, setSelectedYear] = useState('all')
+  const [hoveredYear, setHoveredYear] = useState(null)
+  const [focusedYear, setFocusedYear] = useState(null)
+  const allYearsButton = useRef(null)
+  const yearHintId = useId()
   const [request, setRequest] = useState(emptyRequest)
   const [refreshToken, setRefreshToken] = useState(0)
+  const [salienceRange, setSalienceRange] = useState([0, 100])
   const selectedModes = useMemo(() => PLAYER_ANALYSIS_MODES.filter(
     (mode) => activeModes.has(mode)
   ), [activeModes])
   const modeQuery = selectedModes.join(',')
   const years = useMemo(() => seriesYears(request.data?.points), [request.data])
   const salienceReady = request.data?.salience?.status === 'ready'
-  const dailyPoints = useMemo(
-    () => efficiencyPoints(request.data?.points, selectedYear, salienceReady),
-    [request.data, salienceReady, selectedYear]
+  const salienceScale = useMemo(
+    () => relativeDailySalience(efficiencyPoints(request.data?.points, salienceReady)),
+    [request.data, salienceReady]
   )
+  const dailyPoints = useMemo(
+    () => salienceScale.points.filter((point) => selectedYear === 'all' || String(point.date).startsWith(`${selectedYear}-`)),
+    [salienceScale, selectedYear]
+  )
+  // Plot before hiding points: both axes and normalization stay fixed while dragging.
   const plot = useMemo(() => buildPlot(dailyPoints), [dailyPoints])
+  const visiblePoints = useMemo(() => filterDailySalience(plot.points, salienceRange, salienceScale.enabled),
+    [plot, salienceRange, salienceScale.enabled])
+  const highlightedBand = selectedYear === 'all'
+    ? plot.yearBands.find(band => band.year === (hoveredYear || focusedYear)) : null
+
+  const selectYear = year => {
+    setSelectedYear(year)
+    setHoveredYear(null)
+    setFocusedYear(null)
+    // The selected SVG button disappears on zoom; retain a useful keyboard focus.
+    allYearsButton.current?.focus({ preventScroll: true })
+  }
+  const hoverYear = event => {
+    if (selectedYear !== 'all' || event.pointerType === 'touch') return
+    const svg = event.currentTarget
+    const transform = svg.getScreenCTM()
+    if (!transform) return
+    const cursor = svg.createSVGPoint()
+    cursor.x = event.clientX
+    cursor.y = event.clientY
+    const point = cursor.matrixTransform(transform.inverse())
+    setHoveredYear(point.y >= PLOT_TOP && point.y <= AXIS_Y + 8
+      ? yearAtX(plot.yearBands, point.x) : null)
+  }
+
+  useEffect(() => { setSalienceRange([0, 100]) }, [playerName, modeQuery])
 
   useEffect(() => {
     setActiveModes(new Set(PLAYER_ANALYSIS_MODES))
     setSelectedYear('all')
+    setHoveredYear(null)
+    setFocusedYear(null)
     setRefreshToken(0)
   }, [playerName])
 
@@ -240,17 +250,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
       <div className="behavior-subchart-heading measure-chart-heading measure-daily-efficiency-heading">
         <div><strong>Accuracy</strong></div>
         <div className="measure-daily-years" aria-label="Accuracy year">
-          {['all', ...years].map((year) => (
-            <button
-              type="button"
-              className={selectedYear === year ? 'active' : ''}
-              aria-pressed={selectedYear === year}
-              onClick={() => setSelectedYear(year)}
-              key={year}
-            >
-              {year}
-            </button>
-          ))}
+          <button
+            ref={allYearsButton}
+            type="button"
+            className={selectedYear === 'all' ? 'active' : ''}
+            aria-pressed={selectedYear === 'all'}
+            aria-label="Show all years"
+            onClick={() => selectYear('all')}
+          >All</button>
         </div>
         <PlayerModeToggles
           activeModes={activeModes}
@@ -268,62 +275,80 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
         </p>
       ) : null}
       {!request.loading && !request.error ? (
-        <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="img" aria-label="Average game accuracy by local date">
-          {plot.yTicks.map((tick) => (
-            <g key={`daily-efficiency-y-${tick.value}`}>
-              <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={tick.y} y2={tick.y} />
-              <text className="graph-rating-label" x={PLOT_LEFT - 10} y={tick.y + 3} textAnchor="end">{tick.value}</text>
-            </g>
-          ))}
-          {plot.points.length ? (
-            <>
-              {plot.renderPoints.map((point) => (
-                <circle
-                  className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
-                  cx={point.x}
-                  cy={point.y}
-                  r={point.radius}
-                  opacity={point.opacity}
-                  role="button"
-                  tabIndex="0"
-                  aria-label={point.dailySalience === null
-                    ? `${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`
-                    : `${point.date}, ${point.gameEfficiency.toFixed(2)} salience-weighted accuracy, ${point.dailySalience.toFixed(2)} effective games. Explore games.`}
-                  onClick={() => onSelectPoint?.({
-                    scope: 'date',
-                    date: point.date,
-                    label: point.date,
-                    modes: selectedModes,
-                    minimum_game_moves_exclusive: 10,
-                  })}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault()
-                      onSelectPoint?.({
+        <div className="daily-salience-layout">
+          <div className="daily-salience-plot">
+            <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label={`Average game accuracy by local date — ${selectedYear === 'all' ? 'all years' : selectedYear}`} aria-describedby={yearHintId} onPointerMove={hoverYear} onPointerLeave={() => setHoveredYear(null)}>
+              {selectedYear === 'all' ? <DailyYearBands
+                bands={plot.yearBands}
+                activeYear={highlightedBand?.year}
+                top={PLOT_TOP}
+                bottom={AXIS_Y + 8}
+                onSelect={selectYear}
+                onFocusYear={setFocusedYear}
+              /> : null}
+              {plot.yTicks.map((tick) => (
+                <g key={`daily-efficiency-y-${tick.value}`} pointerEvents="none">
+                  <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={tick.y} y2={tick.y} />
+                  <text className="graph-rating-label" x={PLOT_LEFT - 10} y={tick.y + 3} textAnchor="end">{tick.value}</text>
+                </g>
+              ))}
+              {visiblePoints.length ? (
+                <>
+                  {visiblePoints.map((point) => (
+                    <circle
+                      className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
+                      cx={point.x}
+                      cy={point.y}
+                      r={4}
+                      opacity={1}
+                      data-date={point.date}
+                      role="button"
+                      tabIndex="0"
+                      aria-label={point.dailySalience === null
+                        ? `${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`
+                        : `${point.date}, ${point.gameEfficiency.toFixed(2)} salience-weighted accuracy, ${point.averageGameSalience === null ? 'average game salience unavailable' : `${point.averageGameSalience.toPrecision(4)} average game salience`}. Explore games.`}
+                      onClick={() => onSelectPoint?.({
                         scope: 'date',
                         date: point.date,
                         label: point.date,
                         modes: selectedModes,
                         minimum_game_moves_exclusive: 10,
-                      })
-                    }
-                  }}
-                  key={point.date}
-                >
-                  <title>{point.dailySalience === null
-                    ? `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy\nSalience rebuild pending`
-                    : `${point.date}\n${point.gameEfficiency.toFixed(2)} salience-weighted accuracy\n${point.unweightedAccuracy.toFixed(2)} unweighted accuracy\n${point.dailySalience.toFixed(2)} effective games\n${point.games} analyzed games`}</title>
-                </circle>
+                      })}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onSelectPoint?.({
+                            scope: 'date',
+                            date: point.date,
+                            label: point.date,
+                            modes: selectedModes,
+                            minimum_game_moves_exclusive: 10,
+                          })
+                        }
+                      }}
+                      key={point.date}
+                    >
+                      <title>{point.dailySalience === null
+                        ? `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy\nSalience rebuild pending`
+                        : `${point.date}\n${point.gameEfficiency.toFixed(2)} salience-weighted accuracy\n${point.unweightedAccuracy.toFixed(2)} unweighted accuracy\n${point.averageGameSalience === null ? 'Average game salience unavailable' : `${point.averageGameSalience.toPrecision(4)} average game salience`}${point.relativeSalience === null ? '' : `\n${point.relativeSalience.toFixed(1)} / 100 relative average game salience`}\n${point.dailySalience.toFixed(2)} total effective games\n${point.games} eligible analyzed games`}</title>
+                    </circle>
+                  ))}
+                </>
+              ) : (
+                <text className="graph-empty-label" pointerEvents="none" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(PLOT_TOP + PLOT_BOTTOM) / 2} textAnchor="middle">{plot.points.length ? 'No days in this salience range.' : 'No analyzed games in this selection.'}</text>
+              )}
+              {plot.xTicks.map((tick, index) => (
+                <text className="graph-axis-label measure-daily-x-tick" pointerEvents="none" x={tick.x} y={AXIS_Y} textAnchor={index === 0 ? 'start' : index === plot.xTicks.length - 1 ? 'end' : 'middle'} key={`daily-efficiency-x-${index}`}>{tick.label}</text>
               ))}
-            </>
-          ) : (
-            <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(PLOT_TOP + PLOT_BOTTOM) / 2} textAnchor="middle">No analyzed games in this selection.</text>
-          )}
-          {plot.xTicks.map((tick, index) => (
-            <text className="graph-axis-label measure-daily-x-tick" x={tick.x} y={AXIS_Y} textAnchor={index === 0 ? 'start' : index === plot.xTicks.length - 1 ? 'end' : 'middle'} key={`daily-efficiency-x-${index}`}>{tick.label}</text>
-          ))}
-          <text className="graph-axis-label measure-daily-axis-title" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={AXIS_TITLE_Y} textAnchor="middle">DATE</text>
-        </svg>
+              {highlightedBand ? <text className="daily-year-label" pointerEvents="none" x={(highlightedBand.left + highlightedBand.right) / 2} y={PLOT_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedBand.year}</text> : null}
+              <text className="graph-axis-label measure-daily-axis-title" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={AXIS_TITLE_Y} textAnchor="middle">DATE · {selectedYear === 'all' ? 'ALL YEARS' : selectedYear}</text>
+            </svg>
+            <p className="daily-year-hint" id={yearHintId}>{selectedYear === 'all' ? 'Hover over a year and click its background to zoom in. Click a dot to explore its games.' : `Showing ${selectedYear}. Choose All to restore the timeline. Click a dot to explore its games.`}</p>
+            <p className="daily-salience-count" role="status">Showing {visiblePoints.length.toLocaleString('en-US')} of {dailyPoints.length.toLocaleString('en-US')} days</p>
+            <p className="daily-salience-explanation">Daily average game salience: lower means more repeated positions; higher means more distinctive positions in this player’s recorded games. The filter hides whole days, not individual games.</p>
+          </div>
+          <DailySalienceRange range={salienceRange} scale={salienceScale} onChange={setSalienceRange} />
+        </div>
       ) : null}
     </section>
   )

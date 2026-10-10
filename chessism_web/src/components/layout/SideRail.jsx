@@ -1,6 +1,7 @@
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
+    { href: '/system_status', label: 'System Status', short: '●' },
     { href: '/scored_positions', label: 'Scored Positions', short: 'S' },
     { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
     { href: '/live_analysis', label: 'Live Analysis', short: 'L' },

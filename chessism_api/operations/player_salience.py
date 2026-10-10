@@ -482,94 +482,10 @@ async def get_player_daily_salience_accuracy(
     date_from: date | None = None,
     date_to: date | None = None,
     timezone_name: str | None = None,
+    salience_min: float | None = None,
+    salience_max: float | None = None,
 ) -> dict[str, Any]:
-    """Return chart-ready weighted accuracy and effective games per local day."""
-    player = str(player_name).strip().lower()
-    selected_modes = normalize_salience_modes(mode)
-    local_timestamp = player_local_timestamp_sql("gp")
-    async with AsyncDBSession() as session:
-        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
-        scope = await _analytics_scope(
-            session, player, "all", date_from, date_to, timezone_name
-        )
-        params = {**scope.params(), "selected_modes": list(selected_modes)}
-        result = await session.execute(text(f"""
-            SELECT
-                ({local_timestamp})::date AS date_game_init,
-                (
-                    SUM(engine.game_efficiency * salience.salience)
-                    / NULLIF(SUM(salience.salience), 0)
-                )::double precision AS weighted_accuracy,
-                AVG(engine.game_efficiency)::double precision AS unweighted_accuracy,
-                SUM(salience.salience)::double precision AS daily_salience,
-                COUNT(*)::integer AS games
-            FROM game_player_engine_summary engine
-            JOIN game_player_salience salience
-              ON salience.game_link = engine.game_link
-             AND salience.player_color = engine.player_color
-             AND salience.player_name = engine.player_name
-            JOIN game_player gp
-              ON gp.link = engine.game_link
-             AND gp.color = engine.player_color
-             AND gp.player_name = engine.player_name
-            WHERE engine.player_name = :player
-              AND EXISTS (
-                  SELECT 1 FROM player_salience_summary summary
-                  WHERE summary.player_name = :player AND summary.status = 'ready'
-              )
-              AND engine.analyzed_player_moves > {MINIMUM_ACCURACY_PLAYER_MOVES_EXCLUSIVE}
-              AND engine.game_efficiency IS NOT NULL
-              AND gp.mode = ANY(CAST(:selected_modes AS text[]))
-              AND (
-                  CAST(:date_from_utc AS timestamptz) IS NULL
-                  OR gp.played_at >= CAST(:date_from_utc AS timestamptz)
-              )
-              AND (
-                  CAST(:date_to_utc AS timestamptz) IS NULL
-                  OR gp.played_at < CAST(:date_to_utc AS timestamptz)
-              )
-            GROUP BY date_game_init
-            ORDER BY date_game_init
-        """), params)
-        rows = result.mappings().all()
-        summary = (await session.execute(text("""
-            SELECT status, source_game_count, effective_game_count
-            FROM player_salience_summary
-            WHERE player_name = :player
-        """), {"player": player})).mappings().first()
-
-    payload = scope.response_base()
-    payload["filters"]["mode"] = (
-        "all" if selected_modes == CHART_MODES else ",".join(selected_modes)
-    )
-    payload["filters"]["modes"] = list(selected_modes)
-    payload["filters"]["minimum_analyzed_player_moves_exclusive"] = (
-        MINIMUM_ACCURACY_PLAYER_MOVES_EXCLUSIVE
-    )
-    return {
-        **payload,
-        "salience": {
-            "status": str(summary["status"]) if summary else "missing",
-            "source_game_count": int(summary["source_game_count"] or 0) if summary else 0,
-            "effective_game_count": (
-                round(float(summary["effective_game_count"] or 0), 6) if summary else 0.0
-            ),
-        },
-        "columns": [
-            "date_game_init",
-            "weighted_accuracy",
-            "unweighted_accuracy",
-            "daily_salience",
-            "games",
-        ],
-        "points": [
-            [
-                row["date_game_init"].isoformat(),
-                round(float(row["weighted_accuracy"]), 2),
-                round(float(row["unweighted_accuracy"]), 2),
-                round(float(row["daily_salience"]), 6),
-                int(row["games"]),
-            ]
-            for row in rows
-        ],
-    }
+    """Filter individual games, then aggregate salience-weighted daily accuracy."""
+    from chessism_api.operations.player_salience_chart import daily_chart
+    return await daily_chart(player_name, normalize_salience_modes(mode),
+        date_from, date_to, timezone_name, salience_min, salience_max)

@@ -22,6 +22,7 @@ from chessism_api.operations.player_hero_analytics import (
     _analytics_scope,
 )
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
+from chessism_api.operations.player_salience_chart import SALIENCE_JOIN, ELIGIBLE, range_sql, validate_range
 
 
 LOCAL_PLAYED_AT_SQL = player_local_timestamp_sql("gp")
@@ -114,6 +115,7 @@ def _compact_game(row: Any, local_played_at: datetime | None) -> dict[str, Any]:
             round(float(row["game_efficiency"]), 2)
             if row["game_efficiency"] is not None else None
         ),
+        "salience": float(row['game_salience']) if row.get('game_salience') is not None else None,
         "analyzed_player_moves": int(row["analyzed_player_moves"] or 0),
         "cp_gain": round(gain, 2),
         "cp_loss": round(loss, 2),
@@ -147,19 +149,29 @@ async def explore_player_games(
     hour: int | None = None,
     analyzed_only: bool = True,
     minimum_game_moves_exclusive: int | None = None,
+    salience_min: float | None = None,
+    salience_max: float | None = None,
+    timezone_name: str | None = None,
     limit: int = 30,
     cursor: str | None = None,
 ) -> dict[str, Any]:
     """Return compact analyzed games belonging to one visual chart bin."""
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100.")
+    salience_filtered = validate_range(salience_min, salience_max)
     selected_modes = _normalize_modes(modes)
     selection_sql, selection_params, label = _selection_clause(
         scope_kind, target_date, weekday, hour
     )
     cursor_time, cursor_game_id = _decode_cursor(cursor)
     async with AsyncDBSession() as session:
-        scope = await _analytics_scope(session, player_name)
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        await session.execute(text("SET LOCAL statement_timeout='5s'"))
+        scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
+        if salience_filtered:
+            status = await session.scalar(text('SELECT status FROM player_salience_summary WHERE player_name=:player'), {'player':scope.player})
+            if status != 'ready':
+                raise ValueError('Game salience is not ready; refresh the chart before exploring games.')
         params = {
             **scope.timezone.sql_params(),
             **selection_params,
@@ -170,24 +182,30 @@ async def explore_player_games(
             "analyzed_only": analyzed_only,
             "minimum_game_moves_exclusive": minimum_game_moves_exclusive,
             "limit": limit + 1,
+            "salience_min": salience_min, "salience_max": salience_max,
         }
         minimum_moves_filter = (
             "AND gp.n_moves > :minimum_game_moves_exclusive"
-            if minimum_game_moves_exclusive is not None else ""
+            if minimum_game_moves_exclusive is not None and not salience_filtered else ""
         )
+        salience_join = SALIENCE_JOIN if salience_filtered else ''
+        salience_where = f'AND {ELIGIBLE} AND {range_sql("salience.salience")}' if salience_filtered else ''
+        accuracy_sql = ('SUM(engine.game_efficiency * salience.salience) / NULLIF(SUM(salience.salience), 0)'
+                        if salience_filtered else 'AVG(engine.game_efficiency)')
         base_where = f"""
             gp.player_name = :player
             AND gp.mode = ANY(CAST(:modes AS text[]))
             AND gp.played_at IS NOT NULL
             AND (NOT :analyzed_only OR engine.game_efficiency IS NOT NULL)
             {minimum_moves_filter}
+            {salience_where}
             AND {selection_sql}
         """
         summary_result = await session.execute(text(f"""
             SELECT
                 COUNT(*)::bigint AS games,
                 COUNT(engine.game_efficiency)::bigint AS analyzed_games,
-                AVG(engine.game_efficiency)::double precision AS accuracy,
+                ({accuracy_sql})::double precision AS accuracy,
                 COUNT(*) FILTER (WHERE gp.result = 1)::bigint AS wins,
                 COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
                 COUNT(*) FILTER (WHERE gp.result = 0)::bigint AS losses,
@@ -195,6 +213,7 @@ async def explore_player_games(
             FROM game_player gp
             LEFT JOIN game_player_engine_summary engine
               ON engine.game_link = gp.link AND engine.player_color = gp.color
+            {salience_join}
             WHERE {base_where}
         """), params)
         summary = summary_result.mappings().one()
@@ -206,6 +225,7 @@ async def explore_player_games(
                 engine.game_efficiency, engine.mean_win_percent_loss,
                 engine.median_win_percent_loss, engine.blunder_count,
                 engine.final_player_cp,
+                {'salience.salience' if salience_filtered else 'NULL::double precision'} AS game_salience,
                 CASE WHEN gp.result = 1 THEN 'win'
                      WHEN gp.result = 0.5 THEN 'draw' ELSE 'loss' END AS result,
                 engine.end_by,
@@ -213,6 +233,7 @@ async def explore_player_games(
             FROM game_player gp
             LEFT JOIN game_player_engine_summary engine
               ON engine.game_link = gp.link AND engine.player_color = gp.color
+            {salience_join}
             WHERE {base_where}
               AND (
                 CAST(:cursor_time AS timestamptz) IS NULL
@@ -244,8 +265,11 @@ async def explore_player_games(
             "modes": selected_modes,
             "analyzed_only": analyzed_only,
             "minimum_game_moves_exclusive": minimum_game_moves_exclusive,
+            "salience_min": salience_min, "salience_max": salience_max,
+            "minimum_analyzed_player_moves_exclusive": 10 if salience_filtered else None,
         },
         "summary": {
+            "accuracy_weighting": 'salience' if salience_filtered else 'unweighted',
             "games": int(summary["games"] or 0),
             "analyzed_games": int(summary["analyzed_games"] or 0),
             "accuracy": (
