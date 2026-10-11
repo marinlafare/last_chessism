@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import time
 from typing import Any
 
 from arq.connections import ArqRedis
@@ -43,7 +41,9 @@ from chessism_api.operations.ingestion_pipeline.fen_workers import (
 from chessism_api.operations.ingestion_pipeline.progress import (
     increment_stage_progress,
     reset_stage_progress,
+    write_job_progress,
 )
+from chessism_api.operations.redis_ownership import release_owned
 from chessism_api.operations.ingestion_pipeline.timing import (
     fail_running_ingestion_stages,
     finish_ingestion_run,
@@ -61,7 +61,6 @@ FEN_PIPELINE_BATCH_SIZE = 1_000
 FEN_PIPELINE_WORKERS = 3
 FEN_PIPELINE_LOCK_TTL_SECONDS = 24 * 60 * 60
 FEN_PIPELINE_RESERVATION_TTL_SECONDS = 60
-PROGRESS_TTL_SECONDS = 24 * 60 * 60
 ACTIVE_JOB_STATUSES = {
     JobStatus.queued,
     JobStatus.deferred,
@@ -84,27 +83,15 @@ async def _write_fen_pipeline_progress(
     failed: int = 0,
     ingestion_run_id: str | None = None,
 ) -> None:
-    await redis.set(
-        f"chessism:job_progress:{job_id}",
-        json.dumps({
-            "job_id": job_id,
-            "kind": FEN_PIPELINE_PROGRESS_KIND,
-            "ingestion_run_id": ingestion_run_id,
-            "total": max(0, int(total)),
-            "processed": max(0, int(processed)),
-            "failed": max(0, int(failed)),
-            "phase": phase,
-            "detail": detail,
-            "updated_at": time.time(),
-        }),
-        ex=PROGRESS_TTL_SECONDS,
+    await write_job_progress(
+        redis, job_id, kind=FEN_PIPELINE_PROGRESS_KIND,
+        ingestion_run_id=ingestion_run_id, total=total, processed=processed,
+        failed=failed, phase=phase, detail=detail,
     )
 
 
 async def _release_fen_pipeline_coordination(redis: ArqRedis, job_id: str) -> None:
-    owner = _decode_redis_text(await redis.get(FEN_PIPELINE_COORDINATION_KEY))
-    if owner == job_id:
-        await redis.delete(FEN_PIPELINE_COORDINATION_KEY)
+    await release_owned(redis, FEN_PIPELINE_COORDINATION_KEY, job_id)
 
 
 async def ensure_fen_pipeline_enqueued(
@@ -139,7 +126,7 @@ async def ensure_fen_pipeline_enqueued(
                 "job_id": current_job_id,
                 "pending_games": pending_games,
             }
-        await redis.delete(FEN_PIPELINE_COORDINATION_KEY)
+        await release_owned(redis, FEN_PIPELINE_COORDINATION_KEY, current_job_id)
 
     reserved = await redis.set(
         FEN_PIPELINE_COORDINATION_KEY,

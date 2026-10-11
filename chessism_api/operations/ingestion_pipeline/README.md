@@ -21,7 +21,8 @@ Supporting modules:
 
 - `months.py` selects full or update month ranges.
 - `stages.py` defines the UI/backend lifecycle vocabulary.
-- `progress.py` owns transient Redis counters.
+- `progress.py` owns transient Redis counters and lifecycle snapshots, with a
+  shared 24-hour expiry. Parallel counter updates remain atomic Lua operations.
 - `timing.py` owns durable run and stage timings.
 
 ## Ownership rules
@@ -57,6 +58,14 @@ Monthly Chess.com requests remain serialized with a delay. This is deliberate
 API politeness, not a missed parallelization opportunity.
 
 ## Safe changes
+
+Coordinator job-lock release uses an atomic owner check so a finishing worker
+cannot delete a replacement job's lease. Do not clear claims or Redis globally
+as a maintenance shortcut.
+
+FEN failures go to each worker's container logs (`docker compose logs fen-worker-1`),
+rotated at 5 MB with three files per worker. The historical `illegal_fen.txt`
+is no longer mounted or appended to and is preserved for manual review.
 
 When adding a stage, update `stages.py`, durable timing, Redis progress, and the
 positions-page stage mapping together. Keep every Python module below 1,000

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import re
@@ -18,6 +17,12 @@ from chessism_api.operations.backup_coordination import (
     ensure_backup_reservation,
     release_backup,
 )
+from chessism_api.operations.backup_files import (
+    read_json as _read_json,
+    atomic_write_json as _atomic_write_json,
+    sha256 as _sha256,
+)
+from chessism_api.operations.restore_workspace import workspace_lock, remove_workspace
 from chessism_api.operations.matrix_backups import validate_matrix_bundle
 from chessism_api.operations.matrix_constructor.artifact_files import file_operation
 from chessism_api.operations.matrix_constructor.definition_backups import validate_definition_backup
@@ -65,41 +70,6 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return default
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with temporary.open("w", encoding="utf-8") as output:
-            json.dump(payload, output, indent=2, sort_keys=True)
-            output.write("\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, path)
-        directory_fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
 def _default_restore_status() -> dict[str, Any]:
     return {
         "schema_version": 1,
@@ -125,17 +95,15 @@ def database_restore_test_status() -> dict[str, Any]:
 
 
 def cleanup_stale_restore_workspaces() -> list[str]:
-    """Remove interrupted restore workspaces without touching unrelated data."""
-    RESTORE_TEST_ROOT.mkdir(parents=True, exist_ok=True)
+    """Skip cleanup when another worker owns the shared restore volume."""
     removed: list[str] = []
-    for candidate in RESTORE_TEST_ROOT.iterdir():
-        if not candidate.name.startswith("rehearsal-"):
-            continue
-        if candidate.is_symlink() or not candidate.is_dir():
-            candidate.unlink(missing_ok=True)
-        else:
-            shutil.rmtree(candidate)
-        removed.append(candidate.name)
+    with workspace_lock(RESTORE_TEST_ROOT) as acquired:
+        if not acquired:
+            return removed
+        for candidate in RESTORE_TEST_ROOT.iterdir():
+            if candidate.name.startswith("rehearsal-"):
+                if remove_workspace(RESTORE_TEST_ROOT, candidate):
+                    removed.append(candidate.name)
     return sorted(removed)
 
 
@@ -502,6 +470,17 @@ async def _stop_restored_postgres(pgdata: Path) -> None:
 
 
 async def run_database_restore_test_job(
+    ctx: dict[str, Any], *, backup_id: str, **kwargs: Any,
+) -> dict[str, Any]:
+    # Kernel-held lock survives Redis lease changes and excludes startup cleanup
+    # in other containers sharing this volume. It is released on process exit.
+    with workspace_lock(RESTORE_TEST_ROOT) as acquired:
+        if not acquired:
+            raise RestoreTestUnavailableError("The restore workspace is already in use.")
+        return await _run_database_restore_test_job(ctx, backup_id=backup_id, **kwargs)
+
+
+async def _run_database_restore_test_job(
     ctx: dict[str, Any],
     *,
     backup_id: str,
@@ -509,6 +488,8 @@ async def run_database_restore_test_job(
 ) -> dict[str, Any]:
     """Restore one selected recovery point, validate it, and remove the copy."""
     job_id = str(ctx.get("job_id") or uuid.uuid4())
+    if not _SAFE_BACKUP_ID.fullmatch(job_id):
+        raise RestoreTestUnavailableError("Invalid restore job ID; refusing workspace access.")
     redis = ctx.get("redis")
     started_at = _iso_now()
     started_monotonic = time.monotonic()
@@ -519,6 +500,7 @@ async def run_database_restore_test_job(
     validation: dict[str, Any] | None = None
     backup: dict[str, Any] | None = None
     running_status: dict[str, Any] | None = None
+    workspace_owned = False
     await ensure_backup_reservation(redis, job_id)
 
     try:
@@ -560,8 +542,9 @@ async def run_database_restore_test_job(
             detail=running_status["detail"],
         )
 
-        if workspace.exists():
-            shutil.rmtree(workspace)
+        if not remove_workspace(RESTORE_TEST_ROOT, workspace):
+            raise RestoreTestUnavailableError("An existing restore workspace may still be running.")
+        workspace_owned = True
         pgdata.mkdir(parents=True, mode=0o700)
         socket_dir.mkdir(parents=True, mode=0o700)
 
@@ -683,6 +666,8 @@ async def run_database_restore_test_job(
             detail="Validation passed; removing the disposable restored database.",
         )
         await _stop_restored_postgres(pgdata)
+        if not remove_workspace(RESTORE_TEST_ROOT, workspace):
+            raise RestoreTestUnavailableError("Restored PostgreSQL did not stop; workspace retained.")
         elapsed_seconds = time.monotonic() - started_monotonic
         completed_at = _iso_now()
         detail = f"Restored and validated backup {backup_id}; temporary data was removed."
@@ -779,9 +764,10 @@ async def run_database_restore_test_job(
     finally:
         try:
             try:
-                await _stop_restored_postgres(pgdata)
+                if workspace_owned:
+                    await _stop_restored_postgres(pgdata)
             finally:
-                if workspace.exists():
-                    shutil.rmtree(workspace)
+                if workspace_owned and not remove_workspace(RESTORE_TEST_ROOT, workspace):
+                    raise RestoreTestUnavailableError("Restored PostgreSQL did not stop; workspace retained.")
         finally:
             await release_backup(redis, job_id)

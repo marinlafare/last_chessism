@@ -204,6 +204,26 @@ billing records and all storage/log buckets. Do not put it in the per-job loop.
 
 ## Offline tests
 
+### Local imported benchmark copies
+
+From the repository root, preview removal of downloaded batch files for a single
+completed benchmark:
+
+```bash
+PYTHONPATH=stockfish-batch-worker .venv-cloud/bin/python -m cleaning_job.local_artifacts --benchmark vm200-20261006d200
+```
+
+Add `--apply` to delete the listed batch copies. This requires saved successful
+import and cloud-cleanup evidence, verifies the manifest and every result
+checksum, and only targets manifest-listed `download/batches/NNNNNN.json` files.
+It retains inputs, manifests, contracts, receipts, performance summaries, and
+unlisted files. It never connects to Google or PostgreSQL. Keep compact database
+job history: it supplies performance estimates, audit evidence, and resource
+ownership for later log cleanup. Backups and player-selection drafts are not
+part of this deletion command.
+
+### Test commands
+
 From the worker root:
 
 ```bash

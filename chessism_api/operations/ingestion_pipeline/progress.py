@@ -39,6 +39,17 @@ def _progress_key(job_id: str) -> str:
     return f"chessism:job_progress:{job_id}"
 
 
+async def write_job_progress(redis: ArqRedis, job_id: str, *, kind: str,
+                             total: int, processed: int, failed: int = 0,
+                             **fields: Any) -> dict[str, Any]:
+    """Publish a lifecycle snapshot; parallel increments still use the Lua path."""
+    payload = {**fields, "job_id": job_id, "kind": kind,
+               "total": max(0, int(total)), "processed": max(0, int(processed)),
+               "failed": max(0, int(failed)), "updated_at": time.time()}
+    await redis.set(_progress_key(job_id), json.dumps(payload), ex=PROGRESS_TTL_SECONDS)
+    return payload
+
+
 async def reset_stage_progress(
     redis: ArqRedis,
     *,
@@ -60,23 +71,10 @@ async def reset_stage_progress(
         "failed": max(0, int(failed)),
     })
     await redis.expire(counter_key, PROGRESS_TTL_SECONDS)
-    payload = {
-        "job_id": job_id,
-        "kind": kind,
-        "ingestion_run_id": ingestion_run_id,
-        "total": max(0, int(total)),
-        "processed": max(0, int(processed)),
-        "failed": max(0, int(failed)),
-        "phase": phase,
-        "detail": detail,
-        "updated_at": time.time(),
-    }
-    await redis.set(
-        _progress_key(job_id),
-        json.dumps(payload),
-        ex=PROGRESS_TTL_SECONDS,
+    return await write_job_progress(
+        redis, job_id, kind=kind, ingestion_run_id=ingestion_run_id,
+        total=total, processed=processed, failed=failed, phase=phase, detail=detail,
     )
-    return payload
 
 
 async def increment_stage_progress(

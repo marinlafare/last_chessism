@@ -3,18 +3,11 @@
 from __future__ import annotations
 
 from arq.connections import ArqRedis
+from .redis_ownership import release_owned
 
 
 BACKUP_LOCK_KEY = "chessism:backup:active"
 BACKUP_LOCK_TTL_SECONDS = 7 * 24 * 60 * 60
-
-_RELEASE_LOCK_SCRIPT = """
-if redis.call('GET', KEYS[1]) == ARGV[1] then
-    return redis.call('DEL', KEYS[1])
-end
-return 0
-"""
-
 
 def redis_text(value: object) -> str | None:
     if value is None:
@@ -54,4 +47,4 @@ async def release_backup(redis: ArqRedis | None, job_id: str) -> None:
     """Release the backup lane only when it is still owned by this job."""
     if redis is None:
         return
-    await redis.eval(_RELEASE_LOCK_SCRIPT, 1, BACKUP_LOCK_KEY, job_id)
+    await release_owned(redis, BACKUP_LOCK_KEY, job_id)

@@ -2,13 +2,13 @@
 import asyncio
 import json
 
-from .importer import import_batch, validate_manifest
+from .importer import validate_manifest
 from stockfish_batch.config import Config
-from stockfish_batch.checkpoints import BatchCheckpoints
 from stockfish_batch.performance import validate_performance
 from stockfish_batch.storage import MAX_MANIFEST_BYTES
 from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
 from .ingestion import ingest_ready
+from .result_receipts import task_receipts, completion_manifest
 
 
 async def import_ready(storage, run, tasks, *, storage_factory=None):
@@ -22,10 +22,7 @@ async def collect(storage, run, launch):
     manifests = []
     for task in launch["tasks"]:
         cfg = Config(**task["config"]).validate()
-        prefix = f"tasks/{task['index']:06d}/"
-        receipts = {key[len(prefix):]: {**value, "records": [
-            {**record, "object": record["object"][len(prefix):]} for record in value["records"]]}
-            for key, value in run.receipts.items() if key.startswith(prefix)}
+        receipts = task_receipts(run.receipts, task['index'])
         raw = await asyncio.to_thread(storage.read, cfg.output + "/manifest.json", MAX_MANIFEST_BYTES)
         if raw is None:
             raise ValueError("Successful Batch VM has no completion manifest; cleanup withheld")
@@ -38,9 +35,7 @@ async def collect(storage, run, launch):
         reports.append(validate_performance(json.loads(raw_report), task["contract"], CPUS))
         manifests.append(manifest)
     launch = {**launch, "task_performance": reports, "task_manifests": manifests,
-              "manifest": {"status": "complete", "fingerprint": run.contract["fingerprint"],
-                           "position_count": len(run.positions),
-                           "records": [r for k in sorted(run.receipts) for r in run.receipts[k]["records"]]}}
+              "manifest": completion_manifest(run.contract, len(run.positions), run.receipts)}
     launch["performance"] = {
         "backend": "batch_spot", "position_count": len(run.positions), "vm_count": len(reports),
         "machine_type": MACHINE, "cpus_per_vm": CPUS, "memory_gib_per_vm": VM_MEMORY_MIB // 1024,
@@ -64,10 +59,7 @@ def validate_saved(run, launch):
     for index, (task, report, manifest) in enumerate(zip(tasks, reports, manifests)):
         if task["index"] != index or task["start"] != cursor or task["count"] <= 0:
             raise ValueError("Batch shard ranges changed")
-        prefix = f"tasks/{index:06d}/"
-        receipts = {k[len(prefix):]: {**v, "records": [
-            {**r, "object": r["object"][len(prefix):]} for r in v["records"]]}
-            for k, v in run.receipts.items() if k.startswith(prefix)}
+        receipts = task_receipts(run.receipts, index)
         validate_manifest(manifest, run.positions[cursor:cursor + task["count"]], task["contract"], receipts)
         validate_performance(report, task["contract"], CPUS)
         cursor += task["count"]

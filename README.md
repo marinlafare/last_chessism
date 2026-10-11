@@ -25,7 +25,20 @@ This project is not a single application, but a collection of services managed b
   2. **(Reduce)**: The `pipeline-worker` (boss) collects and aggregates millions of data points into a unique set of FENs and associations (Memory-bound).
   3. **(Write)**: The boss splits the aggregated data and enqueues 3 parallel insertion jobs, which the `fen-worker`s execute to write the data to the database (I/O-bound).
 * **CPU Analysis**: Enqueue analysis jobs to the analysis queue. The analysis worker handles the database logic and calls Stockfish for engine evaluation.
-* **Database Utilities**: Includes shell scripts for easy database backup (`backup.sh`) and restore (`restore_db_from_backup.sh`).
+* **Database Backups**: The application uses pgBackRest recovery points and isolated restore rehearsals. `backup.sh` and `restore_db_from_backup.sh` are legacy manual tools, not the normal backup pipeline.
+
+### Maintenance safeguards
+
+Do not delete pgBackRest backup-chain members or archived WAL manually. Restore
+rehearsals hold an exclusive lock on their shared volume; startup cleanup skips
+locked workspaces and preserves any directory with a PostgreSQL PID file for
+inspection. Backup and restore metadata share atomic, fsynced file writes.
+
+The destructive legacy restore requires an explicit dump and target confirmation:
+`./restore_db_from_backup.sh db_backup/NAME.dump --confirm-database DATABASE_NAME`.
+Stop all Compose services except `db` and `redis` first, and also stop any writers
+outside Compose. The script refuses to proceed while other Compose services run;
+it never silently selects the newest dump.
 
 ## API Endpoints (Core)
 

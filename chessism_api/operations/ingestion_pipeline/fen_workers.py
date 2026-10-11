@@ -3,8 +3,7 @@
 from __future__ import annotations
 
 import time
-from datetime import datetime, timezone
-from pathlib import Path
+import logging
 from typing import Any
 
 from chessism_api.database.db_interface import DBInterface
@@ -23,23 +22,14 @@ from chessism_api.operations.ingestion_pipeline.progress import increment_stage_
 
 
 INSERT_BATCH_SIZE = 5_000
-FAILURE_LOG_PATH = Path("/app/illegal_fen.txt")
+logger = logging.getLogger(__name__)
 
 
 def _write_failures(worker_id: str, failures: list[dict[str, Any]]) -> None:
-    if not failures:
-        return
-    try:
-        FAILURE_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
-        with FAILURE_LOG_PATH.open("a", encoding="utf-8") as output:
-            output.write(
-                f"\n--- FEN Job {worker_id} Run: "
-                f"{datetime.now(timezone.utc).isoformat()} ---\n"
-            )
-            output.writelines(f"{failure}\n" for failure in failures)
-            output.write("--- End of Job Run ---\n")
-    except OSError as error:
-        print(f"[FEN GEN {worker_id}] Could not write failures: {error}", flush=True)
+    # Docker keeps a bounded, independently rotated stream per worker. Do not
+    # append concurrently to a tracked repository file.
+    for failure in failures:
+        logger.error("[FEN GEN %s] %s", worker_id, failure)
 
 
 async def run_fen_generation_job(

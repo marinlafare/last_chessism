@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import time
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
@@ -27,6 +25,7 @@ from chessism_api.operations.ingestion_pipeline.months import (
     missing_archive_months,
     update_archive_months,
 )
+from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
 from chessism_api.operations.ingestion_pipeline.timing import (
     finish_ingestion_run,
     finish_ingestion_stage,
@@ -35,7 +34,6 @@ from chessism_api.operations.ingestion_pipeline.timing import (
 )
 
 
-PROGRESS_TTL_SECONDS = 24 * 60 * 60
 GAME_UPDATE_PROGRESS_KIND = "game_update"
 ProgressCallback = Callable[[str, int, int, str | None], Awaitable[None]]
 IngestionOperation = Callable[[dict[str, Any], ProgressCallback | None], Awaitable[str]]
@@ -57,24 +55,12 @@ async def _write_game_job_progress(
     redis = ctx.get("redis")
     if redis is None:
         return
-    payload = {
-        "job_id": job_id,
-        "kind": GAME_UPDATE_PROGRESS_KIND,
-        "ingestion_run_id": ingestion_run_id,
-        "player_name": player_name,
-        "total": int(total),
-        "processed": int(processed),
-        "failed": int(failed),
-        "phase": phase,
-        "detail": detail,
-        "result": result,
-        "updated_at": time.time(),
-    }
     try:
-        await redis.set(
-            f"chessism:job_progress:{job_id}",
-            json.dumps(payload),
-            ex=PROGRESS_TTL_SECONDS,
+        await write_job_progress(
+            redis, job_id, kind=GAME_UPDATE_PROGRESS_KIND,
+            ingestion_run_id=ingestion_run_id, player_name=player_name,
+            total=total, processed=processed, failed=failed,
+            phase=phase, detail=detail, result=result,
         )
     except Exception as error:
         print(f"Could not publish game-job progress: {error!r}", flush=True)

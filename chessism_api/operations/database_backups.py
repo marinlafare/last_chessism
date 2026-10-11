@@ -3,12 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import os
 import shutil
 import time
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -19,6 +17,11 @@ from chessism_api.operations.database_backup_progress import (
     write_database_backup_progress as _write_progress,
 )
 from chessism_api.operations.database_restore_tests import database_restore_test_status
+from chessism_api.operations.backup_files import (
+    read_json as _read_json,
+    atomic_write_json as _atomic_write_json,
+    sha256 as _sha256,
+)
 
 
 APP_ID = os.getenv("DATABASE_BACKUP_APP_ID", "chessism")
@@ -74,42 +77,6 @@ def utc_now() -> datetime:
 
 def _iso_now() -> str:
     return utc_now().isoformat()
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError):
-        return default
-    return payload
-
-
-def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.tmp")
-    try:
-        with temporary.open("w", encoding="utf-8") as output:
-            json.dump(payload, output, indent=2, sort_keys=True)
-            output.write("\n")
-            output.flush()
-            os.fsync(output.fileno())
-        os.replace(temporary, path)
-        directory_fd = os.open(path.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
-    except Exception:
-        temporary.unlink(missing_ok=True)
-        raise
-
-
-def _sha256(path: Path) -> str:
-    digest = hashlib.sha256()
-    with path.open("rb") as source:
-        for chunk in iter(lambda: source.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
 
 
 def _directory_size(path: Path) -> int:

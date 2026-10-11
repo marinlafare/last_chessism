@@ -1,5 +1,6 @@
 """Cloud Run backend. PostgreSQL is authoritative; no host needed during execution."""
 import asyncio
+from .result_receipts import task_receipts, completion_manifest
 from dataclasses import asdict
 import json
 
@@ -118,9 +119,7 @@ async def advance(controller, job, run):
             performance = []
             for task in launch["tasks"]:
                 cfg = api.task_config(config, task["index"], len(launch["tasks"]))
-                prefix = f"tasks/{task['index']:06d}/"
-                receipts = {k[len(prefix):]: {**v, "records": [{**r, "object": r["object"][len(prefix):]} for r in v["records"]]}
-                            for k, v in current.receipts.items() if k.startswith(prefix)}
+                receipts = task_receipts(current.receipts, task['index'])
                 raw = await asyncio.to_thread(storage.read, cfg.output + "/manifest.json", MAX_MANIFEST_BYTES)
                 if raw is None:
                     raise ValueError("Successful Cloud Run task has no manifest")
@@ -131,8 +130,7 @@ async def advance(controller, job, run):
                 performance.append(validate_performance(json.loads(report), task["contract"], 1))
             launch["task_performance"] = performance
             launch["execution_summary"] = execution
-            launch["manifest"] = {"status": "complete", "fingerprint": run.contract["fingerprint"],
-                                  "position_count": len(run.positions), "records": [r for k in sorted(current.receipts) for r in current.receipts[k]["records"]]}
+            launch["manifest"] = completion_manifest(run.contract, len(run.positions), current.receipts)
             validate_manifest(launch["manifest"], run.positions, run.contract, current.receipts)
             launch["performance"] = {"backend": "cloud_run", "position_count": len(run.positions),
                                      "task_count": len(performance), "parallelism": launch["spec"]["template"]["parallelism"],

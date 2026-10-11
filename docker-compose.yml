@@ -441,8 +441,11 @@ services:
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
-    volumes:
-      - ./illegal_fen.txt:/app/illegal_fen.txt
+    logging: &fen-worker-logging
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
     depends_on:
       - redis
       - db
@@ -458,8 +461,7 @@ services:
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
-    volumes:
-      - ./illegal_fen.txt:/app/illegal_fen.txt
+    logging: *fen-worker-logging
     depends_on:
       - redis
       - db
@@ -475,8 +477,7 @@ services:
       - QUEUE_NAME=fen_queue
     networks:
       - chessism_net
-    volumes:
-      - ./illegal_fen.txt:/app/illegal_fen.txt
+    logging: *fen-worker-logging
     depends_on:
       - redis
       - db
