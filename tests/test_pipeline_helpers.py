@@ -2088,7 +2088,7 @@ class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.temporary_directory.cleanup)
         self.backup_directory = Path(self.temporary_directory.name)
 
-    async def test_incremental_backup_updates_same_file_and_adds_only_changes(self):
+    async def test_incremental_backup_preserves_base_and_adds_only_changes(self):
         filename = "fen-analysis-20240704T120000_000001Z.jsonl.gz"
         backup_path = self.backup_directory / filename
         created_at = "2024-07-04T12:00:00+00:00"
@@ -2141,35 +2141,33 @@ class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
                 "continuations": [],
             },
         }
+        from chessism_api.operations.fen_backup import jobs, database, archive, catalog
         session_context = MagicMock()
-        session_context.__aenter__ = AsyncMock(return_value=MagicMock())
+        session = MagicMock()
+        session.execute = AsyncMock()
+        session.scalar = AsyncMock(return_value=datetime.fromisoformat('2024-07-05T12:00:00+00:00'))
+        session_context.__aenter__ = AsyncMock(return_value=session)
         session_context.__aexit__ = AsyncMock(return_value=False)
+        session.begin.return_value = session_context
+        async def batches(*_):
+            yield list(changed_records.values())
+        original_checksum = analysis_backups._sha256(backup_path)
 
         with (
-            patch.object(analysis_backups, "AsyncDBSession", return_value=session_context),
-            patch.object(
-                analysis_backups,
-                "_collect_analysis_records",
-                AsyncMock(return_value=changed_records),
-            ),
-            patch.object(analysis_backups, "record_application_usage"),
+            patch.object(jobs, 'AsyncDBSession', return_value=session_context),
+            patch.object(database, 'export_fence', AsyncMock(return_value=datetime.fromisoformat('2024-07-05T12:00:00+00:00'))),
+            patch.object(database, 'export_batches', batches),
         ):
-            result = await analysis_backups._update_fen_analysis_backup(
-                {},
-                backup_path,
-                metadata,
-                datetime.fromisoformat(created_at),
-                datetime.fromisoformat("2024-07-05T12:00:00+00:00"),
-            )
+            result = await jobs.create({}, self.backup_directory)
 
-        _, saved_records_iterator = analysis_backups._backup_records(backup_path)
-        saved_records = {
-            record["fen"]: record for record in saved_records_iterator
-        }
-        self.assertEqual(result["filename"], filename)
-        self.assertEqual(result["records"], 3)
-        self.assertEqual(result["added_records"], 1)
-        self.assertEqual(result["updated_records"], 1)
+        manifest = catalog.load(self.backup_directory, result['filename'])
+        saved_records = {}
+        for part in manifest['files']:
+            saved_records.update((record['fen'], record) for record in archive.records(self.backup_directory / part['file']))
+        self.assertNotEqual(result['filename'], filename)
+        self.assertEqual(analysis_backups._sha256(backup_path), original_checksum)
+        self.assertEqual(result['records'], 4)  # Includes both versions of the refreshed FEN.
+        self.assertEqual(result['exported_records'], 2)
         self.assertEqual(saved_records[original_records[0]["fen"]]["score"], 25.0)
         self.assertEqual(len(saved_records), 3)
         self.assertEqual(

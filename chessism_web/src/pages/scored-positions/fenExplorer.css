@@ -1,0 +1,17 @@
+@import '../players/player-game-explorer.css';
+.fen-explorer-popup { position:fixed; z-index:180; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 24px); overflow:auto; padding:12px; border:1px solid var(--muted); border-radius:8px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font-size:12px; }
+.fen-explorer-popup header,.fen-explorer-popup nav { display:flex; align-items:center; gap:8px; justify-content:space-between; }
+.fen-explorer-popup header strong { flex:1; }
+.fen-explorer-popup button { background:var(--surface-2); color:var(--text); border:1px solid var(--border-soft); border-radius:5px; padding:6px; cursor:pointer; font:inherit; }
+.fen-explorer-popup button:focus-visible { outline:2px solid var(--accent); }
+.fen-explorer-popup button:disabled { opacity:.45; cursor:default; }
+.fen-explorer-popup small { display:block; color:var(--muted); }
+.fen-example-list { display:flex; flex-direction:column; gap:4px; }
+.fen-example-list button { display:flex; justify-content:space-between; gap:8px; text-align:left; }
+.fen-explorer-detail { display:grid; grid-template-columns:160px minmax(0,1fr); gap:12px; }
+.fen-explorer-games { max-height:360px; overflow:auto; }
+.fen-explorer-games article { padding:5px 0 10px; border-bottom:1px solid var(--border-soft); }
+.fen-explorer-games article>button { text-align:left; }
+.fen-explorer-games article div { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
+.fen-explorer-loading { position:fixed; top:30%; left:40%; z-index:1300; background:var(--surface); color:var(--text); padding:20px; }
+@media(max-width:520px){.fen-explorer-detail{grid-template-columns:1fr}.fen-explorer-detail>div:first-child{width:160px;margin:auto}.fen-explorer-games{max-height:230px}.fen-explorer-popup nav{flex-wrap:wrap}}

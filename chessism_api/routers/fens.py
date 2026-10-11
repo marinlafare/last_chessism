@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
@@ -20,8 +20,21 @@ from chessism_api.database.ask_db import (
 )
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
+from chessism_api.operations.pending_repetitions import get_fen_appearances, get_pending_repetitions
+from chessism_api.operations.common_position_pages import get_common_position_page
 
 router = APIRouter()
+from chessism_api.routers.fen_explorer import router as explorer_router
+router.include_router(explorer_router, prefix='/explore')
+
+
+@router.get("/common_positions/page")
+async def api_common_position_page(cursor: str = Query(..., min_length=1, max_length=768),
+                                   retry: bool = False, redis: ArqRedis = Depends(get_redis_pool)):
+    try:
+        return await get_common_position_page(redis, cursor, retry)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
 class FenGenerationRequest(BaseModel):
@@ -146,6 +159,18 @@ async def api_get_most_repeated_pending_fens(
     })
 
 
+@router.get("/pending/repetition_histogram")
+async def api_get_pending_repetition_histogram(redis: ArqRedis = Depends(get_redis_pool)) -> JSONResponse:
+    """Read precomputed unscored-FEN counts and enqueue a stale cache refresh."""
+    return JSONResponse(content=await get_pending_repetitions(redis))
+
+
+@router.get("/appearance_histogram")
+async def api_get_fen_appearance_histogram(redis: ArqRedis = Depends(get_redis_pool)) -> JSONResponse:
+    """One compact cached snapshot for all-FEN and unscored-FEN charts."""
+    return JSONResponse(content=await get_fen_appearances(redis))
+
+
 @router.get("/scored")
 async def api_get_scored_positions_page(
     sort: str = Query("impact", pattern="^(frequency|impact|evaluation)$"),
@@ -171,6 +196,13 @@ async def api_get_scored_advantage_by_rating() -> JSONResponse:
     Returns advantage buckets for fully analyzed games split by avg_elo groups.
     """
     result = await get_scored_advantage_by_rating()
+    return JSONResponse(content=result)
+
+
+@router.get("/scored/rating_groups")
+async def api_get_scored_rating_groups() -> JSONResponse:
+    """Small rating-group overview, without the on-demand per-game chart."""
+    result = await get_scored_advantage_by_rating(include_ratings=False)
     return JSONResponse(content=result)
 
 

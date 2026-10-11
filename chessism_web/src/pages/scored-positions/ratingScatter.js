@@ -14,3 +14,10 @@ export function ratingScatterBounds(points) {
   return { minRating: points.length ? minRating : 0,
     maxRating: points.length ? maxRating : 0, maxIndex }
 }
+export const RATING_GROUP_OPTIONS = [
+  { key: 'bad', label: 'bad' },
+  { key: 'medium', label: 'medium' },
+  { key: 'great', label: 'great' },
+]
+
+export const RATING_GROUP_COLORS = { bad: '#f07167', medium: '#f4c057', great: '#3fd089' }

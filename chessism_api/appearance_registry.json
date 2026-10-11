@@ -1,0 +1,395 @@
+{
+  "version": 1,
+  "scope": "scored_positions",
+  "properties": {
+    "background": {
+      "label": "Background",
+      "kind": "color",
+      "css": "background-color"
+    },
+    "color": {
+      "label": "Text color",
+      "kind": "color",
+      "css": "color"
+    },
+    "borderColor": {
+      "label": "Border color",
+      "kind": "color",
+      "css": "border-color"
+    },
+    "borderWidth": {
+      "label": "Border width",
+      "kind": "number",
+      "min": 0,
+      "max": 8,
+      "unit": "px",
+      "css": "border-width"
+    },
+    "radius": {
+      "label": "Corner radius",
+      "kind": "number",
+      "min": 0,
+      "max": 40,
+      "unit": "px",
+      "css": "border-radius"
+    },
+    "padding": {
+      "label": "Padding",
+      "kind": "number",
+      "min": 0,
+      "max": 48,
+      "unit": "px",
+      "css": "padding"
+    },
+    "fontSize": {
+      "label": "Font size",
+      "kind": "number",
+      "min": 10,
+      "max": 40,
+      "unit": "px",
+      "css": "font-size"
+    },
+    "fontFamily": {
+      "label": "Font",
+      "kind": "choice",
+      "options": [
+        "Inter",
+        "IBM Plex Mono",
+        "system-ui"
+      ],
+      "css": "font-family"
+    },
+    "textAlign": {
+      "label": "Text alignment",
+      "kind": "choice",
+      "options": [
+        "left",
+        "center",
+        "right"
+      ],
+      "css": "text-align"
+    },
+    "fill": {
+      "label": "Slice color",
+      "kind": "color",
+      "css": "fill"
+    },
+    "stroke": {
+      "label": "Outline color",
+      "kind": "color",
+      "css": "--pie-outline-color",
+      "default": "#ffffff"
+    },
+    "strokeWidth": {
+      "label": "Outline width",
+      "kind": "number",
+      "min": 0,
+      "max": 6,
+      "unit": "px",
+      "css": "--pie-outline-width",
+      "default": 1.5
+    },
+    "hoverBackground": {
+      "label": "Hover background",
+      "kind": "color",
+      "css": "background-color",
+      "state": ":hover"
+    },
+    "hoverColor": {
+      "label": "Hover text",
+      "kind": "color",
+      "css": "color",
+      "state": ":hover"
+    }
+  },
+  "targets": {
+    "page": {
+      "label": "Page background",
+      "properties": [
+        "background",
+        "color",
+        "fontFamily"
+      ]
+    },
+    "metrics.panel": {
+      "label": "Metrics panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "appearances.panel": {
+      "label": "FEN appearance panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "appearance.tab": {
+      "label": "Appearance tabs",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "position.button": {
+      "label": "Position buttons",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "position.rank": {
+      "label": "Position rank badges",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "unique.outline": {
+      "label": "Unique circle outline",
+      "properties": [
+        "stroke",
+        "strokeWidth"
+      ]
+    },
+    "repeated.outline": {
+      "label": "2–10 circle outline",
+      "properties": [
+        "stroke",
+        "strokeWidth"
+      ]
+    },
+    "unique.slice": {
+      "label": "Unique slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "nonunique.slice": {
+      "label": "Non-unique slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "circle.caption": {
+      "label": "Circle captions",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "cuda.panel": {
+      "label": "Reserved CUDA panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "backup.panel": {
+      "label": "FEN backup panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "chart.disclosure": {
+      "label": "Rating groups disclosure",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "explorer.panel": {
+      "label": "Position explorer panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.scored_positions": {
+      "label": "Metric: scored positions",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.unscored_positions": {
+      "label": "Metric: unscored positions",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.games": {
+      "label": "Metric: games",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.unscored_games": {
+      "label": "Metric: unscored games",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "slice.2": {
+      "label": "2 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.3": {
+      "label": "3 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.4": {
+      "label": "4 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.5": {
+      "label": "5 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.6": {
+      "label": "6 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.7": {
+      "label": "7 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.8": {
+      "label": "8 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.9": {
+      "label": "9 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.10": {
+      "label": "10 appearances slice",
+      "properties": [
+        "fill"
+      ]
+    },
+    "metric.title": {
+      "label": "metric title",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "metric.value": {
+      "label": "metric value",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "position.label": {
+      "label": "position label",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "position.count": {
+      "label": "position count",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "panel.title": {
+      "label": "panel title",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    }
+  }
+}

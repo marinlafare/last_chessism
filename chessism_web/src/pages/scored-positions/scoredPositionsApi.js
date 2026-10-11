@@ -12,8 +12,20 @@ export const fetchAdvantageByRating = ({ signal } = {}) => (
   getJson('/fens/scored/advantage_by_rating', { signal })
 )
 
-export const fetchRepeatedPendingFens = (page, { signal } = {}) => (
-  getJson(`/fens/pending/repeated?page=${page}`, { signal })
+export const fetchRatingGroups = ({ signal } = {}) => (
+  getJson('/fens/scored/rating_groups', { signal })
+)
+
+export const fetchPendingRepetitions = ({ signal } = {}) => (
+  getJson('/fens/pending/repetition_histogram', { signal })
+)
+
+export const fetchFenAppearances = ({ signal } = {}) => (
+  getJson('/fens/appearance_histogram', { signal })
+)
+
+export const fetchCommonPositionPage = (cursor, { signal, retry = false } = {}) => (
+  getJson(`/fens/common_positions/page?${new URLSearchParams({ cursor, ...(retry ? { retry: 'true' } : {}) })}`, { signal })
 )
 
 export const fetchFenAnalysisBackups = ({ signal } = {}) => (

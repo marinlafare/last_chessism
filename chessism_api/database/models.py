@@ -10,6 +10,8 @@ from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
 
 Base = declarative_base()
+from .appearance_models import register as register_appearance
+AppearancePreset, AppearanceSetting, AppearanceOverride = register_appearance(Base)
 from .cloud_columns import register as register_cloud_columns
 from .cloud_codec import Document, Receipts, install as install_cloud_documents
 register_cloud_columns(Base.metadata)
@@ -658,6 +660,77 @@ class ScoredPositionSummary(Base):
     )
 
 
+class FenAppearanceSummary(Base):
+    """Snapshot metadata shared by all-FEN and unscored-FEN histograms."""
+    __tablename__ = "fen_appearance_summary"
+    id = Column(Integer, primary_key=True, default=1)
+    source_updated_at = Column(DateTime(timezone=True), nullable=True)
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    attempted_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(240), nullable=True)
+    __table_args__ = (CheckConstraint("id = 1", name="fen_appearance_singleton"),)
+
+
+class FenAppearanceBin(Base):
+    __tablename__ = "fen_appearance_bin"
+    appearances = Column(BigInteger, primary_key=True)
+    total_fens = Column(BigInteger, nullable=False)
+    unscored_fens = Column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint("appearances >= 0", name="fen_appearance_nonnegative"),
+        CheckConstraint("total_fens >= 0 AND unscored_fens >= 0 AND unscored_fens <= total_fens",
+                        name="fen_appearance_counts_valid"),
+    )
+
+
+class FenCommonnessSummary(Base):
+    __tablename__ = "fen_commonness_summary"
+    id = Column(Integer, primary_key=True, default=1)
+    source_updated_at = Column(DateTime(timezone=True), nullable=True)
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    attempted_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(240), nullable=True)
+    __table_args__ = (CheckConstraint("id = 1", name="fen_commonness_singleton"),)
+
+
+class FenCommonnessPosition(Base):
+    """At most ten cached identities/labels; no per-occurrence tracking."""
+    __tablename__ = "fen_commonness_position"
+    rank = Column(SmallInteger, primary_key=True)
+    fen = Column(String, nullable=False, unique=True)
+    appearances = Column(BigInteger, nullable=False)
+    n_move = Column(Integer, nullable=True)
+    move_color = Column(String(5), nullable=True)
+    san = Column(String(32), nullable=True)
+    label_occurrences = Column(BigInteger, nullable=False, default=0)
+    example_game_link = Column(BigInteger, nullable=True)
+    example_line = Column(Text, nullable=True)
+    __table_args__ = (
+        CheckConstraint("rank BETWEEN 1 AND 10", name="fen_commonness_rank_valid"),
+        CheckConstraint("appearances > 1 AND label_occurrences >= 0", name="fen_commonness_counts_valid"),
+    )
+
+
+class PendingRepetitionSummary(Base):
+    """Small, durable cache metadata; empty histograms are valid snapshots."""
+    __tablename__ = "pending_repetition_summary"
+    id = Column(Integer, primary_key=True, default=1)
+    source_updated_at = Column(DateTime(timezone=True), nullable=True)
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    attempted_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(240), nullable=True)
+    __table_args__ = (CheckConstraint("id = 1", name="pending_repetition_singleton"),)
+
+
+class PendingRepetitionBin(Base):
+    __tablename__ = "pending_repetition_bin"
+    repetitions = Column(BigInteger, primary_key=True)
+    fen_count = Column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint("fen_count >= 0", name="pending_repetition_count_nonnegative"),
+    )
+
+
 class ScoredRatingSummary(Base):
     __tablename__ = "scored_rating_summary"
 
@@ -752,6 +825,8 @@ class Fen(Base):
     )
 
     __table_args__ = (
+        Index('ix_fen_backup_changed', analyzed_at, fen,
+              postgresql_where=text('score IS NOT NULL')),
         Index(
             "ix_fen_pending_tablebase",
             n_games.desc(),

@@ -2877,14 +2877,15 @@ async def _build_scored_advantage_by_rating_payload() -> Dict[str, Any]:
     }
 
 
-async def _read_scored_rating_summary() -> Optional[Dict[str, Any]]:
-    query = """
+async def _read_scored_rating_summary(*, include_ratings: bool = True) -> Optional[Dict[str, Any]]:
+    # The overview card must not read/decode the large per-game chart payload.
+    ratings_column = ", ratings_payload" if include_ratings else ""
+    query = f"""
         SELECT
             rating_basis,
             source_full_games,
             source_distinct_ratings,
-            groups_payload,
-            ratings_payload
+            groups_payload{ratings_column}
         FROM scored_rating_summary
         WHERE id = 1;
     """
@@ -2895,11 +2896,13 @@ async def _read_scored_rating_summary() -> Optional[Dict[str, Any]]:
     if not row:
         return None
 
-    return {
+    payload = {
         "rating_basis": str(row.get("rating_basis") or "avg_elo"),
         "groups": _json_payload(row.get("groups_payload"), []),
-        "ratings": _json_payload(row.get("ratings_payload"), []),
     }
+    if include_ratings:
+        payload["ratings"] = _json_payload(row.get("ratings_payload"), [])
+    return payload
 
 
 async def refresh_scored_rating_summary() -> Dict[str, Any]:
@@ -2963,11 +2966,14 @@ async def refresh_scored_rating_summary() -> Dict[str, Any]:
     }
 
 
-async def get_scored_advantage_by_rating() -> Dict[str, Any]:
-    summary = await _read_scored_rating_summary()
+async def get_scored_advantage_by_rating(*, include_ratings: bool = True) -> Dict[str, Any]:
+    summary = await _read_scored_rating_summary(include_ratings=include_ratings)
     if summary is not None:
         return summary
-    return await refresh_scored_rating_summary()
+    summary = await refresh_scored_rating_summary()
+    if not include_ratings:
+        return {key: summary[key] for key in ("rating_basis", "groups")}
+    return summary
 
 
 async def get_scored_positions_page(

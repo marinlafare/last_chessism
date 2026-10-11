@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Chessboard } from 'react-chessboard'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
+import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '—'
@@ -39,7 +40,7 @@ function useBoardWidth(containerRef, maximized) {
   return width
 }
 
-export default function PlayerGameReviewModal({ gameId, playerName, onBack, onClose }) {
+export default function PlayerGameReviewModal({ gameId, playerName, startingPosition, onBack, onClose }) {
   const [request, setRequest] = useState({ data: null, error: '', loading: false })
   const [positionIndex, setPositionIndex] = useState(0)
   const [maximized, setMaximized] = useState(false)
@@ -53,7 +54,11 @@ export default function PlayerGameReviewModal({ gameId, playerName, onBack, onCl
     setRequest({ data: null, error: '', loading: true })
     fetchGameScore({ gameId, signal: controller.signal })
       .then((data) => {
-        if (!controller.signal.aborted) setRequest({ data, error: '', loading: false })
+        if (!controller.signal.aborted) {
+          const match=findPositionOccurrence(data,startingPosition)
+          setPositionIndex(match.index)
+          setRequest({ data, error: '', loading: false, missingPosition:!match.found })
+        }
       })
       .catch((error) => {
         if (error.name !== 'AbortError') {
@@ -61,7 +66,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, onBack, onCl
         }
       })
     return () => controller.abort()
-  }, [gameId])
+  }, [gameId,startingPosition])
 
   const moves = request.data?.moves || []
   const game = request.data?.game
@@ -114,6 +119,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, onBack, onCl
 
         {request.loading ? <p className="game-modal-message">Loading move-by-move analysis…</p> : null}
         {request.error ? <p className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {request.missingPosition ? <p className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
         {game && !request.loading ? (
           <div className="game-review-body">
             <div className="game-review-board-column">

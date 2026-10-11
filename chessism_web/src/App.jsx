@@ -12,6 +12,7 @@ import SecondaryCharacter from './pages/SecondaryCharacter'
 import Positions from './pages/Positions'
 import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
+import AppearanceProvider, { AppearanceControls } from './appearance/AppearanceProvider'
 import AnalyzeTimes from './pages/AnalyzeTimes'
 import Research from './pages/Research'
 import AccuracyCoefficient from './pages/AccuracyCoefficient'
@@ -231,6 +232,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
         {page}
       </div>
       <div className="superadmin-account-controls">
+        <AppearanceControls />
         <AdminOnlineStatus account={account} />
         <button className="superadmin-logout" type="button" onClick={onLogout}>
           Log out
@@ -334,7 +336,7 @@ function App() {
     return <SuperadminGate onUnlock={openAdmins} />
   }
 
-  return <SuperadminSystem account={account} locationKey={locationKey} path={path} onLogout={handleLogout} />
+  return <AppearanceProvider account={account} pageKey={path}><SuperadminSystem account={account} locationKey={locationKey} path={path} onLogout={handleLogout} /></AppearanceProvider>
 }
 
 export default App

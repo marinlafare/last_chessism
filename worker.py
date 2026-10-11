@@ -14,6 +14,9 @@ from chessism_api.operations.analysis_backups import (
     run_fen_analysis_backup_job,
     run_fen_analysis_restore_job,
 )
+from chessism_api.operations.pending_repetitions import run_pending_repetition_refresh
+from chessism_api.operations.common_positions import run_commonness_refresh
+from chessism_api.operations.common_position_pages import run_commonness_page_refresh
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
     run_fen_pipeline,
 )
@@ -87,6 +90,9 @@ class WorkerSettings:
     """
     
     functions = [
+        func(run_pending_repetition_refresh, timeout=240, keep_result=0, max_tries=1),
+        func(run_commonness_refresh, timeout=600, keep_result=0, max_tries=1),
+        func(run_commonness_page_refresh, timeout=600, keep_result=0, max_tries=1),
         run_analysis_job, 
         run_player_analysis_job,
         run_analysis_loop_job,

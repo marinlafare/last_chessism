@@ -13,6 +13,7 @@ import constants
 from chessism_api.routers import auth, players, games, fens, analysis, jobs, analysis_times, backups, research
 from chessism_api.auth import require_superuser
 from chessism_api.routers import cloud_analysis
+from chessism_api.routers import appearance
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.engine import init_db
@@ -187,6 +188,7 @@ async def read_status():
 
 # --- NEW: Include the router ---
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
+app.include_router(appearance.router, prefix="/appearance", tags=["Appearance"])
 
 # This makes the endpoint available at /players/current_players
 app.include_router(players.router, prefix="/players", tags=["Players"], dependencies=[Depends(require_superuser)])

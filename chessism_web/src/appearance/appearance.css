@@ -1,0 +1,20 @@
+/* Editor chrome is deliberately outside registered appearance scopes. */
+.appearance-account-controls { display:flex; align-items:center; gap:5px; flex-wrap:wrap; max-width:min(720px,80vw); }
+.appearance-account-controls button,.appearance-account-controls select { max-width:100%; background:#121920; color:#edf3f8; border:1px solid #53606d; border-radius:5px; padding:5px 8px; font:12px Inter,system-ui; cursor:pointer; }
+.appearance-account-controls button[aria-pressed="true"] { border-color:#15c780; }
+.appearance-account-error { color:#ffb3aa; font-size:12px; max-width:360px; }
+.appearance-editor { position:fixed; z-index:500; width:min(350px,calc(100vw - 16px)); max-height:calc(100vh - 24px); overflow:auto; resize:vertical; color:#edf3f8; background:#121920; border:1px solid #728291; border-radius:8px; box-shadow:0 10px 40px #0009; font:13px Inter,system-ui; }
+.appearance-editor header { display:flex; gap:4px; align-items:center; padding:8px; background:#23313c; cursor:move; touch-action:none; }
+.appearance-editor header strong { flex:1; }
+.appearance-editor button,.appearance-editor select,.appearance-editor input { font:inherit; color:#edf3f8; background:#080808; border:1px solid #61707d; border-radius:4px; padding:4px; max-width:100%; }
+.appearance-editor button:disabled { opacity:.45; cursor:default; }
+.appearance-editor button { cursor:pointer; }
+.appearance-editor input[type="color"] { width:46px; height:30px; padding:2px; }
+.appearance-editor input[type="number"] { width:75px; }
+.appearance-editor button:focus-visible,.appearance-editor select:focus-visible,.appearance-editor input:focus-visible { outline:2px solid #15c780; }
+.appearance-editor-body { display:flex; flex-direction:column; gap:12px; padding:12px; max-height:65vh; overflow:auto; }
+.appearance-editor-body small { color:#b3c0cb; }
+.appearance-property { display:flex; gap:7px; flex-wrap:wrap; align-items:center; min-width:0; margin:0; padding:0 0 8px; border:0; border-bottom:1px solid #35434f; }
+.appearance-property>label:first-child { width:100%; }
+.appearance-opacity { display:flex; flex-direction:column; flex:1; min-width:110px; font-size:11px; }
+.appearance-inspector-outline { position:fixed; z-index:490; pointer-events:none; outline:2px dashed #f1c644; outline-offset:2px; }

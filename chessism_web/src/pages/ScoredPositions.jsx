@@ -1,32 +1,19 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import './scored-positions/scoredPositions.css'
-import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
-import { ratingScatterBounds } from './scored-positions/ratingScatter'
+import AppearanceChartPanel from './scored-positions/AppearanceChartPanel'
+import RatingChartDisclosure from './scored-positions/RatingChartDisclosure'
+import { styleTarget } from '../appearance/styleCore'
 import {
-  fetchAdvantageByRating,
   fetchBackupJobStatus,
   fetchFenAnalysisBackups,
-  fetchRepeatedPendingFens,
   fetchScoredGamesOverview,
   fetchScoredOverview,
   queueFenAnalysisBackup,
   queueFenAnalysisRestore,
 } from './scored-positions/scoredPositionsApi'
-
-const RATING_GROUP_OPTIONS = [
-  { key: 'bad', label: 'bad' },
-  { key: 'medium', label: 'medium' },
-  { key: 'great', label: 'great' }
-]
-
-const RATING_GROUP_COLORS = {
-  bad: '#f07167',
-  medium: '#f4c057',
-  great: '#3fd089'
-}
 
 const BACKUP_JOB_STORAGE_KEY = 'chessism-fen-analysis-backup-job'
 const TERMINAL_JOB_PHASES = new Set(['complete', 'failed'])
@@ -40,150 +27,16 @@ const formatBytes = (value) => {
   return `${amount.toFixed(unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
-const niceStep = (span, targetTickCount) => {
-  const rawStep = Math.max(1, span / Math.max(1, targetTickCount))
-  const magnitude = 10 ** Math.floor(Math.log10(rawStep))
-  const normalized = rawStep / magnitude
-
-  if (normalized <= 1) return magnitude
-  if (normalized <= 2) return 2 * magnitude
-  if (normalized <= 2.5) return 2.5 * magnitude
-  if (normalized <= 5) return 5 * magnitude
-  return 10 * magnitude
-}
-
-const buildCountTicks = (maxValue, targetTickCount = 8) => {
-  const max = Math.max(1, Math.ceil(Number(maxValue || 1)))
-  const step = niceStep(max, targetTickCount)
-  const ticks = [0]
-
-  for (let tick = step; tick < max; tick += step) {
-    ticks.push(Math.round(tick))
-  }
-
-  if (ticks[ticks.length - 1] !== max) {
-    if (max - ticks[ticks.length - 1] < step * 0.45) {
-      ticks[ticks.length - 1] = max
-      return ticks
-    }
-    ticks.push(max)
-  }
-
-  return ticks
-}
-
-function RatingScatterChart({ payload }) {
-  const points = Array.isArray(payload?.ratings) ? payload.ratings : []
-  const { minRating, maxRating, maxIndex } = useMemo(() => ratingScatterBounds(points), [points])
-  if (!points.length) {
-    return <p className="result-line">No fully analyzed game ratings yet.</p>
-  }
-
-  const width = 920
-  const height = 330
-  const margin = { top: 18, right: 24, bottom: 72, left: 54 }
-  const plotWidth = width - margin.left - margin.right
-  const plotHeight = height - margin.top - margin.bottom
-  const ratingSpan = Math.max(1, maxRating - minRating)
-  const xTicks = buildCountTicks(maxIndex)
-  const yTicks = [...new Set([minRating, Math.round((minRating + maxRating) / 2), maxRating])]
-  const xFor = (index) => margin.left + (Number(index || 0) / maxIndex) * plotWidth
-  const yFor = (rating) => margin.top + plotHeight - ((Number(rating || 0) - minRating) / ratingSpan) * plotHeight
-
-  return (
-    <div className="rating-scatter-wrap">
-      <svg className="rating-scatter-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Fully analyzed games sorted by rating">
-        {yTicks.map((tick) => {
-          const y = yFor(tick)
-          return (
-            <g key={`y-${tick}`}>
-              <line className="rating-grid-line" x1={margin.left} y1={y} x2={width - margin.right} y2={y} />
-              <text className="rating-axis-label" x={margin.left - 10} y={y + 4} textAnchor="end">{formatNumber(tick)}</text>
-            </g>
-          )
-        })}
-        {xTicks.map((tick) => {
-          const x = xFor(tick)
-          return (
-            <g key={`x-${tick}`}>
-              <line className="rating-grid-line vertical" x1={x} y1={margin.top} x2={x} y2={height - margin.bottom} />
-              <text className="rating-axis-label" x={x} y={height - margin.bottom + 28} textAnchor="middle">{formatNumber(tick)}</text>
-            </g>
-          )
-        })}
-        <line className="rating-axis-line" x1={margin.left} y1={height - margin.bottom} x2={width - margin.right} y2={height - margin.bottom} />
-        <line className="rating-axis-line" x1={margin.left} y1={margin.top} x2={margin.left} y2={height - margin.bottom} />
-        <text
-          className="rating-axis-label rating-axis-title-y"
-          x={margin.left - 38}
-          y={margin.top + plotHeight / 2}
-          textAnchor="middle"
-          transform={`rotate(-90 ${margin.left - 38} ${margin.top + plotHeight / 2})`}
-        >
-          avg elo
-        </text>
-        <text className="rating-axis-label" x={margin.left + plotWidth / 2} y={height - margin.bottom + 58} textAnchor="middle">
-          game count, sorted by avg elo
-        </text>
-        {points.map((point) => {
-          const group = point.group || 'medium'
-          return (
-            <circle
-              cx={xFor(point.x_index)}
-              cy={yFor(point.rating)}
-              r={3.4}
-              fill={RATING_GROUP_COLORS[group] || RATING_GROUP_COLORS.medium}
-              key={`${point.link}-${point.x_index}`}
-            />
-          )
-        })}
-      </svg>
-      <div className="rating-scatter-legend">
-        {RATING_GROUP_OPTIONS.map((option) => (
-          <span key={`scatter-${option.key}`}>
-            <i style={{ background: RATING_GROUP_COLORS[option.key] }} />
-            {option.label}
-          </span>
-        ))}
-      </div>
-    </div>
-  )
-}
-
 function ScoredPositions() {
   const [overview, setOverview] = useState(null)
   const [gameOverview, setGameOverview] = useState(null)
-  const [advantageByRating, setAdvantageByRating] = useState(null)
-  const [repeatedPendingFens, setRepeatedPendingFens] = useState([])
-  const [repeatedPendingPage, setRepeatedPendingPage] = useState(1)
-  const [repeatedPendingPagination, setRepeatedPendingPagination] = useState({
-    page: 1,
-    pageSize: 5,
-    hasPrevious: false,
-    hasNext: false
-  })
-  const [repeatedPendingLoading, setRepeatedPendingLoading] = useState(false)
-  const [repeatedPendingError, setRepeatedPendingError] = useState('')
-  const [selectedRatingGroup, setSelectedRatingGroup] = useState('medium')
   const [error, setError] = useState('')
+  const [gameOverviewError, setGameOverviewError] = useState('')
   const [reloadToken, setReloadToken] = useState(0)
   const [backups, setBackups] = useState([])
   const [backupLocation, setBackupLocation] = useState('/home/jon/Desktop/workshop/db_backups/chessism')
   const [backupError, setBackupError] = useState('')
   const [backupJob, setBackupJob] = useState(null)
-
-  const ratingGroups = useMemo(() => {
-    return Array.isArray(advantageByRating?.groups) ? advantageByRating.groups : []
-  }, [advantageByRating])
-
-  const selectedRatingData = useMemo(() => {
-    return ratingGroups.find((group) => group.key === selectedRatingGroup) || ratingGroups[0] || null
-  }, [ratingGroups, selectedRatingGroup])
-
-  const maxRatingBucketPositions = useMemo(() => {
-    const buckets = Array.isArray(selectedRatingData?.buckets) ? selectedRatingData.buckets : []
-    return buckets.reduce((max, bucket) => Math.max(max, Number(bucket.positions || 0)), 1)
-  }, [selectedRatingData])
 
   const latestBackup = backups[0] || null
   const backupJobActive = Boolean(
@@ -193,54 +46,23 @@ function ScoredPositions() {
   useEffect(() => {
     const controller = new AbortController()
 
-    const load = async () => {
-      setError('')
+    const load = async (fetcher, setData, setLoadError) => {
       try {
-        const [overviewPayload, gameOverviewPayload, advantageByRatingPayload] = await Promise.all([
-          fetchScoredOverview({ signal: controller.signal }),
-          fetchScoredGamesOverview({ signal: controller.signal }),
-          fetchAdvantageByRating({ signal: controller.signal })
-        ])
-        setOverview(overviewPayload)
-        setGameOverview(gameOverviewPayload)
-        setAdvantageByRating(advantageByRatingPayload)
+        const payload = await fetcher({ signal: controller.signal })
+        if (controller.signal.aborted) return
+        setData(payload)
+        setLoadError('')
       } catch (loadError) {
-        if (loadError?.name !== 'AbortError') {
-          setError(loadError.message || 'Scored positions unavailable.')
+        if (!controller.signal.aborted) {
+          setLoadError(loadError.message || 'Summary unavailable.')
         }
       }
     }
 
-    load()
+    load(fetchScoredOverview, setOverview, setError)
+    load(fetchScoredGamesOverview, setGameOverview, setGameOverviewError)
     return () => controller.abort()
   }, [reloadToken])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setRepeatedPendingLoading(true)
-    setRepeatedPendingError('')
-
-    fetchRepeatedPendingFens(repeatedPendingPage, { signal: controller.signal })
-      .then((payload) => {
-        setRepeatedPendingFens(Array.isArray(payload?.rows) ? payload.rows : [])
-        setRepeatedPendingPagination({
-          page: Number(payload?.page || repeatedPendingPage),
-          pageSize: Number(payload?.page_size || 5),
-          hasPrevious: Boolean(payload?.has_previous),
-          hasNext: Boolean(payload?.has_next)
-        })
-      })
-      .catch((loadError) => {
-        if (loadError?.name !== 'AbortError') {
-          setRepeatedPendingError(loadError.message || 'Pending FENs unavailable.')
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setRepeatedPendingLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [reloadToken, repeatedPendingPage])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -295,7 +117,8 @@ function ScoredPositions() {
         setBackupError('')
         setBackupJob((current) => (
           current?.jobId === jobId
-            ? { ...current, phase, detail, result }
+            ? { ...current, phase, detail, result, processed: progress.processed,
+                bytes: progress.bytes, elapsed: progress.elapsed_seconds }
             : current
         ))
 
@@ -379,204 +202,115 @@ function ScoredPositions() {
   }, [])
 
   return (
-    <div className="page-frame">
+    <div {...styleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
-        <Header />
         <main className="scored-positions-main">
           <section className="scored-top-grid">
-            <section className="scored-positions-panel scored-engine-panel">
+            <section {...styleTarget('metrics.panel')} className="scored-positions-panel scored-engine-panel">
               {error ? <div className="status-banner warn">{error}</div> : null}
-
-              <div className="analysis-backup-block">
-                <div className="analysis-backup-head">
-                  <div>
-                    <h2 className="panel-title">FEN ANALYSIS BACKUPS</h2>
-                    <p>Create the first snapshot once, then merge only newly analyzed or refreshed FENs.</p>
-                  </div>
-                  <div className="analysis-backup-actions">
-                    <button
-                      className="btn btn-primary btn-inline"
-                      type="button"
-                      disabled={backupJobActive}
-                      onClick={saveFenAnalysis}
-                    >
-                      {latestBackup ? 'Update FEN analysis' : 'Save FEN analysis'}
-                    </button>
-                    <button
-                      className="btn btn-secondary btn-inline"
-                      type="button"
-                      disabled={backupJobActive || !latestBackup}
-                      onClick={restoreLatestBackup}
-                    >
-                      Restore latest
-                    </button>
-                  </div>
-                </div>
-                <div className="analysis-backup-location">
-                  <span>Location</span>
-                  <code>{backupLocation}</code>
-                </div>
-                {latestBackup ? (
-                  <p className="analysis-backup-latest">
-                    Latest: <strong>{latestBackup.filename}</strong>
-                    {' · '}{formatNumber(latestBackup.records)} positions
-                    {' · '}{formatBytes(latestBackup.bytes)}
-                    {latestBackup.updated_at
-                      ? ` · updated ${new Date(latestBackup.updated_at).toLocaleString()}`
-                      : ''}
-                  </p>
-                ) : (
-                  <p className="analysis-backup-latest">No saved FEN analysis yet.</p>
-                )}
-                {backupJob ? (
-                  <div
-                    className={`analysis-backup-status ${backupJob.phase === 'failed' ? 'failed' : ''}`}
-                    aria-live="polite"
-                  >
-                    <strong>{backupJob.kind === 'restore' ? 'Restore' : 'Backup'}:</strong>
-                    {' '}{backupJob.detail}
-                    {backupJob.result?.missing ? ` ${formatNumber(backupJob.result.missing)} FENs were not present.` : ''}
-                  </div>
-                ) : null}
-                {backupError ? <div className="status-banner warn">{backupError}</div> : null}
-              </div>
+              {gameOverviewError ? <div className="status-banner warn">{gameOverviewError}</div> : null}
 
               <div className="scored-coverage-grid">
-                <article className="metric-card">
-                  <span>Scored Positions</span>
-                  <strong>{overview ? formatNumber(overview.scored_positions) : '-'}</strong>
+                <article {...styleTarget('metric.scored_positions')} className="metric-card">
+                  <span {...styleTarget('metric.title')}>Positions</span>
+                  <strong {...styleTarget('metric.value')} title={overview ? formatNumber(overview.scored_positions) : undefined}>{overview ? `${formatNumber(overview.scored_positions / 1000000, 1)} M` : '-'}</strong>
                 </article>
-                <article className="metric-card">
-                  <span>Unscored FENs</span>
-                  <strong>{overview ? formatNumber(overview.unscored_fens) : '-'}</strong>
+                <article {...styleTarget('metric.unscored_positions')} className="metric-card">
+                  <span {...styleTarget('metric.title')}>Unscored</span>
+                  <strong {...styleTarget('metric.value')} title={overview ? formatNumber(overview.unscored_fens) : undefined}>{overview ? `${formatNumber(overview.unscored_fens / 1000000, 1)} M` : '-'}</strong>
                 </article>
-                <article className="metric-card">
-                  <span>Fully Scored Games</span>
-                  <strong>{gameOverview ? formatNumber(gameOverview.fully_analyzed_games) : '-'}</strong>
+                <article {...styleTarget('metric.games')} className="metric-card">
+                  <span {...styleTarget('metric.title')}>Games</span>
+                  <strong {...styleTarget('metric.value')}>{gameOverview ? formatNumber(gameOverview.fully_analyzed_games) : '-'}</strong>
                 </article>
-                <article className="metric-card">
-                  <span>Incomplete Games</span>
-                  <strong>{gameOverview ? formatNumber(gameOverview.incomplete_games) : '-'}</strong>
+                <article {...styleTarget('metric.unscored_games')} className="metric-card">
+                  <span {...styleTarget('metric.title')}>Unscored</span>
+                  <strong {...styleTarget('metric.value')}>{gameOverview ? formatNumber(gameOverview.incomplete_games) : '-'}</strong>
                 </article>
               </div>
             </section>
 
-            <section className="scored-positions-panel scored-rating-advantage-panel">
-              <div className="advantage-rating-head">
-                <h2 className="panel-title">ADVANTAGE BY RATING</h2>
-                <div className="rating-group-controls" aria-label="Rating groups">
-                  {RATING_GROUP_OPTIONS.map((option) => (
-                    <button
-                      className={`rating-group-button ${selectedRatingGroup === option.key ? 'active' : ''}`}
-                      type="button"
-                      key={option.key}
-                      onClick={() => setSelectedRatingGroup(option.key)}
-                    >
-                      {option.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {selectedRatingData ? (
-                <>
-                  <div className="rating-range-summary">
-                    <span>{formatNumber(selectedRatingData.min_rating)}-{formatNumber(selectedRatingData.max_rating)} avg elo</span>
-                    <span>{formatNumber(selectedRatingData.games)} games</span>
-                    <span>{formatNumber(selectedRatingData.positions)} positions</span>
-                  </div>
-                  <div className="score-bucket-list">
-                    {(selectedRatingData.buckets || []).map((bucket) => {
-                      const width = Math.max(3, (Number(bucket.positions || 0) / maxRatingBucketPositions) * 100)
-                      return (
-                        <div className="score-bucket-row" key={`rating-${selectedRatingData.key}-${bucket.key}`}>
-                          <span>{bucket.label}</span>
-                          <div className="score-bucket-track">
-                            <div className={`score-bucket-fill ${bucket.key}`} style={{ width: `${width}%` }} />
-                          </div>
-                          <strong>{formatNumber(bucket.positions)}</strong>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </>
-              ) : (
-                <p className="result-line">No fully analyzed games with ratings yet.</p>
-              )}
-            </section>
+            <AppearanceChartPanel reloadToken={reloadToken} />
           </section>
 
-          <section className="scored-positions-panel repeated-pending-panel">
-            <div className="repeated-pending-heading">
-              <div>
-                <h2 className="panel-title">MOST REPEATED PENDING FENS</h2>
-                <p>Highest-frequency positions with no stored engine evaluation, ordered by repetitions.</p>
-              </div>
-              <span className="stat-chip">5 per page</span>
+          <section {...styleTarget('cuda.panel')} className="scored-positions-panel scored-rating-advantage-panel cuda-reservation" aria-label="Advantage by rating">
+            <h2 {...styleTarget('panel.title')} className="panel-title">Advantage by rating</h2>
+            <div className="cuda-reservation-content" role="note">
+              <svg className="cuda-reservation-icon" viewBox="0 0 48 48" aria-hidden="true" focusable="false">
+                <circle cx="24" cy="24" r="19" />
+                <path d="m17 17 14 14 M31 17 17 31" />
+              </svg>
+              <span>reserved for cuda</span>
             </div>
-            {repeatedPendingError ? <div className="status-banner warn">{repeatedPendingError}</div> : null}
-            {repeatedPendingFens.length ? (
+          </section>
+
+          <RatingChartDisclosure />
+
+          <section {...styleTarget('backup.panel')} className="scored-positions-panel analysis-backup-block" aria-label="Fen Backup">
+            <div className="analysis-backup-head">
+              <h2 {...styleTarget('panel.title')} className="panel-title">Fen Backup</h2>
+              <div className="analysis-backup-actions">
+                <button
+                  className="btn btn-primary btn-inline"
+                  type="button"
+                  disabled={backupJobActive}
+                  onClick={saveFenAnalysis}
+                  title="Save new or updated FEN analysis to the backup"
+                >
+                  backup
+                </button>
+                <button
+                  className="btn btn-secondary btn-inline"
+                  type="button"
+                  disabled={backupJobActive || !latestBackup}
+                  onClick={restoreLatestBackup}
+                  title="Restore the latest saved FEN analysis; confirmation required"
+                >
+                  reroll
+                </button>
+              </div>
+            </div>
+            <div className="analysis-backup-location">
+              <span>Location</span>
+              <code>{backupLocation}</code>
+            </div>
+            <div className="analysis-backup-latest" aria-label="Latest FEN backup">
+              <h3 className="analysis-backup-latest-title" title={latestBackup?.filename}>latest</h3>
+              <dl className="analysis-backup-details">
+                <div>
+                  <dt>fens</dt>
+                  <dd data-backup-fens title={latestBackup?.format_version === 3
+                    ? 'Saved FEN result records; an updated FEN can have multiple versions in incremental backups.' : undefined}>
+                    {latestBackup ? formatNumber(latestBackup.records) : '—'}
+                    {latestBackup?.format_version === 3 && <small> records</small>}
+                  </dd>
+                </div>
+                <div><dt>size</dt><dd data-backup-size>{latestBackup ? formatBytes(latestBackup.bytes) : '—'}</dd></div>
+                <div><dt>date</dt><dd data-backup-date>{latestBackup?.updated_at || latestBackup?.created_at
+                  ? <time dateTime={latestBackup.updated_at || latestBackup.created_at}>
+                    {new Date(latestBackup.updated_at || latestBackup.created_at).toLocaleString()}
+                  </time> : '—'}</dd></div>
+              </dl>
+              {!latestBackup && <p className="analysis-backup-empty">No saved FEN analysis yet.</p>}
+            </div>
+            {backupJob ? (
               <div
-                className="repeated-pending-list"
-                role="table"
-                aria-label="Most repeated unscored FENs"
-                aria-busy={repeatedPendingLoading}
+                className={`analysis-backup-status ${backupJob.phase === 'failed' ? 'failed' : ''}`}
+                aria-live="polite"
               >
-                <div className="repeated-pending-row repeated-pending-columns" role="row">
-                  <span role="columnheader">Rank</span>
-                  <span role="columnheader">FEN</span>
-                  <span role="columnheader">Repetitions</span>
-                </div>
-                {repeatedPendingFens.map((position, index) => (
-                  <div className="repeated-pending-row" role="row" key={position.fen}>
-                    <span className="repeated-pending-rank" role="cell">
-                      #{((repeatedPendingPagination.page - 1) * repeatedPendingPagination.pageSize) + index + 1}
-                    </span>
-                    <code className="repeated-pending-fen" role="cell">{position.fen}</code>
-                    <strong className="repeated-pending-count" role="cell">
-                      {formatNumber(position.repetitions)}
-                    </strong>
-                  </div>
-                ))}
+                <strong>{backupJob.kind === 'restore' ? 'Restore' : 'Backup'}:</strong>
+                {' '}{backupJob.detail}
+                {Number.isFinite(backupJob.elapsed) && <div className="analysis-backup-metrics" aria-label="Backup progress">
+                  <span>Phase: {backupJob.phase.replaceAll('_', ' ')}</span>
+                  <span>{formatNumber(backupJob.processed || 0)} result versions processed</span>
+                  {backupJob.kind === 'backup' && <span>{formatBytes(backupJob.bytes)} written this update</span>}
+                  <span>Elapsed: {Math.floor(backupJob.elapsed / 60)}m {Math.floor(backupJob.elapsed % 60)}s</span>
+                </div>}
+                {backupJob.result?.missing ? ` ${formatNumber(backupJob.result.missing)} FENs were not present.` : ''}
               </div>
-            ) : (
-              <p className="result-line">
-                {repeatedPendingLoading ? 'Loading pending FENs…' : 'No pending FENs found.'}
-              </p>
-            )}
-            <div className="repeated-pending-pagination" aria-label="Pending FEN pages">
-              <button
-                className="repeated-pending-arrow"
-                type="button"
-                aria-label="Previous pending FEN page"
-                disabled={repeatedPendingLoading || !repeatedPendingPagination.hasPrevious}
-                onClick={() => {
-                  setRepeatedPendingLoading(true)
-                  setRepeatedPendingPage((current) => Math.max(1, current - 1))
-                }}
-              >
-                ←
-              </button>
-              <span>Page {formatNumber(repeatedPendingPagination.page)}</span>
-              <button
-                className="repeated-pending-arrow"
-                type="button"
-                aria-label="Next pending FEN page"
-                disabled={repeatedPendingLoading || !repeatedPendingPagination.hasNext}
-                onClick={() => {
-                  setRepeatedPendingLoading(true)
-                  setRepeatedPendingPage((current) => current + 1)
-                }}
-              >
-                →
-              </button>
-            </div>
-          </section>
-
-          <section className="scored-positions-panel scored-rating-scatter-panel">
-            <h2 className="panel-title">RATING GROUPS</h2>
-            <RatingScatterChart payload={advantageByRating} />
+            ) : null}
+            {backupError ? <div className="status-banner warn">{backupError}</div> : null}
           </section>
         </main>
         <Footer />

@@ -401,6 +401,8 @@ async def _ensure_fen_analysis_schema(
             ON fen (n_games DESC)
             WHERE score IS NULL
         """)
+        from chessism_api.operations.fen_backup.migrate import ensure_index
+        await ensure_index(connection)
         player_columns = {
             str(row["column_name"])
             for row in await connection.fetch("""

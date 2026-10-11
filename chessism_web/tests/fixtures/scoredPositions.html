@@ -3,11 +3,65 @@
 <body><div id="root"></div><script type="module">
 import React from 'react'
 import { createRoot } from 'react-dom/client'
+import { Chess } from 'chess.js'
 import ScoredPositions from '/src/pages/ScoredPositions.jsx'
 import '/src/index.css'
 
 const count = Number(new URLSearchParams(location.search).get('count') || 0)
-const state = window.scoredTest = { errors: [], requests: [] }
+const state = window.scoredTest = { errors: [], requests: [], aborted: [], holdChart: false,
+  failChart: false, holdGameOverview: new URLSearchParams(location.search).has('independent') }
+// Exercise page-summary polling explicitly without waiting 15 seconds per case.
+const realInterval = window.setInterval.bind(window)
+window.setInterval = (fn, delay, ...args) => {
+  if (delay === 15000) { state.refreshPage = fn; return realInterval(fn, 600000, ...args) }
+  return realInterval(fn, delay, ...args)
+}
+const wait = (name, held, signal) => new Promise((resolve, reject) => {
+  let timer
+  const clean = () => { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
+  const finish = () => { clean(); resolve() }
+  const abort = () => { clean(); state.aborted.push(name); reject(new DOMException('Aborted', 'AbortError')) }
+  state[`release${name}`] = finish
+  if (signal?.aborted) return abort()
+  signal?.addEventListener('abort', abort, { once: true })
+  if (!held) timer = setTimeout(finish, 200)
+})
+const showBackup = new URLSearchParams(location.search).has('backup')
+state.histogram = { refreshed_at: '2026-10-11T19:00:00Z', stale: false, rows: [
+  { appearances: 0, total_fens: 70000, unscored_fens: 67443 },
+  { appearances: 1, total_fens: 5000000, unscored_fens: 1000000 },
+  { appearances: 2, total_fens: 42, unscored_fens: 2 }, { appearances: 6, total_fens: 999, unscored_fens: 999 },
+  { appearances: 10, total_fens: 0, unscored_fens: 0 }, { appearances: 1000000, total_fens: 2, unscored_fens: 0 },
+] }
+state.commonness = { refreshed_at: '2026-10-11T19:00:00Z', snapshot: '2026-10-11T18:59:00Z',
+  status: 'complete', start_rank: 1, next_cursor: 'page-2', stale: false, rows: [
+  [['e4'], '1. e4', 376228], [['d4'], '1. d4', 212718],
+  [['e4', 'e5'], '1... e5', 113034], [['e4', 'c5'], '1... c5', 93420],
+  [['d4', 'Nf6'], '1... Nf6', 91443], [['Nf3'], '1. Nf3', 86233],
+  [['e4', 'e5', 'Nf3'], '2. Nf3', 82060], [['e4', 'e5', 'Nf3', 'Nc6'], '2... Nc6', 66671],
+  [['e4', 'c5', 'Nf3'], '2. Nf3', 65414], [['d4', 'd5'], '1... d5', 57626],
+].map(([moves, label, appearances], i) => {
+  const board = new Chess()
+  moves.forEach(move => board.move(move))
+  return { rank: i + 1, fen: board.fen().split(' ').slice(0, 4).join(' '), appearances,
+    label, label_occurrences: appearances - 1,
+    example_line: moves.map((move, index) => index % 2 ? move : `${index / 2 + 1}. ${move}`).join(' ') }
+}) }
+state.originalCommonness = structuredClone(state.commonness)
+const pageMoves = ['c4', 'e5', 'Nc3', 'Nf6', 'g3', 'Bb4', 'Bg2', 'O-O', 'Nf3', 'e4']
+const pageBoard = new Chess()
+state.commonPages = { 'page-2': { ...state.commonness, start_rank: 11, next_cursor: 'page-3', rows: pageMoves.map((move, i) => {
+  pageBoard.move(move)
+  return { rank: 11 + i, fen: pageBoard.fen().split(' ').slice(0, 4).join(' '), appearances: 40000 - i * 100,
+    label: `${Math.floor(i / 2) + 1}${i % 2 ? '...' : '.'} ${move}`, example_line: pageMoves.slice(0, i + 1).join(' ') }
+}) } }
+state.commonPages['page-3'] = { ...state.commonness, start_rank: 21, next_cursor: null,
+  rows: state.commonPages['page-2'].rows.slice(0, 3).map((row, i) => ({...row, rank: 21+i, appearances: 10000-i})) }
+state.pageCalls = []
+state.pendingPageReads = 0
+if (showBackup) localStorage.setItem('chessism-fen-analysis-backup-job', JSON.stringify({ jobId: 'backup-test', kind: 'backup', phase: 'exporting' }))
+else localStorage.removeItem('chessism-fen-analysis-backup-job')
+state.backupPhase = 'exporting'
 window.addEventListener('error', e => state.errors.push(e.message))
 window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
 window.fetch = async (input, options = {}) => {
@@ -17,15 +71,50 @@ window.fetch = async (input, options = {}) => {
   if (method !== 'GET') throw new Error('No writes allowed in this test')
   const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
   if (pathname === '/fens/scored/overview') return reply({ scored_positions: 4000000, unscored_fens: 1000000 })
-  if (pathname === '/fens/scored/games/overview') return reply({ fully_analyzed_games: count, incomplete_games: 10 })
+  if (pathname === '/fens/scored/games/overview') {
+    if (state.holdGameOverview) await wait('GameOverview', true, options.signal)
+    return reply({ fully_analyzed_games: count, incomplete_games: 10 })
+  }
   if (pathname === '/fens/scored/advantage_by_rating') {
-    await new Promise(resolve => setTimeout(resolve, 200))
+    await wait('Chart', state.holdChart, options.signal)
+    if (state.failChart) return new Response(JSON.stringify({ detail: 'Chart test failure' }), {
+      status: 503, headers: { 'Content-Type': 'application/json' },
+    })
     return reply({ groups: [], ratings: Array.from({ length: count }, (_, i) => ({
       link: i, x_index: i + 1, rating: 1000 + i % 2201, group: ['bad', 'medium', 'great'][i % 3],
     })) })
   }
-  if (pathname === '/fens/pending/repeated') return reply({ rows: [], page: 1, page_size: 5 })
-  if (pathname === '/analysis/backups') return reply({ backups: [] })
+  if (pathname === '/fens/appearance_histogram') {
+    if (state.failHistogram) throw new Error('Histogram test failure')
+    return reply({ ...state.histogram, commonness: state.commonness })
+  }
+  if (pathname === '/fens/explore') {
+    const params=new URL(input,location.href).searchParams, page=Number(params.get('page')||0), scope=params.get('scope')
+    const rows=[...state.originalCommonness.rows,...state.commonPages['page-2'].rows].map(row=>({...row,appearances:scope==='unique'?1:scope==='repeated'?row.appearances:Number(scope)}))
+    return reply({token:'example-token',page,scope,rows:rows.slice(page*10,page*10+10),sample_size:rows.length,has_next:page===0})
+  }
+  if (pathname === '/fens/explore/games') return reply({rows:[{link:100,white:'Alice',black:'Bob',white_elo:2000,black_elo:2100,year:2026,month:10,day:11,white_str_result:'win',time_control:'180',occurrences:[{n_move:1,move_color:'white'}]}],next_after:null})
+  if (pathname === '/games/100/score') {
+    const board=new Chess(), initial_fen=board.fen();board.move('e4')
+    return reply({game:{initial_fen,white:{name:'Alice',rating:2000},black:{name:'Bob',rating:2100}},player_summaries:[],moves:[{ply:1,move_number:1,move_color:'white',san:'e4',fen_after:board.fen()}]})
+  }
+  if (pathname === '/fens/common_positions/page') {
+    const params = new URL(input, location.href).searchParams
+    const cursor = params.get('cursor')
+    state.pageCalls.push({cursor, retry: params.get('retry')})
+    if (state.holdPage) await wait('CommonPage', true, options.signal)
+    if (state.failPage) return reply({status: 'error', detail: 'Page test failure'})
+    if (state.pendingPageReads > 0) { state.pendingPageReads--; return reply({status:'pending',rows:[]}) }
+    return reply(state.commonPages[cursor])
+  }
+  if (pathname === '/analysis/backups') return reply({ backups: showBackup ? [{
+    filename: 'fen-analysis-20261011T162354_000000Z.manifest.json', records: 19278149,
+    bytes: 1326586573, parts: 8, format_version: 3, record_label: 'result versions',
+    updated_at: '2026-10-11T16:23:54Z',
+  }] : [] })
+  if (pathname === '/jobs/backup-test') return reply({ status: state.backupPhase === 'complete' ? 'complete' : 'running',
+    progress: { phase: state.backupPhase, detail: 'Exporting changed FENs.', processed: 50000,
+      bytes: 1048576, elapsed_seconds: 125 } })
   throw new Error(`Unexpected request ${pathname}; no production requests allowed`)
 }
 createRoot(document.getElementById('root')).render(React.createElement(ScoredPositions))
