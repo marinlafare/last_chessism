@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './home/home.css'
 import Footer from '../components/layout/Footer'
@@ -33,7 +34,7 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
   }, [selectedPlayer, scrollRequest])
 
   return (
-    <div className="page-frame home-page">
+    <div {...pageStyleTarget('page')} className="page-frame home-page">
       <SideRail />
       <div className="home-shell">
         <main>
@@ -41,11 +42,11 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
             <DashboardSummaryPanel />
             <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer} />
           </div>
-          <section className="home-player-workspace" id="selected-player" ref={playerSection}
+          <section {...pageStyleTarget('player.panel')} className="home-player-workspace" id="selected-player" ref={playerSection}
             tabIndex={-1} aria-label={selectedPlayer ? `Player workspace: ${selectedPlayer}` : 'Player workspace'}>
-            {selectedPlayer ? <Suspense fallback={<p role="status">Loading player workspace…</p>}>
+            {selectedPlayer ? <Suspense fallback={<p {...pageStyleTarget('text')} role="status">Loading player workspace…</p>}>
               <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={selectPlayer} />
-            </Suspense> : <p className="home-player-empty">Select a Main Character to explore their profile and analysis here.</p>}
+            </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a Main Character to explore their profile and analysis here.</p>}
           </section>
           <ProofPoints />
         </main>

@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
@@ -36,23 +37,23 @@ const RESEARCH_AREAS = [
 
 export default function Research() {
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="research-hub-main">
-          <section className="research-hub-hero">
-            <p className="eyebrow">SUPERUSER RESEARCH</p>
-            <h1>Research</h1>
-            <p>Build reproducible experiments and datasets without changing production analysis.</p>
+          <section {...pageStyleTarget('panel')} className="research-hub-hero">
+            <p {...pageStyleTarget('text')} className="eyebrow">SUPERUSER RESEARCH</p>
+            <h1 {...pageStyleTarget('heading')}>Research</h1>
+            <p {...pageStyleTarget('text')}>Build reproducible experiments and datasets without changing production analysis.</p>
           </section>
-          <section className="research-hub-grid" aria-label="Research areas">
+          <section {...pageStyleTarget('areas.panel')} className="research-hub-grid" aria-label="Research areas">
             {RESEARCH_AREAS.map((area) => (
-              <a className="research-hub-card" href={area.href} key={area.href}>
+              <a {...pageStyleTarget('link')} className="research-hub-card" href={area.href} key={area.href}>
                 <span className="eyebrow">{area.eyebrow}</span>
-                <h2>{area.title}</h2>
-                <p>{area.description}</p>
-                <strong>{area.action} →</strong>
+                <h2 {...pageStyleTarget('title')}>{area.title}</h2>
+                <p {...pageStyleTarget('text')}>{area.description}</p>
+                <strong {...pageStyleTarget('value')}>{area.action} →</strong>
               </a>
             ))}
           </section>

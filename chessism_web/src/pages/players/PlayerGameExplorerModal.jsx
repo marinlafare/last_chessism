@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatNumber } from '../../utils/formatters'
@@ -96,7 +97,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const analyzedOnly = selection.analyzed_only !== false
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
-      <section
+      <section {...pageStyleTarget('panel')}
         className="game-explorer-modal"
         role="dialog"
         aria-modal="true"
@@ -105,38 +106,38 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
       >
         <header className="game-modal-header">
           <div>
-            <p className="eyebrow">GAME EXPLORER</p>
-            <h2>{selectionTitle(selection)}</h2>
-            <small>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all games in this bin'}</small>
+            <p {...pageStyleTarget('text')} className="eyebrow">GAME EXPLORER</p>
+            <h2 {...pageStyleTarget('title')}>{selectionTitle(selection)}</h2>
+            <small {...pageStyleTarget('text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all games in this bin'}</small>
           </div>
-          <button className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
+          <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
         </header>
 
         {summary ? (
           <div className="game-explorer-summary">
-            <div><span>Games</span><strong>{formatNumber(summary.games)}</strong></div>
-            <div><span>Analyzed</span><strong>{formatNumber(summary.analyzed_games)}</strong></div>
-            <div><span>Accuracy</span><strong>{summary.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
-            <div><span>Results</span><strong>{summary.wins}W · {summary.draws}D · {summary.losses}L</strong></div>
+            <div><span>Games</span><strong {...pageStyleTarget('value')}>{formatNumber(summary.games)}</strong></div>
+            <div><span>Analyzed</span><strong {...pageStyleTarget('value')}>{formatNumber(summary.analyzed_games)}</strong></div>
+            <div><span>Accuracy</span><strong {...pageStyleTarget('value')}>{summary.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
+            <div><span>Results</span><strong {...pageStyleTarget('value')}>{summary.wins}W · {summary.draws}D · {summary.losses}L</strong></div>
           </div>
         ) : null}
 
-        {request.error ? <p className="game-modal-message error" role="alert">{request.error}</p> : null}
-        {!games.length && request.loading ? <p className="game-modal-message">Loading games…</p> : null}
-        {!games.length && !request.loading && !request.error ? <p className="game-modal-message">No analyzed games are in this bin.</p> : null}
+        {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {!games.length && request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading games…</p> : null}
+        {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('text')} className="game-modal-message">No analyzed games are in this bin.</p> : null}
 
         {games.length ? (
           <div className="game-explorer-list">
             {games.map((game) => (
-              <button type="button" onClick={() => onOpenGame(game.game_id)} key={game.game_id}>
+              <button {...pageStyleTarget('button')} type="button" onClick={() => onOpenGame(game.game_id)} key={game.game_id}>
                 <span className={`game-result-mark ${game.result}`}>{resultLabel(game.result)}</span>
                 <span className="game-list-opponent">
-                  <strong>vs {game.opponent_name}</strong>
-                  <small>{localDateTime(game.played_at_local || game.played_at_utc)} · {game.mode} · {game.player_color}</small>
+                  <strong {...pageStyleTarget('value')}>vs {game.opponent_name}</strong>
+                  <small {...pageStyleTarget('text')}>{localDateTime(game.played_at_local || game.played_at_utc)} · {game.mode} · {game.player_color}</small>
                 </span>
-                <span><small>Accuracy</small><strong>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
-                <span><small>Blunders</small><strong>{game.blunder_count ?? 'N/A'}</strong></span>
-                <span><small>Rating</small><strong>{game.player_rating}</strong></span>
+                <span><small {...pageStyleTarget('text')}>Accuracy</small><strong {...pageStyleTarget('value')}>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
+                <span><small {...pageStyleTarget('text')}>Blunders</small><strong {...pageStyleTarget('value')}>{game.blunder_count ?? 'N/A'}</strong></span>
+                <span><small {...pageStyleTarget('text')}>Rating</small><strong {...pageStyleTarget('value')}>{game.player_rating}</strong></span>
                 <span className="game-list-open">open →</span>
               </button>
             ))}
@@ -144,7 +145,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         ) : null}
 
         {request.data?.pagination?.has_more ? (
-          <button className="game-explorer-more" type="button" disabled={request.loading} onClick={loadMore}>
+          <button {...pageStyleTarget('button')} className="game-explorer-more" type="button" disabled={request.loading} onClick={loadMore}>
             {request.loading ? 'Loading…' : 'Load more'}
           </button>
         ) : null}

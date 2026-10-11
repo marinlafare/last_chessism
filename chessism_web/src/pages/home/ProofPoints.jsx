@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 const points = [
   'Stockfish at scale',
   'Critical moments and turning points',
@@ -8,7 +9,7 @@ const points = [
 
 function ProofPoints() {
   return (
-    <section className="proof-points" aria-label="Core capabilities">
+    <section {...pageStyleTarget('panel')} className="proof-points" aria-label="Core capabilities">
       <ul>
         {points.map((point) => (
           <li key={point}>{point}</li>

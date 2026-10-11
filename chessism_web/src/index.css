@@ -2,3 +2,4 @@
 @import './styles/foundation.css';
 @import './styles/dashboard-shared.css';
 @import './styles/responsive.css';
+@import './appearance/chartColors.css';

@@ -3,7 +3,7 @@ import os
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field
 from chessism_api.auth import get_current_account, require_admin
-from chessism_api.operations.appearance import read_appearance, change_appearance, AppearanceConflict
+from chessism_api.operations.appearance import read_appearance, change_appearance, AppearanceConflict, MAX_OVERRIDES
 
 router = APIRouter()
 
@@ -13,7 +13,7 @@ class PresetRequest(BaseModel):
     revision: int = Field(ge=0)
     preset_id: str | None = Field(None, max_length=36)
     name: str | None = Field(None, max_length=60)
-    overrides: list[dict] = Field(default_factory=list, max_length=500)
+    overrides: list[dict] = Field(default_factory=list, max_length=MAX_OVERRIDES)
 
 
 def require_style_write(request: Request):

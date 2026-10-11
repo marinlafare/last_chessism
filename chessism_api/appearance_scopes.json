@@ -1,0 +1,861 @@
+{
+  "common_targets": {
+    "page": {
+      "label": "Page background",
+      "properties": [
+        "background",
+        "color",
+        "fontFamily"
+      ]
+    },
+    "panel": {
+      "label": "Panels on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "card": {
+      "label": "Cards on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "heading": {
+      "label": "Page heading",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "title": {
+      "label": "Section titles",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "text": {
+      "label": "Body text",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "label": {
+      "label": "Field labels",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "value": {
+      "label": "Metric values",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "button": {
+      "label": "Buttons on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "field": {
+      "label": "Form fields on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "link": {
+      "label": "Links on this page",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverColor"
+      ]
+    },
+    "table": {
+      "label": "Tables on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "table.header": {
+      "label": "Table headings",
+      "properties": [
+        "background",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "table.cell": {
+      "label": "Table cells",
+      "properties": [
+        "background",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "disclosure": {
+      "label": "Expandable sections",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "toolbar": {
+      "label": "Toolbars",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "popup": {
+      "label": "Dialogs on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    }
+  },
+  "scopes": {
+    "home": {
+      "label": "Home",
+      "routes": [
+        "/",
+        "/players"
+      ],
+      "targets": {
+        "summary.panel": {
+          "label": "Database summary",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "characters.panel": {
+          "label": "Main characters",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.panel": {
+          "label": "Player workspace",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.profile": {
+          "label": "Player profile",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.behavior": {
+          "label": "Behavioral map",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.analysis": {
+          "label": "Player analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.measures": {
+          "label": "Player measures",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "games": {
+      "label": "Games",
+      "routes": [
+        "/games"
+      ],
+      "targets": {
+        "overview.panel": {
+          "label": "Game overview",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "modes.panel": {
+          "label": "Time controls",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "ratings.panel": {
+          "label": "Ratings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "moves.panel": {
+          "label": "Top moves",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "openings.panel": {
+          "label": "Openings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "lengths.panel": {
+          "label": "Game lengths",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "activity.panel": {
+          "label": "Activity",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "explorer.panel": {
+          "label": "Games explorer",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "system_status": {
+      "label": "System Status",
+      "routes": [
+        "/system_status"
+      ],
+      "targets": {
+        "local.panel": {
+          "label": "Local system status",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.panel": {
+          "label": "Cloud status",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "billing.panel": {
+          "label": "Cloud billing",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "download_games": {
+      "label": "Add Games",
+      "routes": [
+        "/add_games",
+        "/download_new_games"
+      ],
+      "targets": {
+        "download.panel": {
+          "label": "Download games",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "update.panel": {
+          "label": "Update player games",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "main_characters": {
+      "label": "Main Characters",
+      "routes": [
+        "/main_characters"
+      ],
+      "targets": {
+        "modes.panel": {
+          "label": "Time controls",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "ratings.panel": {
+          "label": "Player ratings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "players.panel": {
+          "label": "Player list",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "secondary_character": {
+      "label": "Secondary Character",
+      "routes": [
+        "/secondary_character"
+      ],
+      "targets": {}
+    },
+    "positions": {
+      "label": "Analyze Positions",
+      "routes": [
+        "/analize_positions",
+        "/positions"
+      ],
+      "targets": {
+        "coverage.panel": {
+          "label": "Position coverage",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "local.panel": {
+          "label": "Local analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "local.selection": {
+          "label": "Local FEN selection",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.panel": {
+          "label": "Cloud analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.selection": {
+          "label": "Cloud job configuration",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.job": {
+          "label": "Cloud job progress",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.draft": {
+          "label": "Combined player-game selection",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "live_analysis": {
+      "label": "Live Analysis",
+      "routes": [
+        "/live_analysis",
+        "/live_analyzis"
+      ],
+      "targets": {
+        "analysis.panel": {
+          "label": "Live analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "scored_positions": {
+      "label": "Scored Positions",
+      "routes": [
+        "/scored_positions"
+      ],
+      "targets": {}
+    },
+    "analyze_times": {
+      "label": "Analyze Times",
+      "routes": [
+        "/analyze_times"
+      ],
+      "targets": {
+        "summary.panel": {
+          "label": "Analysis timing summary",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "workers.panel": {
+          "label": "Worker timings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Timing history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "research": {
+      "label": "Research",
+      "routes": [
+        "/research"
+      ],
+      "targets": {
+        "areas.panel": {
+          "label": "Research areas",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "accuracy_coefficient": {
+      "label": "Accuracy Coefficient",
+      "routes": [
+        "/research/chessism-coefficient"
+      ],
+      "targets": {
+        "config.panel": {
+          "label": "Experiment configuration",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Experiment history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Experiment results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "decision.panel": {
+          "label": "Coefficient decision",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "matrices": {
+      "label": "Matrices Constructor",
+      "routes": [
+        "/research/matrices"
+      ],
+      "targets": {
+        "definitions.panel": {
+          "label": "Saved matrices",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "definition.panel": {
+          "label": "Matrix definition",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "preview.panel": {
+          "label": "Matrix preview",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "algorithms": {
+      "label": "Algorithms",
+      "routes": [
+        "/research/algorithms"
+      ],
+      "targets": {
+        "definition.panel": {
+          "label": "Algorithm definition",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Algorithm history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Algorithm results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "steps.panel": {
+          "label": "Algorithm steps",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "salience": {
+      "label": "Salience Research",
+      "routes": [
+        "/research/salience"
+      ],
+      "targets": {
+        "totals.panel": {
+          "label": "Salience totals",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "players.panel": {
+          "label": "Player salience",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "backups": {
+      "label": "Database Backups",
+      "routes": [
+        "/backups"
+      ],
+      "targets": {
+        "storage.panel": {
+          "label": "Backup storage",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "backup.panel": {
+          "label": "Create backup",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "restore.panel": {
+          "label": "Restore checks",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Backup history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "navigation": {
+      "label": "Navigation (all pages)",
+      "routes": [],
+      "targets": {
+        "sidebar": {
+          "label": "Sidebar",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    }
+  }
+}

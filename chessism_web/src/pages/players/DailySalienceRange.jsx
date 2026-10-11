@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useId, useRef } from 'react'
 import { moveSalienceBound } from './dailySalience'
 
@@ -43,8 +44,8 @@ export default function DailySalienceRange({ range, scale, onChange }) {
   return (
     <div className="daily-salience-control" role="group" aria-labelledby={`${id}-label`}
       aria-describedby={`${id}-help`}>
-      <strong id={`${id}-label`}>Relative salience</strong>
-      <small>Average per game</small>
+      <strong {...pageStyleTarget('value')} id={`${id}-label`}>Relative salience</strong>
+      <small {...pageStyleTarget('text')}>Average per game</small>
       <output className="daily-salience-values" aria-label="Selected salience range">{bounds[0]}–{bounds[1]}</output>
       <div className="daily-salience-track" ref={track} data-disabled={disabled}
         onPointerDown={pointerDown} onPointerMove={pointerMove}
@@ -62,7 +63,7 @@ export default function DailySalienceRange({ range, scale, onChange }) {
           <span key={value} className="daily-salience-tick" style={{ bottom: `${value}%` }} aria-hidden="true">{value}</span>
         ))}
         {bounds.map((value, index) => (
-          <button key={index} type="button" role="slider" className="daily-salience-handle"
+          <button {...pageStyleTarget('button')} key={index} type="button" role="slider" className="daily-salience-handle"
             data-salience-handle={index} disabled={disabled} style={{ bottom: `${value}%` }}
             aria-label={`${index === 0 ? 'Minimum' : 'Maximum'} relative average game salience`}
             aria-orientation="vertical" aria-valuemin={index === 0 ? 0 : bounds[0]}
@@ -72,9 +73,9 @@ export default function DailySalienceRange({ range, scale, onChange }) {
             onKeyDown={(event) => keyDown(event, index)}><span aria-hidden="true" /></button>
         ))}
       </div>
-      <button className="daily-salience-reset" type="button"
+      <button {...pageStyleTarget('button')} className="daily-salience-reset" type="button"
         disabled={disabled || (bounds[0] === 0 && bounds[1] === 100)} onClick={() => onChange([0, 100])}>Reset</button>
-      <small id={`${id}-help`}>{scale.minimum === null ? 'Salience unavailable.'
+      <small {...pageStyleTarget('text')} id={`${id}-help`}>{scale.minimum === null ? 'Salience unavailable.'
         : disabled ? 'All days have the same average game salience.'
           : `0 = ${scale.minimum.toPrecision(4)}; 100 = ${scale.maximum.toPrecision(4)} average game salience. All years, selected game types.`}</small>
     </div>

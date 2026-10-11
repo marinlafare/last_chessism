@@ -11,7 +11,7 @@ for key,value in {'AUTH_COOKIE_NAME':'test_session','AUTH_GATE_COOKIE_NAME':'tes
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from chessism_api.routers import appearance as router
-from chessism_api.operations.appearance import validate_overrides,preset_name,AppearanceConflict
+from chessism_api.operations.appearance import validate_overrides,preset_name,AppearanceConflict,REGISTRY,MAX_OVERRIDES
 from chessism_api.auth import get_current_account
 from chessism_api.database.models import AccountRole
 
@@ -30,12 +30,29 @@ class AppearanceTests(unittest.TestCase):
         for value in (True,float('nan'),float('inf'),-1,100):
             with self.assertRaises(ValueError):validate_overrides([override(target='unique.outline',property='strokeWidth',value=value)])
         with self.assertRaises(ValueError):validate_overrides([override(),override()])
-        with self.assertRaises(ValueError):validate_overrides([override()]*501)
+        with self.assertRaises(ValueError):validate_overrides([override()]*(MAX_OVERRIDES+1))
+
+    def test_all_page_scopes_and_original_presets_are_supported(self):
+        self.assertEqual(REGISTRY['version'],1)
+        for scope,spec in REGISTRY['scopes'].items():
+            rows=[override(scope=scope,target='page',property='background',value='#112233')]
+            self.assertEqual(validate_overrides(rows)[0]['scope'],scope)
+            for target in spec['targets']:
+                self.assertLessEqual(len(target),64)
+        self.assertEqual(validate_overrides([override()])[0]['color_value'],'#abcdef80')
+        with self.assertRaises(ValueError):validate_overrides([override(scope='positions')])
+        with self.assertRaises(ValueError):validate_overrides([override(scope='made-up')])
 
     def test_default_names_are_immutable(self):
         for name in ('Default',' default ','DEFAULT','',None,'a'*61,'hello\nworld'):
             with self.assertRaises(ValueError):preset_name(name)
         self.assertEqual(preset_name(' My theme '),'My theme')
+
+    def test_chart_palette_validation(self):
+        rows=[override(scope='home',target='chart.accuracy',property='chartColor1',value='#11223380')]
+        self.assertEqual(validate_overrides(rows)[0]['color_value'],'#11223380')
+        with self.assertRaises(ValueError):validate_overrides([{**rows[0],'property':'chartColor99'}])
+        with self.assertRaises(ValueError):validate_overrides([{**rows[0],'value':'url(https://invalid.test)'}])
 
     def client(self,role='admin'):
         app=FastAPI();app.include_router(router.router,prefix='/appearance')

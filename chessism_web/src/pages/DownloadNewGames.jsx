@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
@@ -29,13 +30,13 @@ function renderUpdateProgress(status) {
   return (
     <div className="job-progress" aria-label="Update progress">
       <div className="job-progress-head">
-        <strong>{phase}</strong>
+        <strong {...pageStyleTarget('value')}>{phase}</strong>
         <span>{percent}%</span>
       </div>
       <div className="job-progress-track">
         <div className="job-progress-fill" style={{ width: `${percent}%` }} />
       </div>
-      <p className="result-line">{progress.detail || `${processed} of ${total}`}</p>
+      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || `${processed} of ${total}`}</p>
     </div>
   )
 }
@@ -179,20 +180,20 @@ function DownloadNewGames() {
   }
 
   return (
-    <div className="page-frame download-games-page">
+    <div {...pageStyleTarget('page')} className="page-frame download-games-page">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main>
-          <section className="games-hero">
-            <h1>Add Games</h1>
+          <section {...pageStyleTarget('panel')} className="games-hero">
+            <h1 {...pageStyleTarget('heading')}>Add Games</h1>
           </section>
 
-          <section className="games-actions" aria-label="Games actions">
-            <article className="game-card">
-              <h2>Download Games of a Player</h2>
-              <label htmlFor="download-player">Player name</label>
-              <input
+          <section {...pageStyleTarget('panel')} className="games-actions" aria-label="Games actions">
+            <article {...pageStyleTarget('card')} className="game-card">
+              <h2 {...pageStyleTarget('title')}>Download Games of a Player</h2>
+              <label {...pageStyleTarget('label')} htmlFor="download-player">Player name</label>
+              <input {...pageStyleTarget('field')}
                 id="download-player"
                 className="text-input"
                 type="text"
@@ -201,17 +202,17 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleDownload()}
                 placeholder="e.g. hikaru"
               />
-              <button className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
+              <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
                 {downloadLoading ? 'Queueing...' : downloadJobActive ? 'Downloading...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
               {renderUpdateProgress(downloadJobStatus)}
-              <p className="result-line">{downloadResult || '-'}</p>
+              <p {...pageStyleTarget('text')} className="result-line">{downloadResult || '-'}</p>
             </article>
 
-            <article className="game-card">
-              <h2>Update Games of a Player</h2>
-              <label htmlFor="update-player">Player name</label>
-              <input
+            <article {...pageStyleTarget('card')} className="game-card">
+              <h2 {...pageStyleTarget('title')}>Update Games of a Player</h2>
+              <label {...pageStyleTarget('label')} htmlFor="update-player">Player name</label>
+              <input {...pageStyleTarget('field')}
                 id="update-player"
                 className="text-input"
                 type="text"
@@ -220,11 +221,11 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleUpdate()}
                 placeholder="e.g. magnuscarlsen"
               />
-              <button className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
+              <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
                 {updateLoading ? 'Queueing...' : updateJobActive ? 'Updating...' : actionBusy ? 'Busy...' : 'Update Games'}
               </button>
               {renderUpdateProgress(updateJobStatus)}
-              <p className="result-line">{updateResult || '-'}</p>
+              <p {...pageStyleTarget('text')} className="result-line">{updateResult || '-'}</p>
             </article>
           </section>
         </main>

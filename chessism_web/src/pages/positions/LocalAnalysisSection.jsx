@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useState } from 'react'
 import AnalysisDisclosure from './AnalysisDisclosure'
 import LocalGameSelection from './LocalGameSelection'
@@ -12,12 +13,12 @@ export default function LocalAnalysisSection({ page }) {
   const activeCount = page.analysisProcessViews.length
   return <AnalysisDisclosure id="analysis-local" label="Local"
     status={activeCount ? `${activeCount} active / queued processes` : 'Compute on this computer'}>
-    <section className="local-analysis-selection" aria-label="Local FEN selection">
-      <p>Choose one FEN set for local Stockfish. Only missing, unreserved positions are selected;
+    <section {...pageStyleTarget('local.selection')} className="local-analysis-selection" aria-label="Local FEN selection">
+      <p {...pageStyleTarget('text')}>Choose one FEN set for local Stockfish. Only missing, unreserved positions are selected;
         FENs assigned to the running cloud job are skipped. {formatNumber(DEFAULT_ANALYSIS_NODES)} nodes per FEN.</p>
-      <label className="local-selection-picker">
-        <span className="field-label">FEN selection</span>
-        <select className="text-input" aria-label="Local FEN selection" value={mode}
+      <label {...pageStyleTarget('label')} className="local-selection-picker">
+        <span {...pageStyleTarget('label')} className="field-label">FEN selection</span>
+        <select {...pageStyleTarget('field')} className="text-input" aria-label="Local FEN selection" value={mode}
           onChange={event => setMode(event.target.value)}>
           <option value="all">All positions — unscored FENs</option>
           <option value="player">Player positions — unscored FENs</option>
@@ -42,10 +43,10 @@ function LocalPositionSelection({ page, mode }) {
   return <form className="local-selection-form" aria-label="Local position analysis"
     onSubmit={player ? page.handlePlayerAnalysis : page.handleGlobalAnalysis}>
     {player && <>
-      <label>
-        <span className="field-label">Chess.com nickname</span>
+      <label {...pageStyleTarget('label')}>
+        <span {...pageStyleTarget('label')} className="field-label">Chess.com nickname</span>
         <div className="input-action-row">
-          <input className="text-input" type="text" required value={state.playerName}
+          <input {...pageStyleTarget('field')} className="text-input" type="text" required value={state.playerName}
             onChange={event => {
               update(current => ({ ...current, playerName: event.target.value }))
               page.setPlayerInspection(current => ({ ...current, error: '', data: null }))
@@ -54,33 +55,33 @@ function LocalPositionSelection({ page, mode }) {
               event.preventDefault()
               page.handleInspectPlayer()
             }} placeholder="hikaru" />
-          <button className="btn btn-secondary" type="button" onClick={page.handleInspectPlayer}
+          <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={page.handleInspectPlayer}
             disabled={page.playerInspection.loading}>{page.playerInspection.loading ? 'Inspecting' : 'Inspect player'}</button>
         </div>
       </label>
       {page.playerInspection.error && <div className="status-banner warn">{page.playerInspection.error}</div>}
-      {page.playerInspection.data && <p className="local-selection-counts">
+      {page.playerInspection.data && <p {...pageStyleTarget('text')} className="local-selection-counts">
         {formatNumber(page.playerInspection.data.total_positions)} positions ·
         {' '}{formatNumber(page.playerInspection.data.analyzed_positions)} analyzed
       </p>}
     </>}
-    {!player && <p className="local-selection-counts">
+    {!player && <p {...pageStyleTarget('text')} className="local-selection-counts">
       {page.analysisCounts || page.coverage ? formatNumber(page.pendingPositions) : '—'} positions pending ·
       {' '}{page.analysisCounts ? formatNumber(page.scoredPositions) : '—'} scored
     </p>}
     <div className="local-position-fields">
-      <label><span className="field-label">FEN positions</span>
-        <input className="text-input number-input-clean" type="number" min="1" step="1" required
+      <label {...pageStyleTarget('label')}><span {...pageStyleTarget('label')} className="field-label">FEN positions</span>
+        <input {...pageStyleTarget('field')} className="text-input number-input-clean" type="number" min="1" step="1" required
           value={state.totalFens} onWheel={event => event.currentTarget.blur()}
           onChange={event => update(current => ({ ...current, totalFens: event.target.value }))} />
       </label>
-      <label><span className="field-label">Batch size</span>
-        <input className="text-input number-input-clean" type="number" min="1" max={maximum} step="1" required
+      <label {...pageStyleTarget('label')}><span {...pageStyleTarget('label')} className="field-label">Batch size</span>
+        <input {...pageStyleTarget('field')} className="text-input number-input-clean" type="number" min="1" max={maximum} step="1" required
           value={state.batchSize} onWheel={event => event.currentTarget.blur()}
           onChange={event => update(current => ({ ...current, batchSize: clampAnalysisBatchInput(event.target.value, maximum) }))} />
       </label>
     </div>
-    <button className="btn btn-primary" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
+    <button {...pageStyleTarget('button')} className="btn btn-primary" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
       {status?.loading || isTrackedJobActive(status) ? getAnalysisButtonLabel(status) : 'Analyze locally'}
     </button>
     <JobStatus jobKey={key} page={page} />

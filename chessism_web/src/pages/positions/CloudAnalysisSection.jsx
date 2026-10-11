@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createCloudAnalysis, fetchCloudAnalysis, resumeCloudAnalysis, retryCloudAnalysis, cancelCloudAnalysis,
@@ -74,24 +75,24 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
   const batchDisplay = displayedJobs.find(({ job }) => job.selection.backend !== 'cloud_run')
   const statusJob = activeJob || displayedJobs[0]?.job
   const content = (
-    <section className="cloud-analysis" aria-label="Google Cloud analysis">
-      <h2>GOOGLE CLOUD ANALYSIS</h2>
-      <p>Same FEN selection, same database results. Local analysis can run alongside cloud jobs;
+    <section {...pageStyleTarget('cloud.panel')} className="cloud-analysis" aria-label="Google Cloud analysis">
+      <h2 {...pageStyleTarget('title')}>GOOGLE CLOUD ANALYSIS</h2>
+      <p {...pageStyleTarget('text')}>Same FEN selection, same database results. Local analysis can run alongside cloud jobs;
         reserved FENs are skipped by the other workers.</p>
-      <p role="status">Controller: {data.controller_online ? 'online' : 'offline — start cloud-controller with Docker Compose'}.</p>
-      <p>Cloud Run uses independent one-vCPU workers; Batch Spot uses 16-vCPU/16-GiB VMs.
+      <p {...pageStyleTarget('text')} role="status">Controller: {data.controller_online ? 'online' : 'offline — start cloud-controller with Docker Compose'}.</p>
+      <p {...pageStyleTarget('text')}>Cloud Run uses independent one-vCPU workers; Batch Spot uses 16-vCPU/16-GiB VMs.
         Each FEN uses one thread, 256 MiB hash and {DEFAULT_ANALYSIS_NODES.toLocaleString('en-US')} nodes (fixed),
         with no time-based search cutoff. Results are uploaded in batches of 500 and imported into the local database.
         Successful jobs clean up automatically after the final database import.</p>
       {error && <div role="alert" className="status-banner warn">{error}</div>}
-      {draftError && <p role="alert">Could not restore the saved FEN set: {draftError}. Open the combined builder and reload the saved draft.</p>}
-      {draftAvailable && <p role="status" className="cloud-busy-notice" data-saved-cloud-draft>
+      {draftError && <p {...pageStyleTarget('text')} role="alert">Could not restore the saved FEN set: {draftError}. Open the combined builder and reload the saved draft.</p>}
+      {draftAvailable && <p {...pageStyleTarget('text')} role="status" className="cloud-busy-notice" data-saved-cloud-draft>
         Saved FEN set: {savedDraft.entries.length} player selections.
         {savedDraft.preview && <> Last preview: {savedDraft.preview.fens_to_analyze.toLocaleString('en-US')} available FENs
           {' '}from {savedDraft.preview.unique_games.toLocaleString('en-US')} unique games.</>}
         {' '}Review it in Batch Spot below; it has not been submitted.
       </p>}
-      {cloudBusy && <p role="status" className="cloud-busy-notice">
+      {cloudBusy && <p {...pageStyleTarget('text')} role="status" className="cloud-busy-notice">
         A cloud job is {activeJob?.status || 'active'}. New submissions are disabled until it finishes
         importing and cleaning up. Paused/failed jobs must be recovered first. Local analysis and combined draft editing remain available.
       </p>}
@@ -105,92 +106,92 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
           savedDraft={savedDraft} onDraftChange={setSavedDraft}
           create={(payload) => action(() => createCloudAnalysis(payload))} />
       </div>
-      <h3>CLOUD JOB PROGRESS</h3>
-      <p>Done means analysis, database import and cleanup have finished. The completed display fades after 10 seconds.
+      <h3 {...pageStyleTarget('title')}>CLOUD JOB PROGRESS</h3>
+      <p {...pageStyleTarget('text')}>Done means analysis, database import and cleanup have finished. The completed display fades after 10 seconds.
         Older completed/cancelled entries are hidden; saved results and reports are retained.</p>
-      {!displayedJobs.length && <p>No active cloud jobs.</p>}
+      {!displayedJobs.length && <p {...pageStyleTarget('text')}>No active cloud jobs.</p>}
       {displayedJobs.map(({ job, state }) => {
         const active = cloudActiveRun(job)
         const progress = cloudJobProgress(job)
         return (
-          <article className={`cloud-job${state === 'fading' ? ' cloud-job-fading' : ''}`} key={job.id}>
-            <strong>{job.selection.backend === 'cloud_run' ? 'Cloud Run' : 'Batch Spot'} · {job.combined_selection
+          <article {...pageStyleTarget('card')} className={`cloud-job${state === 'fading' ? ' cloud-job-fading' : ''}`} key={job.id}>
+            <strong {...pageStyleTarget('value')}>{job.selection.backend === 'cloud_run' ? 'Cloud Run' : 'Batch Spot'} · {job.combined_selection
               ? `Combined games: ${job.combined_selection.players.join(', ')}`
               : `${job.selection.mode} ${job.selection.player_name || ''}`} — {progress.label}</strong>
-            <small>{job.id}</small>
+            <small {...pageStyleTarget('text')}>{job.id}</small>
             <CloudFenProgress job={job} />
             {job.sequence && <div className="cloud-sequence-progress">
-              {!job.sequence.frozen ? <p>Reserving one fixed FEN set: {job.sequence.reserved.toLocaleString('en-US')} / {job.sequence.requested.toLocaleString('en-US')}.
+              {!job.sequence.frozen ? <p {...pageStyleTarget('text')}>Reserving one fixed FEN set: {job.sequence.reserved.toLocaleString('en-US')} / {job.sequence.requested.toLocaleString('en-US')}.
                 No loop starts until selection is frozen.</p> : <>
-                <p>Fixed set: {job.sequence.reserved.toLocaleString('en-US')} FENs (requested {job.sequence.requested.toLocaleString('en-US')}).
+                <p {...pageStyleTarget('text')}>Fixed set: {job.sequence.reserved.toLocaleString('en-US')} FENs (requested {job.sequence.requested.toLocaleString('en-US')}).
                   {' '}{job.sequence.automatic
                     ? `${job.runs.filter(run => run.positions > 0).length} cloud tasks; final cleanup is shared.`
                     : `${job.runs.filter(run => run.positions > 0 && run.status === 'complete').length} loops completed; ${job.runs.filter(run => run.positions > 0).length} nonempty loops.`}</p>
                 {job.sequence.automatic && <>
-                  <p>Cloud tasks complete: {job.sequence.cloud_completed} / {job.runs.filter(run => run.positions > 0).length}.
+                  <p {...pageStyleTarget('text')}>Cloud tasks complete: {job.sequence.cloud_completed} / {job.runs.filter(run => run.positions > 0).length}.
                     {' '}Locally imported: {job.imported.toLocaleString('en-US')} FENs. Cloud status: {job.sequence.cloud_status || 'preparing'}.</p>
-                  <p>Tasks fully imported: {job.runs.filter(run => run.positions > 0 && run.imported >= run.positions).length}
+                  <p {...pageStyleTarget('text')}>Tasks fully imported: {job.runs.filter(run => run.positions > 0 && run.imported >= run.positions).length}
                     {' '} / {job.runs.filter(run => run.positions > 0).length}. Imported tasks can still await verification and shared cleanup.</p>
-                  <p role="status">{job.sequence.safe_to_power_off
+                  <p {...pageStyleTarget('text')} role="status">{job.sequence.safe_to_power_off
                     ? 'Safe to turn off your PC — Google has accepted all tasks. Local import and cleanup resume when Docker returns.'
                     : 'Keep your PC on until every input is uploaded and Google acknowledges the sequence.'}</p>
                 </>}
-                {active && <><p data-cloud-active-task>{job.sequence.automatic ? cloudTaskLabel(job, active)
+                {active && <><p {...pageStyleTarget('text')} data-cloud-active-task>{job.sequence.automatic ? cloudTaskLabel(job, active)
                   : `Loop ${job.runs.indexOf(active) + 1} of ${job.sequence.times} — ${progress.label}`}</p>
                   <CloudFenProgress job={{ ...job, target: active.positions, imported: active.imported, runs: [active] }} /></>}
               </>}
-              {['queued', 'running', 'paused', 'waiting', 'failed'].includes(job.status) && <button type="button"
+              {['queued', 'running', 'paused', 'waiting', 'failed'].includes(job.status) && <button {...pageStyleTarget('button')} type="button"
                 className="btn btn-secondary" disabled={busy || job.sequence.stop_requested}
                 onClick={() => action(() => stopCloudRepeating(job.id))}>
                 {job.sequence.stop_requested ? job.sequence.automatic && !job.sequence.stop_acknowledged ? 'Stop requested — awaiting Google acknowledgement' : 'Remaining tasks stopped' : 'Stop after current task'}
               </button>}
-              <small>{job.sequence.automatic ? 'Cloud execution does not wait for local imports. Failed/stopped sequences retain checkpoints for an explicit retry.' : 'Next loops require the local controller. Paused/failed current loops still need recovery.'}</small>
+              <small {...pageStyleTarget('text')}>{job.sequence.automatic ? 'Cloud execution does not wait for local imports. Failed/stopped sequences retain checkpoints for an explicit retry.' : 'Next loops require the local controller. Paused/failed current loops still need recovery.'}</small>
             </div>}
             <CloudJobSteps job={job} />
-            {active?.cloud_state && <small>Cloud execution: {active.cloud_state} (compute only, not the full workflow).</small>}
+            {active?.cloud_state && <small {...pageStyleTarget('text')}>Cloud execution: {active.cloud_state} (compute only, not the full workflow).</small>}
             {job.runs.map((run) => <CloudPerformanceSummary key={run.id} run={run} />)}
-            {active?.batch_jobs.map((id) => <small key={id}>Batch: {id}</small>)}
-            {active?.run_job && <small>Cloud Run: {active.run_job}</small>}
-            {active?.run_execution && <small>Execution: {active.run_execution.name}</small>}
-            {active?.recovery && <p>Google interruptions: {active.recovery.preemptions}.
+            {active?.batch_jobs.map((id) => <small {...pageStyleTarget('text')} key={id}>Batch: {id}</small>)}
+            {active?.run_job && <small {...pageStyleTarget('text')}>Cloud Run: {active.run_job}</small>}
+            {active?.run_execution && <small {...pageStyleTarget('text')}>Execution: {active.run_execution.name}</small>}
+            {active?.recovery && <p {...pageStyleTarget('text')}>Google interruptions: {active.recovery.preemptions}.
               {' '}Application failures: {active.recovery.application_failures} / 2.
               {' '}Recovery: {active.recovery.status.toLowerCase()}.</p>}
             {!!active?.vm_statuses?.length && <ul aria-label="Batch VM progress">{active.vm_statuses.map((vm) => (
               <li key={vm.index}>VM {vm.index + 1}: {vm.state} · {vm.positions.toLocaleString('en-US')} FENs ·
                 {' '}{vm.preemptions} Google interruptions · {vm.application_failures}/2 application failures</li>
             ))}</ul>}
-            {job.error && <p className="status-banner warn">{job.error}</p>}
+            {job.error && <p {...pageStyleTarget('text')} className="status-banner warn">{job.error}</p>}
             {job.status === 'paused' && active?.status === 'preparing' && ['batch_multi_vm_v1', 'batch_work_units_v1'].includes(job.selection.execution_mode) && (
               <div>
-                <label>VM count for retrying preflight
-                  <input className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1"
+                <label {...pageStyleTarget('label')}>VM count for retrying preflight
+                  <input {...pageStyleTarget('field')} className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1"
                     value={revisedVms} onChange={(event) => setRevisedVms(event.target.value)}
                     disabled={busy || !data.controller_online} />
                 </label>
-                <button className="btn" type="button"
+                <button {...pageStyleTarget('button')} className="btn" type="button"
                   disabled={busy || !data.controller_online || !Number.isInteger(Number(revisedVms)) || Number(revisedVms) < 1 || Number(revisedVms) > MAX_BATCH_VMS}
                   onClick={() => action(() => reviseCloudVms(job.id, Number(revisedVms)))}>Update VM count and retry checks</button>
-                <small>The selected FENs remain reserved. VM count cannot change after preparation.</small>
+                <small {...pageStyleTarget('text')}>The selected FENs remain reserved. VM count cannot change after preparation.</small>
               </div>
             )}
             {['paused', 'waiting'].includes(job.status) && (
-              <button className="btn" disabled={busy || !data.controller_online || (activeJob && activeJob.id !== job.id)}
+              <button {...pageStyleTarget('button')} className="btn" disabled={busy || !data.controller_online || (activeJob && activeJob.id !== job.id)}
                 onClick={() => action(() => resumeCloudAnalysis(job.id))}>Resume saved job</button>
             )}
             {(job.sequence?.automatic || ((active?.recovery_session || active?.run_job) && ['running', 'run_discover', 'submitting'].includes(active?.status))) && ['running', 'paused'].includes(job.status) && (
-              <button className="btn btn-secondary" disabled={busy || !data.controller_online || job.selection.cancel_requested}
+              <button {...pageStyleTarget('button')} className="btn btn-secondary" disabled={busy || !data.controller_online || job.selection.cancel_requested}
                 onClick={() => action(() => cancelCloudAnalysis(job.id))}>
                 {job.selection.cancel_requested ? 'Cancellation requested' : 'Stop cloud job and recovery'}
               </button>
             )}
             {job.status === 'failed' && (job.sequence?.automatic ? job.sequence.session < 3 : active?.run_job ? active.run_execution_count < 3 : active?.recovery_session ? active.recovery_session < 3 : active?.batch_jobs.length < 3) && (
-              <button className="btn" disabled={busy || !data.controller_online || (activeJob && activeJob.id !== job.id)}
+              <button {...pageStyleTarget('button')} className="btn" disabled={busy || !data.controller_online || (activeJob && activeJob.id !== job.id)}
                 onClick={() => action(() => retryCloudAnalysis(job.id))}>Retry cloud — billable</button>
             )}
           </article>
         )
       })}
-      <p>Temporary job data and its image are deleted; the empty bucket/repository, recovery workflow and permissions remain.
+      <p {...pageStyleTarget('text')}>Temporary job data and its image are deleted; the empty bucket/repository, recovery workflow and permissions remain.
         Eligible, job-owned VM or Cloud Run log streams are removed after a performance report is saved locally.
         Shared logs and Google audit/billing/monitoring/workflow history remain. Failed jobs retain checkpoints for recovery.</p>
     </section>
@@ -233,8 +234,8 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, s
     setError('')
   }
   const field = (key, label, max, min = 1) => (
-    <label><span className="field-label">{label}</span>
-      <input className="text-input" type="number" min={min} max={max} required
+    <label {...pageStyleTarget('label')}><span {...pageStyleTarget('label')} className="field-label">{label}</span>
+      <input {...pageStyleTarget('field')} className="text-input" type="number" min={min} max={max} required
         value={form[key]} onChange={(event) => change(key, event.target.value)} /></label>
   )
   const playerVisible = mode !== 'all' && (mode !== 'loop' || form.scope === 'player')
@@ -248,20 +249,20 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, s
     finally { setLoading(false) }
   }
   return (
-    <form className="cloud-selection" aria-labelledby={`${id}-title`} onSubmit={(event) => {
+    <form {...pageStyleTarget('cloud.selection')} className="cloud-selection" aria-labelledby={`${id}-title`} onSubmit={(event) => {
       event.preventDefault()
       if (disabled || loading || mode === 'combined') return
       try { create(cloudPayload(mode, form, preview)) } catch (err) { setError(err.message) }
     }}>
-      <h3 id={`${id}-title`}>{title.toUpperCase()}</h3>
-      <p>Choose your FEN set and {isRun ? 'CPU concurrency' : 'number of Spot VMs'}. Only missing, unreserved FENs are selected.</p>
-      {!isRun && <p>Enter the total FEN count. Each task assigns at most 1,000,000 FENs per VM;
+      <h3 {...pageStyleTarget('title')} id={`${id}-title`}>{title.toUpperCase()}</h3>
+      <p {...pageStyleTarget('text')}>Choose your FEN set and {isRun ? 'CPU concurrency' : 'number of Spot VMs'}. Only missing, unreserved FENs are selected.</p>
+      {!isRun && <p {...pageStyleTarget('text')}>Enter the total FEN count. Each task assigns at most 1,000,000 FENs per VM;
         Google runs the whole sequence even while your PC is off, after preparation is acknowledged.
         Internal work units stay at 50,000 FENs and uploads at 500 results.</p>}
       {job && <div className={fading ? 'cloud-job-fading' : ''}>
-        <p role="status">Current job: {cloudJobProgress(job).label}</p><CloudFenProgress job={job} />
+        <p {...pageStyleTarget('text')} role="status">Current job: {cloudJobProgress(job).label}</p><CloudFenProgress job={job} />
       </div>}
-      {!isRun && <button className="btn btn-secondary" type="button"
+      {!isRun && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button"
         onClick={() => changeMode(mode === 'combined' ? 'all' : 'combined')}>
         {mode === 'combined' ? 'Back to single selection' : 'Build combined player-game job'}
       </button>}
@@ -269,8 +270,8 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, s
         initialDraft={savedDraft} onDraftChange={onDraftChange}
         nVms={form.n_vms} onVmChange={value => change('n_vms', value)} /> : <>
       <fieldset disabled={disabled || loading} aria-label={`${title} controls`}>
-      <label>FEN selection
-        <select className="text-input" aria-label="FEN selection" value={mode}
+      <label {...pageStyleTarget('label')}>FEN selection
+        <select {...pageStyleTarget('field')} className="text-input" aria-label="FEN selection" value={mode}
           onChange={(event) => changeMode(event.target.value)}>
           <option value="all">All positions — unscored FENs</option>
           <option value="player">Player positions — unscored FENs</option>
@@ -278,49 +279,49 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, s
           <option value="loop">Grouped positions — all or player</option>
         </select>
       </label>
-      {isRun ? <><label>Simultaneous CPUs (n_cpus)
-        <input className="text-input" type="number" min="1" max="64" step="1" required
+      {isRun ? <><label {...pageStyleTarget('label')}>Simultaneous CPUs (n_cpus)
+        <input {...pageStyleTarget('field')} className="text-input" type="number" min="1" max="64" step="1" required
           aria-label="Simultaneous CPUs (n_cpus)" aria-describedby="cloud-run-cpus-help"
           value={form.n_cpus} onChange={(event) => change('n_cpus', event.target.value)} />
       </label>
-      <small id="cloud-run-cpus-help">Maximum concurrent one-vCPU workers, not threads per FEN.
+      <small {...pageStyleTarget('text')} id="cloud-run-cpus-help">Maximum concurrent one-vCPU workers, not threads per FEN.
         Up to 64, subject to your Google Cloud quota and the amount of selected work.</small></> : <>
-        <label>Spot VMs (n_vms)
-          <input className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1" required
+        <label {...pageStyleTarget('label')}>Spot VMs (n_vms)
+          <input {...pageStyleTarget('field')} className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1" required
             aria-label="Spot VMs (n_vms)" aria-describedby="cloud-batch-vms-help"
             value={form.n_vms} onChange={(event) => change('n_vms', event.target.value)} />
         </label>
-        <small id="cloud-batch-vms-help">Each VM: 16 vCPUs, 16 GiB RAM (n2d-highcpu-16, Spot only).
+        <small {...pageStyleTarget('text')} id="cloud-batch-vms-help">Each VM: 16 vCPUs, 16 GiB RAM (n2d-highcpu-16, Spot only).
           {' '}{Number(form.n_vms) * 16} vCPUs requested. Up to {MAX_BATCH_VMS} VMs, subject to quota;
           insufficient quota pauses before launch. Fewer VMs are used only when there are fewer FENs than VMs.</small>
       </>}
-      {mode === 'loop' && <label>Scope
-        <select className="text-input" value={form.scope} onChange={(event) => change('scope', event.target.value)}>
+      {mode === 'loop' && <label {...pageStyleTarget('label')}>Scope
+        <select {...pageStyleTarget('field')} className="text-input" value={form.scope} onChange={(event) => change('scope', event.target.value)}>
           <option value="all">All positions</option><option value="player">Player</option>
         </select></label>}
-      {playerVisible && <label>Player
-        <input className="text-input" value={form.player} required maxLength={200}
+      {playerVisible && <label {...pageStyleTarget('label')}>Player
+        <input {...pageStyleTarget('field')} className="text-input" value={form.player} required maxLength={200}
           onChange={(event) => change('player', event.target.value)} placeholder="chess.com nickname" />
       </label>}
-      {playerVisible && mode !== 'games' && <button className="btn btn-secondary" type="button"
+      {playerVisible && mode !== 'games' && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button"
         disabled={loading || !form.player.trim()} onClick={inspect}>Inspect player</button>}
-      {inspection && <p>{inspection.total_positions} positions; {inspection.analyzed_positions} analyzed.</p>}
+      {inspection && <p {...pageStyleTarget('text')}>{inspection.total_positions} positions; {inspection.analyzed_positions} analyzed.</p>}
       {mode === 'games' && <>
-        <label>Game selection
-          <select className="text-input" value={form.selection} onChange={(event) => change('selection', event.target.value)}>
+        <label {...pageStyleTarget('label')}>Game selection
+          <select {...pageStyleTarget('field')} className="text-input" value={form.selection} onChange={(event) => change('selection', event.target.value)}>
             <option value="latest">Latest games</option><option value="oldest">Oldest games</option>
             <option value="range">Date range</option><option value="fair_range">Fair range</option>
           </select></label>
         {['range', 'fair_range'].includes(form.selection) && <>
-          <label>From<input className="text-input" type="date" value={form.from}
+          <label {...pageStyleTarget('label')}>From<input {...pageStyleTarget('field')} className="text-input" type="date" value={form.from}
             onChange={(event) => change('from', event.target.value)} /></label>
-          <label>To<input className="text-input" type="date" value={form.to}
+          <label {...pageStyleTarget('label')}>To<input {...pageStyleTarget('field')} className="text-input" type="date" value={form.to}
             onChange={(event) => change('to', event.target.value)} /></label>
         </>}
         {mode === 'games' && form.selection === 'range' && <>
-          <label><input type="checkbox" checked={form.allGames}
+          <label {...pageStyleTarget('label')}><input {...pageStyleTarget('field')} type="checkbox" checked={form.allGames}
             onChange={(event) => change('allGames', event.target.checked)} /> All games in range</label>
-          <select className="text-input" aria-label="Range order" value={form.order}
+          <select {...pageStyleTarget('field')} className="text-input" aria-label="Range order" value={form.order}
             onChange={(event) => change('order', event.target.value)}>
             <option value="latest">Newest first</option><option value="oldest">Oldest first</option>
           </select>
@@ -329,13 +330,13 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, s
       </>}
       {mode === 'loop' ? <>{field('positions', 'Positions per group', 1000)}{field('runs', 'Groups (combined into one job)', maximum / 1000)}</>
         : mode !== 'games' && field('total', 'Total FEN positions', maximum)}
-      {mode === 'games' && <button className="btn btn-secondary" type="button"
+      {mode === 'games' && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button"
         disabled={loading || !form.player.trim()} onClick={inspect}>Preview games</button>}
-      {preview && <p>Frozen preview: {preview.selected_games} games, {preview.fens_to_analyze} missing FENs.
+      {preview && <p {...pageStyleTarget('text')}>Frozen preview: {preview.selected_games} games, {preview.fens_to_analyze} missing FENs.
         The system sets the FEN count from this selection. Selections over {maximum.toLocaleString('en-US')} FENs cannot be submitted.</p>}
-      <small>{cloudBound(mode, form, preview)}</small>
-      {error && <p role="alert" className="status-banner warn">{error}</p>}
-      <button className="btn" type="submit" disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview, backend))}>
+      <small {...pageStyleTarget('text')}>{cloudBound(mode, form, preview)}</small>
+      {error && <p {...pageStyleTarget('text')} role="alert" className="status-banner warn">{error}</p>}
+      <button {...pageStyleTarget('button')} className="btn" type="submit" disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview, backend))}>
         Create {title} job — billable
       </button>
       </fieldset>

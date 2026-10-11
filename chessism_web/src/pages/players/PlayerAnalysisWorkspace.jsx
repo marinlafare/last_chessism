@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import './player-analysis.css'
 import './player-hero-analytics.css'
@@ -43,15 +44,15 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
 
   return (
     <>
-      <section className="games-mode-detail player-analysis-workspace">
+      <section {...pageStyleTarget('player.analysis')} className="games-mode-detail player-analysis-workspace">
         <div className="player-analysis-heading">
           <div>
-            <p className="eyebrow">BEHAVIORAL ANALYSIS</p>
-            <h2>Patterns</h2>
+            <p {...pageStyleTarget('text')} className="eyebrow">BEHAVIORAL ANALYSIS</p>
+            <h2 {...pageStyleTarget('title')}>Patterns</h2>
           </div>
         </div>
 
-        {error ? <p className="player-analysis-error" role="alert">{error}</p> : null}
+        {error ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{error}</p> : null}
         {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
         {!loading && !error && activity && ratings ? (
           <PlayerBehaviouralPanel

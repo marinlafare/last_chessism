@@ -1,3 +1,4 @@
+import { styleTarget } from '../../appearance/styleCore.js'
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
@@ -12,15 +13,15 @@ function SideRail() {
   ]
 
   return (
-    <aside className="left-rail" aria-label="Primary">
+    <aside {...styleTarget('sidebar', 'navigation')} className="left-rail" aria-label="Primary">
       <div className="left-rail-menu">
-        <a className="rail-brand" href="/" aria-label="Home">
+        <a {...styleTarget('link', 'navigation')} className="rail-brand" href="/" aria-label="Home">
           <img className="left-rail-icon" src="/chessism.jpg" alt="Chessism icon" />
           <span>Chessism</span>
         </a>
-        <nav className="rail-nav" aria-label="Main navigation">
+        <nav {...styleTarget('toolbar', 'navigation')} className="rail-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a
+            <a {...styleTarget('button', 'navigation')}
               key={item.href}
               className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/')) ? 'active' : ''}`}
               href={item.href}

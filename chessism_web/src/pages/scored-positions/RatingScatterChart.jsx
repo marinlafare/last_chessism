@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
+import { pageStyleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
-import { ratingScatterBounds, RATING_GROUP_COLORS, RATING_GROUP_OPTIONS } from './ratingScatter'
+import { ratingScatterBounds, RATING_GROUP_OPTIONS } from './ratingScatter'
 
 const niceStep = (span, targetTickCount) => {
   const rawStep = Math.max(1, span / Math.max(1, targetTickCount))
@@ -41,7 +42,7 @@ function RatingScatterChart({ payload }) {
   const xFor = (index) => margin.left + (Number(index || 0) / maxIndex) * plotWidth
   const yFor = (rating) => margin.top + plotHeight - ((Number(rating || 0) - minRating) / ratingSpan) * plotHeight
 
-  return <div className="rating-scatter-wrap">
+  return <div {...pageStyleTarget('chart.ratingGroups')} className="rating-scatter-wrap">
     <svg className="rating-scatter-chart" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Fully analyzed games sorted by rating">
       {yTicks.map((tick) => {
         const y = yFor(tick)
@@ -65,12 +66,12 @@ function RatingScatterChart({ payload }) {
         game count, sorted by avg elo
       </text>
       {points.map((point) => <circle cx={xFor(point.x_index)} cy={yFor(point.rating)} r={3.4}
-        fill={RATING_GROUP_COLORS[point.group || 'medium'] || RATING_GROUP_COLORS.medium}
+        fill={`var(--chart-color-${{bad:1,medium:2,great:3}[point.group]||2})`}
         key={`${point.link}-${point.x_index}`} />)}
     </svg>
     <div className="rating-scatter-legend">
       {RATING_GROUP_OPTIONS.map((option) => <span key={`scatter-${option.key}`}>
-        <i style={{ background: RATING_GROUP_COLORS[option.key] }} />{option.label}
+        <i style={{ background: `var(--chart-color-${{bad:1,medium:2,great:3}[option.key]||2})` }} />{option.label}
       </span>)}
     </div>
   </div>

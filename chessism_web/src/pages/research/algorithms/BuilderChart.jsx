@@ -1,8 +1,9 @@
+import { pageStyleTarget } from '../../../appearance/styleCore.js'
 import { number } from './algorithmForm'
 
 export default function BuilderChart({ output }) {
   const points = output.points
-  if (!points.length) return <p>No finite points available.</p>
+  if (!points.length) return <p {...pageStyleTarget('text')}>No finite points available.</p>
   const low = Math.min(0, ...points.map((item) => item.y))
   const high = Math.max(0, ...points.map((item) => item.y))
   const span = high - low || 1
@@ -17,7 +18,7 @@ export default function BuilderChart({ output }) {
     : 80 + (values[index] - minimum) / (maximum - minimum || 1) * 780
   const labelEvery = Math.max(1, Math.ceil(points.length / 8))
   return <div className="algorithm-scatter">
-    <svg viewBox="0 0 920 400" role="img" aria-label={`${output.type} chart: ${output.name}`}>
+    <svg {...pageStyleTarget('chart.research')} viewBox="0 0 920 400" role="img" aria-label={`${output.type} chart: ${output.name}`}>
       {Array.from({ length: 5 }, (_, index) => {
         const value = low + span * index / 4
         return <g key={index}>
@@ -25,15 +26,15 @@ export default function BuilderChart({ output }) {
           <text x="70" y={y(value) + 4} textAnchor="end">{number(value)}</text>
         </g>
       })}
-      {output.type === 'line' && <polyline fill="none" stroke="#59b6e5" strokeWidth="2"
+      {output.type === 'line' && <polyline fill="none" stroke="var(--chart-color-1)" strokeWidth="2"
         points={points.map((point, index) => `${x(index)},${y(point.y)}`).join(' ')} />}
       {points.map((point, index) => <g key={index}>
         {output.type === 'bar'
           ? <rect x={x(index) - 780 / points.length * .35} y={Math.min(y(0), y(point.y))}
-            width={780 / points.length * .7} height={Math.abs(y(point.y) - y(0))} fill="#59b6e5">
+            width={780 / points.length * .7} height={Math.abs(y(point.y) - y(0))} fill="var(--chart-color-1)">
             <title>{`${point.x}: ${number(point.y)}\n${point.row_key}`}</title>
           </rect>
-          : <circle cx={x(index)} cy={y(point.y)} r="3" fill="#59b6e5">
+          : <circle cx={x(index)} cy={y(point.y)} r="3" fill="var(--chart-color-1)">
             <title>{`${point.x}: ${number(point.y)}\n${point.row_key}`}</title>
           </circle>}
         {index % labelEvery === 0 && <text x={x(index)} y="337" textAnchor="middle">

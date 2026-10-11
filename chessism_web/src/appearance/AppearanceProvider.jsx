@@ -1,7 +1,8 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fetchAppearance, saveAppearance } from './appearanceApi'
-import { appearanceCss, sameOverrides } from './styleCore'
+import { appearanceCss, sameOverrides, registryTarget, registryScope } from './styleCore'
+import { scopeForPath } from './pageScopes'
 import './appearance.css'
 
 const Editor = lazy(() => import('./AppearanceEditor'))
@@ -41,8 +42,9 @@ export default function AppearanceProvider({ account, pageKey, children }) {
   },[dirty])
   const select = useCallback((element, x=24,y=80) => {
     const target=element?.closest?.('[data-style-id][data-style-scope]')
-    if(target && target.dataset.styleScope===saved?.registry.scope && saved.registry.targets[target.dataset.styleId]) {
-      setSelection({element:target,id:target.dataset.styleId,x,y})
+    const scope=target?.dataset.styleScope
+    if(target && registryTarget(saved?.registry,scope,target.dataset.styleId)) {
+      setSelection({element:target,id:target.dataset.styleId,scope,x,y})
       return true
     }
     return false
@@ -59,8 +61,9 @@ export default function AppearanceProvider({ account, pageKey, children }) {
         if(select(e.target,rect.left,rect.bottom))e.preventDefault()
       }
     }
-    document.addEventListener('contextmenu',context);document.addEventListener('keydown',keyboard)
-    return()=>{document.removeEventListener('contextmenu',context);document.removeEventListener('keydown',keyboard)}
+    const outside=e=>{if(e.button===0&&!e.target.closest?.('[data-appearance-tools]'))setSelection(null)}
+    document.addEventListener('contextmenu',context);document.addEventListener('keydown',keyboard);document.addEventListener('pointerdown',outside)
+    return()=>{document.removeEventListener('contextmenu',context);document.removeEventListener('keydown',keyboard);document.removeEventListener('pointerdown',outside)}
   },[enabled,account?.role,select])
   const change=async(action,payload)=>{
     if(!saved || busy)return
@@ -78,7 +81,8 @@ export default function AppearanceProvider({ account, pageKey, children }) {
     return change('save',{preset_id,name,overrides:draft})
   }
   const canDiscard=()=>!dirty||window.confirm('Discard unsaved appearance changes?')
-  const value={saved,draft,setDraft,enabled,selection,setSelection,select,error,busy,dirty,save,
+  const pageScope=scopeForPath(pageKey || window.location.pathname)
+  const value={saved,draft,setDraft,enabled,selection,setSelection,select,error,busy,dirty,save,pageScope,
     toggle:()=>{if(!enabled){setEnabled(true);return}if(canDiscard()){setDraft(saved.overrides);setEnabled(false);setSelection(null)}},
     activate:id=>{if(canDiscard())change('activate',{preset_id:id||null})},
     rename:()=>{const name=window.prompt('New preset name:',saved.presets.find(p=>p.id===saved.active_preset_id)?.name||'');if(name!==null)change('rename',{preset_id:saved.active_preset_id,name})},
@@ -105,8 +109,9 @@ export function AppearanceControls() {
       </select>
       <button type="button" disabled={ctx.busy} onClick={()=>ctx.save(true)}>New preset</button>
       <button type="button" disabled={ctx.busy||!ctx.saved.active_preset_id||ctx.dirty} onClick={ctx.rename}>Rename</button>
-      <button type="button" onClick={()=>ctx.select(document.querySelector('[data-style-id="page"]'))}>Select page</button>
+      <button type="button" onClick={()=>ctx.select(document.querySelector(`[data-style-scope="${ctx.pageScope}"][data-style-id="page"]`) || document.querySelector('[data-style-id="page"]'))}>Select page</button>
       <button type="button" disabled={!ctx.dirty||ctx.busy} onClick={()=>ctx.save()}>Save styles</button>
+      <small className="appearance-editing-hint">{registryScope(ctx.saved.registry,ctx.pageScope)?.label || 'Appearance'} · Right-click an element to edit it</small>
     </>}
     {ctx.error&&<span className="appearance-account-error" role="alert">{ctx.error} <button type="button" onClick={ctx.reload}>Reload saved styles</button></span>}
   </div>

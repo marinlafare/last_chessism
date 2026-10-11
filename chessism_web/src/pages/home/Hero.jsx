@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import { fetchDashboardSummary } from './homeApi'
@@ -31,17 +32,17 @@ export function DashboardSummaryPanel() {
   ]
 
   return (
-    <div className="dashboard-panel" aria-label="Database summary">
+    <div {...pageStyleTarget('summary.panel')} className="dashboard-panel" aria-label="Database summary">
       <div className="metric-grid">
         {metrics.map((metric) => (
-          <article className="metric-card" key={metric.label}>
+          <article {...pageStyleTarget('card')} className="metric-card" key={metric.label}>
             <span>{metric.label}</span>
-            <strong>{metric.value === undefined ? '-' : formatNumber(metric.value)}</strong>
+            <strong {...pageStyleTarget('value')}>{metric.value === undefined ? '-' : formatNumber(metric.value)}</strong>
           </article>
         ))}
       </div>
 
-      {error ? <p className="result-line">{error}</p> : null}
+      {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
     </div>
   )
 }

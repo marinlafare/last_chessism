@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 export const PLAYER_ANALYSIS_MODES = ['bullet', 'blitz', 'rapid']
 
 export const PLAYER_MODE_COLORS = {
@@ -20,12 +21,12 @@ export default function PlayerModeToggles({
         const available = availableModes.has(mode)
         const active = available && activeModes.has(mode)
         return (
-          <button
+          <button {...pageStyleTarget('button')}
             type="button"
             className={active ? 'active' : ''}
             aria-pressed={active}
             disabled={!available}
-            style={colored ? { '--mode-color': PLAYER_MODE_COLORS[mode] } : undefined}
+            style={colored ? { '--mode-color': `var(--chart-color-${{bullet:1,blitz:2,rapid:3}[mode]}, ${PLAYER_MODE_COLORS[mode]})` } : undefined}
             onClick={() => onToggle(mode)}
             key={mode}
           >

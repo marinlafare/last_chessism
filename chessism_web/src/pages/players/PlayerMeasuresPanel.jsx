@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerDailyEfficiencyChart from './PlayerDailyEfficiencyChart'
@@ -94,9 +95,9 @@ function metricValue(row, metric) {
 
 function MetricSelector({ value, onChange, label }) {
   return (
-    <label className="measure-metric-selector">
+    <label {...pageStyleTarget('label')} className="measure-metric-selector">
       <span>{label}</span>
-      <select value={value} onChange={(event) => onChange(event.target.value)}>
+      <select {...pageStyleTarget('field')} value={value} onChange={(event) => onChange(event.target.value)}>
         {Object.entries(METRICS).map(([key, metric]) => (
           <option value={key} key={key}>{metric.label}</option>
         ))}
@@ -140,9 +141,9 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, 
   const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => activeModes.has(mode))
 
   return (
-    <section className="measure-chart-section">
+    <section {...pageStyleTarget('panel')} className="measure-chart-section">
       <div className="behavior-subchart-heading measure-chart-heading">
-        <div><strong>Days</strong></div>
+        <div><strong {...pageStyleTarget('value')}>Days</strong></div>
         <MetricSelector value={metric} onChange={setMetric} label="Day metric" />
         <PlayerModeToggles
           activeModes={activeModes}
@@ -161,7 +162,7 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, 
               className={`measure-day-row ${isExpanded ? 'expanded' : ''}`}
               key={day.weekday}
             >
-              <button
+              <button {...pageStyleTarget('button')}
                 className="measure-day-name"
                 type="button"
                 aria-expanded={isExpanded}
@@ -170,7 +171,7 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, 
                 {String(day.label).toUpperCase()}
               </button>
               <span className="measure-day-stage">
-                <button
+                <button {...pageStyleTarget('button')}
                   className="measure-day-summary"
                   type="button"
                   disabled={!selectedModes.length}
@@ -178,14 +179,14 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, 
                   onClick={() => onExplore({ scope: 'weekday', weekday: day.weekday, label: day.label, modes: selectedModes })}
                 >
                   <i style={{ background: measureColor(dayValue, maximum, metric) }} />
-                  <strong>{cp(dayValue)}</strong>
+                  <strong {...pageStyleTarget('value')}>{cp(dayValue)}</strong>
                 </button>
                 <span className="measure-day-hours">
                   {Array.from({ length: 24 }, (_, hour) => {
                     const cell = hourMap.get(hour) || {}
                     const value = metricValue(cell, metric)
                     return (
-                      <button
+                      <button {...pageStyleTarget('button')}
                         type="button"
                         disabled={!selectedModes.length}
                         style={{ background: measureColor(value, maximum, metric) }}
@@ -210,7 +211,7 @@ function MeasureDaysChart({ quality, activeModes, availableModes, onToggleMode, 
       </div>
       <div className="measure-day-axis" aria-hidden="true">
         {Array.from({ length: 24 }, (_, hour) => <span key={hour}>{String(hour).padStart(2, '0')}</span>)}
-        <strong>HRS</strong>
+        <strong {...pageStyleTarget('value')}>HRS</strong>
       </div>
     </section>
   )
@@ -227,9 +228,9 @@ function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode,
   const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => activeModes.has(mode))
 
   return (
-    <section className="measure-chart-section measure-hours-section">
+    <section {...pageStyleTarget('panel')} className="measure-chart-section measure-hours-section">
       <div className="behavior-subchart-heading measure-chart-heading">
-        <div><strong>Hours</strong></div>
+        <div><strong {...pageStyleTarget('value')}>Hours</strong></div>
         <MetricSelector value={metric} onChange={setMetric} label="Hour metric" />
         <PlayerModeToggles
           activeModes={activeModes}
@@ -238,7 +239,7 @@ function MeasureHoursChart({ quality, activeModes, availableModes, onToggleMode,
           onToggle={onToggleMode}
         />
       </div>
-      <svg className="measure-hours-graph" viewBox={`0 0 ${HOURS_WIDTH} ${HOURS_HEIGHT}`} role="img" aria-label={`${METRICS[metric].label} by hour`}>
+      <svg {...pageStyleTarget('chart.measures')} className="measure-hours-graph" viewBox={`0 0 ${HOURS_WIDTH} ${HOURS_HEIGHT}`} role="img" aria-label={`${METRICS[metric].label} by hour`}>
         <line className="graph-grid-line" x1={HOURS_LEFT} x2={HOURS_RIGHT} y1={HOURS_TOP} y2={HOURS_TOP} />
         <line className="measure-zero-line" x1={HOURS_LEFT} x2={HOURS_RIGHT} y1={zeroY} y2={zeroY} />
         <line className="graph-grid-line" x1={HOURS_LEFT} x2={HOURS_RIGHT} y1={HOURS_BOTTOM} y2={HOURS_BOTTOM} />
@@ -324,12 +325,12 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
     <>
       <div className="measure-dashboard">
       <div className="measure-coverage" aria-label="Stockfish analysis coverage">
-        <div><span>Total games</span><strong>{formatNumber(coverage.total_games || 0)}</strong></div>
-        <div><span>Complete games</span><strong>{formatNumber(coverage.eligible_games || 0)}</strong><small>{coveragePercent.toFixed(1)}%</small></div>
-        <div><span>Excluded games</span><strong>{formatNumber(coverage.excluded_games || 0)}</strong></div>
-        <div><span>Scored positions</span><strong>{formatNumber(coverage.scored_positions || 0)}</strong></div>
+        <div><span>Total games</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.total_games || 0)}</strong></div>
+        <div><span>Complete games</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.eligible_games || 0)}</strong><small {...pageStyleTarget('text')}>{coveragePercent.toFixed(1)}%</small></div>
+        <div><span>Excluded games</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.excluded_games || 0)}</strong></div>
+        <div><span>Scored positions</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.scored_positions || 0)}</strong></div>
       </div>
-      <article className="measure-chart-card">
+      <article {...pageStyleTarget('card')} className="measure-chart-card">
         <PlayerDailyEfficiencyChart
           availableModes={availableModes}
           playerName={playerName}

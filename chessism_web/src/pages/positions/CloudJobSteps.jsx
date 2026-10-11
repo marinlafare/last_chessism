@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { cloudJobProgress } from './cloudJobProgress'
 
 export default function CloudJobSteps({ job }) {
@@ -6,7 +7,7 @@ export default function CloudJobSteps({ job }) {
     {steps.map(({ title, state }) => <li key={title} className={`cloud-step cloud-step--${state}`}
       aria-current={state === 'current' || state === 'attention' ? 'step' : undefined}>
       <span>{title}</span>
-      <small>{state === 'complete' ? 'Complete' : state === 'current' ? 'In progress'
+      <small {...pageStyleTarget('text')}>{state === 'complete' ? 'Complete' : state === 'current' ? 'In progress'
         : state === 'attention' ? 'Needs attention' : 'Pending'}</small>
     </li>)}
   </ol>

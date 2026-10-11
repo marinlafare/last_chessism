@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { Chessboard } from 'react-chessboard'
 import Header from '../../components/layout/Header'
 import Footer from '../../components/layout/Footer'
@@ -33,151 +34,151 @@ export default function GamesView({ page }) {
   } = page
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="games-main">
           <div className="games-hero-wrap">
-            <h1
+            <h1 {...pageStyleTarget('heading')}
               className="games-hero-badge games-main-title badge-hover"
               onMouseMove={handleBadgeHoverMove}
               onMouseLeave={handleBadgeHoverLeave}
             >
               GameS
             </h1>
-            <section className="games-hero">
+            <section {...pageStyleTarget('overview.panel')} className="games-hero">
               <div className="games-generalities-grid">
-              <article className="games-generality-card">
-                <h3>Number of games</h3>
-                <p>
+              <article {...pageStyleTarget('card')} className="games-generality-card">
+                <h3 {...pageStyleTarget('title')}>Number of games</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(generalities?.n_games_in_db)}
                 </p>
               </article>
-              <a
+              <a {...pageStyleTarget('link')}
                 className="games-generality-card games-link-card"
                 href="/main_characters"
                 data-note="players with all their games in"
               >
-                <h3>Main characters</h3>
-                <p>
+                <h3 {...pageStyleTarget('title')}>Main characters</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(generalities?.main_characters)}
                 </p>
               </a>
-              <a
+              <a {...pageStyleTarget('link')}
                 className="games-generality-card games-link-card"
                 href="/secondary_character"
                 data-note="the opponents of our main players"
               >
-                <h3>Secondary characters</h3>
-                <p>
+                <h3 {...pageStyleTarget('title')}>Secondary characters</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(generalities?.secondary_characters)}
                 </p>
               </a>
-              <a
+              <a {...pageStyleTarget('link')}
                 className="games-generality-card games-link-card"
                 href="/analize_positions"
                 data-note="stats about the positions"
               >
-                <h3>Number of positions</h3>
-                <p>
+                <h3 {...pageStyleTarget('title')}>Number of positions</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(generalities?.n_positions)}
                 </p>
               </a>
-              <a
+              <a {...pageStyleTarget('link')}
                 className="games-generality-card games-link-card"
                 href="/scored_positions"
                 data-note="stats about the positions"
               >
-                <h3>Scored fens</h3>
-                <p>
+                <h3 {...pageStyleTarget('title')}>Scored fens</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(generalities?.scored_fens)}
                 </p>
               </a>
-              <a
+              <a {...pageStyleTarget('link')}
                 className="games-generality-card games-link-card"
                 href="/analize_positions"
                 data-note="stats about the positions"
               >
-                <h3>Unscored fens</h3>
-                <p>
+                <h3 {...pageStyleTarget('title')}>Unscored fens</h3>
+                <p {...pageStyleTarget('text')}>
                   {generalitiesLoading
                     ? 'Loading...'
                     : formatNumber(Math.max(0, (generalities?.n_positions ?? 0) - (generalities?.scored_fens ?? 0)))}
                 </p>
               </a>
             </div>
-            {generalitiesError ? <p className="result-line">{generalitiesError}</p> : null}
+            {generalitiesError ? <p {...pageStyleTarget('text')} className="result-line">{generalitiesError}</p> : null}
             </section>
           </div>
 
           <div className="games-time-wrap">
-            <h2
+            <h2 {...pageStyleTarget('title')}
               className="games-hero-badge time-control-badge badge-hover"
               onMouseMove={handleBadgeHoverMove}
               onMouseLeave={handleBadgeHoverLeave}
             >
               Time Control
             </h2>
-            <section className="games-time-controls" aria-label="Time controls">
+            <section {...pageStyleTarget('modes.panel')} className="games-time-controls" aria-label="Time controls">
               <div className="games-generalities-grid games-time-controls-grid">
-              <button
+              <button {...pageStyleTarget('button')}
                 className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('bullet')}
               >
-                <h3>bullet</h3>
+                <h3 {...pageStyleTarget('title')}>bullet</h3>
                 <span className="time-control-icon bullet-cartridge-icon" aria-hidden="true">
                   <span className="bullet-cartridge-shape" />
                 </span>
-                <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.bullet)}</p>
+                <p {...pageStyleTarget('text')}>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.bullet)}</p>
               </button>
-              <button
+              <button {...pageStyleTarget('button')}
                 className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('blitz')}
               >
-                <h3>blitz</h3>
+                <h3 {...pageStyleTarget('title')}>blitz</h3>
                 <span className="time-control-icon time-control-icon-blitz" aria-hidden="true">⚡</span>
-                <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
+                <p {...pageStyleTarget('text')}>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
               </button>
-              <button
+              <button {...pageStyleTarget('button')}
                 className="games-generality-card games-mode-button games-link-card"
                 type="button"
                 onClick={() => handleSelectMode('rapid')}
               >
-                <h3>rapid</h3>
+                <h3 {...pageStyleTarget('title')}>rapid</h3>
                 <span className="time-control-icon time-control-icon-rapid" aria-hidden="true">⏱</span>
-                <p>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.rapid)}</p>
+                <p {...pageStyleTarget('text')}>{timeControlsLoading ? 'Loading...' : formatNumber(timeControlCounts.rapid)}</p>
               </button>
             </div>
-            {timeControlsError ? <p className="result-line">{timeControlsError}</p> : null}
+            {timeControlsError ? <p {...pageStyleTarget('text')} className="result-line">{timeControlsError}</p> : null}
             </section>
           </div>
 
           {selectedMode ? (
             <>
-              <section className="games-mode-detail rating-clickable" aria-label={`${selectedMode} ratings`} onClick={openRatingModal}>
-                {ratingLoading ? <p className="result-line">Loading ratings chart...</p> : null}
-                {ratingError ? <p className="result-line">{ratingError}</p> : null}
+              <section {...pageStyleTarget('ratings.panel')} className="games-mode-detail rating-clickable" aria-label={`${selectedMode} ratings`} onClick={openRatingModal}>
+                {ratingLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading ratings chart...</p> : null}
+                {ratingError ? <p {...pageStyleTarget('text')} className="result-line">{ratingError}</p> : null}
                 {!ratingLoading && !ratingError ? (
                   <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} size="large" />
                 ) : null}
-                <p className="result-line rating-hint">Click to expand</p>
+                <p {...pageStyleTarget('text')} className="result-line rating-hint">Click to expand</p>
               </section>
               {ratingModalOpen ? (
                 <div className="rating-modal-backdrop" onClick={closeRatingModal}>
-                  <div className="rating-modal" role="dialog" aria-label={`${selectedMode} ratings enlarged`} onClick={(e) => e.stopPropagation()}>
+                  <div {...pageStyleTarget('popup')} className="rating-modal" role="dialog" aria-label={`${selectedMode} ratings enlarged`} onClick={(e) => e.stopPropagation()}>
                     <TimeControlRatingsScatterChart mode={selectedMode} chart={ratingChart} />
                   </div>
                 </div>
@@ -186,19 +187,19 @@ export default function GamesView({ page }) {
           ) : null}
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} top moves`}>
+            <section {...pageStyleTarget('moves.panel')} className="games-mode-detail" aria-label={`${selectedMode} top moves`}>
               <div className="section-head mode-detail-head">
-                <h2 className="games-action-title">{selectedMode}</h2>
+                <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode}</h2>
                 <div className="mode-detail-controls">
                   <div className="mode-color-switch">
-                    <button
+                    <button {...pageStyleTarget('button')}
                       className={`mode-color-btn mode-color-white ${selectedMoveColor === 'white' ? 'active' : ''}`}
                       type="button"
                       onClick={() => handleMoveColorChange('white')}
                     >
                       white
                     </button>
-                    <button
+                    <button {...pageStyleTarget('button')}
                       className={`mode-color-btn mode-color-black ${selectedMoveColor === 'black' ? 'active' : ''}`}
                       type="button"
                       onClick={() => handleMoveColorChange('black')}
@@ -219,13 +220,13 @@ export default function GamesView({ page }) {
                   <span className={`mode-chart-side mode-chart-side-${selectedMoveColor}`}>{selectedMoveColor}</span>
                 </div>
                 {modeLoading ? (
-                  <p className="result-line">Loading top moves...</p>
+                  <p {...pageStyleTarget('text')} className="result-line">Loading top moves...</p>
                 ) : null}
                 {modeError ? (
-                  <p className="result-line">{modeError}</p>
+                  <p {...pageStyleTarget('text')} className="result-line">{modeError}</p>
                 ) : null}
                 {!modeLoading && !modeError ? (
-                  <div className="mode-moves-chart">
+                  <div {...pageStyleTarget('chart.bars')} className="mode-moves-chart">
                     {(() => {
                       const maxTimes = Math.max(...modeRows.map((row) => Number(row.times_played || 0)), 1)
                       return modeRows.map((row) => {
@@ -246,7 +247,7 @@ export default function GamesView({ page }) {
                   </div>
                 ) : null}
                 <div className="mode-moves-pagination">
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-secondary"
                     type="button"
                     onClick={handleMovesPrevious}
@@ -255,7 +256,7 @@ export default function GamesView({ page }) {
                     previous 5
                   </button>
                   <span>page {modePage} / {modeTotalPages || 0}</span>
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-secondary"
                     type="button"
                     onClick={handleMovesNext}
@@ -269,9 +270,9 @@ export default function GamesView({ page }) {
           ) : null}
 
           {selectedMode ? (
-            <section className="games-openings-detail" aria-label={`${selectedMode} top openings`}>
+            <section {...pageStyleTarget('openings.panel')} className="games-openings-detail" aria-label={`${selectedMode} top openings`}>
               <div className="section-head analytics-section-head">
-                <h2
+                <h2 {...pageStyleTarget('title')}
                   className="games-action-title badge-hover openings-title"
                   onMouseMove={handleBadgeHoverMove}
                   onMouseLeave={handleBadgeHoverLeave}
@@ -299,8 +300,8 @@ export default function GamesView({ page }) {
                   </div>
                 </div>
                 <div className="openings-query-row">
-                  <label htmlFor="openings-n-moves">moves</label>
-                  <select
+                  <label {...pageStyleTarget('label')} htmlFor="openings-n-moves">moves</label>
+                  <select {...pageStyleTarget('field')}
                     id="openings-n-moves"
                     className="text-input openings-n-moves-select"
                     value={openingNMovesInput}
@@ -318,7 +319,7 @@ export default function GamesView({ page }) {
                       )
                     })}
                   </select>
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-secondary"
                     type="button"
                     onClick={() => handleLoadOpenings()}
@@ -336,10 +337,10 @@ export default function GamesView({ page }) {
                   </span>
                 </div>
                 <div className="mode-moves-table openings-list-table">
-                  {openingLoading ? <p className="result-line">Loading openings...</p> : null}
-                  {openingError ? <p className="result-line">{openingError}</p> : null}
+                  {openingLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading openings...</p> : null}
+                  {openingError ? <p {...pageStyleTarget('text')} className="result-line">{openingError}</p> : null}
                   {!openingRequested && !openingLoading ? (
-                    <p className="result-line">Select moves and click go.</p>
+                    <p {...pageStyleTarget('text')} className="result-line">Select moves and click go.</p>
                   ) : null}
                   {openingRequested && !openingLoading && !openingError ? (
                     openingRows.length ? (
@@ -359,14 +360,14 @@ export default function GamesView({ page }) {
                             key={`opening-${selectedMode}-${row.top}`}
                             className={`mode-moves-row opening-step-row ${activeOpeningTop === row.top ? 'active' : ''}`}
                           >
-                            <button
+                            <button {...pageStyleTarget('button')}
                               className={`opening-top-btn ${activeOpeningTop === row.top ? 'active' : ''}`}
                               type="button"
                               onClick={() => handleSelectOpening(row.top)}
                             >
                               top_{row.top}
                             </button>
-                            <button
+                            <button {...pageStyleTarget('button')}
                               className="btn btn-secondary opening-arrow-btn"
                               type="button"
                               onClick={() => handleOpeningStep(row.top, 'prev')}
@@ -380,7 +381,7 @@ export default function GamesView({ page }) {
                             >
                               {currentMove}
                             </span>
-                            <button
+                            <button {...pageStyleTarget('button')}
                               className="btn btn-secondary opening-arrow-btn"
                               type="button"
                               onClick={() => handleOpeningStep(row.top, 'next')}
@@ -392,7 +393,7 @@ export default function GamesView({ page }) {
                         )
                       })
                     ) : (
-                      <p className="result-line">No openings found.</p>
+                      <p {...pageStyleTarget('text')} className="result-line">No openings found.</p>
                     )
                   ) : null}
                 </div>
@@ -401,9 +402,9 @@ export default function GamesView({ page }) {
           ) : null}
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} result color matrix`}>
+            <section {...pageStyleTarget('results.panel')} className="games-mode-detail" aria-label={`${selectedMode} result color matrix`}>
               <div className="section-head analytics-section-head">
-                <h2 className="games-action-title">{selectedMode} results</h2>
+                <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode} results</h2>
                 <ClusterSelect
                   idPrefix="results-cluster"
                   value={selectedResultsCluster}
@@ -411,19 +412,19 @@ export default function GamesView({ page }) {
                 />
               </div>
               <div className="mode-moves-table analytics-table-wrap">
-                {resultMatrixLoading ? <p className="result-line">Loading result matrix...</p> : null}
-                {resultMatrixError ? <p className="result-line">{resultMatrixError}</p> : null}
+                {resultMatrixLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading result matrix...</p> : null}
+                {resultMatrixError ? <p {...pageStyleTarget('text')} className="result-line">{resultMatrixError}</p> : null}
                 {!resultMatrixLoading && !resultMatrixError ? (
                   <>
                     <div className="matrix-color-grid">
-                      <div className="matrix-color-card">
+                      <div {...pageStyleTarget('panel')} className="matrix-color-card">
                         <div className="matrix-color-head">
                           <span className="result-matrix-color white">white</span>
                           <span className="matrix-color-meta">
                             score: {formatPercent(resultMatrix?.white?.score_rate || 0)}
                           </span>
                         </div>
-                        <div className="wl-bar">
+                        <div {...pageStyleTarget('chart.outcomes')} className="wl-bar">
                           <div className="wl-row">
                             <span className="wl-label">Wins</span>
                             <div className="wl-track">
@@ -457,14 +458,14 @@ export default function GamesView({ page }) {
                         </div>
                       </div>
 
-                      <div className="matrix-color-card">
+                      <div {...pageStyleTarget('panel')} className="matrix-color-card">
                         <div className="matrix-color-head">
                           <span className="result-matrix-color black">black</span>
                           <span className="matrix-color-meta">
                             score: {formatPercent(resultMatrix?.black?.score_rate || 0)}
                           </span>
                         </div>
-                        <div className="wl-bar">
+                        <div {...pageStyleTarget('chart.outcomes')} className="wl-bar">
                           <div className="wl-row">
                             <span className="wl-label">Wins</span>
                             <div className="wl-track">
@@ -498,7 +499,7 @@ export default function GamesView({ page }) {
                         </div>
                       </div>
                     </div>
-                    <p className="result-line">total games: {formatNumber(resultMatrix?.total_games || 0)}</p>
+                    <p {...pageStyleTarget('text')} className="result-line">total games: {formatNumber(resultMatrix?.total_games || 0)}</p>
                   </>
                 ) : null}
               </div>
@@ -506,18 +507,18 @@ export default function GamesView({ page }) {
           ) : null}
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} game length analytics`}>
+            <section {...pageStyleTarget('lengths.panel')} className="games-mode-detail" aria-label={`${selectedMode} game length analytics`}>
               <div className="mode-moves-table analytics-table-wrap">
                 <div className="section-head analytics-section-head">
-                  <h2 className="games-action-title">{selectedMode} lengths</h2>
+                  <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode} lengths</h2>
                   <ClusterSelect
                     idPrefix="lengths-cluster"
                     value={selectedLengthsCluster}
                     onChange={handleLengthsClusterChange}
                   />
                 </div>
-                {gameLengthLoading ? <p className="result-line">Loading game length analytics...</p> : null}
-                {gameLengthError ? <p className="result-line">{gameLengthError}</p> : null}
+                {gameLengthLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading game length analytics...</p> : null}
+                {gameLengthError ? <p {...pageStyleTarget('text')} className="result-line">{gameLengthError}</p> : null}
                 {!gameLengthLoading && !gameLengthError ? (
                   <>
                     <div className="length-stats-grid">
@@ -533,13 +534,13 @@ export default function GamesView({ page }) {
                         values={gameLengthData?.n_moves_hist?.y || []}
                       />
                     </div>
-                    <p className="result-line duration-label">moves per game</p>
+                    <p {...pageStyleTarget('text')} className="result-line duration-label">moves per game</p>
                     <CompactBarChart
                       title=""
                       labels={gameLengthData?.time_elapsed_hist?.x || []}
                       values={gameLengthData?.time_elapsed_hist?.y || []}
                     />
-                    <p className="result-line duration-label">Minutes</p>
+                    <p {...pageStyleTarget('text')} className="result-line duration-label">Minutes</p>
                     <span className="opening-meta-chip length-meta-right">
                       avg elapsed: {formatSeconds(gameLengthData?.summary?.avg_time_elapsed_sec)}
                     </span>
@@ -550,9 +551,9 @@ export default function GamesView({ page }) {
           ) : null}
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} activity trend`}>
+            <section {...pageStyleTarget('activity.panel')} className="games-mode-detail" aria-label={`${selectedMode} activity trend`}>
               <div className="section-head analytics-section-head">
-                <h2 className="games-action-title">{selectedMode} activity trend</h2>
+                <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode} activity trend</h2>
                 <ClusterSelect
                   idPrefix="activity-cluster"
                   value={selectedActivityCluster}
@@ -560,8 +561,8 @@ export default function GamesView({ page }) {
                 />
               </div>
               <div className="mode-moves-table analytics-table-wrap">
-                {activityTrendLoading ? <p className="result-line">Loading activity trend...</p> : null}
-                {activityTrendError ? <p className="result-line">{activityTrendError}</p> : null}
+                {activityTrendLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading activity trend...</p> : null}
+                {activityTrendError ? <p {...pageStyleTarget('text')} className="result-line">{activityTrendError}</p> : null}
                 {!activityTrendLoading && !activityTrendError ? (
                   <div className="activity-heat-stack">
                     <HeatStrip
@@ -586,15 +587,15 @@ export default function GamesView({ page }) {
             </section>
           ) : null}
 
-          <section className="games-count" aria-label="Games explorer">
+          <section {...pageStyleTarget('explorer.panel')} className="games-count" aria-label="Games explorer">
             <div className="section-head">
-              <h2>Games Explorer</h2>
-              <p>Check how many games exist, then view stats and recent games.</p>
+              <h2 {...pageStyleTarget('title')}>Games Explorer</h2>
+              <p {...pageStyleTarget('text')}>Check how many games exist, then view stats and recent games.</p>
             </div>
             <div className="count-row">
               <div className="count-controls">
-                <label htmlFor="count-player">Player name</label>
-                <input
+                <label {...pageStyleTarget('label')} htmlFor="count-player">Player name</label>
+                <input {...pageStyleTarget('field')}
                   id="count-player"
                   className="text-input"
                   type="text"
@@ -603,14 +604,14 @@ export default function GamesView({ page }) {
                   onKeyDown={(event) => event.key === 'Enter' && handleCount()}
                   placeholder="e.g. gothamchess"
                 />
-                <button className="btn btn-secondary" type="button" onClick={handleCount} disabled={countLoading}>
+                <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={handleCount} disabled={countLoading}>
                   {countLoading ? 'Checking...' : 'Check Count'}
                 </button>
-                <p className="result-line strong">{countResult || '-'}</p>
+                <p {...pageStyleTarget('text')} className="result-line strong">{countResult || '-'}</p>
               </div>
 
-              {summaryLoading ? <p className="result-line">Loading stats...</p> : null}
-              {summaryError ? <p className="result-line">{summaryError}</p> : null}
+              {summaryLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading stats...</p> : null}
+              {summaryError ? <p {...pageStyleTarget('text')} className="result-line">{summaryError}</p> : null}
               {summaryData ? (
                 <div className="games-stats">
                   <div className="stat-chip stat-win">Wins: {summaryData.wins ?? 0}</div>
@@ -625,20 +626,20 @@ export default function GamesView({ page }) {
           </section>
 
           {selectedPlayer ? (
-            <section className="games-recent" aria-label="Recent player games">
+            <section {...pageStyleTarget('panel')} className="games-recent" aria-label="Recent player games">
               <div className="section-head">
-                <h2>Recent Games</h2>
-                <p>Last 10 games for {selectedPlayer}. Use pagination to browse the next ten.</p>
+                <h2 {...pageStyleTarget('title')}>Recent Games</h2>
+                <p {...pageStyleTarget('text')}>Last 10 games for {selectedPlayer}. Use pagination to browse the next ten.</p>
               </div>
 
               <div className="recent-pagination">
-                <button className="btn btn-secondary" type="button" onClick={handlePrevious} disabled={recentLoading || recentPage <= 1}>
+                <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={handlePrevious} disabled={recentLoading || recentPage <= 1}>
                   Previous 10
                 </button>
                 <span>
                   Page {recentData?.page || recentPage} / {recentData?.total_pages || 0}
                 </span>
-                <button
+                <button {...pageStyleTarget('button')}
                   className="btn btn-secondary"
                   type="button"
                   onClick={handleNext}
@@ -648,8 +649,8 @@ export default function GamesView({ page }) {
                 </button>
               </div>
 
-              {recentLoading ? <p className="result-line">Loading games...</p> : null}
-              {recentError ? <p className="result-line">{recentError}</p> : null}
+              {recentLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading games...</p> : null}
+              {recentError ? <p {...pageStyleTarget('text')} className="result-line">{recentError}</p> : null}
 
               {!recentLoading && !recentError ? (
                 <div className="recent-list">
@@ -664,7 +665,7 @@ export default function GamesView({ page }) {
                         game.result === 'win' ? 'result-win' : game.result === 'loss' ? 'result-loss' : 'result-draw'
 
                       return (
-                        <a
+                        <a {...pageStyleTarget('link')}
                           key={`${game.link || index}-${game.played_at}`}
                           className="recent-line"
                           href={`/games/${game.link || ''}`}
@@ -683,7 +684,7 @@ export default function GamesView({ page }) {
                       )
                     })
                   ) : (
-                    <p className="recent-line">No games found.</p>
+                    <p {...pageStyleTarget('text')} className="recent-line">No games found.</p>
                   )}
                 </div>
               ) : null}

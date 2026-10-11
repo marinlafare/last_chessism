@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { pageStyleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import { appearanceWindow } from './pendingRepetitions'
 import AppearanceChartDetails from './AppearanceChartDetails'
@@ -45,7 +46,7 @@ export default function AllFenAppearanceChart({ data, error, mode, view, scale, 
       : !bars.length ? <p>{isCommon ? 'No repeated FENs with recorded appearances.' : 'No FENs with recorded appearances.'}</p> : <>
         <div className="pending-repetition-scroll" onMouseLeave={() => setSelected('')}>
           {selected && <div className="appearance-tooltip" role="status">{selected}</div>}
-          <svg ref={ref} className="pending-repetition-chart all-appearance-chart" viewBox={`0 0 ${width} ${height}`} role="img"
+          <svg {...pageStyleTarget('chart.appearances')} ref={ref} className="pending-repetition-chart all-appearance-chart" viewBox={`0 0 ${width} ${height}`} role="img"
             aria-label={`${title}. Compressed X-axis shows only counts that occur. ${logarithmic ? 'Logarithmic' : 'Linear'} frequency normalized from 0 to 1, not a per-FEN score.`}>
             {scale.ticks.map(tick => <g key={tick} className="appearance-y-tick">
               <line className="repetition-grid" x1={left} x2={width - right} y1={yFraction(tick)} y2={yFraction(tick)} />

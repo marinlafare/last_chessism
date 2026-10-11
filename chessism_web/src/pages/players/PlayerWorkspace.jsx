@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './players.css'
@@ -28,7 +29,7 @@ import {
 function GameUpdateProgress({ status, message }) {
   const progress = status?.progress
   if (!progress) {
-    return message ? <p className="result-line players-update-message">{message}</p> : null
+    return message ? <p {...pageStyleTarget('text')} className="result-line players-update-message">{message}</p> : null
   }
 
   const phase = progress.phase || status?.status || 'working'
@@ -41,7 +42,7 @@ function GameUpdateProgress({ status, message }) {
   return (
     <div className="job-progress players-update-progress" aria-live="polite">
       <div className="job-progress-head">
-        <strong>{phase}</strong>
+        <strong {...pageStyleTarget('value')}>{phase}</strong>
         <span>{percent}%</span>
       </div>
       <div className="job-progress-track">
@@ -50,7 +51,7 @@ function GameUpdateProgress({ status, message }) {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p className="result-line">{progress.detail || message || `${processed} of ${total}`}</p>
+      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || message || `${processed} of ${total}`}</p>
     </div>
   )
 }
@@ -409,14 +410,14 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
   }))
   return (
         <div className="games-main players-starting-point">
-          {message ? <p className="result-line">{message}</p> : null}
-          {error ? <p className="result-line">{error}</p> : null}
+          {message ? <p {...pageStyleTarget('text')} className="result-line">{message}</p> : null}
+          {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
 
-          <section className="players-top-grid">
+          <section {...pageStyleTarget('panel')} className="players-top-grid">
             <div className="games-mode-detail players-profile-navigation-section">
               <div className="section-head">
                 <div className="players-title-navigation">
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="players-title-arrow"
                     type="button"
                     aria-label={`Previous player${playerNeighbors?.previous_player ? `: ${playerNeighbors.previous_player}` : ''}`}
@@ -429,7 +430,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     </svg>
                   </button>
                   <div className="players-title-picker" ref={playerPickerRef}>
-                    <button
+                    <button {...pageStyleTarget('button')}
                       className="games-action-title players-title-select"
                       type="button"
                       aria-haspopup="menu"
@@ -442,12 +443,12 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     </button>
                     {playerMenuOpen ? (
                       <div className="players-title-menu" id="player-navigation-menu" role="menu">
-                        {playerMenuLoading ? <p>Loading players…</p> : null}
-                        {playerMenuError ? <p className="error">{playerMenuError}</p> : null}
+                        {playerMenuLoading ? <p {...pageStyleTarget('text')}>Loading players…</p> : null}
+                        {playerMenuError ? <p {...pageStyleTarget('text')} className="error">{playerMenuError}</p> : null}
                         {!playerMenuLoading && !playerMenuError ? playerMenuPlayers
                           .filter((name) => name !== activePlayer.toLowerCase())
                           .map((name) => (
-                            <button
+                            <button {...pageStyleTarget('button')}
                               type="button"
                               role="menuitem"
                               key={name}
@@ -457,12 +458,12 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                             </button>
                           )) : null}
                         {!playerMenuLoading && !playerMenuError && playerMenuPlayers.length <= 1 ? (
-                          <p>No other players available.</p>
+                          <p {...pageStyleTarget('text')}>No other players available.</p>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="players-title-arrow"
                     type="button"
                     aria-label={`Next player${playerNeighbors?.next_player ? `: ${playerNeighbors.next_player}` : ''}`}
@@ -476,7 +477,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                   </button>
                 </div>
                 <div className="players-profile-actions">
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-primary btn-inline players-update-button"
                     type="button"
                     title="Fetch games from the player's latest saved month through the current month"
@@ -485,7 +486,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                   >
                     {gamesUpdateLoading ? 'queueing…' : gamesUpdateActive ? 'updating…' : 'update'}
                   </button>
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-danger btn-inline players-delete-button"
                     type="button"
                     disabled={!activePlayer || loading || deletePreviewLoading || deleteActive || gamesUpdateActive || Boolean(profile?.deleted_at)}
@@ -520,17 +521,17 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                         ].map(([label, value]) => (
                           <div className="profile-item" key={label}>
                             <span>{label}</span>
-                            <strong>{String(value)}</strong>
+                            <strong {...pageStyleTarget('value')}>{String(value)}</strong>
                           </div>
                         ))}
-                        <div className="players-followers-card">
+                        <div {...pageStyleTarget('panel')} className="players-followers-card">
                           <span>Followers</span>
-                          <strong>{followersDisplay}</strong>
+                          <strong {...pageStyleTarget('value')}>{followersDisplay}</strong>
                         </div>
                         <div className="players-mode-activity-row">
                           {modeActivity.map(({ mode, games, hours }) => (
-                            <p className="players-mode-activity" key={mode}>
-                              <strong>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs
+                            <p {...pageStyleTarget('text')} className="players-mode-activity" key={mode}>
+                              <strong {...pageStyleTarget('value')}>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs
                             </p>
                           ))}
                         </div>
@@ -539,28 +540,28 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
                       <div className="players-position-stat">
                         <span>Total games</span>
-                        <strong>{formatNumber(totalPlayerGames)}</strong>
-                        <small>games in database</small>
+                        <strong {...pageStyleTarget('value')}>{formatNumber(totalPlayerGames)}</strong>
+                        <small {...pageStyleTarget('text')}>games in database</small>
                       </div>
                       <div className="players-position-stat players-position-stat-analyzed">
                         <span>Games analyzed</span>
-                        <strong>{formatNumber(analyzedPlayerGames)}</strong>
-                        <small>{analyzedPlayerGamePercent.toFixed(1)}% fully analyzed</small>
+                        <strong {...pageStyleTarget('value')}>{formatNumber(analyzedPlayerGames)}</strong>
+                        <small {...pageStyleTarget('text')}>{analyzedPlayerGamePercent.toFixed(1)}% fully analyzed</small>
                       </div>
                       <div className="players-position-stat">
                         <span>FENs</span>
-                        <strong>{formatNumber(totalPlayerFens)}</strong>
-                        <small>positions across games</small>
+                        <strong {...pageStyleTarget('value')}>{formatNumber(totalPlayerFens)}</strong>
+                        <small {...pageStyleTarget('text')}>positions across games</small>
                       </div>
                       <div className="players-position-stat players-position-stat-analyzed">
                         <span>FENs analyzed</span>
-                        <strong>{formatNumber(analyzedPlayerFens)}</strong>
-                        <small>{analyzedPlayerFenPercent.toFixed(1)}% coverage</small>
+                        <strong {...pageStyleTarget('value')}>{formatNumber(analyzedPlayerFens)}</strong>
+                        <small {...pageStyleTarget('text')}>{analyzedPlayerFenPercent.toFixed(1)}% coverage</small>
                       </div>
                     </div>
                   </>
                 ) : (
-                  <p className="result-line">{loading ? 'Loading profile…' : 'No profile loaded.'}</p>
+                  <p {...pageStyleTarget('text')} className="result-line">{loading ? 'Loading profile…' : 'No profile loaded.'}</p>
                 )}
               </div>
             </div>
@@ -574,7 +575,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
           {/* Escape the route animation's transformed fixed-position container. */}
           {deletePreview ? createPortal(
             <div className="player-delete-backdrop" onClick={closeDeletePreview}>
-              <div
+              <div {...pageStyleTarget('popup')}
                 className="player-delete-dialog"
                 role="alertdialog"
                 aria-modal="true"
@@ -584,35 +585,35 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                 <div className="player-delete-heading">
                   <div>
                     <span>Permanent database operation</span>
-                    <h2 id="player-delete-title">Delete {activePlayer}?</h2>
+                    <h2 {...pageStyleTarget('title')} id="player-delete-title">Delete {activePlayer}?</h2>
                   </div>
-                  <button className="btn btn-secondary btn-inline" type="button" onClick={closeDeletePreview}>Cancel</button>
+                  <button {...pageStyleTarget('button')} className="btn btn-secondary btn-inline" type="button" onClick={closeDeletePreview}>Cancel</button>
                 </div>
                 <div className="player-delete-preview-grid">
                   <div className="danger">
                     <span>Games deleted</span>
-                    <strong>{formatNumber(deletePreview.exclusive_games)}</strong>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.exclusive_games)}</strong>
                   </div>
                   <div>
                     <span>Shared games kept</span>
-                    <strong>{formatNumber(deletePreview.shared_games)}</strong>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.shared_games)}</strong>
                   </div>
                   <div>
                     <span>Game/FEN links removed</span>
-                    <strong>{formatNumber(deletePreview.fen_associations)}</strong>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.fen_associations)}</strong>
                   </div>
                   <div>
                     <span>Analyzed links affected</span>
-                    <strong>{formatNumber(deletePreview.analyzed_fen_associations)}</strong>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.analyzed_fen_associations)}</strong>
                   </div>
                 </div>
                 <div className="player-delete-preservation">
-                  <strong>FEN rows and engine analysis deleted: 0</strong>
+                  <strong {...pageStyleTarget('value')}>FEN rows and engine analysis deleted: 0</strong>
                   <span>Scores, WDL, PVs, continuations and tablebase results remain stored.</span>
                 </div>
-                <label className="player-delete-confirm-field">
-                  <span>Type <strong>{activePlayer}</strong> to confirm</span>
-                  <input
+                <label {...pageStyleTarget('label')} className="player-delete-confirm-field">
+                  <span>Type <strong {...pageStyleTarget('value')}>{activePlayer}</strong> to confirm</span>
+                  <input {...pageStyleTarget('field')}
                     className="text-input"
                     value={deleteConfirmation}
                     onChange={(event) => setDeleteConfirmation(event.target.value)}
@@ -620,10 +621,10 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     spellCheck="false"
                   />
                 </label>
-                {deleteError ? <p className="player-delete-error">{deleteError}</p> : null}
+                {deleteError ? <p {...pageStyleTarget('text')} className="player-delete-error">{deleteError}</p> : null}
                 <div className="player-delete-actions">
-                  <button className="btn btn-secondary" type="button" onClick={closeDeletePreview} disabled={deleteSubmitting}>Cancel</button>
-                  <button
+                  <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={closeDeletePreview} disabled={deleteSubmitting}>Cancel</button>
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-danger"
                     type="button"
                     disabled={!deleteConfirmationMatches || deleteSubmitting}

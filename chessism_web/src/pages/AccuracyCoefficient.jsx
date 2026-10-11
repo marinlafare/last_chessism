@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
@@ -38,7 +39,7 @@ function CoefficientPlot({ fits, mode }) {
     fit.mode === mode &&
     fit.rating_bin?.key !== 'all'
   ))
-  if (!points.length) return <p className="research-empty">No fitted rating bins for this mode.</p>
+  if (!points.length) return <p {...pageStyleTarget('text')} className="research-empty">No fitted rating bins for this mode.</p>
 
   const width = 900
   const height = 260
@@ -57,7 +58,7 @@ function CoefficientPlot({ fits, mode }) {
 
   return (
     <div className="coefficient-plot-wrap">
-      <svg className="coefficient-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Coefficient by rating bin">
+      <svg {...pageStyleTarget('chart.coefficients')} className="coefficient-plot" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Coefficient by rating bin">
         <line className="coefficient-baseline" x1={inset.left} x2={width - inset.right} y1={y(0.00368208)} y2={y(0.00368208)} />
         <text className="coefficient-baseline-label" x={width - inset.right} y={y(0.00368208) - 7} textAnchor="end">LICHESS 0.00368208</text>
         <polyline className="coefficient-line" points={line} />
@@ -76,23 +77,23 @@ function CoefficientPlot({ fits, mode }) {
 function DatasetTable({ overview }) {
   return (
     <div className="research-table-wrap">
-      <table className="research-table">
+      <table {...pageStyleTarget('table')} className="research-table">
         <thead>
           <tr>
-            <th>Rating bin</th>
-            <th>Games</th>
-            <th>Candidate positions</th>
-            {MODE_LABELS.map((mode) => <th key={mode}>{mode}</th>)}
+            <th {...pageStyleTarget('table.header')}>Rating bin</th>
+            <th {...pageStyleTarget('table.header')}>Games</th>
+            <th {...pageStyleTarget('table.header')}>Candidate positions</th>
+            {MODE_LABELS.map((mode) => <th {...pageStyleTarget('table.header')} key={mode}>{mode}</th>)}
           </tr>
         </thead>
         <tbody>
           {(overview?.bins || []).map((bin) => (
             <tr key={bin.key}>
-              <td>{bin.label}</td>
-              <td>{formatNumber(bin.games)}</td>
-              <td>{formatNumber(bin.candidate_positions)}</td>
+              <td {...pageStyleTarget('table.cell')}>{bin.label}</td>
+              <td {...pageStyleTarget('table.cell')}>{formatNumber(bin.games)}</td>
+              <td {...pageStyleTarget('table.cell')}>{formatNumber(bin.candidate_positions)}</td>
               {MODE_LABELS.map((mode) => (
-                <td key={mode}>{formatNumber(bin.modes?.[mode]?.games || 0)}</td>
+                <td {...pageStyleTarget('table.cell')} key={mode}>{formatNumber(bin.modes?.[mode]?.games || 0)}</td>
               ))}
             </tr>
           ))}
@@ -106,16 +107,16 @@ function ResultsTable({ fits, mode }) {
   const rows = fits.filter((fit) => fit.mode === mode)
   return (
     <div className="research-table-wrap">
-      <table className="research-table research-results-table">
+      <table {...pageStyleTarget('table')} className="research-table research-results-table">
         <thead>
           <tr>
-            <th>Rating bin</th>
-            <th>Coefficient</th>
-            <th>95% interval</th>
-            <th>Train games</th>
-            <th>Test games</th>
-            <th>Test MSE</th>
-            <th>vs Lichess</th>
+            <th {...pageStyleTarget('table.header')}>Rating bin</th>
+            <th {...pageStyleTarget('table.header')}>Coefficient</th>
+            <th {...pageStyleTarget('table.header')}>95% interval</th>
+            <th {...pageStyleTarget('table.header')}>Train games</th>
+            <th {...pageStyleTarget('table.header')}>Test games</th>
+            <th {...pageStyleTarget('table.header')}>Test MSE</th>
+            <th {...pageStyleTarget('table.header')}>vs Lichess</th>
           </tr>
         </thead>
         <tbody>
@@ -123,13 +124,13 @@ function ResultsTable({ fits, mode }) {
             const interval = fit.confidence_interval_95
             return (
               <tr key={`${fit.rating_bin.key}-${fit.mode}`}>
-                <td>{fit.rating_bin.label}</td>
-                <td>{fit.status === 'fitted' ? coefficientText(fit.coefficient) : 'insufficient data'}</td>
-                <td>{interval ? `${coefficientText(interval[0])} – ${coefficientText(interval[1])}` : '-'}</td>
-                <td>{formatNumber(fit.samples?.training?.games || 0)}</td>
-                <td>{formatNumber(fit.samples?.test?.games || 0)}</td>
-                <td>{fit.test?.mse == null ? '-' : Number(fit.test.mse).toFixed(6)}</td>
-                <td className={Number(fit.test?.improvement_percent) > 0 ? 'research-positive' : 'research-negative'}>
+                <td {...pageStyleTarget('table.cell')}>{fit.rating_bin.label}</td>
+                <td {...pageStyleTarget('table.cell')}>{fit.status === 'fitted' ? coefficientText(fit.coefficient) : 'insufficient data'}</td>
+                <td {...pageStyleTarget('table.cell')}>{interval ? `${coefficientText(interval[0])} – ${coefficientText(interval[1])}` : '-'}</td>
+                <td {...pageStyleTarget('table.cell')}>{formatNumber(fit.samples?.training?.games || 0)}</td>
+                <td {...pageStyleTarget('table.cell')}>{formatNumber(fit.samples?.test?.games || 0)}</td>
+                <td {...pageStyleTarget('table.cell')}>{fit.test?.mse == null ? '-' : Number(fit.test.mse).toFixed(6)}</td>
+                <td {...pageStyleTarget('table.cell')} className={Number(fit.test?.improvement_percent) > 0 ? 'research-positive' : 'research-negative'}>
                   {fit.test?.improvement_percent == null ? '-' : `${Number(fit.test.improvement_percent).toFixed(2)}%`}
                 </td>
               </tr>
@@ -270,21 +271,21 @@ export default function AccuracyCoefficient() {
   )
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="research-main">
-          <section className="research-hero">
+          <section {...pageStyleTarget('panel')} className="research-hero">
             <div className="section-head">
               <div>
-                <p className="eyebrow">SUPERUSER RESEARCH</p>
-                <h1>Chessism Coefficient</h1>
-                <p className="research-subtitle">Fit Stockfish centipawns to observed game outcomes without changing live accuracy.</p>
+                <p {...pageStyleTarget('text')} className="eyebrow">SUPERUSER RESEARCH</p>
+                <h1 {...pageStyleTarget('heading')}>Chessism Coefficient</h1>
+                <p {...pageStyleTarget('text')} className="research-subtitle">Fit Stockfish centipawns to observed game outcomes without changing live accuracy.</p>
               </div>
               <div className="research-baseline">
                 <span>Lichess constant</span>
-                <strong>0.00368208</strong>
+                <strong {...pageStyleTarget('value')}>0.00368208</strong>
               </div>
             </div>
             {error ? <div className="status-banner warn">{error}</div> : null}
@@ -295,14 +296,14 @@ export default function AccuracyCoefficient() {
             )}
           </section>
 
-          <section className="research-panel">
+          <section {...pageStyleTarget('panel')} className="research-panel">
             <div className="section-head">
-              <div><p className="eyebrow">DATASET</p><h2>Experiment Configuration</h2></div>
+              <div><p {...pageStyleTarget('text')} className="eyebrow">DATASET</p><h2 {...pageStyleTarget('title')}>Experiment Configuration</h2></div>
               <div className="research-actions">
-                <button className="btn btn-secondary btn-inline" type="button" onClick={loadPreview} disabled={loadingPreview}>
+                <button {...pageStyleTarget('button')} className="btn btn-secondary btn-inline" type="button" onClick={loadPreview} disabled={loadingPreview}>
                   {loadingPreview ? 'Inspecting' : 'Refresh preview'}
                 </button>
-                <button className="btn btn-primary btn-inline" type="button" onClick={startExperiment} disabled={!canStart}>
+                <button {...pageStyleTarget('button')} className="btn btn-primary btn-inline" type="button" onClick={startExperiment} disabled={!canStart}>
                   {starting ? 'Queueing' : 'Run research'}
                 </button>
               </div>
@@ -310,48 +311,48 @@ export default function AccuracyCoefficient() {
 
             <div className="research-mode-row" aria-label="Included modes">
               {MODE_LABELS.map((mode) => (
-                <button className={`research-toggle ${form.modes.includes(mode) ? 'active' : ''}`} type="button" key={mode} onClick={() => toggleMode(mode)}>
+                <button {...pageStyleTarget('button')} className={`research-toggle ${form.modes.includes(mode) ? 'active' : ''}`} type="button" key={mode} onClick={() => toggleMode(mode)}>
                   {mode}
                 </button>
               ))}
             </div>
 
             <div className="research-config-grid">
-              <label><span>Maximum rating gap</span><input type="number" min="0" max="1000" value={form.max_rating_gap} onChange={(event) => updateNumber('max_rating_gap', event.target.value)} /></label>
-              <label><span>Opening moves excluded</span><input type="number" min="0" max="40" value={form.opening_moves_excluded} onChange={(event) => updateNumber('opening_moves_excluded', event.target.value)} /></label>
-              <label><span>Minimum games / fit</span><input type="number" min="50" value={form.minimum_games_per_fit} onChange={(event) => updateNumber('minimum_games_per_fit', event.target.value)} /></label>
-              <label><span>CP ceiling</span><input type="number" min="100" max="2000" value={form.cp_ceiling} onChange={(event) => updateNumber('cp_ceiling', event.target.value)} /></label>
-              <label><span>Split seed</span><input type="number" min="1" value={form.split_seed} onChange={(event) => updateNumber('split_seed', event.target.value)} /></label>
+              <label {...pageStyleTarget('label')}><span>Maximum rating gap</span><input {...pageStyleTarget('field')} type="number" min="0" max="1000" value={form.max_rating_gap} onChange={(event) => updateNumber('max_rating_gap', event.target.value)} /></label>
+              <label {...pageStyleTarget('label')}><span>Opening moves excluded</span><input {...pageStyleTarget('field')} type="number" min="0" max="40" value={form.opening_moves_excluded} onChange={(event) => updateNumber('opening_moves_excluded', event.target.value)} /></label>
+              <label {...pageStyleTarget('label')}><span>Minimum games / fit</span><input {...pageStyleTarget('field')} type="number" min="50" value={form.minimum_games_per_fit} onChange={(event) => updateNumber('minimum_games_per_fit', event.target.value)} /></label>
+              <label {...pageStyleTarget('label')}><span>CP ceiling</span><input {...pageStyleTarget('field')} type="number" min="100" max="2000" value={form.cp_ceiling} onChange={(event) => updateNumber('cp_ceiling', event.target.value)} /></label>
+              <label {...pageStyleTarget('label')}><span>Split seed</span><input {...pageStyleTarget('field')} type="number" min="1" value={form.split_seed} onChange={(event) => updateNumber('split_seed', event.target.value)} /></label>
             </div>
 
             <div className="research-summary-grid">
-              <article><span>Eligible games</span><strong>{loadingPreview ? '-' : formatNumber(overview?.totals?.games || 0)}</strong></article>
-              <article><span>Candidate positions</span><strong>{loadingPreview ? '-' : formatNumber(overview?.totals?.candidate_positions || 0)}</strong></article>
-              <article><span>Weighting</span><strong>1 game = 1</strong></article>
-              <article><span>Split</span><strong>70 / 15 / 15</strong></article>
+              <article {...pageStyleTarget('card')}><span>Eligible games</span><strong {...pageStyleTarget('value')}>{loadingPreview ? '-' : formatNumber(overview?.totals?.games || 0)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Candidate positions</span><strong {...pageStyleTarget('value')}>{loadingPreview ? '-' : formatNumber(overview?.totals?.candidate_positions || 0)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Weighting</span><strong {...pageStyleTarget('value')}>1 game = 1</strong></article>
+              <article {...pageStyleTarget('card')}><span>Split</span><strong {...pageStyleTarget('value')}>70 / 15 / 15</strong></article>
             </div>
             <DatasetTable overview={overview} />
-            <p className="research-note">{overview?.position_note}</p>
+            <p {...pageStyleTarget('text')} className="research-note">{overview?.position_note}</p>
           </section>
 
-          <section className="research-panel">
+          <section {...pageStyleTarget('panel')} className="research-panel">
             <div className="section-head">
-              <div><p className="eyebrow">EXPERIMENTS</p><h2>Saved Runs</h2></div>
+              <div><p {...pageStyleTarget('text')} className="eyebrow">EXPERIMENTS</p><h2 {...pageStyleTarget('title')}>Saved Runs</h2></div>
             </div>
             <div className="research-history">
               {experiments.map((experiment) => (
-                <button className={`research-history-item ${selected?.id === experiment.id ? 'active' : ''}`} type="button" key={experiment.id} onClick={() => selectExperiment(experiment.id)}>
+                <button {...pageStyleTarget('button')} className={`research-history-item ${selected?.id === experiment.id ? 'active' : ''}`} type="button" key={experiment.id} onClick={() => selectExperiment(experiment.id)}>
                   <span>{experiment.created_at ? new Date(experiment.created_at).toLocaleString() : experiment.id}</span>
-                  <strong>{experiment.status}</strong>
-                  <small>{experiment.dataset_summary ? `${formatNumber(experiment.dataset_summary.eligible_games)} games` : 'waiting for dataset'}</small>
+                  <strong {...pageStyleTarget('value')}>{experiment.status}</strong>
+                  <small {...pageStyleTarget('text')}>{experiment.dataset_summary ? `${formatNumber(experiment.dataset_summary.eligible_games)} games` : 'waiting for dataset'}</small>
                 </button>
               ))}
-              {!experiments.length ? <p className="research-empty">No coefficient experiments yet.</p> : null}
+              {!experiments.length ? <p {...pageStyleTarget('text')} className="research-empty">No coefficient experiments yet.</p> : null}
             </div>
 
             {selected && ['queued', 'running'].includes(selected.status) ? (
               <div className="research-progress" aria-live="polite">
-                <div><strong>{String(progress.phase || selected.status).toUpperCase()}</strong><span>{progress.detail || 'Waiting for the research worker.'}</span></div>
+                <div><strong {...pageStyleTarget('value')}>{String(progress.phase || selected.status).toUpperCase()}</strong><span>{progress.detail || 'Waiting for the research worker.'}</span></div>
                 <div className="research-progress-track"><div style={{ width: `${progressPercent}%` }} /></div>
               </div>
             ) : null}
@@ -360,39 +361,39 @@ export default function AccuracyCoefficient() {
           </section>
 
           {selected?.status === 'complete' ? (
-            <section className="research-panel">
+            <section {...pageStyleTarget('panel')} className="research-panel">
               <div className="section-head">
-                <div><p className="eyebrow">RESULTS</p><h2>Coefficient Candidates</h2></div>
+                <div><p {...pageStyleTarget('text')} className="eyebrow">RESULTS</p><h2 {...pageStyleTarget('title')}>Coefficient Candidates</h2></div>
                 <div className="research-mode-row compact">
                   {['all', ...MODE_LABELS].map((mode) => (
-                    <button className={`research-toggle ${resultMode === mode ? 'active' : ''}`} type="button" key={mode} onClick={() => setResultMode(mode)}>{mode}</button>
+                    <button {...pageStyleTarget('button')} className={`research-toggle ${resultMode === mode ? 'active' : ''}`} type="button" key={mode} onClick={() => setResultMode(mode)}>{mode}</button>
                   ))}
                 </div>
               </div>
               <div className="research-result-cards">
-                <article><span>Global Chessism coefficient</span><strong>{coefficientText(globalFit?.coefficient)}</strong></article>
-                <article><span>Global test improvement</span><strong>{globalFit?.test?.improvement_percent == null ? '-' : `${Number(globalFit.test.improvement_percent).toFixed(2)}%`}</strong></article>
-                <article><span>Eligible games</span><strong>{formatNumber(selected.dataset_summary?.eligible_games || 0)}</strong></article>
-                <article><span>Eligible positions</span><strong>{formatNumber(selected.dataset_summary?.eligible_position_appearances || 0)}</strong></article>
+                <article {...pageStyleTarget('card')}><span>Global Chessism coefficient</span><strong {...pageStyleTarget('value')}>{coefficientText(globalFit?.coefficient)}</strong></article>
+                <article {...pageStyleTarget('card')}><span>Global test improvement</span><strong {...pageStyleTarget('value')}>{globalFit?.test?.improvement_percent == null ? '-' : `${Number(globalFit.test.improvement_percent).toFixed(2)}%`}</strong></article>
+                <article {...pageStyleTarget('card')}><span>Eligible games</span><strong {...pageStyleTarget('value')}>{formatNumber(selected.dataset_summary?.eligible_games || 0)}</strong></article>
+                <article {...pageStyleTarget('card')}><span>Eligible positions</span><strong {...pageStyleTarget('value')}>{formatNumber(selected.dataset_summary?.eligible_position_appearances || 0)}</strong></article>
               </div>
               <CoefficientPlot fits={fits} mode={resultMode} />
               <ResultsTable fits={fits} mode={resultMode} />
-              <p className="research-note">Artifact: {selected.result?.artifact_path || '-'}</p>
+              <p {...pageStyleTarget('text')} className="research-note">Artifact: {selected.result?.artifact_path || '-'}</p>
             </section>
           ) : null}
 
           {selected?.status === 'complete' ? (
-            <section className="research-panel research-decision-panel">
-              <div className="section-head"><div><p className="eyebrow">DECISION</p><h2>Production Direction</h2></div></div>
-              <p className="research-note">This records the intended direction only. It does not recalculate or replace live accuracy.</p>
+            <section {...pageStyleTarget('panel')} className="research-panel research-decision-panel">
+              <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">DECISION</p><h2 {...pageStyleTarget('title')}>Production Direction</h2></div></div>
+              <p {...pageStyleTarget('text')} className="research-note">This records the intended direction only. It does not recalculate or replace live accuracy.</p>
               <div className="research-strategy-row">
-                <label><input type="radio" name="strategy" checked={decisionStrategy === 'global'} onChange={() => setDecisionStrategy('global')} /> One global Chessism coefficient</label>
-                <label><input type="radio" name="strategy" checked={decisionStrategy === 'rating_bins'} onChange={() => setDecisionStrategy('rating_bins')} /> Coefficients by rating bin</label>
+                <label {...pageStyleTarget('label')}><input {...pageStyleTarget('field')} type="radio" name="strategy" checked={decisionStrategy === 'global'} onChange={() => setDecisionStrategy('global')} /> One global Chessism coefficient</label>
+                <label {...pageStyleTarget('label')}><input {...pageStyleTarget('field')} type="radio" name="strategy" checked={decisionStrategy === 'rating_bins'} onChange={() => setDecisionStrategy('rating_bins')} /> Coefficients by rating bin</label>
               </div>
-              <textarea value={decisionNotes} onChange={(event) => setDecisionNotes(event.target.value)} placeholder="Research notes and reasons for the decision" />
+              <textarea {...pageStyleTarget('field')} value={decisionNotes} onChange={(event) => setDecisionNotes(event.target.value)} placeholder="Research notes and reasons for the decision" />
               <div className="research-decision-actions">
                 {Object.entries(DECISION_LABELS).map(([action, label]) => (
-                  <button className={`btn ${action === 'replace' ? 'btn-primary' : 'btn-secondary'} btn-inline`} type="button" key={action} onClick={() => saveDecision(action)}>{label}</button>
+                  <button {...pageStyleTarget('button')} className={`btn ${action === 'replace' ? 'btn-primary' : 'btn-secondary'} btn-inline`} type="button" key={action} onClick={() => saveDecision(action)}>{label}</button>
                 ))}
               </div>
               {selected.decision ? (

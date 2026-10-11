@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { pageStyleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import { appearanceHistogram, APPEARANCE_Y_LIMIT } from './pendingRepetitions'
 import AppearanceChartDetails from './AppearanceChartDetails'
@@ -30,7 +31,7 @@ export default function PendingRepetitionChart({ data, error }) {
       : !view.total ? <p>No unscored FENs with recorded appearances.</p> : <>
         <div className="pending-repetition-scroll" onMouseLeave={() => setSelected(null)}>
           {selected && <div className="appearance-tooltip" role="status">{selected}</div>}
-          <svg ref={ref} className="pending-repetition-chart" viewBox={`0 0 ${width} ${height}`} role="img"
+          <svg {...pageStyleTarget('chart.pending')} ref={ref} className="pending-repetition-chart" viewBox={`0 0 ${width} ${height}`} role="img"
             aria-label="Unscored FENs with 1 to 10 appearances. Y-axis is capped at 1,000; select a bar for its exact count.">
             {[0, 250, 500, 750, 1000].map(value => <g key={value}>
               <line className="repetition-grid" x1={left} x2={width - right} y1={y(value)} y2={y(value)} />

@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerModeToggles, {
@@ -235,10 +236,10 @@ function WeekdayStartChart({
   }
 
   return (
-    <section className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
+    <section {...pageStyleTarget('panel')} className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
       <div className="behavior-subchart-heading">
         <div>
-          <strong>Days</strong>
+          <strong {...pageStyleTarget('value')}>Days</strong>
         </div>
         <div className="behavior-score-scale" aria-label="Performance color scale from loss through draw to win">
           <div><span>Loss</span><span>Draw</span><span>Win</span></div>
@@ -265,7 +266,7 @@ function WeekdayStartChart({
                   <div
                     className="behavior-weekday-summary"
                   >
-                    <button
+                    <button {...pageStyleTarget('button')}
                       className="behavior-weekday-badge"
                       type="button"
                       aria-expanded={isExpanded}
@@ -284,7 +285,7 @@ function WeekdayStartChart({
                         {Array.from({ length: 24 }, (_, hour) => {
                           const cell = cellMap.get(hour) || {}
                           return (
-                            <button
+                            <button {...pageStyleTarget('button')}
                               className="behavior-weekday-hour"
                               type="button"
                               disabled={!isExpanded || !binsAreInteractive || !selectedModes.length}
@@ -305,7 +306,7 @@ function WeekdayStartChart({
                           )
                         })}
                       </span>
-                      <button
+                      <button {...pageStyleTarget('button')}
                         className="behavior-weekday-curtain"
                         type="button"
                         disabled={isExpanded || !selectedModes.length}
@@ -332,7 +333,7 @@ function WeekdayStartChart({
                   <span key={hour}>{String(hour).padStart(2, '0')}</span>
                 ))}
               </div>
-              <strong>HRS</strong>
+              <strong {...pageStyleTarget('value')}>HRS</strong>
             </div>
           </div>
         </div>
@@ -443,28 +444,28 @@ export default function PlayerBehaviouralPanel({
     <>
       <div className="behavior-dashboard">
       <div className="behavior-summary" aria-label="Behavioral selection summary">
-        <div><span>Games</span><strong>{formatNumber(totals.games)}</strong></div>
-        <div><span>Results</span><strong>{formatNumber(totals.wins)}W · {formatNumber(totals.draws)}D · {formatNumber(totals.losses)}L</strong></div>
-        <div><span>Rating range</span><strong>{ratingPlot.lines.length ? `${formatNumber(ratingPlot.minimum)}–${formatNumber(ratingPlot.maximum)}` : 'N/A'}</strong></div>
+        <div><span>Games</span><strong {...pageStyleTarget('value')}>{formatNumber(totals.games)}</strong></div>
+        <div><span>Results</span><strong {...pageStyleTarget('value')}>{formatNumber(totals.wins)}W · {formatNumber(totals.draws)}D · {formatNumber(totals.losses)}L</strong></div>
+        <div><span>Rating range</span><strong {...pageStyleTarget('value')}>{ratingPlot.lines.length ? `${formatNumber(ratingPlot.minimum)}–${formatNumber(ratingPlot.maximum)}` : 'N/A'}</strong></div>
       </div>
 
-      <article className="behavior-graph-card">
+      <article {...pageStyleTarget('card')} className="behavior-graph-card">
         <header className="behavior-graph-header">
           <div>
-            <h3>Behavioral map</h3>
-            <p>Weekday habits, hourly outcomes, and rating movement.</p>
+            <h3 {...pageStyleTarget('title')}>Behavioral map</h3>
+            <p {...pageStyleTarget('text')}>Weekday habits, hourly outcomes, and rating movement.</p>
           </div>
         </header>
 
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
-            <section className="behavior-chart-section" aria-label="Rating chart">
+            <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">
               <div className="behavior-subchart-heading behavior-rating-heading">
                 <div>
-                  <strong>Rating</strong>
+                  <strong {...pageStyleTarget('value')}>Rating</strong>
                 </div>
                 <div className="behavior-rating-years" aria-label="Rating year">
-                  <button
+                  <button {...pageStyleTarget('button')}
                     ref={allRatingYearsButton}
                     type="button"
                     className={selectedRatingYear === 'all' ? 'active' : ''}
@@ -515,11 +516,11 @@ export default function PlayerBehaviouralPanel({
                     <polyline
                       className="behavior-rating-line"
                       fill="none"
-                      stroke={line.color}
+                      stroke={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`}
                       points={line.points.map((point) => `${point.x},${point.y}`).join(' ')}
                     />
                     {line.points.length === 1 ? <circle className="behavior-rating-point"
-                      cx={line.points[0].x} cy={line.points[0].y} r={3} fill={line.color} /> : null}
+                      cx={line.points[0].x} cy={line.points[0].y} r={3} fill={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`} /> : null}
                   </g>
                 ))}
                 <text className="graph-axis-label" pointerEvents="none" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
@@ -531,15 +532,15 @@ export default function PlayerBehaviouralPanel({
                   x={(highlightedRatingBand.left + highlightedRatingBand.right) / 2}
                   y={RATING_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedRatingBand.year}</text> : null}
               </svg>
-              <p className="daily-year-hint" id={ratingYearHintId}>{selectedRatingYear === 'all'
+              <p {...pageStyleTarget('text')} className="daily-year-hint" id={ratingYearHintId}>{selectedRatingYear === 'all'
                 ? 'Hover over a year and click to zoom in.'
                 : `Showing ${selectedRatingYear}. Choose All to restore the timeline.`}</p>
             </section>
 
-            <section className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
+            <section {...pageStyleTarget('chart.outcomes')} className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
               <div className="behavior-subchart-heading">
                 <div>
-                  <strong>Hours</strong>
+                  <strong {...pageStyleTarget('value')}>Hours</strong>
                 </div>
                 <div className="behavior-result-legend" aria-label="Result colors">
                   <span><i className="wins" />Wins</span>

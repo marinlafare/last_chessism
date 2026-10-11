@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import Footer from '../components/layout/Footer'
@@ -73,37 +74,37 @@ export default function SalienceResearch() {
   }
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="salience-main">
-          <section className="salience-hero">
+          <section {...pageStyleTarget('panel')} className="salience-hero">
             <div>
-              <p className="eyebrow">CORPUS PROJECTION</p>
-              <h1>Game salience</h1>
-              <p>Measure how distinctive every game and move is inside each player&apos;s complete corpus.</p>
+              <p {...pageStyleTarget('text')} className="eyebrow">CORPUS PROJECTION</p>
+              <h1 {...pageStyleTarget('heading')}>Game salience</h1>
+              <p {...pageStyleTarget('text')}>Measure how distinctive every game and move is inside each player&apos;s complete corpus.</p>
             </div>
             <div className="salience-actions">
-              <a href="/research">Research</a>
-              <button type="button" disabled={busy} onClick={() => run(startSalienceBackfill)}>
+              <a {...pageStyleTarget('link')} href="/research">Research</a>
+              <button {...pageStyleTarget('button')} type="button" disabled={busy} onClick={() => run(startSalienceBackfill)}>
                 {busy ? 'Queueing…' : 'Build pending players'}
               </button>
             </div>
           </section>
 
-          <section className="salience-stat-grid" aria-label="Salience projection totals">
+          <section {...pageStyleTarget('totals.panel')} className="salience-stat-grid" aria-label="Salience projection totals">
             {Object.entries(totals).map(([label, value]) => (
-              <article key={label}>
+              <article {...pageStyleTarget('card')} key={label}>
                 <span>{label}</span>
-                <strong>{number.format(value)}</strong>
+                <strong {...pageStyleTarget('value')}>{number.format(value)}</strong>
               </article>
             ))}
           </section>
 
-          {error ? <p className="salience-error">{error}</p> : null}
+          {error ? <p {...pageStyleTarget('text')} className="salience-error">{error}</p> : null}
 
-          <section className="salience-panel">
+          <section {...pageStyleTarget('players.panel')} className="salience-panel">
             <div className="salience-table-head">
               <span>Player</span>
               <span>Status</span>
@@ -114,20 +115,20 @@ export default function SalienceResearch() {
             </div>
             <div className="salience-player-list">
               {(payload.players || []).map((player) => (
-                <article className="salience-player-row" key={player.player_name}>
-                  <strong>{player.player_name}</strong>
+                <article {...pageStyleTarget('card')} className="salience-player-row" key={player.player_name}>
+                  <strong {...pageStyleTarget('value')}>{player.player_name}</strong>
                   <span className={`salience-status is-${player.status}`}>{player.status}</span>
                   <span>{number.format(player.source_game_count || 0)}</span>
                   <span>{number.format(player.source_position_count || 0)}</span>
                   <span>{decimal.format(player.effective_game_count || 0)}</span>
-                  <button
+                  <button {...pageStyleTarget('button')}
                     type="button"
                     disabled={busy || ACTIVE.has(player.status)}
                     onClick={() => run(() => rebuildPlayerSalience(player.player_name))}
                   >
                     rebuild
                   </button>
-                  {player.error ? <p>{player.error}</p> : null}
+                  {player.error ? <p {...pageStyleTarget('text')}>{player.error}</p> : null}
                 </article>
               ))}
             </div>

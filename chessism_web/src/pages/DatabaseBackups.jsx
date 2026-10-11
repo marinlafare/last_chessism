@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
@@ -323,20 +324,20 @@ export default function DatabaseBackups() {
   }, [backupCompletedAt, restoreCompletedAt, statusClock])
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="database-backups-main">
-          <section className="database-backups-hero">
+          <section {...pageStyleTarget('panel')} className="database-backups-hero">
             <div className="section-head">
               <div>
-                <p className="eyebrow">RECOVERY</p>
-                <h1>Database Backups</h1>
-                <p className="database-backups-copy">Matrix and algorithm definitions, plus completed algorithm results, are included inside PostgreSQL. Previews and temporary algorithm inputs create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
+                <p {...pageStyleTarget('text')} className="eyebrow">RECOVERY</p>
+                <h1 {...pageStyleTarget('heading')}>Database Backups</h1>
+                <p {...pageStyleTarget('text')} className="database-backups-copy">Matrix and algorithm definitions, plus completed algorithm results, are included inside PostgreSQL. Previews and temporary algorithm inputs create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
               </div>
               <div className="database-backups-actions">
-                <button
+                <button {...pageStyleTarget('button')}
                   className="btn btn-primary btn-inline"
                   type="button"
                   disabled={active || !storage.available || storage.error}
@@ -344,7 +345,7 @@ export default function DatabaseBackups() {
                 >
                   {backupActive ? 'Backup running' : policy.migration_required ? 'Create new full base' : 'Backup database'}
                 </button>
-                <button
+                <button {...pageStyleTarget('button')}
                   className="btn btn-inline"
                   type="button"
                   disabled={active || !storage.available || !latestBackup}
@@ -365,37 +366,37 @@ export default function DatabaseBackups() {
             ) : null}
           </section>
 
-          <section className="database-backups-panel">
-            <div className="section-head"><div><p className="eyebrow">STORAGE</p><h2>Protected Allocation</h2></div></div>
+          <section {...pageStyleTarget('panel')} className="database-backups-panel">
+            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">STORAGE</p><h2 {...pageStyleTarget('title')}>Protected Allocation</h2></div></div>
             <div className="database-backups-stats">
-              <article><span>Available</span><strong>{formatBytes(storage.free_bytes)}</strong></article>
-              <article><span>Database protected</span><strong>{formatBytes(latestBackup?.database_bytes)}</strong></article>
-              <article><span>Current total used</span><strong>{formatBytes(storage.application_bytes)}</strong></article>
-              <article><span>Chessism allocation</span><strong>{formatBytes(storage.quota_bytes)}</strong></article>
-              <article><span>Protected reserve</span><strong>{formatBytes(storage.free_floor_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Available</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.free_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Database protected</span><strong {...pageStyleTarget('value')}>{formatBytes(latestBackup?.database_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Current total used</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.application_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Chessism allocation</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.quota_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Protected reserve</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.free_floor_bytes)}</strong></article>
             </div>
             <div className="database-backups-meter" aria-label={`${usagePercent.toFixed(1)} percent of the Chessism backup allocation used`}>
               <div style={{ width: `${usagePercent}%` }} />
             </div>
             <div className="database-backups-stats database-backups-breakdown">
-              <article><span>Backup chains</span><strong>{formatBytes(storage.database_backup_bytes)}</strong></article>
-              <article><span>Archived WAL</span><strong>{formatBytes(storage.archived_wal_bytes)}</strong></article>
-              <article><span>FEN exports</span><strong>{formatBytes(storage.fen_analysis_bytes)}</strong></article>
-              <article><span>Research files</span><strong>{formatBytes(storage.research_bytes)}</strong></article>
-              <article><span>Metadata / other</span><strong>{formatBytes(storage.other_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Backup chains</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.database_backup_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Archived WAL</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.archived_wal_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>FEN exports</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.fen_analysis_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Research files</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.research_bytes)}</strong></article>
+              <article {...pageStyleTarget('card')}><span>Metadata / other</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.other_bytes)}</strong></article>
             </div>
-            <p className="database-backups-storage-note">
+            <p {...pageStyleTarget('text')} className="database-backups-storage-note">
               Current storage is measured at most once per minute · last measured {formatDate(storage.usage_measured_at)}. The protected database value is its uncompressed size at the latest recovery point{latestBackup ? `; that recovery point added ${formatBytes(latestBackup.repository_delta_bytes)} to the repository` : ''}.
             </p>
-            <p className="database-backups-location">{storage.storage_location || '/main-monitor-db-backups/chessism'}</p>
+            <p {...pageStyleTarget('text')} className="database-backups-location">{storage.storage_location || '/main-monitor-db-backups/chessism'}</p>
           </section>
 
-          <section className="database-backups-panel">
+          <section {...pageStyleTarget('panel')} className="database-backups-panel">
             <div className="section-head">
               <div>
-                <p className="eyebrow">STATUS</p>
+                <p {...pageStyleTarget('text')} className="eyebrow">STATUS</p>
                 <div className="database-backups-status-title">
-                  <h2>{String(backupDisplayPhase || 'idle').toUpperCase()}</h2>
+                  <h2 {...pageStyleTarget('title')}>{String(backupDisplayPhase || 'idle').toUpperCase()}</h2>
                   {backupActive ? (
                     <span
                       className="database-backups-live-light"
@@ -408,7 +409,7 @@ export default function DatabaseBackups() {
               </div>
             </div>
             <div className={`database-backups-progress ${['failed', 'unavailable'].includes(backupDisplayPhase) ? 'failed' : ''}`}>
-              <strong>{backupDisplayDetail || 'No database backup has run yet.'}</strong>
+              <strong {...pageStyleTarget('value')}>{backupDisplayDetail || 'No database backup has run yet.'}</strong>
               {backupElapsedMs !== null ? (
                 <span className="database-backups-elapsed">Elapsed: {formatElapsedTime(backupElapsedMs)}</span>
               ) : null}
@@ -444,12 +445,12 @@ export default function DatabaseBackups() {
             </div>
           </section>
 
-          <section className="database-backups-panel">
+          <section {...pageStyleTarget('panel')} className="database-backups-panel">
             <div className="section-head">
               <div>
-                <p className="eyebrow">RESTORE REHEARSAL</p>
+                <p {...pageStyleTarget('text')} className="eyebrow">RESTORE REHEARSAL</p>
                 <div className="database-backups-status-title">
-                  <h2>{String(restoreDisplayPhase || 'not tested').replaceAll('_', ' ').toUpperCase()}</h2>
+                  <h2 {...pageStyleTarget('title')}>{String(restoreDisplayPhase || 'not tested').replaceAll('_', ' ').toUpperCase()}</h2>
                   {restoreActive ? (
                     <span
                       className="database-backups-live-light"
@@ -462,30 +463,30 @@ export default function DatabaseBackups() {
               </div>
             </div>
             <div className={`database-backups-progress ${restoreDisplayPhase === 'failed' ? 'failed' : ''}`}>
-              <strong>{restoreDisplayDetail || 'No recovery point has been restored and tested yet.'}</strong>
+              <strong {...pageStyleTarget('value')}>{restoreDisplayDetail || 'No recovery point has been restored and tested yet.'}</strong>
               <span>Backup ID: {restoreTest.backup_id || (job?.kind === 'restore_test' ? job?.result?.backup_id : null) || '-'}</span>
               <span>Last tested: {formatDate(restoreTest.completed_at)}</span>
               <span>Duration: {restoreTest.elapsed_seconds !== null && restoreTest.elapsed_seconds !== undefined ? `${Number(restoreTest.elapsed_seconds).toFixed(1)} seconds` : '-'}</span>
               <span>Temporary local space required: {formatBytes(restoreTest.required_local_bytes)}</span>
             </div>
-            <p className="database-backups-copy">Runs only when a superuser clicks Test backup. The exact latest recovery point is restored on a private PostgreSQL socket, validated, and deleted afterward.</p>
+            <p {...pageStyleTarget('text')} className="database-backups-copy">Runs only when a superuser clicks Test backup. The exact latest recovery point is restored on a private PostgreSQL socket, validated, and deleted afterward.</p>
           </section>
 
-          <section className="database-backups-panel">
-            <div className="section-head"><div><p className="eyebrow">RECOVERY CHAINS</p><h2>Verified Backups</h2></div></div>
+          <section {...pageStyleTarget('panel')} className="database-backups-panel">
+            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">RECOVERY CHAINS</p><h2 {...pageStyleTarget('title')}>Verified Backups</h2></div></div>
             <div className="database-backups-table-wrap">
-              <table className="database-backups-table">
-                <thead><tr><th>Backup</th><th>Type</th><th>Storage</th><th>Completed</th><th>Changed data</th><th>Repository data</th><th>Restore tested</th></tr></thead>
+              <table {...pageStyleTarget('table')} className="database-backups-table">
+                <thead><tr><th {...pageStyleTarget('table.header')}>Backup</th><th {...pageStyleTarget('table.header')}>Type</th><th {...pageStyleTarget('table.header')}>Storage</th><th {...pageStyleTarget('table.header')}>Completed</th><th {...pageStyleTarget('table.header')}>Changed data</th><th {...pageStyleTarget('table.header')}>Repository data</th><th {...pageStyleTarget('table.header')}>Restore tested</th></tr></thead>
                 <tbody>
                   {backups.map((backup) => (
                     <tr key={backup.backup_id}>
-                      <td>{backup.backup_id}</td>
-                      <td>{backup.type}</td>
-                      <td>{backup.storage_mode === 'block_incremental_v1' ? 'block' : 'legacy'}</td>
-                      <td>{formatDate(backup.completed_at)}</td>
-                      <td>{formatBytes(backup.database_delta_bytes)}</td>
-                      <td>{formatBytes(backup.repository_delta_bytes)}</td>
-                      <td>
+                      <td {...pageStyleTarget('table.cell')}>{backup.backup_id}</td>
+                      <td {...pageStyleTarget('table.cell')}>{backup.type}</td>
+                      <td {...pageStyleTarget('table.cell')}>{backup.storage_mode === 'block_incremental_v1' ? 'block' : 'legacy'}</td>
+                      <td {...pageStyleTarget('table.cell')}>{formatDate(backup.completed_at)}</td>
+                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.database_delta_bytes)}</td>
+                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.repository_delta_bytes)}</td>
+                      <td {...pageStyleTarget('table.cell')}>
                         {backup.restore_tested
                           ? `passed · ${formatDate(backup.restore_tested_at)}`
                           : backup.restore_test_status === 'failed'
@@ -494,11 +495,11 @@ export default function DatabaseBackups() {
                       </td>
                     </tr>
                   ))}
-                  {!backups.length ? <tr><td colSpan="7">No verified database backups yet.</td></tr> : null}
+                  {!backups.length ? <tr><td {...pageStyleTarget('table.cell')} colSpan="7">No verified database backups yet.</td></tr> : null}
                 </tbody>
               </table>
             </div>
-            <p className="database-backups-copy">
+            <p {...pageStyleTarget('text')} className="database-backups-copy">
               Backups run only after a superuser clicks Backup database. That manual request starts a new full chain after {policy.full_after_incrementals ?? 10} incrementals, when the full base is at least {policy.full_after_days ?? 7} days old, or after interrupted WAL continuity; otherwise it stores a block incremental.
             </p>
           </section>

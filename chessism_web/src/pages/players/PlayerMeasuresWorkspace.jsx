@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import PlayerMeasuresPanel from './PlayerMeasuresPanel'
 import { fetchQualityCalendar } from './playerAnalysisApi'
@@ -38,15 +39,15 @@ export default function PlayerMeasuresWorkspace({ playerName, disabled = false }
   }, [playerName, disabled])
 
   return (
-    <section className="games-mode-detail player-measures-workspace">
+    <section {...pageStyleTarget('player.measures')} className="games-mode-detail player-measures-workspace">
       <div className="player-analysis-heading">
         <div>
-          <p className="eyebrow">STOCKFISH ANALYSIS</p>
-          <h2>Position quality</h2>
+          <p {...pageStyleTarget('text')} className="eyebrow">STOCKFISH ANALYSIS</p>
+          <h2 {...pageStyleTarget('title')}>Position quality</h2>
         </div>
       </div>
 
-      {qualityError ? <p className="player-analysis-error" role="alert">{qualityError}</p> : null}
+      {qualityError ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{qualityError}</p> : null}
       {qualityLoading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating engine measures…</div> : null}
       {!qualityLoading && !qualityError && quality ? (
         <PlayerMeasuresPanel

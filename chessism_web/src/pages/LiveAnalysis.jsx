@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './live-analysis/liveAnalysis.css'
 import { Chess } from 'chess.js'
@@ -196,15 +197,15 @@ function LiveAnalysis() {
   }
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="live-analysis-main">
-          <section className="live-analysis-panel">
+          <section {...pageStyleTarget('analysis.panel')} className="live-analysis-panel">
             <div className="live-analysis-toolbar">
-              <p className="eyebrow">LIVE ANALYSIS</p>
-              <button
+              <p {...pageStyleTarget('text')} className="eyebrow">LIVE ANALYSIS</p>
+              <button {...pageStyleTarget('button')}
                 className={`btn btn-secondary btn-inline live-stockfish-toggle ${engineOn ? 'active' : ''}`}
                 type="button"
                 onClick={() => setEngineOn((current) => !current)}
@@ -248,7 +249,7 @@ function LiveAnalysis() {
               <span className="stat-chip">{engineOn ? (loading ? 'Analyzing' : getScoreLabel(bestLine?.score)) : 'Stockfish off'}</span>
               <span className="stat-chip">Depth {formatNumber(bestLine?.depth)}</span>
               <span className="stat-chip">Best {moveToSan(fen, bestLine?.pv?.[0])}</span>
-              <button className="btn btn-secondary btn-inline" type="button" onClick={resetBoard}>
+              <button {...pageStyleTarget('button')} className="btn btn-secondary btn-inline" type="button" onClick={resetBoard}>
                 Reset
               </button>
             </div>

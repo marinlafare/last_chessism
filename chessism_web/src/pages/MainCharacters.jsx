@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import './main-characters/mainCharacters.css'
 import Header from '../components/layout/Header'
@@ -123,7 +124,7 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
   }
 
   return (
-    <article
+    <article {...pageStyleTarget('card')}
       className="main-character-card main-character-card-clickable"
       role="link"
       tabIndex={0}
@@ -148,7 +149,7 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
           <span className="main-character-rank" style={{ background: rankBackground }}>
             top_{rank}
           </span>
-          <button
+          <button {...pageStyleTarget('button')}
             className="btn btn-secondary main-character-update-btn"
             type="button"
             onClick={handleUpdateClick}
@@ -157,8 +158,8 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
             {buttonLabel}
           </button>
         </div>
-        <h3 className={`main-character-player-name ${isLongName ? 'long-name' : ''}`}>{primaryName}</h3>
-        <p>{getSecondaryDisplayName(player)}</p>
+        <h3 {...pageStyleTarget('title')} className={`main-character-player-name ${isLongName ? 'long-name' : ''}`}>{primaryName}</h3>
+        <p {...pageStyleTarget('text')}>{getSecondaryDisplayName(player)}</p>
         <div className="main-character-meta-stack">
           <span className="stat-chip">last rating: {formatNumber(player.rating)}</span>
           <span className="stat-chip main-character-last-game-chip">
@@ -196,7 +197,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
   )
 
   if (!points.length) {
-    return <p className="result-line">No bubble chart data for this time control.</p>
+    return <p {...pageStyleTarget('text')} className="result-line">No bubble chart data for this time control.</p>
   }
 
   const width = 960
@@ -247,7 +248,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
   const yTickValues = ticks
 
   return (
-    <div className="main-character-scatter-shell">
+    <div {...pageStyleTarget('chart.bubbles')} className="main-character-scatter-shell">
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="main-character-scatter"
@@ -322,7 +323,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
               cy={yScale(point.y)}
               r={isActive ? bubbleRadius(point.games) + 3 : bubbleRadius(point.games)}
               className={`main-character-scatter-point ${isActive ? 'active' : ''}`}
-              style={{ fill: isActive ? '#ffffff' : bubbleColor(point.y) }}
+              style={{ fill: isActive ? '#ffffff' : `var(--chart-color-1, ${bubbleColor(point.y)})` }}
               onMouseEnter={() => onHoverPlayer(point.player_name)}
               onFocus={() => onHoverPlayer(point.player_name)}
               tabIndex={0}
@@ -330,7 +331,7 @@ function MainCharacterBubbleChart({ players, hoveredPlayerName, onHoverPlayer })
           )
         })}
       </svg>
-      <p className="main-character-hover-note">Bubble size = games played. Hover a point to inspect that player.</p>
+      <p {...pageStyleTarget('text')} className="main-character-hover-note">Bubble size = games played. Hover a point to inspect that player.</p>
     </div>
   )
 }
@@ -587,13 +588,13 @@ function MainCharacters() {
   }
 
   return (
-    <div className="page-frame main-characters-page">
+    <div {...pageStyleTarget('page')} className="page-frame main-characters-page">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main className="games-main">
           <div className="games-hero-wrap">
-            <h1
+            <h1 {...pageStyleTarget('heading')}
               className="games-hero-badge games-main-title badge-hover"
               onMouseMove={handleBadgeHoverMove}
               onMouseLeave={handleBadgeHoverLeave}
@@ -603,57 +604,57 @@ function MainCharacters() {
           </div>
 
           <div className="games-time-wrap">
-            <h2
+            <h2 {...pageStyleTarget('title')}
               className="games-hero-badge time-control-badge badge-hover"
               onMouseMove={handleBadgeHoverMove}
               onMouseLeave={handleBadgeHoverLeave}
             >
               Time Control
             </h2>
-            <section className="games-time-controls" aria-label="Main character time controls">
+            <section {...pageStyleTarget('modes.panel')} className="games-time-controls" aria-label="Main character time controls">
               <div className="games-generalities-grid games-time-controls-grid">
-                <button
+                <button {...pageStyleTarget('button')}
                   className="games-generality-card games-mode-button games-link-card"
                   type="button"
                   onClick={() => handleSelectMode('bullet')}
                 >
-                  <h3>bullet</h3>
+                  <h3 {...pageStyleTarget('title')}>bullet</h3>
                   <span className="time-control-icon bullet-cartridge-icon" aria-hidden="true">
                     <span className="bullet-cartridge-shape" />
                   </span>
-                  <p>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.bullet)}</p>
+                  <p {...pageStyleTarget('text')}>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.bullet)}</p>
                 </button>
-                <button
+                <button {...pageStyleTarget('button')}
                   className="games-generality-card games-mode-button games-link-card"
                   type="button"
                   onClick={() => handleSelectMode('blitz')}
                 >
-                  <h3>blitz</h3>
+                  <h3 {...pageStyleTarget('title')}>blitz</h3>
                   <span className="time-control-icon time-control-icon-blitz" aria-hidden="true">⚡</span>
-                  <p>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
+                  <p {...pageStyleTarget('text')}>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.blitz)}</p>
                 </button>
-                <button
+                <button {...pageStyleTarget('button')}
                   className="games-generality-card games-mode-button games-link-card"
                   type="button"
                   onClick={() => handleSelectMode('rapid')}
                 >
-                  <h3>rapid</h3>
+                  <h3 {...pageStyleTarget('title')}>rapid</h3>
                   <span className="time-control-icon time-control-icon-rapid" aria-hidden="true">⏱</span>
-                  <p>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.rapid)}</p>
+                  <p {...pageStyleTarget('text')}>{countsLoading ? 'Loading...' : formatNumber(timeControlCounts.rapid)}</p>
                 </button>
               </div>
-              {countsError ? <p className="result-line">{countsError}</p> : null}
+              {countsError ? <p {...pageStyleTarget('text')} className="result-line">{countsError}</p> : null}
             </section>
           </div>
 
           {selectedMode ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} players bubble chart`}>
+            <section {...pageStyleTarget('ratings.panel')} className="games-mode-detail" aria-label={`${selectedMode} players bubble chart`}>
               <div className="section-head analytics-section-head">
-                <h2 className="games-action-title">{selectedMode}</h2>
+                <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode}</h2>
                 <div className="main-character-add-player-wrap">
                   {showAddPlayerForm ? (
                     <div className="main-character-add-player-pop">
-                      <input
+                      <input {...pageStyleTarget('field')}
                         className="text-input main-character-add-player-input"
                         type="text"
                         value={addPlayerName}
@@ -668,7 +669,7 @@ function MainCharacters() {
                         placeholder="player name"
                         disabled={isPipelineBusy}
                       />
-                      <button
+                      <button {...pageStyleTarget('button')}
                         className="btn btn-secondary"
                         type="button"
                         onClick={handleAddPlayer}
@@ -678,7 +679,7 @@ function MainCharacters() {
                       </button>
                     </div>
                   ) : null}
-                  <button
+                  <button {...pageStyleTarget('button')}
                     className="btn btn-secondary"
                     type="button"
                     onClick={() => setShowAddPlayerForm((previous) => !previous)}
@@ -688,8 +689,8 @@ function MainCharacters() {
                   </button>
                 </div>
               </div>
-              {topLoading ? <p className="result-line">Loading main characters...</p> : null}
-              {topError ? <p className="result-line">{topError}</p> : null}
+              {topLoading ? <p {...pageStyleTarget('text')} className="result-line">Loading main characters...</p> : null}
+              {topError ? <p {...pageStyleTarget('text')} className="result-line">{topError}</p> : null}
               {!topLoading && !topError ? (
                 sortedByRating.length ? (
                   <>
@@ -701,7 +702,7 @@ function MainCharacters() {
                     <div className="main-character-hover-grid">
                       {hoveredPlayer ? (
                         <div className="main-character-hover-nav">
-                          <button
+                          <button {...pageStyleTarget('button')}
                             className="btn btn-secondary main-character-hover-nav-btn"
                             type="button"
                             onClick={handleHoveredNext}
@@ -722,7 +723,7 @@ function MainCharacters() {
                               updateStateByPlayer[String(hoveredPlayer.player_name || '').toLowerCase()] || ''
                             }
                           />
-                          <button
+                          <button {...pageStyleTarget('button')}
                             className="btn btn-secondary main-character-hover-nav-btn"
                             type="button"
                             onClick={handleHoveredPrevious}
@@ -732,25 +733,25 @@ function MainCharacters() {
                           </button>
                         </div>
                       ) : (
-                        <p className="result-line">Hover a point to inspect that player.</p>
+                        <p {...pageStyleTarget('text')} className="result-line">Hover a point to inspect that player.</p>
                       )}
                     </div>
-                    {updateMessage ? <p className="result-line">{updateMessage}</p> : null}
+                    {updateMessage ? <p {...pageStyleTarget('text')} className="result-line">{updateMessage}</p> : null}
                   </>
                 ) : (
-                  <p className="result-line">No main characters found for this time control.</p>
+                  <p {...pageStyleTarget('text')} className="result-line">No main characters found for this time control.</p>
                 )
               ) : null}
             </section>
           ) : null}
 
               {selectedMode && !topLoading && !topError && sortedByRating.length ? (
-            <section className="games-mode-detail" aria-label={`${selectedMode} top players`}>
+            <section {...pageStyleTarget('players.panel')} className="games-mode-detail" aria-label={`${selectedMode} top players`}>
               <div className="section-head">
-                <h2 className="games-action-title">{selectedMode} top players</h2>
+                <h2 {...pageStyleTarget('title')} className="games-action-title">{selectedMode} top players</h2>
               </div>
               <div className="main-character-top-layout">
-                <button
+                <button {...pageStyleTarget('button')}
                   className="btn btn-secondary main-character-page-btn"
                   type="button"
                   onClick={handleTopPlayersPrevious}
@@ -773,7 +774,7 @@ function MainCharacters() {
                     />
                   ))}
                 </div>
-                <button
+                <button {...pageStyleTarget('button')}
                   className="btn btn-secondary main-character-page-btn"
                   type="button"
                   onClick={handleTopPlayersNext}

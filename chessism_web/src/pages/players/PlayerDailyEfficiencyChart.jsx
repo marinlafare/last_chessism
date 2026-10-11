@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { fetchDailyEfficiency, fetchDailySalienceAccuracy } from './playerAnalysisApi'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
@@ -246,11 +247,11 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   }
 
   return (
-    <section className="measure-chart-section measure-daily-efficiency-section" aria-label="Daily game accuracy chart">
+    <section {...pageStyleTarget('panel')} className="measure-chart-section measure-daily-efficiency-section" aria-label="Daily game accuracy chart">
       <div className="behavior-subchart-heading measure-chart-heading measure-daily-efficiency-heading">
-        <div><strong>Accuracy</strong></div>
+        <div><strong {...pageStyleTarget('value')}>Accuracy</strong></div>
         <div className="measure-daily-years" aria-label="Accuracy year">
-          <button
+          <button {...pageStyleTarget('button')}
             ref={allYearsButton}
             type="button"
             className={selectedYear === 'all' ? 'active' : ''}
@@ -270,14 +271,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
       {request.loading ? <div className="measure-chart-message">Calculating daily accuracy…</div> : null}
       {!request.loading && request.error ? <div className="measure-chart-message error" role="alert">{request.error}</div> : null}
       {!request.loading && request.data?.saliencePending ? (
-        <p className="measure-salience-state">
+        <p {...pageStyleTarget('text')} className="measure-salience-state">
           Salience is {request.data.salience?.status || 'unavailable'}; showing unweighted Accuracy until the player rebuild finishes.
         </p>
       ) : null}
       {!request.loading && !request.error ? (
         <div className="daily-salience-layout">
           <div className="daily-salience-plot">
-            <svg className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label={`Average game accuracy by local date — ${selectedYear === 'all' ? 'all years' : selectedYear}`} aria-describedby={yearHintId} onPointerMove={hoverYear} onPointerLeave={() => setHoveredYear(null)}>
+            <svg {...pageStyleTarget('chart.accuracy')} className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label={`Average game accuracy by local date — ${selectedYear === 'all' ? 'all years' : selectedYear}`} aria-describedby={yearHintId} onPointerMove={hoverYear} onPointerLeave={() => setHoveredYear(null)}>
               {selectedYear === 'all' ? <DailyYearBands
                 bands={plot.yearBands}
                 activeYear={highlightedBand?.year}
@@ -343,9 +344,9 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
               {highlightedBand ? <text className="daily-year-label" pointerEvents="none" x={(highlightedBand.left + highlightedBand.right) / 2} y={PLOT_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedBand.year}</text> : null}
               <text className="graph-axis-label measure-daily-axis-title" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={AXIS_TITLE_Y} textAnchor="middle">DATE · {selectedYear === 'all' ? 'ALL YEARS' : selectedYear}</text>
             </svg>
-            <p className="daily-year-hint" id={yearHintId}>{selectedYear === 'all' ? 'Hover over a year and click its background to zoom in. Click a dot to explore its games.' : `Showing ${selectedYear}. Choose All to restore the timeline. Click a dot to explore its games.`}</p>
-            <p className="daily-salience-count" role="status">Showing {visiblePoints.length.toLocaleString('en-US')} of {dailyPoints.length.toLocaleString('en-US')} days</p>
-            <p className="daily-salience-explanation">Daily average game salience: lower means more repeated positions; higher means more distinctive positions in this player’s recorded games. The filter hides whole days, not individual games.</p>
+            <p {...pageStyleTarget('text')} className="daily-year-hint" id={yearHintId}>{selectedYear === 'all' ? 'Hover over a year and click its background to zoom in. Click a dot to explore its games.' : `Showing ${selectedYear}. Choose All to restore the timeline. Click a dot to explore its games.`}</p>
+            <p {...pageStyleTarget('text')} className="daily-salience-count" role="status">Showing {visiblePoints.length.toLocaleString('en-US')} of {dailyPoints.length.toLocaleString('en-US')} days</p>
+            <p {...pageStyleTarget('text')} className="daily-salience-explanation">Daily average game salience: lower means more repeated positions; higher means more distinctive positions in this player’s recorded games. The filter hides whole days, not individual games.</p>
           </div>
           <DailySalienceRange range={salienceRange} scale={salienceScale} onChange={setSalienceRange} />
         </div>

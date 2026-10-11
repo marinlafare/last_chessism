@@ -11,6 +11,16 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import AppearancePreset as Preset, AppearanceSetting as Setting, AppearanceOverride as Override
 
 REGISTRY = json.loads((Path(__file__).parents[1] / 'appearance_registry.json').read_text())
+_SCOPES = json.loads((Path(__file__).parents[1] / 'appearance_scopes.json').read_text())
+_CHARTS = json.loads((Path(__file__).parents[1] / 'appearance_charts.json').read_text())
+REGISTRY['properties'].update(_CHARTS['properties'])
+REGISTRY['scopes'] = {
+    scope: {**spec, 'targets': {**_SCOPES['common_targets'], **_CHARTS['targets'], **spec['targets']}}
+    for scope, spec in _SCOPES['scopes'].items()
+}
+# Additive registry expansion: all v1 Scored Positions preset keys remain valid.
+REGISTRY['scopes'][REGISTRY['scope']]['targets'].update(REGISTRY['targets'])
+MAX_OVERRIDES = 2000
 
 
 class AppearanceConflict(ValueError):
@@ -27,16 +37,16 @@ def preset_name(value):
 
 
 def validate_overrides(rows):
-    if not isinstance(rows, list) or len(rows) > 500:
-        raise ValueError('At most 500 appearance overrides are allowed.')
+    if not isinstance(rows, list) or len(rows) > MAX_OVERRIDES:
+        raise ValueError(f'At most {MAX_OVERRIDES} appearance overrides are allowed.')
     output, seen = [], set()
     for row in rows:
         if not isinstance(row, dict) or set(row) != {'scope', 'target', 'property', 'value'}:
             raise ValueError('Invalid appearance override.')
         scope, target, prop, value = (row[k] for k in ('scope', 'target', 'property', 'value'))
-        if not all(isinstance(v, str) for v in (scope, target, prop)) or scope != REGISTRY['scope']:
+        if not all(isinstance(v, str) for v in (scope, target, prop)) or scope not in REGISTRY['scopes']:
             raise ValueError('Unknown appearance scope.')
-        if prop not in REGISTRY['targets'].get(target, {}).get('properties', []):
+        if prop not in REGISTRY['scopes'][scope]['targets'].get(target, {}).get('properties', []):
             raise ValueError('Unknown target or unsupported appearance property.')
         key = (scope, target, prop)
         if key in seen: raise ValueError('Duplicate appearance property.')

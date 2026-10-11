@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { Chess } from 'chess.js'
 import { formatNumber } from '../../utils/formatters'
 
@@ -242,7 +243,7 @@ function TimeControlRatingsScatterChart({ mode, chart, size = 'normal' }) {
   const bins = chart?.bins && typeof chart.bins === 'object' ? chart.bins : {}
 
   if (!xValues.length || xValues.length !== yValues.length) {
-    return <p className="result-line">No ratings data for this time control.</p>
+    return <p {...pageStyleTarget('text')} className="result-line">No ratings data for this time control.</p>
   }
 
   const isLarge = size === 'large'
@@ -273,14 +274,14 @@ function TimeControlRatingsScatterChart({ mode, chart, size = 'normal' }) {
   const yTicks = Array.from({ length: 5 }, (_, idx) => Math.round(minY + (idx * (yRange / 4))))
 
   return (
-    <div className="rating-chart-shell">
-      <h3>raitings for: {mode}</h3>
+    <div {...pageStyleTarget('chart.ratingGroups')} className="rating-chart-shell">
+      <h3 {...pageStyleTarget('title')}>raitings for: {mode}</h3>
       <div className="rating-cluster-legend">
         {CLUSTER_KEYS.map((clusterKey) => (
           <span key={`legend-${clusterKey}`} className="rating-cluster-item">
             <span
               className="rating-cluster-dot"
-              style={{ background: CLUSTER_COLORS[clusterKey] || '#f4c057' }}
+              style={{ background: `var(--chart-color-${{cluster_1:1,cluster_2:2,cluster_3:3}[clusterKey]||2})` }}
               aria-hidden="true"
             />
             {clusterKey}
@@ -336,7 +337,7 @@ function TimeControlRatingsScatterChart({ mode, chart, size = 'normal' }) {
             cy={point.y}
             r="3.2"
             className="scatter-point"
-            style={{ fill: CLUSTER_COLORS[point.clusterKey] || '#f4c057' }}
+            style={{ fill: `var(--chart-color-${{cluster_1:1,cluster_2:2,cluster_3:3}[point.clusterKey]||2})` }}
           />
         ))}
       </svg>
@@ -375,12 +376,12 @@ function CompactBarChart({ title, labels, values }) {
   const safeValues = Array.isArray(values) ? values : []
 
   if (!safeLabels.length || safeLabels.length !== safeValues.length) {
-    return <p className="result-line">No chart data.</p>
+    return <p {...pageStyleTarget('text')} className="result-line">No chart data.</p>
   }
 
   return (
-    <div className="analytics-bars-wrap">
-      {title ? <h3>{title}</h3> : null}
+    <div {...pageStyleTarget('chart.bars')} className="analytics-bars-wrap">
+      {title ? <h3 {...pageStyleTarget('title')}>{title}</h3> : null}
       <div className="analytics-bars-scroll">
         <div className="analytics-bars">
           {safeLabels.map((label, idx) => {
@@ -408,12 +409,12 @@ function HeatStrip({ title, labels, values, singleRow = false }) {
   const maxValue = Math.max(...safeValues.map((v) => Number(v || 0)), 1)
 
   if (!safeLabels.length || safeLabels.length !== safeValues.length) {
-    return <p className="result-line">No heat data.</p>
+    return <p {...pageStyleTarget('text')} className="result-line">No heat data.</p>
   }
 
   return (
     <div className="heat-strip-wrap">
-      <h3>{title}</h3>
+      <h3 {...pageStyleTarget('title')}>{title}</h3>
       <div
         className={`heat-strip-grid${singleRow ? ' single-row' : ''}`}
         style={singleRow ? { '--heat-cols': safeLabels.length } : undefined}
@@ -436,7 +437,7 @@ function HeatStrip({ title, labels, values, singleRow = false }) {
 
 function ClusterSelect({ value, onChange, idPrefix }) {
   return (
-    <select
+    <select {...pageStyleTarget('field')}
       className="cluster-select"
       style={getClusterSelectStyle(value)}
       value={value}

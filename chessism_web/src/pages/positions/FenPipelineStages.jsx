@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   formatNumber,
@@ -102,7 +103,7 @@ function PipelineStage({
             : 'up to date'
 
   return (
-    <article className={`fen-pipeline-stage is-${lifecycle}`}>
+    <article {...pageStyleTarget('card')} className={`fen-pipeline-stage is-${lifecycle}`}>
       <div className="fen-pipeline-stage-head">
         <span>{label}</span>
         <i
@@ -112,7 +113,7 @@ function PipelineStage({
           title={`${label} is ${lifecycle}`}
         />
       </div>
-      <strong>{`${formatNumber(safeValue)} / ${formatNumber(safeTotal)}`}</strong>
+      <strong {...pageStyleTarget('value')}>{`${formatNumber(safeValue)} / ${formatNumber(safeTotal)}`}</strong>
       <div
         className="fen-pipeline-stage-track"
         role="progressbar"
@@ -123,7 +124,7 @@ function PipelineStage({
       >
         <div style={{ width: `${percent}%` }} />
       </div>
-      <small>{statusLabel}</small>
+      <small {...pageStyleTarget('text')}>{statusLabel}</small>
     </article>
   )
 }

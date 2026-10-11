@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Chessboard } from 'react-chessboard'
@@ -104,34 +105,34 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
 
   return createPortal(
     <div className="game-review-backdrop" role="presentation">
-      <section className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
+      <section {...pageStyleTarget('panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
         <header className="game-modal-header game-review-header">
-          <button className="game-review-back" type="button" onClick={onBack}>← games</button>
+          <button {...pageStyleTarget('button')} className="game-review-back" type="button" onClick={onBack}>← games</button>
           <div>
-            <p className="eyebrow">GAME REVIEW</p>
-            <h2>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
+            <p {...pageStyleTarget('text')} className="eyebrow">GAME REVIEW</p>
+            <h2 {...pageStyleTarget('title')}>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
           </div>
           <div className="game-review-window-actions">
-            <button className="game-modal-icon" type="button" aria-label={maximized ? 'Restore viewer' : 'Maximize viewer'} onClick={() => setMaximized((value) => !value)}>{maximized ? '↙' : '↗'}</button>
-            <button className="game-modal-icon" type="button" aria-label="Close game viewer" onClick={onClose}>×</button>
+            <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label={maximized ? 'Restore viewer' : 'Maximize viewer'} onClick={() => setMaximized((value) => !value)}>{maximized ? '↙' : '↗'}</button>
+            <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label="Close game viewer" onClick={onClose}>×</button>
           </div>
         </header>
 
-        {request.loading ? <p className="game-modal-message">Loading move-by-move analysis…</p> : null}
-        {request.error ? <p className="game-modal-message error" role="alert">{request.error}</p> : null}
-        {request.missingPosition ? <p className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
+        {request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading move-by-move analysis…</p> : null}
+        {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {request.missingPosition ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
         {game && !request.loading ? (
           <div className="game-review-body">
             <div className="game-review-board-column">
               <div className="game-review-names">
                 <span>{orientation === 'white' ? game.black.name : game.white.name}</span>
-                <strong>{orientation === 'white' ? game.black.rating : game.white.rating}</strong>
+                <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.black.rating : game.white.rating}</strong>
               </div>
               <div className="game-review-stage">
                 <div className={`game-review-eval ${orientation === 'black' ? 'flipped' : ''}`} style={{ '--white-eval': `${whitePercent}%` }}>
                   <div className="game-review-eval-black" />
                   <div className="game-review-eval-white" />
-                  <strong>{evaluationLabel(evaluation, orientation)}</strong>
+                  <strong {...pageStyleTarget('value')}>{evaluationLabel(evaluation, orientation)}</strong>
                 </div>
                 <div className="game-review-board" ref={boardRef}>
                   <Chessboard
@@ -146,41 +147,41 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
               </div>
               <div className="game-review-names">
                 <span>{orientation === 'white' ? game.white.name : game.black.name}</span>
-                <strong>{orientation === 'white' ? game.white.rating : game.black.rating}</strong>
+                <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.white.rating : game.black.rating}</strong>
               </div>
               <div className="game-review-navigation">
-                <button type="button" aria-label="Previous move" disabled={positionIndex === 0} onClick={() => setPositionIndex((value) => Math.max(0, value - 1))}>←</button>
+                <button {...pageStyleTarget('button')} type="button" aria-label="Previous move" disabled={positionIndex === 0} onClick={() => setPositionIndex((value) => Math.max(0, value - 1))}>←</button>
                 <span>{positionIndex === 0 ? 'Starting position' : `${currentMove.move_number}${currentMove.move_color === 'white' ? '.' : '…'} ${currentMove.san}`}</span>
-                <button type="button" aria-label="Next move" disabled={positionIndex >= moves.length} onClick={() => setPositionIndex((value) => Math.min(moves.length, value + 1))}>→</button>
+                <button {...pageStyleTarget('button')} type="button" aria-label="Next move" disabled={positionIndex >= moves.length} onClick={() => setPositionIndex((value) => Math.min(moves.length, value + 1))}>→</button>
               </div>
             </div>
 
             <aside className="game-review-analysis">
               <div className="game-review-summary">
-                <div><span>Accuracy</span><strong>{playerSummary?.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
-                <div><span>Result</span><strong>{playerSummary?.result || '—'}</strong></div>
-                <div><span>Blunders</span><strong>{playerSummary?.blunder_count ?? '—'}</strong></div>
-                <div><span>Ended by</span><strong>{playerSummary?.end_by?.replaceAll('_', ' ') || '—'}</strong></div>
+                <div><span>Accuracy</span><strong {...pageStyleTarget('value')}>{playerSummary?.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
+                <div><span>Result</span><strong {...pageStyleTarget('value')}>{playerSummary?.result || '—'}</strong></div>
+                <div><span>Blunders</span><strong {...pageStyleTarget('value')}>{playerSummary?.blunder_count ?? '—'}</strong></div>
+                <div><span>Ended by</span><strong {...pageStyleTarget('value')}>{playerSummary?.end_by?.replaceAll('_', ' ') || '—'}</strong></div>
               </div>
               <div className="game-review-current">
-                <strong>{currentMove?.classification || 'position'}</strong>
+                <strong {...pageStyleTarget('value')}>{currentMove?.classification || 'position'}</strong>
                 <span>Evaluation {evaluationLabel(evaluation, 'white')} for White</span>
                 <span>White clock {formatClock(currentMove?.clock?.white_time_left)}</span>
                 <span>Black clock {formatClock(currentMove?.clock?.black_time_left)}</span>
                 {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
-                {currentMove?.engine_line_before?.length ? <small>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
+                {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('text')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
               </div>
               <div className="game-review-moves" aria-label="Game moves">
                 {moves.map((move, index) => (
-                  <button
+                  <button {...pageStyleTarget('button')}
                     type="button"
                     className={`${positionIndex === index + 1 ? 'active' : ''} ${move.classification || ''}`}
                     onClick={() => setPositionIndex(index + 1)}
                     key={move.ply}
                   >
                     <span>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>
-                    <strong>{move.san || '—'}</strong>
-                    <small>{evaluationLabel(move.evaluation_after, 'white')}</small>
+                    <strong {...pageStyleTarget('value')}>{move.san || '—'}</strong>
+                    <small {...pageStyleTarget('text')}>{evaluationLabel(move.evaluation_after, 'white')}</small>
                   </button>
                 ))}
               </div>

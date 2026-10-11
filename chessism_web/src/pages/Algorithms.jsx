@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useRef } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
@@ -18,9 +19,9 @@ export default function Algorithms() {
       resultsRef.current.focus({ preventScroll: true })
     }
   }, [model.result?.id])
-  return <div className="page-frame"><SideRail /><div className="home-shell"><Header />
+  return <div {...pageStyleTarget('page')} className="page-frame"><SideRail /><div className="home-shell"><Header />
     <main className="algorithm-main">
-      <section className="algorithm-panel algorithm-heading"><div><p className="eyebrow">SUPERUSER RESEARCH</p><h1>Algorithm creation</h1><p>Use saved matrix instructions to investigate your chess data. Definitions and compact results are included in your manual database backup.</p></div><a href="/research">Research index</a></section>
+      <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-heading"><div><p {...pageStyleTarget('text')} className="eyebrow">SUPERUSER RESEARCH</p><h1 {...pageStyleTarget('heading')}>Algorithm creation</h1><p {...pageStyleTarget('text')}>Use saved matrix instructions to investigate your chess data. Definitions and compact results are included in your manual database backup.</p></div><a {...pageStyleTarget('link')} href="/research">Research index</a></section>
       {model.error && <div className="status-banner warn" role="alert">{model.error}</div>}
       {model.notice && <div className="status-banner" role="status">{model.notice}</div>}
       <AlgorithmForm model={model} />

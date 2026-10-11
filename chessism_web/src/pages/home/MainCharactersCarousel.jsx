@@ -1,3 +1,4 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import { fetchTopMainCharacters } from './homeApi'
@@ -66,16 +67,16 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
     : '0 of 0'
 
   return (
-    <section className="main-characters-carousel" aria-labelledby="main-characters-title">
+    <section {...pageStyleTarget('characters.panel')} className="main-characters-carousel" aria-labelledby="main-characters-title">
       <div className="carousel-head">
         <div>
-          <p className="eyebrow">Player database</p>
-          <h2 id="main-characters-title">Main Characters</h2>
+          <p {...pageStyleTarget('text')} className="eyebrow">Player database</p>
+          <h2 {...pageStyleTarget('title')} id="main-characters-title">Main Characters</h2>
         </div>
         <div className="carousel-actions">
           <div className="mode-tabs" aria-label="Time control">
             {TIME_CONTROLS.map((mode) => (
-              <button
+              <button {...pageStyleTarget('button')}
                 className={`mode-tab ${selectedMode === mode ? 'active' : ''}`}
                 type="button"
                 key={mode}
@@ -102,7 +103,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
               const absoluteIndex = pageStart + index
 
               return (
-                <a className={`character-rating-row${selected ? ' selected' : ''}`} href={profileHref}
+                <a {...pageStyleTarget('link')} className={`character-rating-row${selected ? ' selected' : ''}`} href={profileHref}
                   key={playerName || index} aria-current={selected ? 'true' : undefined}
                   onClick={event => {
                     if (!onSelectPlayer || !isPlainClick(event)) return
@@ -111,7 +112,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
                   }}>
                   <span className="character-rating-rank">#{absoluteIndex + 1}</span>
                   <span className="character-rating-name">{getDisplayName(player)}</span>
-                  <strong className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
+                  <strong {...pageStyleTarget('value')} className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
                 </a>
               )
             })}
@@ -125,7 +126,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
         </span>
         {hasPagination ? (
           <div className="character-pagination" aria-label="Main character pages">
-            <button
+            <button {...pageStyleTarget('button')}
               className="btn btn-secondary btn-inline"
               type="button"
               disabled={safePage <= 1}
@@ -134,7 +135,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
               Previous
             </button>
             <span>{safePage} / {totalPages}</span>
-            <button
+            <button {...pageStyleTarget('button')}
               className="btn btn-secondary btn-inline"
               type="button"
               disabled={safePage >= totalPages}
