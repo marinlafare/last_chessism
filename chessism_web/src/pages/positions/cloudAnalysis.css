@@ -47,4 +47,7 @@
 .cloud-draft-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 .cloud-selection .cloud-draft-editor { border: 1px solid #35525a; border-radius: 6px; padding: .8rem; }
 .cloud-draft-preview { border-left: 3px solid #9c7ab4; padding: .75rem; background: #1b2c2b; }
+.cloud-draft-vm-plan { width: 100%; border-collapse: collapse; margin: .75rem 0; }
+.cloud-draft-vm-plan th, .cloud-draft-vm-plan td { text-align: left; vertical-align: top; padding: .4rem; border-bottom: 1px solid #35525a; overflow-wrap: anywhere; }
+.cloud-draft-vm-plan td > span { display: block; }
 @media (max-width: 800px) { .cloud-analysis-grid { grid-template-columns: 1fr; } }

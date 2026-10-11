@@ -14,6 +14,11 @@ const state = window.cloudTest = { job, online: true, requests: [], previewCount
     { ...job, id: 'old-complete', status: 'complete', imported: 2082, runs: [{ ...job.runs[0], status: 'complete' }] },
     { ...job, id: 'old-cancelled', status: 'cancelled', runs: [] },
   ] }
+const restoreDraft = new URLSearchParams(location.search).has('restoreDraft')
+if (restoreDraft) {
+  state.draft = JSON.parse(sessionStorage.getItem('cloud-draft-fixture'))
+  job.status = 'complete'
+}
 window.fetch = async (input, options = {}) => {
   const url = new URL(input, location.href), method = options.method || 'GET'
   state.requests.push({ path: url.pathname, method, body: options.body ? JSON.parse(options.body) : null })
@@ -29,6 +34,7 @@ window.fetch = async (input, options = {}) => {
       blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job, ...state.history] })
   }
   if (url.pathname.endsWith('/analysis/player_games/preview')) {
+    if (state.previewError) return reply({ detail: state.previewError }, 500)
     state.previewForm = JSON.parse(options.body)
     return reply({ plan_id: 'a'.repeat(32), selected_games: 30, fens_to_analyze: state.previewCount })
   }
@@ -79,5 +85,5 @@ window.fetch = async (input, options = {}) => {
   if (url.pathname.endsWith('/stop-repeating')) { job.sequence.stop_requested = true; return reply({ id: job.id }, 202) }
   throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
 }
-createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection))
+createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection, { collapsible: restoreDraft }))
 </script></body></html>

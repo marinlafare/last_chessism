@@ -1,4 +1,8 @@
-import { cloudDefaults, MAX_BATCH_VMS, batchCycleCapacity } from './cloudAnalysisForm.js'
+import { cloudDefaults, MAX_BATCH_VMS, batchCycleCapacity, cloudLimit } from './cloudAnalysisForm.js'
+
+export function hasSavedCloudDraft(draft) {
+  return Boolean(draft?.id && !draft.submitted_job_id && draft.entries?.length)
+}
 
 export function draftEntryForm(entry) {
   return { ...cloudDefaults, player: entry.player_name, selection: entry.selection_mode,
@@ -27,4 +31,20 @@ export function draftTaskSummary(count, nVms = 1) {
     .filter(Boolean).join(' + ')
   const tasks = Math.ceil(count / capacity)
   return `${sizes} FENs across ${tasks} cycle(s) in Google, ${tasks > 1 ? 'sequentially, ' : ''}using up to ${nVms} parallel Spot VMs; at most 1,000,000 FENs per VM per cycle.`
+}
+
+export function draftVmPlan(count, nVms) {
+  const vms = Number(nVms)
+  if (!Number.isSafeInteger(count) || count < 1 || count > cloudLimit('batch_spot')
+      || !Number.isInteger(vms) || vms < 1 || vms > MAX_BATCH_VMS) return null
+  const capacity = batchCycleCapacity(vms)
+  // Mirror sequencing.cycle_sizes and work_units.ranges: full cycles first,
+  // then an even VM split within each cycle (the first VMs take remainders).
+  return Array.from({ length: Math.ceil(count / capacity) }, (_, index) => {
+    const total = Math.min(capacity, count - index * capacity)
+    const usedVms = Math.min(total, vms)
+    const size = Math.floor(total / usedVms), extra = total % usedVms
+    return { cycle: index + 1, total,
+      vmFens: Array.from({ length: usedVms }, (_, vm) => size + (vm < extra ? 1 : 0)) }
+  })
 }

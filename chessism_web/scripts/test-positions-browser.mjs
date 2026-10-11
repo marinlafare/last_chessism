@@ -114,7 +114,9 @@ try {
     await assert("document.querySelector('#analysis-gcloud-panel').hidden")
     await click('#analysis-gcloud-toggle')
     await assert("document.querySelector('[aria-label=\"Draft player\"]').value==='keep-my-draft' && document.querySelector('[aria-label=\"Draft games\"]').value==='77'")
-    await assert("window.positionsTest.requests.filter(r=>r.path.endsWith('/drafts/current')).length===1")
+    // One initial saved-draft discovery, one fresh read when entering the
+    // builder, and no extra read/reset when collapsing and reopening it.
+    await assert("window.positionsTest.requests.filter(r=>r.path.endsWith('/drafts/current')).length===2")
     await assert("!window.positionsTest.requests.some(r=>r.method!=='GET' && r.path.includes('/analysis/cloud'))")
     await assert("window.positionsTest.errors.length===0 && window.positionsTest.unexpected.length===0")
     await assert("document.documentElement.scrollWidth<=innerWidth")

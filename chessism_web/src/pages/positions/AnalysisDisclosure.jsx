@@ -1,8 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import './analysis-disclosure.css'
 
-export default function AnalysisDisclosure({ id, label, status, children }) {
+export default function AnalysisDisclosure({ id, label, status, children, revealKey }) {
   const [open, setOpen] = useState(false)
+  // Reveal newly restored work once, without reopening on every progress poll.
+  useEffect(() => { if (revealKey) setOpen(true) }, [revealKey])
   return <section className={`analysis-disclosure${open ? ' is-open' : ''}`} aria-label={`${label} analysis`}>
     <h2 className="analysis-disclosure-heading">
       <button className="analysis-disclosure-toggle" type="button" id={`${id}-toggle`}

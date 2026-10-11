@@ -12,7 +12,7 @@ export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onC
     setForm(old => ({ ...old, [key]: value })); setPreview(null); setError('')
   }
   const inspect = async () => {
-    setLoading(true); setError('')
+    setLoading(true); setError(''); setPreview(null)
     try { setPreview(await previewPlayerGameAnalysis(cloudGamePreview(form))) }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
@@ -47,12 +47,16 @@ export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onC
       <button className="btn btn-secondary" type="button" disabled={!form.player.trim()} onClick={inspect}>
         {loading ? 'Previewing games…' : 'Preview selection'}
       </button>
-      <button className="btn" type="button" disabled={!preview?.plan_id}
-        onClick={() => onSave(preview.plan_id, entry?.id)}>{entry ? 'Save edited selection' : 'Add selection'}</button>
-      {entry && <button className="btn btn-secondary" type="button" onClick={onCancel}>Cancel edit</button>}
     </div>
     {preview && <p role="status">{preview.selected_games.toLocaleString('en-US')} selected games;
       {' '}{preview.fens_to_analyze.toLocaleString('en-US')} missing FENs before combined deduplication and reservation checks.</p>}
     {error && <p role="alert">{error}</p>}
+    <div className="cloud-draft-actions">
+      <button className="btn" type="button" disabled={!preview?.plan_id}
+        onClick={() => onSave(preview.plan_id, entry?.id)}>{entry ? 'Save edited selection' : 'Add FENs'}</button>
+      {entry && <button className="btn btn-secondary" type="button" onClick={onCancel}>Cancel edit</button>}
+    </div>
+    <small>{preview?.plan_id ? `${entry ? 'Save this selection in' : 'Add these games’ missing FENs to'} the saved set. This does not start a cloud job.`
+      : 'Preview the games to enable saving their missing FENs to the set.'}</small>
   </fieldset>
 }

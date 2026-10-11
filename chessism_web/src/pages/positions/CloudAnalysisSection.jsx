@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createCloudAnalysis, fetchCloudAnalysis, resumeCloudAnalysis, retryCloudAnalysis, cancelCloudAnalysis,
-  previewPlayerGameAnalysis, fetchPlayerAnalysisCounts, reviseCloudVms, stopCloudRepeating,
+  previewPlayerGameAnalysis, fetchPlayerAnalysisCounts, reviseCloudVms, stopCloudRepeating, fetchCloudDraft,
 } from './positionsApi'
 import { cloudDefaults, cloudRunDefaults, cloudPayload, cloudGamePreview, cloudBound, cloudGameSelectionError,
   cloudLimit, MAX_BATCH_VMS } from './cloudAnalysisForm'
@@ -13,6 +13,7 @@ import { cloudJobProgress, cloudActiveRun, cloudTaskLabel } from './cloudJobProg
 import useCloudJobDisplay from './useCloudJobDisplay'
 import { CloudPerformanceSummary } from './CloudPerformanceSummary'
 import CloudGameDraft from './CloudGameDraft'
+import { hasSavedCloudDraft } from './cloudGameDraft'
 import CloudJobIndicator from './CloudJobIndicator'
 import AnalysisDisclosure from './AnalysisDisclosure'
 import './cloudAnalysis.css'
@@ -22,9 +23,20 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
   const [revisedVms, setRevisedVms] = useState(1)
+  const [savedDraft, setSavedDraft] = useState(null)
+  const [draftError, setDraftError] = useState('')
   const onProgressRef = useRef(onProgress)
   const progressStamp = useRef(null)
   onProgressRef.current = onProgress
+  useEffect(() => {
+    let live = true
+    // Read the saved selection, not a new preview or reservation. Never submit
+    // work as a side effect of visiting or refreshing the page.
+    fetchCloudDraft().then(draft => { if (live) setSavedDraft(draft) })
+      .catch(err => { if (live) setDraftError(err.message) })
+    return () => { live = false }
+  }, [])
+  const draftAvailable = hasSavedCloudDraft(savedDraft)
   const refresh = useCallback(async () => {
     const next = await fetchCloudAnalysis()
     setData(next)
@@ -72,6 +84,13 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
         with no time-based search cutoff. Results are uploaded in batches of 500 and imported into the local database.
         Successful jobs clean up automatically after the final database import.</p>
       {error && <div role="alert" className="status-banner warn">{error}</div>}
+      {draftError && <p role="alert">Could not restore the saved FEN set: {draftError}. Open the combined builder and reload the saved draft.</p>}
+      {draftAvailable && <p role="status" className="cloud-busy-notice" data-saved-cloud-draft>
+        Saved FEN set: {savedDraft.entries.length} player selections.
+        {savedDraft.preview && <> Last preview: {savedDraft.preview.fens_to_analyze.toLocaleString('en-US')} available FENs
+          {' '}from {savedDraft.preview.unique_games.toLocaleString('en-US')} unique games.</>}
+        {' '}Review it in Batch Spot below; it has not been submitted.
+      </p>}
       {cloudBusy && <p role="status" className="cloud-busy-notice">
         A cloud job is {activeJob?.status || 'active'}. New submissions are disabled until it finishes
         importing and cleaning up. Paused/failed jobs must be recovered first. Local analysis and combined draft editing remain available.
@@ -83,6 +102,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
         <CloudSelection backend="batch_spot" disabled={busy || !data.controller_online || cloudBusy}
           job={batchDisplay?.job} fading={batchDisplay?.state === 'fading'}
           onSubmitted={refresh}
+          savedDraft={savedDraft} onDraftChange={setSavedDraft}
           create={(payload) => action(() => createCloudAnalysis(payload))} />
       </div>
       <h3>CLOUD JOB PROGRESS</h3>
@@ -176,19 +196,25 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
     </section>
   )
   return collapsible ? <AnalysisDisclosure id="analysis-gcloud" label="GCloud"
+    revealKey={draftAvailable ? savedDraft.id : null}
     status={statusJob ? <><CloudJobIndicator job={statusJob} />
       <span>{cloudJobProgress(statusJob).label} · {statusJob.imported.toLocaleString('en-US')} / {statusJob.target.toLocaleString('en-US')} FENs</span>
-    </> : error ? 'Unable to refresh cloud status' : data.controller_online ? 'No active cloud jobs' : 'Controller offline'}>
+    </> : error ? 'Unable to refresh cloud status' : draftAvailable ? 'Saved FEN set ready to review'
+      : data.controller_online ? 'No active cloud jobs' : 'Controller offline'}>
     {content}
   </AnalysisDisclosure> : content
 }
 
-function CloudSelection({ backend, disabled, create, job, fading, onSubmitted }) {
+function CloudSelection({ backend, disabled, create, job, fading, onSubmitted, savedDraft, onDraftChange }) {
   const isRun = backend === 'cloud_run'
   const maximum = cloudLimit(backend)
   const title = isRun ? 'Cloud Run' : 'Batch Spot'
   const id = isRun ? 'cloud-run' : 'cloud-batch'
   const [mode, setMode] = useState('all')
+  const modeChosen = useRef(false)
+  useEffect(() => {
+    if (!isRun && hasSavedCloudDraft(savedDraft) && !modeChosen.current) setMode('combined')
+  }, [isRun, savedDraft])
   const [form, setForm] = useState({ ...(isRun ? cloudRunDefaults : cloudDefaults) })
   const [preview, setPreview] = useState(null)
   const [inspection, setInspection] = useState(null)
@@ -201,6 +227,7 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted })
     setError('')
   }
   const changeMode = (value) => {
+    modeChosen.current = true
     setMode(value)
     setPreview(null); setInspection(null)
     setError('')
@@ -238,7 +265,9 @@ function CloudSelection({ backend, disabled, create, job, fading, onSubmitted })
         onClick={() => changeMode(mode === 'combined' ? 'all' : 'combined')}>
         {mode === 'combined' ? 'Back to single selection' : 'Build combined player-game job'}
       </button>}
-      {mode === 'combined' ? <CloudGameDraft launchDisabled={disabled} onSubmitted={onSubmitted} /> : <>
+      {mode === 'combined' ? <CloudGameDraft launchDisabled={disabled} onSubmitted={onSubmitted}
+        initialDraft={savedDraft} onDraftChange={onDraftChange}
+        nVms={form.n_vms} onVmChange={value => change('n_vms', value)} /> : <>
       <fieldset disabled={disabled || loading} aria-label={`${title} controls`}>
       <label>FEN selection
         <select className="text-input" aria-label="FEN selection" value={mode}

@@ -2,16 +2,16 @@ import { useEffect, useState } from 'react'
 import { fetchCloudDraft, createCloudDraft, saveCloudDraftEntry, removeCloudDraftEntry,
   previewCloudDraft, submitCloudDraft } from './positionsApi'
 import { MAX_BATCH_VMS } from './cloudAnalysisForm'
-import { draftSubmitError, draftTaskSummary } from './cloudGameDraft'
+import { draftSubmitError, draftTaskSummary, draftVmPlan } from './cloudGameDraft'
 import CloudDraftSelectionEditor from './CloudDraftSelectionEditor'
 
-export default function CloudGameDraft({ launchDisabled, onSubmitted }) {
-  const [draft, setDraft] = useState(null)
+export default function CloudGameDraft({ launchDisabled, onSubmitted, initialDraft = null, onDraftChange, nVms, onVmChange }) {
+  const [draft, setDraft] = useState(initialDraft)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [editing, setEditing] = useState(null)
   const [editorKey, setEditorKey] = useState(0)
-  const [nVms, setNVms] = useState(1)
+  useEffect(() => { onDraftChange?.(draft) }, [draft, onDraftChange])
   useEffect(() => {
     let live = true
     fetchCloudDraft().then(value => { if (live) setDraft(value) })
@@ -33,6 +33,7 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted }) {
     revision: draft.revision, plan_id: planId, ...(entryId ? { replace_entry_id: entryId } : {}),
   }), true)
   const submitError = draftSubmitError(draft, nVms)
+  const vmPlan = draftVmPlan(draft?.preview?.fens_to_analyze, nVms)
   const submit = async () => {
     if (loading || launchDisabled || submitError || editing) return
     setLoading(true); setError('')
@@ -70,6 +71,13 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted }) {
       {(editing || draft.entries.length < draft.max_entries) && <CloudDraftSelectionEditor
         key={editorKey} entry={editing} disabled={loading} onSave={save}
         onCancel={() => { setEditing(null); setEditorKey(key => key + 1) }} />}
+      <label>Parallel Spot VMs per cycle
+        <input className="text-input" aria-label="Combined Spot VMs" aria-describedby="combined-vms-help"
+          type="number" min="1" max={MAX_BATCH_VMS} step="1" required
+          disabled={loading} value={nVms} onChange={e => onVmChange(e.target.value)} />
+      </label>
+      <small id="combined-vms-help">Each VM: 16 vCPUs / 16 GiB. Changing the VM count updates the split below immediately;
+        it does not change your saved FEN set or require another preview. Concurrency is subject to Google quota.</small>
       <button className="btn btn-secondary" type="button" disabled={loading || !draft.entries.length || !!editing}
         onClick={() => perform(() => previewCloudDraft(draft.id, draft.revision))}>Preview combined selection</button>
       {draft.preview && <div className="cloud-draft-preview" role="status">
@@ -77,14 +85,21 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted }) {
         <p>{draft.preview.unique_games.toLocaleString('en-US')} unique games; {draft.preview.claimed_fens.toLocaleString('en-US')} missing FENs
           {' '}already reserved elsewhere and excluded. Shared positions across players are counted once.</p>
         <p>{draftTaskSummary(draft.preview.fens_to_analyze, nVms)}</p>
+        {vmPlan && <>
+          <p>{Number(nVms)} Spot VM{Number(nVms) === 1 ? '' : 's'} selected · up to {Math.min(Number(nVms), draft.preview.fens_to_analyze) * 16} vCPUs concurrently.
+            {' '}VMs within a cycle run in parallel; cycles run sequentially.</p>
+          <table className="cloud-draft-vm-plan" aria-label="Planned Batch VM allocation">
+            <thead><tr><th scope="col">Cycle</th><th scope="col">Total FENs</th><th scope="col">FENs per VM</th></tr></thead>
+            <tbody>{vmPlan.map(row => <tr key={row.cycle}>
+              <th scope="row">{row.cycle}</th>
+              <td>{row.total.toLocaleString('en-US')}</td>
+              <td>{row.vmFens.map((count, index) => <span key={index}>VM {index + 1}: {count.toLocaleString('en-US')}</span>)}</td>
+            </tr>)}</tbody>
+          </table>
+        </>}
         <small>Snapshot, not a reservation. Counts may decrease before launch. Maximum {draft.max_fens.toLocaleString('en-US')} FENs.</small>
       </div>}
-      <label>Spot VMs per task
-        <input className="text-input" aria-label="Combined Spot VMs" type="number" min="1" max={MAX_BATCH_VMS} step="1"
-          disabled={loading} value={nVms} onChange={e => setNVms(e.target.value)} />
-      </label>
-      <small>Each VM: 16 vCPUs / 16 GiB. Tasks run sequentially; VM concurrency is subject to Google quota.
-        Keep the PC on until “Safe to turn off your PC” appears. No total-runtime or monetary cap.</small>
+      <small>Keep the PC on until “Safe to turn off your PC” appears. No total-runtime or monetary cap.</small>
       {launchDisabled && <p>Draft editing remains available. Submission requires an online controller and no unfinished cloud job.</p>}
       {submitError && <p>{submitError}</p>}
       <button className="btn" type="button" disabled={loading || launchDisabled || !!submitError || !!editing}
