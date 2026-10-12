@@ -1,8 +1,11 @@
 import assert from 'node:assert/strict'
-import { positionSlices, rankedGamePlayers, gamePlayerPage, gameAxisMax, sliceDescription, playerAvatarUrl } from '../src/pages/home/summaryData.js'
+import { positionSlices, rankedGamePlayers, gamePlayerPage, gameAxisMax, gameBarLabel, sliceDescription, fenTotalLabel, playerAvatarUrl } from '../src/pages/home/summaryData.js'
 import { pieSegments } from '../src/utils/pieSegments.js'
 
 assert.deepEqual(positionSlices(null), [])
+for (const [games, label] of [[0,'0'],[19.1,'20'],[999,'999'],[1000,'1K'],[1001,'2K'],[7500,'8K'],[12340,'13K'],[999999,'1M'],[1000001,'2M']]) {
+  assert.equal(gameBarLabel(games),label)
+}
 assert.equal(playerAvatarUrl(' https://images.example.invalid/avatar.png '),'https://images.example.invalid/avatar.png')
 assert.equal(playerAvatarUrl('/chessism.jpg'),'/chessism.jpg')
 for (const value of [null, '', 123, 'javascript:alert(1)', 'data:image/svg+xml,test', '//another.invalid/image.png', '/\\another.invalid/image.png']) {
@@ -14,7 +17,13 @@ const summary = {refreshed_at:'2026-10-11',total_fens:4,titled_fens:2,players:[
   {player_name:'c',title:'WFM',games:0,game_half_units:0},
 ]}
 assert.deepEqual(positionSlices(summary).map(s=>s.value),[2,2])
-assert.equal(sliceDescription(pieSegments(positionSlices(summary))[0]),'Titled-player positions: 2 FENs · 50.0%')
+assert.equal(sliceDescription(pieSegments(positionSlices(summary))[0]),'titled\n50%\n2')
+assert.equal(sliceDescription(pieSegments(positionSlices(summary))[1]),'untitled\n50%\n2')
+assert.equal(sliceDescription({key:'titled',value:400000,fraction:2/3}),'titled\n67%\n400,000')
+for (const [value, label] of [[999999,'999,999'],[1000000,'1.0M'],[3800000,'3.8M'],[10000000,'10.0M']]) {
+  assert.equal(sliceDescription({key:'titled',value,fraction:0.5}),`titled\n50%\n${label}`)
+}
+for (const [total, label] of [[null,'—'],[undefined,'—'],[0,'0.0M'],[600000,'0.6M'],[51510523,'51.5M'],[2000000,'2.0M']]) assert.equal(fenTotalLabel(total),label)
 assert.equal(pieSegments(positionSlices({...summary,titled_fens:4}))[0].full,true)
 assert.equal(pieSegments(positionSlices({...summary,total_fens:0,titled_fens:0})).length,0)
 const players = [

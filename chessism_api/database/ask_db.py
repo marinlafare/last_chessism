@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import async_engine, AsyncDBSession
 from chessism_api.database.models import Fen, Game, GameAnalysisSummary, GameFenAssociation
+from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES
 
 async def get_all_database_names():
     """
@@ -1579,7 +1580,8 @@ async def sync_game_analytics_projection(game_links: Optional[Tuple[int, ...]] =
 
 async def get_top_main_characters_by_time_control(
     time_control: str,
-    limit: int = 5
+    limit: int = 5,
+    title_status: str = "all",
 ) -> Dict[str, Any]:
     """
     Returns main characters for one normalized time control from the precomputed summary.
@@ -1590,6 +1592,8 @@ async def get_top_main_characters_by_time_control(
 
     # Keep a high cap so the bubble chart can include the full mode population.
     safe_limit = max(1, min(int(limit), 5000))
+    if title_status not in {"all", "titled", "untitled"}:
+        raise ValueError("Unknown player title filter")
 
     await ensure_main_character_mode_summary()
 
@@ -1607,17 +1611,25 @@ async def get_top_main_characters_by_time_control(
             s.as_black,
             TO_CHAR(s.last_game_at, 'YYYY-MON-DD') AS last_game_date,
             p.name AS full_name,
+            p.title,
             p.avatar,
             p.url AS profile_url
         FROM main_character_mode_summary s
         LEFT JOIN player p ON p.player_name = s.player_name
         WHERE s.mode = :mode
+          AND p.deleted_at IS NULL
+          AND (:title_status = 'all'
+            OR (:title_status = 'titled' AND UPPER(TRIM(COALESCE(p.title, ''))) = ANY(:titles))
+            OR (:title_status = 'untitled' AND NOT (UPPER(TRIM(COALESCE(p.title, ''))) = ANY(:titles))))
         ORDER BY s.rating DESC NULLS LAST, s.n_games DESC, s.player_name ASC
         LIMIT :limit;
     """
 
     async with AsyncDBSession() as session:
-        result = await session.execute(text(query), {"mode": target_mode, "limit": safe_limit})
+        result = await session.execute(text(query), {
+            "mode": target_mode, "limit": safe_limit,
+            "title_status": title_status, "titles": list(OFFICIAL_PLAYER_TITLES),
+        })
         rows = result.mappings().all()
 
     players = []
@@ -1631,6 +1643,7 @@ async def get_top_main_characters_by_time_control(
         players.append({
             "player_name": str(row.get("player_name") or ""),
             "full_name": str(row.get("full_name") or ""),
+            "title": str(row.get("title") or "").strip().upper(),
             "avatar": str(row.get("avatar") or ""),
             "profile_url": str(row.get("profile_url") or ""),
             "rating": int(row.get("rating") or 0),
@@ -1649,6 +1662,7 @@ async def get_top_main_characters_by_time_control(
     return {
         "time_control": target_mode,
         "limit": safe_limit,
+        "title_status": title_status,
         "players": players
     }
 

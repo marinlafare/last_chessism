@@ -4,7 +4,6 @@ import { formatNumber } from '../../utils/formatters'
 import { fetchTopMainCharacters } from './homeApi'
 import { isPlainClick, normalizePlayer, playerHomeHref } from '../../services/navigation'
 
-const TIME_CONTROLS = ['bullet', 'blitz', 'rapid']
 const PLAYER_PAGE_SIZE = 50
 const PLAYER_FETCH_LIMIT = 5000
 
@@ -15,8 +14,7 @@ const getDisplayName = (player) => {
 
 const getPlayerRating = (player) => Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0)
 
-function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
-  const [selectedMode, setSelectedMode] = useState('bullet')
+function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnly = true, onTitleFilterChange }) {
   const [players, setPlayers] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
@@ -28,21 +26,24 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
     const loadPlayers = async () => {
       setLoading(true)
       setError('')
+      setPlayers([])
+      setPage(1)
 
       try {
         const payload = await fetchTopMainCharacters(
-          selectedMode,
+          'blitz',
           PLAYER_FETCH_LIMIT,
-          { signal: controller.signal },
+          { signal: controller.signal, titleStatus: titledOnly ? 'titled' : 'untitled' },
         )
+        if (controller.signal.aborted) return
         const sortedPlayers = Array.isArray(payload.players)
           ? [...payload.players].sort((a, b) => getPlayerRating(b) - getPlayerRating(a))
           : []
         setPlayers(sortedPlayers)
         setPage(1)
       } catch (err) {
-        if (err.name !== 'AbortError') {
-          setError(err.message || 'Main characters unavailable')
+        if (!controller.signal.aborted && err.name !== 'AbortError') {
+          setError(err.message || 'Player rankings unavailable')
           setPlayers([])
         }
       } finally {
@@ -54,44 +55,36 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
 
     loadPlayers()
     return () => controller.abort()
-  }, [selectedMode])
+  }, [titledOnly])
 
   const totalPages = Math.max(1, Math.ceil(players.length / PLAYER_PAGE_SIZE))
   const safePage = Math.min(page, totalPages)
   const pageStart = (safePage - 1) * PLAYER_PAGE_SIZE
   const pagePlayers = players.slice(pageStart, pageStart + PLAYER_PAGE_SIZE)
-  const pageEnd = pageStart + pagePlayers.length
   const hasPagination = players.length > PLAYER_PAGE_SIZE
-  const rangeLabel = players.length > 0
-    ? `${formatNumber(pageEnd)} / ${formatNumber(players.length)}`
-    : '0 of 0'
 
   return (
     <section {...pageStyleTarget('characters.panel')} className="main-characters-carousel" aria-labelledby="main-characters-title">
       <div className="carousel-head">
-        <div>
-          <p {...pageStyleTarget('text')} className="eyebrow">Player database</p>
-          <h2 {...pageStyleTarget('title')} id="main-characters-title">Main Characters</h2>
-        </div>
-        <div className="carousel-actions">
-          <div className="mode-tabs" aria-label="Time control">
-            {TIME_CONTROLS.map((mode) => (
-              <button {...pageStyleTarget('button')}
-                className={`mode-tab ${selectedMode === mode ? 'active' : ''}`}
-                type="button"
-                key={mode}
-                onClick={() => setSelectedMode(mode)}
-              >
-                {mode}
-              </button>
-            ))}
-          </div>
-        </div>
+        <h2 {...pageStyleTarget('title')} className="character-list-title" id="main-characters-title">
+          {titledOnly ? 'TITLED' : 'UNTITLED'}
+        </h2>
+        <button {...pageStyleTarget('button')} type="button" className="character-medal-toggle"
+          aria-label="Titled players" aria-pressed={titledOnly}
+          title={titledOnly ? 'Show untitled players · Blitz rating' : 'Show titled players · Blitz rating'}
+          onClick={() => { onTitleFilterChange?.(!titledOnly); setPlayers([]); setPage(1); setLoading(true) }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M7 3H3l6 8m8-8h4l-6 8M7 3l5 7 5-7" />
+            <circle cx="12" cy="16" r="6" />
+            <path d="m12 12 1.1 2.3 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4Z" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
       </div>
 
       {error ? <div className="status-banner warn">{error}</div> : null}
 
-      <div className="character-rating-list" aria-label={`${selectedMode} main character ratings`}>
+      <div className="character-rating-list" aria-label={`${titledOnly ? 'Titled' : 'Untitled'} players by blitz rating`} aria-busy={loading}>
+        {!loading && !error && !pagePlayers.length && <p className="character-rating-empty">No {titledOnly ? 'titled' : 'untitled'} players with blitz games yet.</p>}
         {loading
           ? Array.from({ length: 10 }).map((_, index) => (
               <div className="character-rating-row loading" key={`loading-${index}`} />
@@ -118,14 +111,9 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
             })}
       </div>
 
-      <div className="carousel-footer">
-        <span>
-          {loading
-            ? 'Loading'
-            : rangeLabel}
-        </span>
-        {hasPagination ? (
-          <div className="character-pagination" aria-label="Main character pages">
+      {hasPagination && <div className="carousel-footer">
+        <div className="character-footer-actions">
+          <div className="character-pagination" aria-label="Player ranking pages">
             <button {...pageStyleTarget('button')}
               className="btn btn-secondary btn-inline"
               type="button"
@@ -144,8 +132,8 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer }) {
               Next
             </button>
           </div>
-        ) : null}
-      </div>
+        </div>
+      </div>}
     </section>
   )
 }

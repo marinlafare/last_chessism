@@ -8,6 +8,12 @@ export function positionSlices(summary) {
 
 export const GAME_PLAYERS_PER_PAGE = 4
 
+const compactWhole = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 0 })
+export function gameBarLabel(games) {
+  const unit = games >= 1e9 ? 1e9 : games >= 1e6 ? 1e6 : games >= 1e3 ? 1e3 : 1
+  return compactWhole.format(Math.ceil(games / unit) * unit)
+}
+
 export function playerAvatarUrl(value) {
   if (typeof value !== 'string') return ''
   const url = value.trim()
@@ -43,6 +49,11 @@ export function gameAxisMax(maxGames) {
 }
 
 export function sliceDescription(slice) {
-  const number = value => Number(value).toLocaleString('en-US', { maximumFractionDigits: 1 })
-  return `${slice.label}: ${number(slice.value)} FENs · ${(slice.fraction * 100).toFixed(1)}%`
+  const count = Number(slice.value) >= 1e6 ? fenTotalLabel(Number(slice.value))
+    : Number(slice.value).toLocaleString('en-US', { maximumFractionDigits: 0 })
+  return `${slice.key === 'titled' ? 'titled' : 'untitled'}\n${Math.round(slice.fraction * 100)}%\n${count}`
+}
+
+export function fenTotalLabel(total) {
+  return Number.isFinite(total) ? `${(total / 1e6).toFixed(1)}M` : '—'
 }

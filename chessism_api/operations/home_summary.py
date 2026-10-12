@@ -10,9 +10,9 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES as TITLES
 
 LOG = logging.getLogger(__name__)
-TITLES = ("GM", "IM", "FM", "CM", "WGM", "WIM", "WFM", "WCM", "NM", "WNM")
 JOB_ID = "home-titled-summary-v1"
 LOCK_ID = 731_946_229
 REFRESH_SECONDS = 300
@@ -28,8 +28,8 @@ def needs_refresh(meta, now=None):
 
 
 async def get_home_summary(redis):
-    # Counts stay cached. Only avatar URLs use small primary-key profile lookups;
-    # changing a photo must not require rebuilding the expensive FEN union.
+    # Counts stay cached; profile lookups and the tiny per-player/mode summary
+    # supply avatars and untitled-player game totals without scanning game/FEN rows.
     async with AsyncDBSession() as session:
         rows = (await session.execute(text("""
             SELECT m.*, s.revision AS current_revision,
@@ -41,6 +41,16 @@ async def get_home_summary(redis):
             LEFT JOIN player profile ON profile.player_name = p.player_name AND profile.deleted_at IS NULL
             ORDER BY p.game_half_units DESC, p.player_name
         """))).mappings().all()
+        untitled = (await session.execute(text("""
+            SELECT p.player_name, p.avatar, SUM(s.n_games) AS games
+            FROM main_character_mode_summary s
+            JOIN player p ON p.player_name = s.player_name
+            WHERE p.deleted_at IS NULL
+              AND NOT (UPPER(TRIM(COALESCE(p.title, ''))) = ANY(CAST(:titles AS text[])))
+            GROUP BY p.player_name, p.avatar
+            HAVING SUM(s.n_games) > 0
+            ORDER BY games DESC, p.player_name
+        """), {"titles": list(TITLES)})).mappings().all()
     meta = dict(rows[0])
     error = meta.get("last_error")
     if needs_refresh(meta):
@@ -63,6 +73,9 @@ async def get_home_summary(redis):
                      "games": int(row["games"]), "game_half_units": int(row["game_half_units"]),
                      "avatar": row["avatar"]}
                     for row in rows if row["player_name"] is not None],
+        "untitled_players": [{"player_name": row["player_name"], "title": "",
+                              "games": int(row["games"]), "avatar": row["avatar"]}
+                             for row in untitled],
     }
 
 

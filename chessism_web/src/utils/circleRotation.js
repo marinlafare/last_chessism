@@ -1,3 +1,4 @@
+// Shared by homepage and Scored Positions pies.
 export function rotateCircle(angle, delta) {
   if (!Number.isFinite(delta)) return angle
   return ((angle + delta) % 360 + 360) % 360

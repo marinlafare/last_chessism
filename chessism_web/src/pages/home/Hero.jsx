@@ -5,7 +5,7 @@ import SummaryPie from './SummaryPie.jsx'
 import SummaryGamesChart from './SummaryGamesChart.jsx'
 import { positionSlices } from './summaryData.js'
 
-export function DashboardSummaryPanel({ onSelectPlayer }) {
+export function DashboardSummaryPanel({ onSelectPlayer, titledOnly = true, onTitleFilterChange }) {
   const [generalities, setGeneralities] = useState(null)
   const [error, setError] = useState('')
 
@@ -37,8 +37,11 @@ export function DashboardSummaryPanel({ onSelectPlayer }) {
   return (
     <div {...pageStyleTarget('summary.panel')} className="dashboard-panel" aria-label="Database summary">
       <div className="home-summary-charts">
-        <SummaryPie items={positionSlices(generalities)} ready={ready} />
-        <SummaryGamesChart players={generalities?.players} ready={ready} onSelectPlayer={onSelectPlayer} />
+        <SummaryPie items={positionSlices(generalities)} ready={ready} totalFens={generalities?.total_fens}
+          titledOnly={titledOnly} onTitleFilterChange={onTitleFilterChange} />
+        <SummaryGamesChart key={titledOnly ? 'titled' : 'untitled'} titledOnly={titledOnly}
+          players={titledOnly ? generalities?.players : generalities?.untitled_players}
+          ready={titledOnly ? ready : Array.isArray(generalities?.untitled_players)} onSelectPlayer={onSelectPlayer} />
       </div>
       {(error || generalities?.refresh_error || generalities?.stale) && <p {...pageStyleTarget('text')} className="home-summary-state" role="status">
         {error || generalities?.refresh_error || (ready ? 'Updating summary… Previous snapshot shown.' : 'Preparing database summary…')}

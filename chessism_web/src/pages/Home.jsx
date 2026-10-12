@@ -15,6 +15,7 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
   const playerSection = useRef(null)
   const pendingScroll = useRef(false)
   const [scrollRequest, setScrollRequest] = useState(0)
+  const [titledOnly, setTitledOnly] = useState(true)
   const selectPlayer = useCallback((name) => {
     const href = playerHomeHref(name)
     if (`${window.location.pathname}${window.location.search}` !== href) {
@@ -38,15 +39,17 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
       <SideRail />
       <div className="home-shell">
         <main>
-          <div className="home-overview">
-            <DashboardSummaryPanel onSelectPlayer={selectPlayer} />
-            <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer} />
+          <div {...pageStyleTarget('overview.layout')} className="home-overview">
+            <DashboardSummaryPanel onSelectPlayer={selectPlayer} titledOnly={titledOnly}
+              onTitleFilterChange={setTitledOnly} />
+            <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer}
+              titledOnly={titledOnly} onTitleFilterChange={setTitledOnly} />
           </div>
           <section {...pageStyleTarget('player.panel')} className="home-player-workspace" id="selected-player" ref={playerSection}
             tabIndex={-1} aria-label={selectedPlayer ? `Player workspace: ${selectedPlayer}` : 'Player workspace'}>
             {selectedPlayer ? <Suspense fallback={<p {...pageStyleTarget('text')} role="status">Loading player workspace…</p>}>
               <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={selectPlayer} />
-            </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a Main Character to explore their profile and analysis here.</p>}
+            </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a player to explore their profile and analysis here.</p>}
           </section>
           <ProofPoints />
         </main>

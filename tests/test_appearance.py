@@ -48,6 +48,16 @@ class AppearanceTests(unittest.TestCase):
             with self.assertRaises(ValueError):preset_name(name)
         self.assertEqual(preset_name(' My theme '),'My theme')
 
+    def test_home_margin_is_bounded_numeric_and_page_scoped(self):
+        row = override(scope='home', target='overview.layout', property='homeTopMargin', value=3.5)
+        self.assertEqual(validate_overrides([row])[0]['number_value'], 3.5)
+        self.assertEqual(REGISTRY['properties']['homeTopMargin']['unit'], 'rem')
+        for value in (-1, 13, True, '3rem', float('inf')):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                validate_overrides([{**row, 'value': value}])
+        with self.assertRaises(ValueError):
+            validate_overrides([{**row, 'scope': 'scored_positions'}])
+
     def test_chart_palette_validation(self):
         rows=[override(scope='home',target='chart.accuracy',property='chartColor1',value='#11223380')]
         self.assertEqual(validate_overrides(rows)[0]['color_value'],'#11223380')

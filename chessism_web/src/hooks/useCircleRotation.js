@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { rotateCircle, wheelRotation } from './circleRotation'
+import { rotateCircle, wheelRotation } from '../utils/circleRotation'
 
 export default function useCircleRotation() {
   const [element, ref] = useState(null)

@@ -3,7 +3,9 @@
     "chartColor1": {"label":"Primary color","kind":"color","css":"--chart-color-1","default":"#15c780"},
     "chartColor2": {"label":"Secondary color","kind":"color","css":"--chart-color-2","default":"#d55c5c"},
     "chartColor3": {"label":"Third color","kind":"color","css":"--chart-color-3","default":"#8d6bb4"},
-    "chartColor4": {"label":"Fourth color","kind":"color","css":"--chart-color-4","default":"#4ea3c7"}
+    "chartColor4": {"label":"Fourth color","kind":"color","css":"--chart-color-4","default":"#4ea3c7"},
+    "barHoverColor": {"label":"Bar hover color","kind":"color","css":"--bar-hover-color","default":"#2adca2"},
+    "barHoverBorder": {"label":"Bar hover border","kind":"color","css":"--bar-hover-border","default":"#ffffff"}
   },
   "targets": {
     "chart.bars": {"label":"Bar chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Bars"}},

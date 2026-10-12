@@ -31,6 +31,7 @@ async def check():
                 HomeSummarySource.__table__, HomeTitledSummary.__table__, HomeTitledPlayerSummary.__table__]))
             for sql in (
                 "CREATE TABLE player (player_name text PRIMARY KEY, title text, deleted_at timestamptz, avatar text)",
+                "CREATE TABLE main_character_mode_summary (player_name text, mode text, n_games bigint)",
                 "CREATE TABLE game (link bigint PRIMARY KEY, white text, black text, fens_done boolean)",
                 "CREATE TABLE fen (fen text PRIMARY KEY, score integer)",
                 "CREATE TABLE game_fen_association (game_link bigint, fen_fen text)",
@@ -42,6 +43,7 @@ async def check():
         redis = AsyncMock()
         empty = await get_home_summary(redis)
         assert empty['total_fens'] is None and empty['stale']
+        assert empty['untitled_players'] == []
         redis.enqueue_job.assert_awaited_once()
         await run_home_summary_refresh({})
         empty = await get_home_summary(redis)
@@ -68,6 +70,15 @@ async def check():
         with_avatar = await get_home_summary(redis)
         assert not with_avatar['stale'] and with_avatar['refreshed_at'] == result['refreshed_at']
         assert with_avatar['players'][0]['avatar'] == 'https://images.example.invalid/a.jpg'
+        # Untitled bars use small, precomputed per-player/mode totals. Do not
+        # include titled/deleted profiles or rescan raw games for this toggle.
+        async with engine.begin() as conn:
+            await conn.execute(text("""INSERT INTO main_character_mode_summary VALUES
+                ('a','blitz',9000),('c','bullet',3210),('c','blitz',1000),
+                ('d','rapid',7650),('deleted','blitz',99999)"""))
+        with_untitled = await get_home_summary(redis)
+        assert [(p['player_name'],p['games']) for p in with_untitled['untitled_players']] == [('d',7650),('c',4210)]
+        assert not with_untitled['stale']
         # Scoring and processing flags never invalidate a structural summary.
         async with engine.begin() as conn:
             await conn.execute(text("UPDATE fen SET score=55"))
@@ -90,11 +101,12 @@ async def check():
         await run_home_summary_refresh({})
         assert (await get_home_summary(redis))['titled_fens'] == 0
         # Cache reads must not access raw games, FENs or associations. Profiles
-        # remain available only for cheap, live avatar lookups.
+        # remain available only for cheap avatar/title lookups.
         async with engine.begin() as conn:
             for table in ('game', 'fen', 'game_fen_association'):
                 await conn.execute(text(f'ALTER TABLE {table} RENAME TO hidden_{table}'))
         assert not (await get_home_summary(redis))['stale']
+        assert [(p['player_name'],p['games']) for p in (await get_home_summary(redis))['untitled_players']] == [('a',9000),('d',7650),('c',4210)]
         try:
             logging.getLogger('chessism_api.operations.home_summary').disabled = True
             await run_home_summary_refresh({})

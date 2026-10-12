@@ -10,7 +10,8 @@ export default function AppearancePropertyFields({ editable, related = false }) 
     ...rows.filter(row => !(matches(row) && row.property === property)),
     { scope, target: id, property, value },
   ])
-  return target.properties.map(property => {
+  // Keep old palette keys valid for saved presets without exposing unused controls.
+  return target.properties.filter(property => !target.hiddenProperties?.includes(property)).map(property => {
     const spec = saved.registry.properties[property]
     const override = draft.find(row => matches(row) && row.property === property)
     const lastSaved = saved.overrides.find(row => matches(row) && row.property === property)
@@ -29,7 +30,7 @@ export default function AppearancePropertyFields({ editable, related = false }) 
             value={Math.round(parseInt(normalizeColor(value).slice(7), 16) / 255 * 100)}
             onChange={e => set(property, normalizeColor(value).slice(0, 7) + Math.round(Number(e.target.value) * 2.55).toString(16).padStart(2, '0'))} />
         </label>
-      </> : spec.kind === 'number' ? <input id={inputId} type="number" min={spec.min} max={spec.max} value={value}
+      </> : spec.kind === 'number' ? <input id={inputId} type="number" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value}
         onChange={e => { const number = Number(e.target.value); if (validValue(spec, number)) set(property, number) }} />
         : <select id={inputId} value={spec.options.includes(value) ? value : ''} onChange={e => set(property, e.target.value)}>
           <option value="" disabled>Inherited</option>{spec.options.map(option => <option key={option}>{option}</option>)}

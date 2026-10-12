@@ -3,8 +3,8 @@ import { styleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import AppearanceChartDetails from './AppearanceChartDetails'
 import { circleDistribution, pieSegments } from './appearanceCircles'
-import useCircleRotation from './useCircleRotation'
-import { circlePercentage } from './circleRotation'
+import useCircleRotation from '../../hooks/useCircleRotation'
+import { circlePercentage } from '../../utils/circleRotation'
 import AppearanceCircleTooltip from './AppearanceCircleTooltip'
 const FenPositionExplorer=lazy(()=>import('./FenPositionExplorer'))
 

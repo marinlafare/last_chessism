@@ -188,8 +188,13 @@
         "/players"
       ],
       "targets": {
+        "overview.layout": {
+          "label": "First row spacing",
+          "properties": ["homeTopMargin"]
+        },
         "summary.panel": {
           "label": "Database summary",
+          "editorParent": "overview.layout",
           "properties": [
             "background",
             "borderColor",
@@ -201,6 +206,10 @@
         "summary.positions": {
           "label": "Positions pie border",
           "properties": ["stroke", "strokeWidth"]
+        },
+        "summary.total": {
+          "label": "Total FENs",
+          "properties": ["color", "fontSize", "fontFamily"]
         },
         "summary.titled": {
           "label": "Titled-player positions slice",
@@ -214,10 +223,13 @@
         },
         "summary.games": {
           "label": "Games chart colors and border",
-          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth"]
+          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth", "barHoverColor", "barHoverBorder"],
+          "hiddenProperties": ["chartColor2", "chartColor3", "chartColor4"],
+          "propertyLabels": {"chartColor1": "All bars", "stroke": "Bar border", "barHoverColor": "Bar hover color", "barHoverBorder": "Bar hover border"}
         },
         "characters.panel": {
-          "label": "Main characters",
+          "label": "Player rankings",
+          "editorParent": "overview.layout",
           "properties": [
             "background",
             "borderColor",

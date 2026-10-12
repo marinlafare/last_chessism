@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { rotateCircle, wheelRotation, circlePercentage } from '../src/pages/scored-positions/circleRotation.js'
+import { rotateCircle, wheelRotation, circlePercentage } from '../src/utils/circleRotation.js'
 
 test('rotation wraps in both directions and scrolling normalizes device units', () => {
   assert.equal(rotateCircle(0, -18), 342)

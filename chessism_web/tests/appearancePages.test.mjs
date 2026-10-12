@@ -69,9 +69,18 @@ test('homepage charts expose colors and borders without changing other charts',(
     ['summary.titled','fill','#ffffff'],['summary.other','fill','#112233'],
     ['summary.positions','stroke','#abcdef'],['summary.positions','strokeWidth',2],
     ['summary.games','stroke','#cdefab'],['summary.games','chartColor1','#223344'],
+    ['summary.games','barHoverColor','#335577'],['summary.games','barHoverBorder','#eeffee'],
+    ['summary.total','color','#112233'],['overview.layout','homeTopMargin',3.5],
   ]){
     assert.ok(appearanceCss(registry,[{scope:'home',target,property,value}]))
     assert.equal(appearanceCss(registry,[{scope:'positions',target,property,value}]),'')
   }
   assert.equal(registryTarget(registry,'home','summary.titled').editorParent,'summary.positions')
+  assert.equal(registryTarget(registry,'home','summary.panel').editorParent,'overview.layout')
+  assert.equal(registryTarget(registry,'home','characters.panel').editorParent,'overview.layout')
+  assert.ok(appearanceCss(registry,[{scope:'home',target:'overview.layout',property:'homeTopMargin',value:3.5}]).includes('--home-top-gap:3.5rem'))
+  const games=registryTarget(registry,'home','summary.games')
+  assert.deepEqual(games.hiddenProperties,['chartColor2','chartColor3','chartColor4'])
+  // Legacy presets remain valid, but only one fill is offered in the editor.
+  for(const property of games.hiddenProperties)assert.ok(appearanceCss(registry,[{scope:'home',target:'summary.games',property,value:'#112233'}]))
 })

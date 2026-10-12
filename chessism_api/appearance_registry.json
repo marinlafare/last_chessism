@@ -41,6 +41,16 @@
       "unit": "px",
       "css": "padding"
     },
+    "homeTopMargin": {
+      "label": "Top margin (rem)",
+      "kind": "number",
+      "min": 0,
+      "max": 12,
+      "step": 0.25,
+      "unit": "rem",
+      "css": "--home-top-gap",
+      "default": 3
+    },
     "fontSize": {
       "label": "Font size",
       "kind": "number",

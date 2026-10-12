@@ -23,11 +23,14 @@ state.homeSummary = { total_fens:600000,titled_players:7,titled_fens:400000,titl
     {player_name:'player4',title:'GM',games:6200,game_half_units:6200,avatar:'/chessism.jpg'},
     {player_name:'player5',title:'GM',games:5000,game_half_units:5000},
     {player_name:'player6',title:'GM',games:4800,game_half_units:4800},
-    {player_name:'player7',title:'GM',games:4000,game_half_units:4000}] }
+    {player_name:'player7',title:'GM',games:4000,game_half_units:4000}],
+  untitled_players:[{player_name:'untitled-first',title:'',games:3210},
+    {player_name:'untitled-second',title:'',games:7650}] }
 state.summaryReady = structuredClone(state.homeSummary)
 if (summaryScenario === 'loading') state.homeSummary = {total_fens:null,titled_players:null,titled_fens:null,titled_games:null,refreshed_at:null,stale:true,players:[]}
-if (summaryScenario === 'empty') state.homeSummary = {...state.homeSummary,total_fens:0,titled_fens:0,titled_games:0,titled_players:0,players:[]}
+if (summaryScenario === 'empty') state.homeSummary = {...state.homeSummary,total_fens:0,titled_fens:0,titled_games:0,titled_players:0,players:[],untitled_players:[]}
 if (summaryScenario === 'stale') state.homeSummary.stale = true
+if (summaryScenario === 'millions') state.homeSummary = {...state.homeSummary,total_fens:7600000,titled_fens:3800000}
 state.billing = {
   project:'chessism-production',fetched_at:'2026-10-10T12:00:00Z',next_refresh_at:'2026-10-10T13:00:00Z',stale:false,
   periods:[{id:'2026-10',has_data:true,exported_at:'2026-10-10T09:00:00Z',usage_through:'2026-10-10T08:00:00Z',currencies:[{
@@ -54,7 +57,13 @@ window.fetch = async (input, options = {}) => {
   if (path === '/appearance') return reply({revision:0,active_preset_id:null,presets:[],overrides:[]})
   if (path === '/games/generalities') return reply({main_characters:52,n_games_in_db:10000,n_positions:600000,scored_fens:400000})
   if (path === '/games/home_summary') return state.failSummary ? reply({detail:'Unavailable'},503) : reply(state.homeSummary)
-  if (path === '/players/main_characters/top') return reply({players:names.map((player_name,i)=>({player_name,full_name:player_name,rating:3200-i}))})
+  if (path === '/players/main_characters/top') {
+    const untitled = url.searchParams.get('title_status') === 'untitled'
+    const players = untitled ? ['untitled-first','untitled-second'] : names
+    if (state.failRankings) return reply({detail:'Rankings unavailable'},503)
+    return reply({players:state.emptyRankings ? [] : players.map((player_name,i)=>({player_name,full_name:player_name,
+      title:untitled ? '' : 'GM',rating:(untitled ? 2200 : 3200)-i})).reverse()})
+  }
   if (path === '/status') return state.failStatus ? reply({detail:'Unavailable'},503) : reply({
     workers:{total:4,busy:2,idle:2},jobs:{queued:1,running:1,failed:0,completed:12},version:{backend:'test',stockfish:'16.1'},
   })

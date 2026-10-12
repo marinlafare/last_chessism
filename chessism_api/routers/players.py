@@ -156,14 +156,16 @@ async def api_get_main_character_time_controls() -> JSONResponse:
 @router.get("/main_characters/top")
 async def api_get_top_main_characters(
     time_control: str = Query(..., pattern="^(bullet|blitz|rapid)$"),
-    limit: int = Query(200, ge=1, le=5000)
+    limit: int = Query(200, ge=1, le=5000),
+    title_status: str = Query("all", pattern="^(all|titled|untitled)$"),
 ) -> JSONResponse:
     """
     Returns top main characters for one time control.
     """
     result = await get_top_main_characters_by_time_control_payload(
         time_control=time_control,
-        limit=limit
+        limit=limit,
+        title_status=title_status,
     )
     return JSONResponse(content=result)
 
