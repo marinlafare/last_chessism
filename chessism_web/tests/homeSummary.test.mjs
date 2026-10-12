@@ -17,11 +17,11 @@ const summary = {refreshed_at:'2026-10-11',total_fens:4,titled_fens:2,players:[
   {player_name:'c',title:'WFM',games:0,game_half_units:0},
 ]}
 assert.deepEqual(positionSlices(summary).map(s=>s.value),[2,2])
-assert.equal(sliceDescription(pieSegments(positionSlices(summary))[0]),'titled\n50%\n2')
-assert.equal(sliceDescription(pieSegments(positionSlices(summary))[1]),'untitled\n50%\n2')
-assert.equal(sliceDescription({key:'titled',value:400000,fraction:2/3}),'titled\n67%\n400,000')
+assert.equal(sliceDescription(pieSegments(positionSlices(summary))[0]),'professionals\n50%\n2')
+assert.equal(sliceDescription(pieSegments(positionSlices(summary))[1]),'fans\n50%\n2')
+assert.equal(sliceDescription({key:'titled',value:400000,fraction:2/3}),'professionals\n67%\n400,000')
 for (const [value, label] of [[999999,'999,999'],[1000000,'1.0M'],[3800000,'3.8M'],[10000000,'10.0M']]) {
-  assert.equal(sliceDescription({key:'titled',value,fraction:0.5}),`titled\n50%\n${label}`)
+  assert.equal(sliceDescription({key:'titled',value,fraction:0.5}),`professionals\n50%\n${label}`)
 }
 for (const [total, label] of [[null,'—'],[undefined,'—'],[0,'0.0M'],[600000,'0.6M'],[51510523,'51.5M'],[2000000,'2.0M']]) assert.equal(fenTotalLabel(total),label)
 assert.equal(pieSegments(positionSlices({...summary,titled_fens:4}))[0].full,true)

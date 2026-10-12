@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import { useEffect, useMemo, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerDailyEfficiencyChart from './PlayerDailyEfficiencyChart'
@@ -330,12 +331,15 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
         <div><span>Excluded games</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.excluded_games || 0)}</strong></div>
         <div><span>Scored positions</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.scored_positions || 0)}</strong></div>
       </div>
-      <article {...pageStyleTarget('card')} className="measure-chart-card">
+      <div className="player-analysis-chart-list">
+        <PlayerAnalysisDisclosure label="Accuracy">
         <PlayerDailyEfficiencyChart
           availableModes={availableModes}
           playerName={playerName}
           onSelectPoint={setExplorerSelection}
         />
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Days">
         <MeasureDaysChart
           quality={dayQuality}
           activeModes={dayModes}
@@ -343,6 +347,8 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
           onToggleMode={(mode) => toggleMode(setDayModes, mode)}
           onExplore={setExplorerSelection}
         />
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Hours">
         <MeasureHoursChart
           quality={hourQuality}
           activeModes={hourModes}
@@ -350,7 +356,8 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
           onToggleMode={(mode) => toggleMode(setHourModes, mode)}
           onExplore={setExplorerSelection}
         />
-      </article>
+        </PlayerAnalysisDisclosure>
+      </div>
       </div>
       {!reviewGameId ? (
         <PlayerGameExplorerModal

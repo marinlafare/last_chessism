@@ -9,6 +9,7 @@ import PlayerGameExplorerModal from './PlayerGameExplorerModal'
 import PlayerGameReviewModal from './PlayerGameReviewModal'
 import DailyYearBands from './DailyYearBands'
 import { buildYearScale, yearAtX } from './dailyYearNavigation'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 
 const WIDTH = 1200
 const RATING_SVG_HEIGHT = 156
@@ -449,14 +450,8 @@ export default function PlayerBehaviouralPanel({
         <div><span>Rating range</span><strong {...pageStyleTarget('value')}>{ratingPlot.lines.length ? `${formatNumber(ratingPlot.minimum)}–${formatNumber(ratingPlot.maximum)}` : 'N/A'}</strong></div>
       </div>
 
-      <article {...pageStyleTarget('card')} className="behavior-graph-card">
-        <header className="behavior-graph-header">
-          <div>
-            <h3 {...pageStyleTarget('title')}>Behavioral map</h3>
-            <p {...pageStyleTarget('text')}>Weekday habits, hourly outcomes, and rating movement.</p>
-          </div>
-        </header>
-
+      <div className="player-analysis-chart-list">
+        <PlayerAnalysisDisclosure label="Rating">
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">
@@ -536,7 +531,12 @@ export default function PlayerBehaviouralPanel({
                 ? 'Hover over a year and click to zoom in.'
                 : `Showing ${selectedRatingYear}. Choose All to restore the timeline.`}</p>
             </section>
-
+          </div>
+        </div>
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Hours">
+        <div className="behavior-graph-scroll">
+          <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.outcomes')} className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
               <div className="behavior-subchart-heading">
                 <div>
@@ -652,7 +652,8 @@ export default function PlayerBehaviouralPanel({
             </section>
           </div>
         </div>
-
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Days">
         <WeekdayStartChart
           availableModes={availableActivityModes}
           onExplore={setExplorerSelection}
@@ -662,7 +663,8 @@ export default function PlayerBehaviouralPanel({
           weekdays={dayActivity.weekdays}
           weekdayHours={dayActivity.weekday_hours}
         />
-      </article>
+        </PlayerAnalysisDisclosure>
+      </div>
       </div>
       {!reviewGameId ? (
         <PlayerGameExplorerModal

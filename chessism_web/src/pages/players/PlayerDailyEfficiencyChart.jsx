@@ -7,6 +7,7 @@ import DailyYearBands from './DailyYearBands'
 import { buildYearScale, yearAtX } from './dailyYearNavigation'
 import { relativeDailySalience, filterDailySalience } from './dailySalience'
 import './daily-salience.css'
+import { useAnalysisVisible } from './PlayerAnalysisDisclosure'
 
 const WIDTH = 1200
 const HEIGHT = 250
@@ -120,6 +121,7 @@ function efficiencyBand(value) {
 }
 
 export default function PlayerDailyEfficiencyChart({ availableModes, playerName, onSelectPoint }) {
+  const visible = useAnalysisVisible()
   const [activeModes, setActiveModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [selectedYear, setSelectedYear] = useState('all')
   const [hoveredYear, setHoveredYear] = useState(null)
@@ -127,6 +129,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   const allYearsButton = useRef(null)
   const yearHintId = useId()
   const [request, setRequest] = useState(emptyRequest)
+  const completedRequest = useRef(null)
   const [refreshToken, setRefreshToken] = useState(0)
   const [salienceRange, setSalienceRange] = useState([0, 100])
   const selectedModes = useMemo(() => PLAYER_ANALYSIS_MODES.filter(
@@ -185,10 +188,15 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   }, [selectedYear, years])
 
   useEffect(() => {
+    if (!visible) return undefined
     if (!playerName || !modeQuery) {
+      completedRequest.current = null
       setRequest(emptyRequest)
       return undefined
     }
+    const requestKey = `${playerName}:${modeQuery}:${refreshToken}`
+    if (completedRequest.current === requestKey) return undefined
+    completedRequest.current = null
     const controller = new AbortController()
     setRequest((current) => ({ ...current, error: '', loading: true }))
     const loadAccuracy = async () => {
@@ -220,7 +228,10 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
 
     loadAccuracy()
       .then((data) => {
-        if (!controller.signal.aborted) setRequest({ data, error: '', loading: false })
+        if (!controller.signal.aborted) {
+          completedRequest.current = requestKey
+          setRequest({ data, error: '', loading: false })
+        }
       })
       .catch((error) => {
         if (error.name !== 'AbortError') {
@@ -228,14 +239,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
         }
       })
     return () => controller.abort()
-  }, [modeQuery, playerName, refreshToken])
+  }, [modeQuery, playerName, refreshToken, visible])
 
   useEffect(() => {
     const status = request.data?.salience?.status
-    if (request.loading || !status || status === 'ready') return undefined
+    if (!visible || request.loading || !status || status === 'ready') return undefined
     const timer = window.setTimeout(() => setRefreshToken((value) => value + 1), 15000)
     return () => window.clearTimeout(timer)
-  }, [playerName, request.data, request.loading])
+  }, [playerName, request.data, request.loading, visible])
 
   const toggleMode = (mode) => {
     setActiveModes((current) => {

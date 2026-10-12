@@ -76,7 +76,9 @@ window.fetch = async (input, options = {}) => {
   })
   if (/^\/players\/[^/]+\/neighbors$/.test(path)) return reply({previous_player:'hikaru',next_player:'magnuscarlsen'})
   if (/^\/games\/[^/]+\/hours_played$/.test(path)) return reply({bullet_games:30,bullet_hours:2,blitz_games:20,blitz_hours:3,rapid_games:10,rapid_hours:4})
-  if (/^\/fens\/players\/[^/]+\/analysis_counts$/.test(path)) return reply({total_games:60,analyzed_games:50,total_fens:3000,analyzed_fens:2500})
+  if (/^\/fens\/players\/[^/]+\/analysis_counts$/.test(path)) return reply(path.includes('/player51/')
+    ? {total_games:1000000,analyzed_games:340000,total_fens:2563236,analyzed_fens:1289308}
+    : {total_games:60,analyzed_games:50,total_fens:3000,analyzed_fens:2500})
   if (path.endsWith('/analysis/behavioural/ratings')) return reply({series: path.includes('/players/player52/') ? [] : [
     {mode:'bullet',points:[['2023-12-31',2900],['2024-01-01',3000],['2024-06-15',3100],['2025-01-01',2950]]
       .map(([date,last_rating])=>({date,last_rating}))},

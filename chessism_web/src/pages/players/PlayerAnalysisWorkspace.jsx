@@ -4,12 +4,22 @@ import './player-analysis.css'
 import './player-hero-analytics.css'
 import PlayerBehaviouralPanel from './PlayerBehaviouralPanel'
 import PlayerMeasuresWorkspace from './PlayerMeasuresWorkspace'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import {
   fetchBehaviouralActivity,
   fetchBehaviouralRatings,
 } from './playerAnalysisApi'
 
 export default function PlayerAnalysisWorkspace({ playerName, disabled = false }) {
+  return <>
+    <PlayerAnalysisDisclosure key={playerName} label="Behavioral analysis" target="player.analysis" level={2} disabled={disabled}>
+      <BehaviouralContent playerName={playerName} disabled={disabled} />
+    </PlayerAnalysisDisclosure>
+    <PlayerMeasuresWorkspace key={`measures-${playerName}`} playerName={playerName} disabled={disabled} />
+  </>
+}
+
+function BehaviouralContent({ playerName, disabled }) {
   const [activity, setActivity] = useState(null)
   const [ratings, setRatings] = useState(null)
   const [loading, setLoading] = useState(false)
@@ -43,26 +53,16 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
   }, [playerName, disabled])
 
   return (
-    <>
-      <section {...pageStyleTarget('player.analysis')} className="games-mode-detail player-analysis-workspace">
-        <div className="player-analysis-heading">
-          <div>
-            <p {...pageStyleTarget('text')} className="eyebrow">BEHAVIORAL ANALYSIS</p>
-            <h2 {...pageStyleTarget('title')}>Patterns</h2>
-          </div>
-        </div>
-
-        {error ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{error}</p> : null}
-        {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
-        {!loading && !error && activity && ratings ? (
-          <PlayerBehaviouralPanel
-            activity={activity}
-            playerName={playerName}
-            ratings={ratings}
-          />
-        ) : null}
-      </section>
-      <PlayerMeasuresWorkspace playerName={playerName} disabled={disabled} />
-    </>
+    <div className="player-analysis-chart-list">
+      {error ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{error}</p> : null}
+      {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
+      {!loading && !error && activity && ratings ? (
+        <PlayerBehaviouralPanel
+          activity={activity}
+          playerName={playerName}
+          ratings={ratings}
+        />
+      ) : null}
+    </div>
   )
 }

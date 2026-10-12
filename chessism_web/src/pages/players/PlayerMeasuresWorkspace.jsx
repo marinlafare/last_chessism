@@ -1,11 +1,18 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import PlayerMeasuresPanel from './PlayerMeasuresPanel'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import { fetchQualityCalendar } from './playerAnalysisApi'
 import './player-measures.css'
 import './player-game-explorer.css'
 
 export default function PlayerMeasuresWorkspace({ playerName, disabled = false }) {
+  return <PlayerAnalysisDisclosure label="Stockfish analysis" target="player.measures" level={2} disabled={disabled}>
+    <MeasuresContent playerName={playerName} disabled={disabled} />
+  </PlayerAnalysisDisclosure>
+}
+
+function MeasuresContent({ playerName, disabled }) {
   const [quality, setQuality] = useState(null)
   const [qualityError, setQualityError] = useState('')
   const [qualityLoading, setQualityLoading] = useState(false)
@@ -39,14 +46,7 @@ export default function PlayerMeasuresWorkspace({ playerName, disabled = false }
   }, [playerName, disabled])
 
   return (
-    <section {...pageStyleTarget('player.measures')} className="games-mode-detail player-measures-workspace">
-      <div className="player-analysis-heading">
-        <div>
-          <p {...pageStyleTarget('text')} className="eyebrow">STOCKFISH ANALYSIS</p>
-          <h2 {...pageStyleTarget('title')}>Position quality</h2>
-        </div>
-      </div>
-
+    <div className="player-analysis-chart-list">
       {qualityError ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{qualityError}</p> : null}
       {qualityLoading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating engine measures…</div> : null}
       {!qualityLoading && !qualityError && quality ? (
@@ -55,6 +55,6 @@ export default function PlayerMeasuresWorkspace({ playerName, disabled = false }
           quality={quality}
         />
       ) : null}
-    </section>
+    </div>
   )
 }

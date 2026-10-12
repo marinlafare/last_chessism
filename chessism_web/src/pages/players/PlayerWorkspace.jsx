@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom'
 import './players.css'
 import PlayerAnalysisWorkspace from './PlayerAnalysisWorkspace'
 import { formatNumber } from '../../utils/formatters'
+import { formatPlayerCount } from './playerSummary.js'
 import { playerHomeHref } from '../../services/navigation'
 import {
   PLAYER_DELETE_JOB_STORAGE_KEY,
@@ -389,7 +390,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
   const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'
   const followersDisplay = profile?.followers === null || profile?.followers === undefined
     ? 'N/A'
-    : formatNumber(profile.followers)
+    : formatPlayerCount(profile.followers)
   const totalPlayerGames = Number(playerPositionStats?.total_games || 0)
   const analyzedPlayerGames = Number(playerPositionStats?.analyzed_games || 0)
   const totalPlayerFens = Number(playerPositionStats?.total_fens ?? playerPositionStats?.total_positions ?? 0)
@@ -531,7 +532,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                         <div className="players-mode-activity-row">
                           {modeActivity.map(({ mode, games, hours }) => (
                             <p {...pageStyleTarget('text')} className="players-mode-activity" key={mode}>
-                              <strong {...pageStyleTarget('value')}>{mode}:</strong> {formatNumber(games)} | {formatNumber(hours)} hrs
+                              <strong {...pageStyleTarget('value')}>{mode}:</strong> {formatPlayerCount(games)} | {formatPlayerCount(hours)} hrs
                             </p>
                           ))}
                         </div>
@@ -539,24 +540,22 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     </div>
                     <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
                       <div className="players-position-stat">
-                        <span>Total games</span>
-                        <strong {...pageStyleTarget('value')}>{formatNumber(totalPlayerGames)}</strong>
-                        <small {...pageStyleTarget('text')}>games in database</small>
+                        <span>Games</span>
+                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(totalPlayerGames)}</strong>
                       </div>
                       <div className="players-position-stat players-position-stat-analyzed">
-                        <span>Games analyzed</span>
-                        <strong {...pageStyleTarget('value')}>{formatNumber(analyzedPlayerGames)}</strong>
-                        <small {...pageStyleTarget('text')}>{analyzedPlayerGamePercent.toFixed(1)}% fully analyzed</small>
+                        <span>Stockfish</span>
+                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(analyzedPlayerGames)}</strong>
+                        <small {...pageStyleTarget('text')}>{Math.round(analyzedPlayerGamePercent)}%</small>
                       </div>
                       <div className="players-position-stat">
-                        <span>FENs</span>
-                        <strong {...pageStyleTarget('value')}>{formatNumber(totalPlayerFens)}</strong>
-                        <small {...pageStyleTarget('text')}>positions across games</small>
+                        <span>Positions</span>
+                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(totalPlayerFens)}</strong>
                       </div>
                       <div className="players-position-stat players-position-stat-analyzed">
-                        <span>FENs analyzed</span>
-                        <strong {...pageStyleTarget('value')}>{formatNumber(analyzedPlayerFens)}</strong>
-                        <small {...pageStyleTarget('text')}>{analyzedPlayerFenPercent.toFixed(1)}% coverage</small>
+                        <span>Stockfish</span>
+                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(analyzedPlayerFens)}</strong>
+                        <small {...pageStyleTarget('text')}>{Math.round(analyzedPlayerFenPercent)}%</small>
                       </div>
                     </div>
                   </>

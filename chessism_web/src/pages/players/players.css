@@ -318,6 +318,8 @@
 
 .players-position-stat {
   display: grid;
+  text-align: center;
+  justify-items: center;
   gap: 3px;
   min-height: 74px;
   align-content: center;

@@ -51,7 +51,7 @@ export function gameAxisMax(maxGames) {
 export function sliceDescription(slice) {
   const count = Number(slice.value) >= 1e6 ? fenTotalLabel(Number(slice.value))
     : Number(slice.value).toLocaleString('en-US', { maximumFractionDigits: 0 })
-  return `${slice.key === 'titled' ? 'titled' : 'untitled'}\n${Math.round(slice.fraction * 100)}%\n${count}`
+  return `${slice.key === 'titled' ? 'professionals' : 'fans'}\n${Math.round(slice.fraction * 100)}%\n${count}`
 }
 
 export function fenTotalLabel(total) {
