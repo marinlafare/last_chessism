@@ -1,48 +1,48 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
-import { formatNumber } from '../../utils/formatters'
 import { fetchDashboardSummary } from './homeApi'
+import SummaryPie from './SummaryPie.jsx'
+import SummaryGamesChart from './SummaryGamesChart.jsx'
+import { positionSlices } from './summaryData.js'
 
-export function DashboardSummaryPanel() {
+export function DashboardSummaryPanel({ onSelectPlayer }) {
   const [generalities, setGeneralities] = useState(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const controller = new AbortController()
 
-    fetchDashboardSummary({ signal: controller.signal })
-      .then((generalitiesPayload) => {
-        setGeneralities(generalitiesPayload)
+    let timer
+    const load = async () => {
+      let delay = 60000
+      try {
+        if (document.hidden) return
+        const payload = await fetchDashboardSummary({ signal: controller.signal })
+        if (controller.signal.aborted) return
+        setGeneralities(payload)
         setError('')
-      })
-      .catch((err) => {
-        if (err?.name !== 'AbortError') {
-          setError('Dashboard metrics unavailable.')
-        }
-      })
-
-    return () => controller.abort()
+        if (payload.stale) delay = 15000
+      } catch (err) {
+        if (err?.name !== 'AbortError') setError('Dashboard metrics unavailable. Showing the last snapshot if available.')
+      } finally {
+        if (!controller.signal.aborted) timer = setTimeout(load, delay)
+      }
+    }
+    load()
+    return () => { controller.abort(); clearTimeout(timer) }
   }, [])
 
-  const metrics = [
-    { label: 'Main Players', value: generalities?.main_characters },
-    { label: 'Games', value: generalities?.n_games_in_db },
-    { label: 'Positions', value: generalities?.n_positions },
-    { label: 'Scored Positions', value: generalities?.scored_fens }
-  ]
+  const ready = Boolean(generalities?.refreshed_at)
 
   return (
     <div {...pageStyleTarget('summary.panel')} className="dashboard-panel" aria-label="Database summary">
-      <div className="metric-grid">
-        {metrics.map((metric) => (
-          <article {...pageStyleTarget('card')} className="metric-card" key={metric.label}>
-            <span>{metric.label}</span>
-            <strong {...pageStyleTarget('value')}>{metric.value === undefined ? '-' : formatNumber(metric.value)}</strong>
-          </article>
-        ))}
+      <div className="home-summary-charts">
+        <SummaryPie items={positionSlices(generalities)} ready={ready} />
+        <SummaryGamesChart players={generalities?.players} ready={ready} onSelectPlayer={onSelectPlayer} />
       </div>
-
-      {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
+      {(error || generalities?.refresh_error || generalities?.stale) && <p {...pageStyleTarget('text')} className="home-summary-state" role="status">
+        {error || generalities?.refresh_error || (ready ? 'Updating summary… Previous snapshot shown.' : 'Preparing database summary…')}
+      </p>}
     </div>
   )
 }

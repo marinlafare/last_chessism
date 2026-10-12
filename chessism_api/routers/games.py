@@ -94,6 +94,12 @@ async def api_get_games_database_generalities() -> JSONResponse:
     result = await get_games_database_generalities()
     return JSONResponse(content=result)
 
+
+@router.get("/home_summary")
+async def api_get_home_summary(redis: ArqRedis = Depends(get_redis_pool)) -> JSONResponse:
+    from chessism_api.operations.home_summary import get_home_summary
+    return JSONResponse(content=await get_home_summary(redis))
+
 @router.get("/generalities")
 async def api_get_games_generalities_alias() -> JSONResponse:
     """

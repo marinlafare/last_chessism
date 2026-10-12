@@ -28,6 +28,9 @@
 .appearance-resize-se { bottom:-4px; right:-4px; } .appearance-resize-sw { bottom:-4px; left:-4px; }
 .appearance-editor-body small { color:#b3c0cb; }
 .appearance-property { display:flex; gap:7px; flex-wrap:wrap; align-items:center; min-width:0; margin:0; padding:0 0 8px; border:0; border-bottom:1px solid #35434f; }
+.appearance-property-group { display:flex; flex-direction:column; gap:12px; }
+.appearance-property-group>strong { font-size:12px; color:#b3c0cb; }
+.appearance-editor .appearance-restore-property { width:28px; height:28px; flex-shrink:0; padding:0; font-size:20px; line-height:1; }
 .appearance-property>label:first-child { width:100%; }
 .appearance-opacity { display:flex; flex-direction:column; flex:1; min-width:110px; font-size:11px; }
 .appearance-inspector-outline { position:fixed; z-index:490; pointer-events:none; outline:2px dashed #f1c644; outline-offset:2px; }

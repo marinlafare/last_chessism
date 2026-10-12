@@ -7,6 +7,7 @@ import App from '/src/App.jsx'
 import '/src/index.css'
 
 const initial = new URLSearchParams(location.search).get('initial') || '/'
+const summaryScenario = new URLSearchParams(location.search).get('summary') || ''
 history.replaceState(null, '', initial.startsWith('/') && !initial.startsWith('//') ? initial : '/')
 localStorage.clear() // Isolated browser profile only.
 const names = ['hikaru', 'magnuscarlsen', ...Array.from({length:50}, (_, i) => `player${i+3}`)]
@@ -14,6 +15,19 @@ const state = window.homeTest = { requests: [], unexpected: [], aborted: [], fai
   failCloudStatus: false, clockOffsetMs: 0, cloudUsage: {}, cloud: { controller_online: true, cloud_busy: false, jobs: [] } }
 const realNow = Date.now.bind(Date)
 state.failBilling = false
+state.homeSummary = { total_fens:600000,titled_players:7,titled_fens:400000,titled_games:24000,
+  refreshed_at:'2026-10-11T00:00:00Z',stale:false,refresh_error:null,
+  players:[{player_name:'hikaru',title:'GM',games:7500,game_half_units:13001,avatar:'/chessism.jpg'},
+    {player_name:'magnuscarlsen',title:'GM',games:6500,game_half_units:6999,avatar:'/tests/fixtures/home.html'},
+    {player_name:'player3',title:'IM',games:8000,game_half_units:8000},
+    {player_name:'player4',title:'GM',games:6200,game_half_units:6200,avatar:'/chessism.jpg'},
+    {player_name:'player5',title:'GM',games:5000,game_half_units:5000},
+    {player_name:'player6',title:'GM',games:4800,game_half_units:4800},
+    {player_name:'player7',title:'GM',games:4000,game_half_units:4000}] }
+state.summaryReady = structuredClone(state.homeSummary)
+if (summaryScenario === 'loading') state.homeSummary = {total_fens:null,titled_players:null,titled_fens:null,titled_games:null,refreshed_at:null,stale:true,players:[]}
+if (summaryScenario === 'empty') state.homeSummary = {...state.homeSummary,total_fens:0,titled_fens:0,titled_games:0,titled_players:0,players:[]}
+if (summaryScenario === 'stale') state.homeSummary.stale = true
 state.billing = {
   project:'chessism-production',fetched_at:'2026-10-10T12:00:00Z',next_refresh_at:'2026-10-10T13:00:00Z',stale:false,
   periods:[{id:'2026-10',has_data:true,exported_at:'2026-10-10T09:00:00Z',usage_through:'2026-10-10T08:00:00Z',currencies:[{
@@ -25,7 +39,7 @@ state.billing = {
 Date.now = () => realNow() + state.clockOffsetMs // ETA test time, isolated to this mocked tab.
 // Exercise polling and its teardown quickly, only in this fully mocked tab.
 const realTimeout = window.setTimeout.bind(window)
-window.setTimeout = (fn, delay, ...args) => realTimeout(fn, [5000,10000,20000,30000].includes(delay) ? 150 : delay, ...args)
+window.setTimeout = (fn, delay, ...args) => realTimeout(fn, [5000,10000,20000,30000,...(summaryScenario ? [15000,60000] : [])].includes(delay) ? 150 : delay, ...args)
 const originalScroll = Element.prototype.scrollIntoView
 Element.prototype.scrollIntoView = function(options) {
   state.scrolls.push(this.id)
@@ -37,7 +51,9 @@ window.fetch = async (input, options = {}) => {
   const reply = (value, status=200) => new Response(JSON.stringify(value), {status,headers:{'Content-Type':'application/json'}})
   if (method !== 'GET') { state.unexpected.push(`${method} ${path}`); throw new Error('No writes allowed in homepage test') }
   if (path === '/auth/me') return reply({account:{name:'Test admin',role:'superadmin'}})
+  if (path === '/appearance') return reply({revision:0,active_preset_id:null,presets:[],overrides:[]})
   if (path === '/games/generalities') return reply({main_characters:52,n_games_in_db:10000,n_positions:600000,scored_fens:400000})
+  if (path === '/games/home_summary') return state.failSummary ? reply({detail:'Unavailable'},503) : reply(state.homeSummary)
   if (path === '/players/main_characters/top') return reply({players:names.map((player_name,i)=>({player_name,full_name:player_name,rating:3200-i}))})
   if (path === '/status') return state.failStatus ? reply({detail:'Unavailable'},503) : reply({
     workers:{total:4,busy:2,idle:2},jobs:{queued:1,running:1,failed:0,completed:12},version:{backend:'test',stockfish:'16.1'},

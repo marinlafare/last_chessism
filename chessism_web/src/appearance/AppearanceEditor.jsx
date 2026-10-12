@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppearance } from './AppearanceProvider'
-import { normalizeColor, replaceRgb, validValue, registryTarget, registryScope } from './styleCore'
+import { registryScope } from './styleCore'
 import { fitEditor, resizeEditor, RESIZE_EDGES } from './editorGeometry'
+import { editorTargets, restoreSavedStyle } from './editorTargets'
+import AppearancePropertyFields from './AppearancePropertyFields'
 
 const viewport=()=>({width:window.innerWidth,height:window.innerHeight})
 
@@ -28,12 +30,10 @@ export default function AppearanceEditor() {
     return()=>{observer.disconnect();window.removeEventListener('scroll',update,true);window.removeEventListener('resize',update)}
   },[selection,draft])
   if(!selection)return null
-  const target=registryTarget(saved.registry,selection.scope,selection.id)
-  if(!target)return null
-  const matches=row=>row.scope===selection.scope&&row.target===selection.id
-  const set=(property,value)=>setDraft(rows=>[...rows.filter(row=>!(matches(row)&&row.property===property)),
-    ...(value===null?[]:[{scope:selection.scope,target:selection.id,property,value}])])
-  const restore=()=>setDraft(rows=>[...rows.filter(row=>!matches(row)),...saved.overrides.filter(matches)])
+  const targets=editorTargets(saved.registry,selection)
+  if(!targets.length)return null
+  const target=targets[0].spec
+  const restore=()=>setDraft(rows=>targets.reduce((current,item)=>restoreSavedStyle(current,saved.overrides,item.scope,item.id),rows))
   const drag=(e,edge=null)=>{
     if(e.button!==0 || (!edge&&e.target.closest('button')))return
     e.preventDefault()
@@ -64,23 +64,10 @@ export default function AppearanceEditor() {
       {!minimized&&<div className="appearance-editor-body">
         <small>{registryScope(saved.registry,selection.scope).label} · {saved.presets.find(p=>p.id===saved.active_preset_id)?.name||'Default (editing a copy)'}</small>
         <button type="button" disabled={!selection.element.parentElement?.closest('[data-style-id]')} onClick={()=>ctx.select(selection.element.parentElement,position.left,position.top)}>Select enclosing container</button>
-        {target.properties.map(property=>{
-          const spec=saved.registry.properties[property], override=draft.find(row=>matches(row)&&row.property===property)
-          const label=target.propertyLabels?.[property]||spec.label
-          const computed=getComputedStyle(selection.element).getPropertyValue(spec.css).trim()||String(spec.default??'')
-          const value=override?.value??(spec.kind==='color'?normalizeColor(computed):spec.kind==='number'?parseFloat(computed)||0:computed.split(',')[0].replaceAll('"','').trim())
-          return <fieldset className="appearance-property" key={property} disabled={ctx.busy}>
-            <label htmlFor={`appearance-${property}`}>{label}</label>
-            {spec.kind==='color'?<>
-              <input id={`appearance-${property}`} type="color" value={normalizeColor(value).slice(0,7)} onChange={e=>set(property,replaceRgb(value,e.target.value))}/>
-              <label className="appearance-opacity">Opacity {Math.round(parseInt(normalizeColor(value).slice(7),16)/255*100)}%
-                <input aria-label={`${label} opacity`} type="range" min="0" max="100" value={Math.round(parseInt(normalizeColor(value).slice(7),16)/255*100)} onChange={e=>set(property,normalizeColor(value).slice(0,7)+Math.round(Number(e.target.value)*2.55).toString(16).padStart(2,'0'))}/>
-              </label>
-            </>:spec.kind==='number'?<input id={`appearance-${property}`} type="number" min={spec.min} max={spec.max} value={value} onChange={e=>{const number=Number(e.target.value);if(validValue(spec,number))set(property,number)}}/>
-              :<select id={`appearance-${property}`} value={spec.options.includes(value)?value:''} onChange={e=>set(property,e.target.value)}><option value="" disabled>Inherited</option>{spec.options.map(option=><option key={option}>{option}</option>)}</select>}
-            <button type="button" disabled={!override} onClick={()=>set(property,null)}>Inherit</button>
-          </fieldset>
-        })}
+        {targets.map((item,index)=><div className="appearance-property-group" data-appearance-target={item.id} key={item.id}>
+          {index>0&&<strong>{item.spec.label}</strong>}
+          <AppearancePropertyFields editable={item} related={index>0}/>
+        </div>)}
         {ctx.error&&<p role="alert">{ctx.error}</p>}
         <button type="button" disabled={!ctx.dirty||ctx.busy} onClick={()=>ctx.save()}>{ctx.busy?'Saving…':'Save all style changes'}</button>
         <small>Closing keeps your draft. Saving Default creates a named preset.</small>

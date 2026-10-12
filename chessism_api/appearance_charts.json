@@ -17,6 +17,6 @@
     "chart.measures": {"label":"Stockfish chart colors","properties":["chartColor1","chartColor2"],"propertyLabels":{"chartColor1":"Positive","chartColor2":"Negative / losses"}},
     "chart.coefficients": {"label":"Coefficient chart colors","properties":["chartColor1","chartColor2","chartColor3"],"propertyLabels":{"chartColor1":"Fitted line","chartColor2":"Fitted points","chartColor3":"Lichess baseline"}},
     "chart.research": {"label":"Research chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Series"}},
-    "chart.bubbles": {"label":"Player bubble chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Point color (Inherit restores score gradient)"}}
+    "chart.bubbles": {"label":"Player bubble chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Point color"}}
   }
 }

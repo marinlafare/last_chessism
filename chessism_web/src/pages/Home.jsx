@@ -39,7 +39,7 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
       <div className="home-shell">
         <main>
           <div className="home-overview">
-            <DashboardSummaryPanel />
+            <DashboardSummaryPanel onSelectPlayer={selectPlayer} />
             <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer} />
           </div>
           <section {...pageStyleTarget('player.panel')} className="home-player-workspace" id="selected-player" ref={playerSection}

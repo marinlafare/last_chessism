@@ -1,6 +1,6 @@
 import { getJson } from '../../services/apiClient'
 
-export const fetchDashboardSummary = ({ signal } = {}) => getJson('/games/generalities', { signal })
+export const fetchDashboardSummary = ({ signal } = {}) => getJson('/games/home_summary', { signal })
 
 export const fetchTopMainCharacters = (timeControl, limit, { signal } = {}) => (
   getJson(

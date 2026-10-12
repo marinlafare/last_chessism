@@ -30,14 +30,40 @@
 .dashboard-panel {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 16px;
   padding: 18px;
 }
 
-.home-page .dashboard-panel .metric-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  flex: 1;
-}
+.home-summary-charts { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.4fr); align-items: center; gap: 14px; }
+.home-summary-pie { margin: 0; min-width: 0; text-align: center; }
+.home-summary-pie svg { display: block; width: 100%; max-width: 200px; height: auto; margin: 0 auto 8px; }
+.home-summary-charts figcaption { color: var(--text); font-weight: 700; }
+.home-summary-positions { --titled-fill: #21b787; --other-fill: #d9685b; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
+.home-summary-games { margin: 0; min-width: 0; text-align: center; --chart-color-1: #21b787; --chart-color-2: #e7b768; --chart-color-3: #728edf; --chart-color-4: #d36c8f; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
+.home-games-navigation { display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; gap: 3px; align-items: stretch; }
+.home-games-chart { display: block; width: 100%; height: auto; }
+.home-games-chart text { fill: var(--muted); stroke: none; font-size: 14px; }
+.home-games-tick line { stroke: var(--border-soft); stroke-width: 1; }
+.home-games-player { cursor: pointer; outline: none; }
+.home-games-player:hover .home-games-bar, .home-games-player:focus-visible .home-games-bar { filter: brightness(1.25); stroke-width: 3; }
+.home-games-player .home-games-count { fill: var(--text); }
+.home-games-avatar-background { fill: var(--surface-2); stroke: none; }
+.home-games-avatar-fallback { fill: var(--muted); }
+.home-games-avatar-frame { fill: none; }
+.home-games-player:hover .home-games-avatar-frame, .home-games-player:focus-visible .home-games-avatar-frame { stroke-width: 2; }
+.home-games-pagination { margin-top: 6px; font-size: 11px; color: var(--muted); }
+.home-games-navigation button { display: grid; place-items: center; min-width: 0; padding: 0; border: 1px solid var(--border-soft); border-radius: 4px; color: var(--text); background: transparent; font-size: 20px; cursor: pointer; }
+.home-games-navigation button:disabled { opacity: .35; cursor: default; }
+.home-games-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.home-summary-slice.titled { fill: var(--titled-fill); }
+.home-summary-slice.other { fill: var(--other-fill); }
+.home-summary-slice { outline: none; }
+.home-summary-slice:hover, .home-summary-slice:focus-visible { filter: brightness(1.18); stroke-width: 3; }
+.home-summary-empty { fill: var(--surface-2); stroke: var(--border-soft); }
+.home-summary-empty-label, .home-summary-state { color: var(--muted); font-size: 12px; }
+.home-summary-state { margin: 0; }
+.home-summary-tooltip { position: fixed; z-index: 80; max-width: min(280px, calc(100vw - 16px)); padding: 8px 10px; background: #111a22; border: 1px solid var(--border); border-radius: 5px; color: var(--text); pointer-events: none; text-align: left; font-size: 12px; overflow-wrap: anywhere; box-sizing: border-box; }
 
 .home-player-workspace { min-width: 0; scroll-margin-top: 18px; }
 .home-player-workspace:focus { outline: none; }
@@ -99,9 +125,9 @@
   display: grid;
   align-content: start;
   gap: 6px;
-  height: 268px;
-  min-height: 268px;
-  max-height: 268px;
+  height: 164px;
+  min-height: 164px;
+  max-height: 164px;
   overflow-y: auto;
   padding: 10px;
   border: 1px solid var(--border-soft);
@@ -158,5 +184,6 @@
   .carousel-head,
   .carousel-footer { align-items: flex-start; flex-direction: column; }
   .carousel-actions { width: 100%; justify-content: flex-start; }
-  .home-page .dashboard-panel .metric-grid { grid-template-columns: 1fr; }
+  .home-summary-charts { grid-template-columns: minmax(0, 1fr); gap: 20px; }
+  .home-summary-games { width: 100%; max-width: 460px; justify-self: center; }
 }

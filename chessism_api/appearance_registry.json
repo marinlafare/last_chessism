@@ -75,13 +75,13 @@
       "css": "fill"
     },
     "stroke": {
-      "label": "Outline color",
+      "label": "Border color",
       "kind": "color",
       "css": "--pie-outline-color",
       "default": "#ffffff"
     },
     "strokeWidth": {
-      "label": "Outline width",
+      "label": "Border width",
       "kind": "number",
       "min": 0,
       "max": 6,
@@ -174,14 +174,14 @@
       ]
     },
     "unique.outline": {
-      "label": "Unique circle outline",
+      "label": "Unique circle border",
       "properties": [
         "stroke",
         "strokeWidth"
       ]
     },
     "repeated.outline": {
-      "label": "2–10 circle outline",
+      "label": "2–10 circle border",
       "properties": [
         "stroke",
         "strokeWidth"
@@ -189,12 +189,14 @@
     },
     "unique.slice": {
       "label": "Unique slice",
+      "editorParent": "unique.outline",
       "properties": [
         "fill"
       ]
     },
     "nonunique.slice": {
       "label": "Non-unique slice",
+      "editorParent": "unique.outline",
       "properties": [
         "fill"
       ]
@@ -294,54 +296,63 @@
     },
     "slice.2": {
       "label": "2 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.3": {
       "label": "3 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.4": {
       "label": "4 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.5": {
       "label": "5 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.6": {
       "label": "6 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.7": {
       "label": "7 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.8": {
       "label": "8 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.9": {
       "label": "9 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]
     },
     "slice.10": {
       "label": "10 appearances slice",
+      "editorParent": "repeated.outline",
       "properties": [
         "fill"
       ]

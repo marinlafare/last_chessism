@@ -198,6 +198,24 @@
             "padding"
           ]
         },
+        "summary.positions": {
+          "label": "Positions pie border",
+          "properties": ["stroke", "strokeWidth"]
+        },
+        "summary.titled": {
+          "label": "Titled-player positions slice",
+          "editorParent": "summary.positions",
+          "properties": ["fill"]
+        },
+        "summary.other": {
+          "label": "Other positions slice",
+          "editorParent": "summary.positions",
+          "properties": ["fill"]
+        },
+        "summary.games": {
+          "label": "Games chart colors and border",
+          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth"]
+        },
         "characters.panel": {
           "label": "Main characters",
           "properties": [

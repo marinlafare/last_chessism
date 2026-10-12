@@ -660,6 +660,45 @@ class ScoredPositionSummary(Base):
     )
 
 
+class HomeSummarySource(Base):
+    __tablename__ = "home_summary_source"
+    id = Column(Integer, primary_key=True, default=1)
+    revision = Column(BigInteger, nullable=False, server_default="1")
+    __table_args__ = (CheckConstraint("id = 1", name="home_summary_source_singleton"),)
+
+
+class HomeTitledSummary(Base):
+    """One coherent snapshot; no JSON and no per-position rows."""
+    __tablename__ = "home_titled_summary"
+    id = Column(Integer, primary_key=True, default=1)
+    source_revision = Column(BigInteger, nullable=True)
+    total_fens = Column(BigInteger, nullable=False, server_default="0")
+    titled_players = Column(BigInteger, nullable=False, server_default="0")
+    titled_fens = Column(BigInteger, nullable=False, server_default="0")
+    titled_games = Column(BigInteger, nullable=False, server_default="0")
+    refreshed_at = Column(DateTime(timezone=True), nullable=True)
+    attempted_at = Column(DateTime(timezone=True), nullable=True)
+    last_error = Column(String(240), nullable=True)
+    __table_args__ = (
+        CheckConstraint("id = 1", name="home_titled_summary_singleton"),
+        CheckConstraint("total_fens >= titled_fens AND titled_fens >= 0 AND titled_games >= 0 "
+                        "AND titled_players >= 0", name="home_titled_counts_valid"),
+    )
+
+
+class HomeTitledPlayerSummary(Base):
+    """At most one row per titled player. Two half-units represent one game."""
+    __tablename__ = "home_titled_player_summary"
+    player_name = Column(String, primary_key=True)
+    title = Column(String(8), nullable=False)
+    games = Column(BigInteger, nullable=False)
+    game_half_units = Column(BigInteger, nullable=False)
+    __table_args__ = (
+        CheckConstraint("games >= 0 AND game_half_units >= games AND game_half_units <= games * 2",
+                        name="home_titled_player_counts_valid"),
+    )
+
+
 class FenAppearanceSummary(Base):
     """Snapshot metadata shared by all-FEN and unscored-FEN histograms."""
     __tablename__ = "fen_appearance_summary"

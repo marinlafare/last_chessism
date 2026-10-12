@@ -63,3 +63,15 @@ test('chart palettes are scoped, validated and independent of chart data',()=>{
   assert.equal(appearanceCss(registry,[{...row,property:'chartColor99'}]),'')
   assert.equal(appearanceCss(registry,[{...row,value:'url(https://invalid.test)'}]),'')
 })
+
+test('homepage charts expose colors and borders without changing other charts',()=>{
+  for(const [target,property,value] of [
+    ['summary.titled','fill','#ffffff'],['summary.other','fill','#112233'],
+    ['summary.positions','stroke','#abcdef'],['summary.positions','strokeWidth',2],
+    ['summary.games','stroke','#cdefab'],['summary.games','chartColor1','#223344'],
+  ]){
+    assert.ok(appearanceCss(registry,[{scope:'home',target,property,value}]))
+    assert.equal(appearanceCss(registry,[{scope:'positions',target,property,value}]),'')
+  }
+  assert.equal(registryTarget(registry,'home','summary.titled').editorParent,'summary.positions')
+})

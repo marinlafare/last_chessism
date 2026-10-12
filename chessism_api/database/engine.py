@@ -631,6 +631,8 @@ async def init_db(connection_string: str):
                     "SELECT to_regclass('public.matrix_definition') IS NOT NULL"
                 ))
                 await conn.run_sync(Base.metadata.create_all)
+                from chessism_api.database.home_summary_schema import ensure_home_summary_triggers
+                await ensure_home_summary_triggers(conn)
                 if definitions_missing:
                     from chessism_api.database.matrix_definitions import import_snapshot_definitions
                     imported = await import_snapshot_definitions(conn)

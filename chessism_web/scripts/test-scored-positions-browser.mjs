@@ -123,6 +123,8 @@ try {
   await assert(`document.querySelector('.scored-engine-panel').getBoundingClientRect().right < document.querySelector('.appearance-panel').getBoundingClientRect().left`)
   await assert(`document.querySelector('.appearance-panel').getBoundingClientRect().width > document.querySelector('.scored-engine-panel').getBoundingClientRect().width`)
   await assert(`Array.from(document.querySelectorAll('.appearance-tabs button')).map(e=>e.textContent).join('|') === 'Uniqueness|Communess|Unscored FENs'`)
+  await assert(`Array.from(document.querySelectorAll('.appearance-tabs button')).every(e=>{const s=getComputedStyle(e);return s.borderRadius==='0px'&&s.boxShadow==='none'&&s.backgroundColor==='rgba(0, 0, 0, 0)'})`)
+  await assert(`getComputedStyle(document.querySelector('#appearance-tab-uniqueness')).borderBottomWidth==='2px'&&getComputedStyle(document.querySelector('#appearance-tab-uniqueness')).borderBottomColor!==getComputedStyle(document.querySelector('#appearance-tab-commonness')).borderBottomColor`)
   await assert(`document.querySelectorAll('#appearance-panel-uniqueness .appearance-circle').length === 2`)
   await assert(`Math.abs(document.querySelector('.scored-engine-panel').getBoundingClientRect().height - document.querySelector('.appearance-panel').getBoundingClientRect().height) < 1 && document.querySelector('.scored-engine-panel').getBoundingClientRect().height < 300`)
   await assert(`Array.from(document.querySelectorAll('#appearance-panel-uniqueness .appearance-circle')).every(e => e.getBoundingClientRect().height <= 190 && e.getBoundingClientRect().width <= 180)`)

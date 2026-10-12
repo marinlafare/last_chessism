@@ -5,9 +5,13 @@ import {styleTarget} from '/src/appearance/styleCore.js'
 import '/src/appearance/chartColors.css'
 import PendingRepetitionChart from '/src/pages/scored-positions/PendingRepetitionChart.jsx'
 import BuilderChart from '/src/pages/research/algorithms/BuilderChart.jsx'
+import AppearanceCircles from '/src/pages/scored-positions/AppearanceCircles.jsx'
+import '/src/pages/scored-positions/scoredPositions.css'
 const registry={version:1,scope:'scored_positions',properties:{background:{kind:'color',css:'background-color',label:'Background'},radius:{kind:'number',css:'border-radius',label:'Radius',min:0,max:40,unit:'px'}},targets:{page:{label:'Page',properties:['background']},'metrics.panel':{label:'Metrics panel',properties:['background','radius']}}}
 const charts=window.appearanceTestCharts||{properties:{},targets:{}}
-registry.properties={...registry.properties,...charts.properties}
+const circles=window.appearanceTestRegistry||{properties:{},targets:{}}
+registry.properties={...circles.properties,...registry.properties,...charts.properties}
+registry.targets={...circles.targets,...registry.targets}
 registry.scopes={scored_positions:{label:'Scored Positions',targets:{...registry.targets,...charts.targets}},home:{label:'Home',targets:charts.targets}}
 const key='chessism-test-only-appearance'
 const empty=()=>({revision:0,active_preset_id:null,presets:[],overrides:[],registry})
@@ -43,4 +47,5 @@ createRoot(document.getElementById('root')).render(h(AppearanceProvider,{account
  h('section',{...styleTarget('metrics.panel'),id:'editable',tabIndex:0},'Scored Positions panel')),
  h('section',{'data-style-scope':'different_page','data-style-id':'metrics.panel',id:'outside'},'Other page'),
  h('div',{id:'chart-fixture',style:{height:180}},h(PendingRepetitionChart,{data:{refreshed_at:'2026-10-11T12:00:00Z',rows:[{repetitions:1,fen_count:20},{repetitions:2,fen_count:10}]}})),
- h(BuilderChart,{output:{name:'Test',type:'bar',x:'X',y:'Y',points:[{x:1,y:2,row_key:'one'}]}})))
+ h(BuilderChart,{output:{name:'Test',type:'bar',x:'X',y:'Y',points:[{x:1,y:2,row_key:'one'}]}}),
+ h('div',{id:'circle-fixture',style:{height:220,'--accent':'#15c780','--surface':'#121920'}},h(AppearanceCircles,{active:true,data:{refreshed_at:'2026-10-11T12:00:00Z'},view:{bars:[{appearances:1,count:50},{appearances:2,count:30},{appearances:3,count:20}]}}))))
