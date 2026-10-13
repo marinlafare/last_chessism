@@ -5,6 +5,7 @@
 .player-analysis-disclosure-toggle:hover:not(:disabled) { background: var(--surface-3); }
 .player-analysis-disclosure-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 .player-analysis-disclosure-toggle:disabled { opacity: .5; cursor: default; }
+.player-analysis-disclosure-toggle > span { flex: 1; min-width: 0; text-align: inherit; }
 .player-analysis-disclosure-toggle svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .player-analysis-disclosure-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 .player-analysis-disclosure-content { min-width: 0; padding: 12px; border-top: 1px solid var(--border-soft); }

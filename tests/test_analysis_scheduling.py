@@ -89,6 +89,7 @@ class BalancedWorkerTests(unittest.IsolatedAsyncioTestCase):
             for name in ('record_analysis_times', '_increment_summary_for_analysis_results', '_refresh_scored_projections_after_analysis'):
                 stack.enter_context(patch.object(analysis, name, new_callable=AsyncMock))
             stack.enter_context(patch.object(analysis.fen_interface, 'update_fen_analysis_data', new_callable=AsyncMock))
+            stack.enter_context(patch.object(analysis, 'stage_fen_results', new_callable=AsyncMock))
             result = await asyncio.wait_for(analysis._run_analysis_job(
                 {}, total_fens_to_process=total, batch_size=batch_limit, nodes_limit=1_000_000,
                 fetch_batch=fetch_batch, timing_source='test', job_id='BALANCED TEST',

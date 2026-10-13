@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.salience_staging import stage_game_positions
 
 
@@ -57,16 +58,16 @@ async def _full_rebuild(session, player: str) -> dict[str, Any]:
         SELECT
             CAST(:player AS text) AS player_name,
             player_color,
-            fen_fen,
+            fen_id,
             COUNT(*)::bigint AS games_with_position,
             SUM(occurrence_count)::bigint AS total_occurrences
         FROM salience_game_position_stage
-        GROUP BY player_color, fen_fen
+        GROUP BY player_color, fen_id
         HAVING COUNT(*) > 1
     """), {"player": player})
     await session.execute(text("""
         CREATE UNIQUE INDEX salience_frequency_stage_key
-        ON salience_frequency_stage (player_color, fen_fen)
+        ON salience_frequency_stage (player_color, fen_id)
     """))
     await session.execute(text("ANALYZE salience_frequency_stage"))
 
@@ -95,7 +96,7 @@ async def _full_rebuild(session, player: str) -> dict[str, Any]:
         FROM salience_game_position_stage game_position
         LEFT JOIN salience_frequency_stage frequency
           ON frequency.player_color = game_position.player_color
-         AND frequency.fen_fen = game_position.fen_fen
+         AND frequency.fen_id = game_position.fen_id
         GROUP BY game_position.game_link, game_position.player_color
     """), {"player": player})
 
@@ -108,17 +109,22 @@ async def _full_rebuild(session, player: str) -> dict[str, Any]:
         FROM salience_game_stage
     """))).mappings().one()
 
+    if storage_for(session):
+        from .relational_salience import persist_full
+        await persist_full(session,player)
+        return {**dict(stats), "calculation": "full"}
+
     await session.execute(
         text("DELETE FROM player_position_frequency WHERE player_name = :player"),
         {"player": player},
     )
     await session.execute(text("""
         INSERT INTO player_position_frequency (
-            player_name, player_color, fen_fen,
+            player_name, player_color, fen_id,
             games_with_position, total_occurrences
         )
         SELECT
-            player_name, player_color, fen_fen,
+            player_name, player_color, fen_id,
             games_with_position, total_occurrences
         FROM salience_frequency_stage
         WHERE games_with_position > 1
@@ -192,12 +198,12 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
     await session.execute(text("""
         CREATE TEMP TABLE salience_changed_fen
         ON COMMIT DROP AS
-        SELECT DISTINCT player_color, fen_fen
+        SELECT DISTINCT player_color, fen_id
         FROM salience_new_game_position
     """))
     await session.execute(text("""
         CREATE UNIQUE INDEX salience_changed_fen_key
-        ON salience_changed_fen (player_color, fen_fen)
+        ON salience_changed_fen (player_color, fen_id)
     """))
     await session.execute(text("ANALYZE salience_changed_fen"))
 
@@ -211,7 +217,7 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
             SELECT
                 existing.game_link,
                 existing.player_color,
-                association.fen_fen,
+                association.fen_id,
                 (
                     association.n_move * 2
                     - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END
@@ -220,7 +226,7 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
                     PARTITION BY
                         existing.game_link,
                         existing.player_color,
-                        association.fen_fen
+                        association.fen_id
                     ORDER BY
                         association.n_move,
                         CASE WHEN association.move_color = 'white' THEN 1 ELSE 2 END
@@ -228,7 +234,7 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
             FROM salience_existing_game existing
             CROSS JOIN LATERAL (
                 SELECT
-                    game_fen_association.fen_fen,
+                    game_fen_association.fen_id,
                     game_fen_association.n_move,
                     game_fen_association.move_color
                 FROM game_fen_association
@@ -237,12 +243,12 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
             ) association
             JOIN salience_changed_fen changed
               ON changed.player_color = existing.player_color
-             AND changed.fen_fen = association.fen_fen
+             AND changed.fen_id = association.fen_id
         )
         SELECT
             game_link,
             player_color,
-            fen_fen,
+            fen_id,
             COUNT(*)::integer AS occurrence_count,
             SUM(
                 (
@@ -250,11 +256,11 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
                 ) / occurrence_index
             )::double precision AS weighted_occurrence_mass
         FROM ordered_occurrences
-        GROUP BY game_link, player_color, fen_fen
+        GROUP BY game_link, player_color, fen_id
     """))
     await session.execute(text("""
         CREATE INDEX salience_existing_game_position_frequency_idx
-        ON salience_existing_game_position (player_color, fen_fen)
+        ON salience_existing_game_position (player_color, fen_id)
     """))
     await session.execute(text("ANALYZE salience_existing_game_position"))
 
@@ -264,24 +270,24 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
         WITH existing_frequency AS (
             SELECT
                 player_color,
-                fen_fen,
+                fen_id,
                 COUNT(*)::bigint AS game_frequency,
                 SUM(occurrence_count)::bigint AS total_occurrences
             FROM salience_existing_game_position
-            GROUP BY player_color, fen_fen
+            GROUP BY player_color, fen_id
         ),
         new_frequency AS (
             SELECT
                 player_color,
-                fen_fen,
+                fen_id,
                 COUNT(*)::bigint AS game_frequency,
                 SUM(occurrence_count)::bigint AS total_occurrences
             FROM salience_new_game_position
-            GROUP BY player_color, fen_fen
+            GROUP BY player_color, fen_id
         )
         SELECT
             new_frequency.player_color,
-            new_frequency.fen_fen,
+            new_frequency.fen_id,
             COALESCE(existing_frequency.game_frequency, 0)::bigint
                 AS old_game_frequency,
             (
@@ -295,11 +301,11 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
         FROM new_frequency
         LEFT JOIN existing_frequency
           ON existing_frequency.player_color = new_frequency.player_color
-         AND existing_frequency.fen_fen = new_frequency.fen_fen
+         AND existing_frequency.fen_id = new_frequency.fen_id
     """))
     await session.execute(text("""
         CREATE UNIQUE INDEX salience_frequency_change_key
-        ON salience_frequency_change (player_color, fen_fen)
+        ON salience_frequency_change (player_color, fen_id)
     """))
     await session.execute(text("ANALYZE salience_frequency_change"))
 
@@ -321,10 +327,14 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
         FROM salience_existing_game_position existing
         JOIN salience_frequency_change frequency
           ON frequency.player_color = existing.player_color
-         AND frequency.fen_fen = existing.fen_fen
+         AND frequency.fen_id = existing.fen_id
         WHERE frequency.old_game_frequency > 0
         GROUP BY existing.game_link, existing.player_color
     """))
+    if storage_for(session):
+        from .relational_salience import persist_incremental
+        return await persist_incremental(session,player)
+
     await session.execute(text("""
         UPDATE game_player_salience target
         SET
@@ -364,24 +374,24 @@ async def _incremental_update(session, player: str) -> dict[str, Any]:
         FROM salience_new_game_position new_position
         JOIN salience_frequency_change frequency
           ON frequency.player_color = new_position.player_color
-         AND frequency.fen_fen = new_position.fen_fen
+         AND frequency.fen_id = new_position.fen_id
         GROUP BY new_position.game_link, new_position.player_color
     """), {"player": player})
 
     await session.execute(text("""
         INSERT INTO player_position_frequency (
-            player_name, player_color, fen_fen,
+            player_name, player_color, fen_id,
             games_with_position, total_occurrences
         )
         SELECT
             CAST(:player AS text),
             player_color,
-            fen_fen,
+            fen_id,
             new_game_frequency,
             new_total_occurrences
         FROM salience_frequency_change
         WHERE new_game_frequency > 1
-        ON CONFLICT (player_name, player_color, fen_fen) DO UPDATE SET
+        ON CONFLICT (player_name, player_color, fen_id) DO UPDATE SET
             games_with_position = EXCLUDED.games_with_position,
             total_occurrences = EXCLUDED.total_occurrences
     """), {"player": player})
@@ -445,6 +455,11 @@ async def calculate_player_salience(player_name: str) -> dict[str, Any]:
     player = str(player_name).strip().lower()
     if not player:
         raise ValueError("Player name is required.")
+
+    async with AsyncDBSession() as selection_session:
+        if storage_for(selection_session):
+            from .relational_salience import calculate
+            return await calculate(AsyncDBSession,player)
 
     async with AsyncDBSession() as session:
         tracked = await session.scalar(text("""

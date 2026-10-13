@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import './fenIngestion.css'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   formatNumber,

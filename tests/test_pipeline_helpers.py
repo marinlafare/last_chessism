@@ -404,7 +404,7 @@ class PlayerSalienceTests(unittest.TestCase):
         self.assertEqual(
             frequency_columns,
             {
-                "player_name", "player_color", "fen_fen",
+                "player_name", "player_color", "fen_id",
                 "games_with_position", "total_occurrences",
             },
         )
@@ -1682,6 +1682,7 @@ class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(analysis, "ANALYSIS_CONCURRENCY", 3),
+            patch.object(analysis, "stage_fen_results", new_callable=AsyncMock),
             patch.object(analysis, "_call_engine_service", side_effect=call_engine),
             patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
             patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),
@@ -1732,6 +1733,7 @@ class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
 
         with (
             patch.object(analysis, "ANALYSIS_CONCURRENCY", 1),
+            patch.object(analysis, "stage_fen_results", new_callable=AsyncMock),
             patch.object(analysis, "_call_engine_service", side_effect=call_engine),
             patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
             patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),

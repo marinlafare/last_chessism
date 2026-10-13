@@ -169,7 +169,8 @@ async def get_player_behavioural_activity(
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
-        result = await session.execute(query, scope.params())
+        from chessism_api.database.relational_reads import player_rows_sql
+        result = await session.execute(player_rows_sql(session,query,('mode','played_at','result')), scope.params())
         rows = result.mappings().all()
 
     aggregate = _summarize_activity_rows(rows)
@@ -203,7 +204,7 @@ async def get_player_behavioural_ratings(
                 ({PLAYER_LOCAL_TIMESTAMP_SQL})::date AS local_date,
                 ROW_NUMBER() OVER (
                     PARTITION BY gp.mode, ({PLAYER_LOCAL_TIMESTAMP_SQL})::date
-                    ORDER BY gp.played_at DESC, gp.link DESC
+                    ORDER BY gp.played_at DESC, gp.link DESC, gp.color ASC
                 ) AS day_rank
             FROM game_player gp
             WHERE gp.player_name = :player
@@ -222,7 +223,11 @@ async def get_player_behavioural_ratings(
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
-        result = await session.execute(query, scope.params())
+        from chessism_api.database.relational_reads import player_ratings_sql
+        result = await session.execute(
+            player_ratings_sql(session, query, local_timestamp_sql=player_local_timestamp_sql('g')),
+            scope.params(),
+        )
         rows = result.mappings().all()
 
     modes = [mode] if mode != "all" else list(CHART_MODES)
@@ -814,7 +819,7 @@ GAME_POSITIONS_SQL = text("""
         CASE WHEN association.move_color = 'white' THEN moves.white_reaction_time ELSE moves.black_reaction_time END AS reaction_time,
         CASE WHEN association.move_color = 'white' THEN moves.white_time_left ELSE moves.black_time_left END AS time_left
     FROM game_fen_association association
-    JOIN fen ON fen.fen = association.fen_fen
+    JOIN fen ON fen.fen_id = association.fen_id
     LEFT JOIN moves ON moves.link = association.game_link AND moves.n_move = association.n_move
     WHERE association.game_link = ANY(CAST(:game_ids AS bigint[]))
       AND fen.score IS NOT NULL

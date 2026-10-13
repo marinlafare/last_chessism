@@ -110,7 +110,7 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
         formatted, continuations = _format_engine_results(results)
         if len(formatted) != len(fens):
             raise ValueError("Not every downloaded result can be persisted")
-        await stage_fen_results(session, formatted, continuations)
+        await stage_fen_results(session, formatted, continuations, fen_ids={row.fen: row.fen_id for row in rows})
         # Same counters as the local writer, but atomic with the cloud receipt.
         await session.execute(text("""
             UPDATE database_summary SET analyzed_fens = analyzed_fens + :count,
@@ -154,8 +154,9 @@ async def refresh_projections(positions):
     links = set()
     async with AsyncDBSession() as session:
         for offset in range(0, len(positions), 1000):
-            links.update((await session.scalars(select(GameFenAssociation.game_link).where(
-                GameFenAssociation.fen_fen.in_([row["fen"] for row in positions[offset:offset + 1000]])
+            links.update((await session.scalars(select(GameFenAssociation.game_link)
+                .join(Fen, Fen.fen_id == GameFenAssociation.fen_id).where(
+                Fen.fen.in_([row["fen"] for row in positions[offset:offset + 1000]])
             ).distinct())).all())
     if links:
         await refresh_game_analysis_summary(links, strict=True)
@@ -180,7 +181,8 @@ async def refresh_unit_projections(run_ids):
             SELECT DISTINCT gfa.game_link
             FROM cloud_control_position p
             CROSS JOIN LATERAL unnest(p.fen) selected(fen)
-            JOIN game_fen_association gfa ON gfa.fen_fen = selected.fen
+            JOIN fen f ON f.fen = selected.fen
+            JOIN game_fen_association gfa ON gfa.fen_id = f.fen_id
             WHERE p.document_id = ANY(CAST(:refs AS text[]))
         '''), {'refs': refs})).all()
     if links:

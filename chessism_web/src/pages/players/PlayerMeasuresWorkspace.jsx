@@ -7,7 +7,8 @@ import './player-measures.css'
 import './player-game-explorer.css'
 
 export default function PlayerMeasuresWorkspace({ playerName, disabled = false }) {
-  return <PlayerAnalysisDisclosure label="Stockfish analysis" target="player.measures" level={2} disabled={disabled}>
+  return <PlayerAnalysisDisclosure label="Stockfish analysis" target="player.measures"
+    buttonTarget="player.measures.toggle" level={2} disabled={disabled}>
     <MeasuresContent playerName={playerName} disabled={disabled} />
   </PlayerAnalysisDisclosure>
 }

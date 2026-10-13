@@ -25,7 +25,7 @@ export default function SummaryGamesChart({ players, ready, onSelectPlayer, titl
   return (
     <figure {...pageStyleTarget('summary.games')} className="home-summary-games">
       <div className="home-games-navigation" role="group" aria-label="Browse players by games">
-        <button {...pageStyleTarget('button')} type="button" aria-label="Previous four players" disabled={!data.page}
+        <button {...pageStyleTarget('summary.games.previous')} type="button" aria-label="Previous four players" disabled={!data.page}
           onClick={() => changePage(-1)}>‹</button>
       <svg className="home-games-chart" viewBox="0 0 360 250" role="group" aria-label={`Games by ${titledOnly ? 'titled' : 'untitled'} player`}>
         {[0, 1, 2, 3, 4].map(index => {
@@ -58,7 +58,7 @@ export default function SummaryGamesChart({ players, ready, onSelectPlayer, titl
           {ready ? 'No games yet' : 'Preparing…'}
         </text>}
       </svg>
-        <button {...pageStyleTarget('button')} type="button" aria-label="Next four players" disabled={data.page + 1 >= data.pages}
+        <button {...pageStyleTarget('summary.games.next')} type="button" aria-label="Next four players" disabled={data.page + 1 >= data.pages}
           onClick={() => changePage(1)}>›</button>
       </div>
       <figcaption {...pageStyleTarget('label')}>Games</figcaption>

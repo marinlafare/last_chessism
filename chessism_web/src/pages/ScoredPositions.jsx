@@ -5,6 +5,7 @@ import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
 import AppearanceChartPanel from './scored-positions/AppearanceChartPanel'
 import RatingChartDisclosure from './scored-positions/RatingChartDisclosure'
+import AutomaticIngestionPanel from './scored-positions/AutomaticIngestionPanel'
 import { styleTarget } from '../appearance/styleCore'
 import {
   fetchBackupJobStatus,
@@ -312,6 +313,7 @@ function ScoredPositions() {
             ) : null}
             {backupError ? <div className="status-banner warn">{backupError}</div> : null}
           </section>
+          <AutomaticIngestionPanel />
         </main>
         <Footer />
       </div>

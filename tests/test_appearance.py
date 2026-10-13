@@ -64,6 +64,30 @@ class AppearanceTests(unittest.TestCase):
         with self.assertRaises(ValueError):validate_overrides([{**rows[0],'property':'chartColor99'}])
         with self.assertRaises(ValueError):validate_overrides([{**rows[0],'value':'url(https://invalid.test)'}])
 
+    def test_independent_home_buttons_support_legacy_seed_and_scoped_writes(self):
+        targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()
+                   if spec.get('initialStyleFrom') == 'button']
+        self.assertEqual(len(targets), 16)
+        rows = [override(scope='home', target=target, property='background', value='#123456') for target in targets]
+        self.assertEqual(len(validate_overrides(rows)), 16)
+        with self.assertRaises(ValueError): validate_overrides([{**rows[0], 'scope':'games'}])
+
+    def test_database_scope_and_medal_pressed_color(self):
+        self.assertEqual(REGISTRY['scopes']['database']['routes'], ['/database'])
+        medal = REGISTRY['scopes']['home']['targets']['characters.medal']
+        self.assertTrue(medal['pressedUsesHoverColor'])
+        self.assertTrue(medal['pressedUsesHoverBackground'])
+        row = override(scope='home', target='characters.medal', property='hoverColor', value='#123456')
+        self.assertEqual(validate_overrides([row])[0]['color_value'], '#123456')
+        self.assertEqual(validate_overrides([{**row, 'property':'hoverBackground'}])[0]['color_value'], '#123456')
+
+    def test_player_list_ratings_are_independent_of_profile_values(self):
+        target = REGISTRY['scopes']['home']['targets']['characters.rating']
+        self.assertEqual(target['initialStyleFrom'], 'value')
+        row = override(scope='home', target='characters.rating', property='color', value='#123456')
+        self.assertEqual(validate_overrides([row])[0]['color_value'], '#123456')
+        with self.assertRaises(ValueError): validate_overrides([{**row, 'scope':'games'}])
+
     def client(self,role='admin'):
         app=FastAPI();app.include_router(router.router,prefix='/appearance')
         async def account():

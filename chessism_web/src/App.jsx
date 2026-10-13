@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Games from './pages/Games'
 import SystemStatus from './pages/SystemStatus'
+import Database from './pages/Database'
 import { normalizePath } from './services/navigation'
 // These existing shared card styles are also used by Games/Main Characters.
 // Keep them available before the player workspace is first lazy-loaded.
@@ -34,6 +35,7 @@ const APP_PATHS = new Set([
   '/games',
   '/players',
   '/system_status',
+  '/database',
   '/add_games',
   '/download_new_games',
   '/main_characters',
@@ -198,6 +200,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <Games />
   } else if (path === '/system_status') {
     page = <SystemStatus />
+  } else if (path === '/database') {
+    page = <Database account={account} />
   } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {

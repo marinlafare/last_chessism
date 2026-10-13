@@ -50,19 +50,19 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
                 SELECT
                     association.n_move,
                     association.move_color,
-                    association.fen_fen,
+                    association.fen_id,
                     (
                         association.n_move * 2
                         - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END
                     )::integer AS ply,
                     ROW_NUMBER() OVER (
-                        PARTITION BY association.fen_fen
+                        PARTITION BY association.fen_id
                         ORDER BY
                             association.n_move,
                             CASE WHEN association.move_color = 'white' THEN 1 ELSE 2 END
                     )::integer AS occurrence_index,
                     COUNT(*) OVER (
-                        PARTITION BY association.fen_fen
+                        PARTITION BY association.fen_id
                     )::integer AS game_occurrence_count
                 FROM game_fen_association association
                 WHERE association.game_link = :game_id
@@ -75,7 +75,7 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
                     WHEN occurrence.move_color = 'white' THEN moves.white_move
                     ELSE moves.black_move
                 END AS move,
-                occurrence.fen_fen,
+                position.fen AS fen_fen,
                 COALESCE(frequency.games_with_position, 1)::bigint
                     AS games_with_position,
                 COALESCE(
@@ -106,10 +106,11 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
                     )
                 )::double precision AS weighted_move_salience
             FROM ordered_occurrences occurrence
+            JOIN fen position ON position.fen_id = occurrence.fen_id
             LEFT JOIN player_position_frequency frequency
               ON frequency.player_name = :player
              AND frequency.player_color = :player_color
-             AND frequency.fen_fen = occurrence.fen_fen
+             AND frequency.fen_id = occurrence.fen_id
             LEFT JOIN moves
               ON moves.link = :game_id
              AND moves.n_move = occurrence.n_move

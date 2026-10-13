@@ -4,7 +4,7 @@ from typing import Any, Dict
 from sqlalchemy import (
     Column, ForeignKey, Integer, String, Float, BigInteger,
     DateTime, Enum, func, UniqueConstraint, Index, CheckConstraint, JSON,
-    SmallInteger, text, ForeignKeyConstraint, Text, Numeric, Date
+    SmallInteger, text, ForeignKeyConstraint, Text, Numeric, Date, Identity
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
@@ -518,9 +518,9 @@ class PlayerPositionFrequency(Base):
         primary_key=True,
     )
     player_color = Column(String(5), primary_key=True)
-    fen_fen = Column(
-        String,
-        ForeignKey("fen.fen", ondelete="CASCADE"),
+    fen_id = Column(
+        BigInteger,
+        ForeignKey("fen.fen_id", name="fk_player_position_frequency_fen_id", ondelete="CASCADE"),
         primary_key=True,
     )
     games_with_position = Column(BigInteger, nullable=False)
@@ -833,6 +833,7 @@ class Fen(Base):
     # FEN query. Adding index=True/unique=True here creates a duplicate 5 GB
     # index (ix_fen_fen) with the same key and ordering as fen_pkey.
     fen = Column('fen', String, primary_key=True)
+    fen_id = Column(BigInteger, Identity(), nullable=False)
     n_games = Column('n_games',BigInteger, nullable = False)
     moves_counter = Column('moves_counter',String, nullable = False)
     next_moves = Column('next_moves',String, nullable = True)
@@ -864,6 +865,7 @@ class Fen(Base):
     )
 
     __table_args__ = (
+        UniqueConstraint('fen_id', name='uq_fen_fen_id'),
         Index('ix_fen_backup_changed', analyzed_at, fen,
               postgresql_where=text('score IS NOT NULL')),
         Index(
@@ -886,7 +888,7 @@ class GameFenAssociation(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     
     game_link = Column(BigInteger, ForeignKey('game.link'), nullable=False, index=True)
-    fen_fen = Column(String, ForeignKey('fen.fen'), nullable=False, index=True)
+    fen_id = Column(BigInteger, ForeignKey('fen.fen_id', name='fk_game_fen_association_fen_id'), nullable=False, index=True)
     n_move = Column(Integer, nullable=False)
     move_color = Column(String(5), nullable=False) # 'white' or 'black'
 
@@ -895,7 +897,7 @@ class GameFenAssociation(Base):
     fen = relationship("Fen", back_populates="game_associations", overlaps="games,fens")
 
     __table_args__ = (
-        UniqueConstraint('game_link', 'fen_fen', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
+        UniqueConstraint('game_link', 'fen_id', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
         Index(
             "ix_game_fen_association_game_order",
             "game_link",
@@ -908,7 +910,7 @@ class GameFenAssociation(Base):
 class FenContinuation(Base):
     __tablename__ = "fen_continuation"
     id = Column(Integer, primary_key=True, autoincrement=True)
-    fen_fen = Column(String, ForeignKey('fen.fen'), nullable=False, index=True)
+    fen_id = Column(BigInteger, ForeignKey('fen.fen_id', name='fk_fen_continuation_fen_id'), nullable=False)
     rank = Column(Integer, nullable=False) # PV rank: 2..4
     move = Column(String, nullable=False) # First move of the continuation
     score = Column(Float, nullable=False)
@@ -916,7 +918,7 @@ class FenContinuation(Base):
     fen = relationship("Fen", back_populates="continuations")
 
     __table_args__ = (
-        UniqueConstraint('fen_fen', 'rank', name='_fen_rank_uc'),
+        UniqueConstraint('fen_id', 'rank', name='uq_fen_continuation_fen_id_rank'),
     )
 
 

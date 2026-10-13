@@ -56,7 +56,8 @@ async def describe_examples(rows):
             arrival = (await session.execute(text("""
                 SELECT a.game_link, a.n_move, a.move_color,
                     CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END AS san
-                FROM (SELECT game_link,n_move,move_color FROM game_fen_association WHERE fen_fen=:fen LIMIT 1) a
+                FROM (SELECT game_link,n_move,move_color FROM game_fen_association
+                    WHERE fen_id=(SELECT fen_id FROM fen WHERE fen=:fen) LIMIT 1) a
                 LEFT JOIN LATERAL (SELECT white_move,black_move FROM moves
                     WHERE link=a.game_link AND n_move=a.n_move ORDER BY id LIMIT 1) m ON TRUE
             """), {'fen': row['fen']})).mappings().first()
@@ -102,7 +103,8 @@ async def position_games(fen, after=0):
         await session.execute(text("SET LOCAL statement_timeout = '5s'"))
         ids = (await session.execute(text("""
             SELECT DISTINCT game_link FROM game_fen_association
-            WHERE fen_fen=:fen AND game_link>:after ORDER BY game_link LIMIT 11
+            WHERE fen_id=(SELECT fen_id FROM fen WHERE fen=:fen)
+              AND game_link>:after ORDER BY game_link LIMIT 11
         """), {'fen':fen,'after':after})).scalars().all()
         if not ids: return {'rows': [], 'next_after': None}
         games = (await session.execute(text("""
@@ -111,7 +113,7 @@ async def position_games(fen, after=0):
         """), {'ids':ids[:10]})).mappings().all()
         occurrences = (await session.execute(text("""
             SELECT game_link,n_move,move_color FROM game_fen_association
-            WHERE fen_fen=:fen AND game_link=ANY(:ids)
+            WHERE fen_id=(SELECT fen_id FROM fen WHERE fen=:fen) AND game_link=ANY(:ids)
             ORDER BY game_link,n_move,move_color LIMIT 2001
         """), {'fen':fen,'ids':ids[:10]})).mappings().all()
     return {'rows':[{**dict(game), 'occurrences':[{'n_move':o['n_move'],'move_color':o['move_color']}

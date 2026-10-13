@@ -1,5 +1,9 @@
 import { getJson, requestJson } from '../../services/apiClient'
 
+export const fetchAutomaticIngestionJobs = ({ signal } = {}) => getJson('/jobs/active', { signal })
+export const fetchIngestionJobStatus = (jobId, { signal } = {}) => getJson(`/jobs/${encodeURIComponent(jobId)}`, { signal })
+export const fetchLatestIngestionTiming = ({ signal } = {}) => getJson('/fens/pipeline/timings/latest', { signal })
+
 export const fetchScoredOverview = ({ signal } = {}) => (
   getJson('/fens/scored/overview', { signal })
 )

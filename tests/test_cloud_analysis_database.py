@@ -175,10 +175,12 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         from chessism_api.operations.cloud_analysis import __main__ as daemon
         await controller.save_job(self.job.id, status="paused")
         cloud = Mock()
-        def test_engine(*args, **kwargs):
-            return create_async_engine(TEST_URL, connect_args={"server_settings": {"search_path": self.schema}})
+        async def test_engine(*args, **kwargs):
+            engine = create_async_engine(TEST_URL, connect_args={"server_settings": {"search_path": self.schema}})
+            AsyncDBSession.configure(bind=engine, info={})
+            return engine
         with tempfile.TemporaryDirectory() as directory, \
-             patch.object(daemon, "create_async_engine", side_effect=test_engine), \
+             patch.object(daemon, "bind_runtime_engine", side_effect=test_engine), \
              patch.object(daemon, "Client", return_value=cloud):
             marker = Path(directory) / "heartbeat"
             args = SimpleNamespace(gcloud="not-called", local_image="unused", poll_seconds=5, heartbeat_file=marker)

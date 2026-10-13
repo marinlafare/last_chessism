@@ -1,0 +1,73 @@
+.database-page .database-main { min-width: 0; width: 100%; padding-bottom: 110px; }
+.database-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+.database-heading h1 { margin: 0; color: var(--accent); font-size: 23px; }
+.database-heading > span { color: var(--muted); font-size: 13px; flex: 1; }
+.database-tools { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.database-search { position: relative; width: min(390px, 100%); }
+.database-search label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.database-tools input { width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface-2); color: var(--text); }
+.database-zoom { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.database-zoom output { min-width: 48px; text-align: center; font: 12px monospace; }
+.database-zoom select { max-width: 210px; padding: 7px 8px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.database-tools button, .database-relationships button { padding: 7px 10px; background: var(--surface-2); color: var(--text); border: 1px solid var(--border); border-radius: 4px; cursor: pointer; }
+.database-tools button:hover, .database-relationships button:hover { color: var(--accent); border-color: var(--accent); }
+.database-tools button:disabled { opacity: .4; cursor: not-allowed; }
+.database-search-results { position: absolute; top: 100%; left: 0; width: 100%; max-height: 320px; overflow: auto; z-index: 10; background: var(--surface-2); border: 1px solid var(--border); padding: 8px; box-shadow: 0 12px 30px #0008; }
+.database-search-results button { display: block; width: 100%; text-align: left; margin-top: 5px; overflow-wrap: anywhere; }
+.database-search-results small { color: var(--muted); }
+.database-hint { color: var(--muted); font-size: 12px; margin: 10px 0; }
+.database-error { border-left: 3px solid #ed8274; padding: 8px 12px; color: #ffb9af; }
+.database-canvas { position: relative; isolation: isolate; height: max(380px, calc(100dvh - 235px)); min-width: 0; overflow: hidden; border: 1px solid var(--border); border-radius: 8px; background-color: #0c1217; touch-action: none; cursor: grab; }
+.database-canvas:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.database-canvas { color: var(--accent); }
+.database-canvas.dragging, .database-canvas.dragging * { cursor: grabbing; user-select: none; }
+.database-world { position: absolute; top: 0; left: 0; transform-origin: 0 0; }
+.database-field { position: absolute; pointer-events: none; box-sizing: border-box; border: 2px dashed #455765; background-image: radial-gradient(#33434e 1px, transparent 1px); background-size: 22px 22px; }
+[data-database-family="chess"] { --database-family-color: #69c7a2; }
+[data-database-family="derived"] { --database-family-color: #7bb9da; }
+[data-database-family="processing"] { --database-family-color: #d9ad6d; }
+[data-database-family="research"] { --database-family-color: #b7a0dc; }
+[data-database-family="application"] { --database-family-color: #a2acb7; }
+[data-database-family="other"] { --database-family-color: #a4aeae; }
+.database-region { position: absolute; box-sizing: border-box; pointer-events: none; border: 1px solid color-mix(in srgb, var(--database-family-color) 32%, transparent); border-radius: 10px; background: color-mix(in srgb, var(--database-family-color) 3%, transparent); }
+.database-region h2 { margin: 0; padding: 18px 24px; color: var(--database-family-color); font: 600 15px sans-serif; letter-spacing: .04em; }
+.database-table { position: absolute; width: 300px; height: 54px; box-sizing: border-box; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #455765; border-radius: 7px; background: #17212a; color: #e3ebf2; box-shadow: 0 5px 18px #0005; cursor: default; }
+.database-table[data-database-group="games"] { border-color: #26d891; box-shadow: 0 0 0 1px #26d89170; }
+.database-table.expanded { height: 300px; }
+.database-table.selected { outline: 2px solid var(--accent); outline-offset: 3px; z-index: 2; }
+.database-table.related { box-shadow: 0 0 0 1px #75c7a6; }
+.database-table.dimmed { opacity: .38; }
+.database-table-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; width: 100%; flex-shrink: 0; height: 52px; background: color-mix(in srgb, var(--database-family-color) 13%, #17212a); color: color-mix(in srgb, var(--database-family-color) 70%, white); border: 0; text-align: left; padding: 8px 10px; cursor: grab; touch-action: none; user-select: none; }
+.database-table-header > span:first-child { min-width: 0; flex: 1; }
+.database-table-titlebar { display: flex; flex-shrink: 0; height: 52px; background: color-mix(in srgb, var(--database-family-color) 13%, #17212a); }
+.database-table-titlebar .database-table-header { width: auto; flex: 1; min-width: 0; }
+.database-table.expanded .database-table-titlebar { border-bottom: 1px solid #455765; }
+.database-table-eye { display: grid; place-items: center; flex-shrink: 0; width: 36px; margin: 6px 5px 6px 0; padding: 7px; border: 0; border-radius: 4px; color: var(--database-family-color); background: transparent; cursor: pointer; }
+.database-table-eye svg { width: 20px; height: 20px; }
+.database-table-eye:hover { background: #ffffff14; color: white; }
+.database-table-eye:focus-visible { outline: 2px solid var(--accent); }
+.database-table-disclosure { opacity: .75; }
+.database-table-header small { display: block; opacity: .7; font-size: 10px; }
+.database-table-header strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font: 600 13px monospace; }
+.database-table-header:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.database-table-meta { display: flex; justify-content: space-between; gap: 8px; padding: 7px 9px; color: var(--muted); font-size: 10px; }
+.database-columns { flex: 1; min-height: 0; margin: 0; padding: 0 8px; list-style: none; overflow: auto; overscroll-behavior: contain; scrollbar-width: thin; touch-action: pan-y; }
+.database-columns li { display: grid; grid-template-columns: 40px minmax(0, 1fr) minmax(64px, .75fr); gap: 5px; padding: 5px 0; border-bottom: 1px solid #ffffff0a; font: 11px monospace; }
+.database-column-name, .database-column-type { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.database-column-type { text-align: right; opacity: .7; }
+.database-columns .database-zoom-hint { display: block; text-align: center; padding-top: 50px; opacity: .65; }
+.database-key-markers { display: flex; gap: 3px; align-items: center; color: #82d6b0; }
+.database-key-markers abbr { text-decoration: none; font-size: 9px; border: 1px solid currentColor; border-radius: 2px; padding: 0 2px; }
+.database-table footer { flex-shrink: 0; padding: 8px; color: var(--muted); font-size: 9px; }
+.database-connectors { position: absolute; left: 0; top: 0; width: 1px; height: 1px; overflow: visible; pointer-events: none; color: inherit; }
+.database-connectors > path { fill: none; stroke: currentColor; stroke-width: 2; }
+.database-empty { padding: 28px; color: var(--muted); }
+.database-relationships { margin-top: 16px; padding: 16px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 7px; }
+.database-relationships header { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.database-relationships h2 { margin: 0; font-size: 16px; color: var(--accent); overflow-wrap: anywhere; }
+.database-relationships p { font-size: 12px; color: var(--muted); }
+.database-relationships ul { padding: 0; margin: 0; list-style: none; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 8px; }
+.database-relationships li { display: flex; flex-direction: column; align-items: start; gap: 5px; padding: 10px; border: 1px solid var(--border-soft); min-width: 0; }
+.database-relationships button, .database-relationships code, .database-relationships small { max-width: 100%; overflow-wrap: anywhere; }
+.database-relationship-direction, .database-relationships small { font-size: 11px; color: var(--muted); }
+@media (max-width: 700px) { .database-heading { gap: 8px; } .database-tools { gap: 10px; } .database-search { width: 100%; } .database-canvas { height: 65dvh; min-height: 350px; } }

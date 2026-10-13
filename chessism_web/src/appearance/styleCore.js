@@ -10,6 +10,25 @@ export const registryTarget = (registry, scope, id) => registryScope(registry,sc
 export const overrideKey = row => `${row.scope}@${row.target}@${row.property}`
 export const sameOverrides = (a, b) => JSON.stringify([...a].sort((x,y)=>overrideKey(x).localeCompare(overrideKey(y)))) === JSON.stringify([...b].sort((x,y)=>overrideKey(x).localeCompare(overrideKey(y))))
 
+// Split formerly shared controls without resetting existing presets. Seed only
+// missing values when a saved snapshot is accepted, never while editing a draft.
+// The next normal save persists the independent rows; reads do not change the DB.
+export function seedIndependentStyles(registry, rows) {
+  const result = [...rows], existing = new Set(rows.map(overrideKey))
+  for (const [scope, spec] of Object.entries(registry?.scopes || {})) {
+    for (const [target, definition] of Object.entries(spec.targets || {})) {
+      if (!definition.initialStyleFrom) continue
+      for (const source of rows) {
+        if (source.scope !== scope || source.target !== definition.initialStyleFrom
+          || !definition.properties.includes(source.property)) continue
+        const row = { ...source, target }, key = overrideKey(row)
+        if (!existing.has(key)) { result.push(row); existing.add(key) }
+      }
+    }
+  }
+  return result
+}
+
 export function validValue(spec, value) {
   if (spec.kind === 'color') return typeof value === 'string' && /^#[\da-f]{6}([\da-f]{2})?$/i.test(value)
   if (spec.kind === 'number') return typeof value === 'number' && Number.isFinite(value) && value >= spec.min && value <= spec.max
@@ -20,11 +39,18 @@ export function appearanceCss(registry, rows) {
   if (!registry) return ''
   return rows.flatMap(row => {
     const spec = registry.properties[row.property]
-    if (!registryTarget(registry,row.scope,row.target)?.properties.includes(row.property) || !spec || !validValue(spec,row.value)) return []
+    const target = registryTarget(registry,row.scope,row.target)
+    if (!target?.properties.includes(row.property) || !spec || !validValue(spec,row.value)) return []
     // IDs, property names and suffixes come from the server-owned registry only.
     if (!/^[\w.-]+$/.test(row.target) || !/^[\w-]+$/.test(row.scope)) return []
     const value = spec.kind === 'number' ? `${row.value}${spec.unit || ''}` : spec.kind === 'choice' && row.property === 'fontFamily' ? JSON.stringify(row.value) : row.value
-    return [`[data-style-scope="${row.scope}"][data-style-id="${row.target}"][data-style-id][data-style-id][data-style-id]${spec.state || ''}{${spec.css}:${value};${row.property==='borderWidth'?'border-style:solid;':''}}`]
+    const selector = `[data-style-scope="${row.scope}"][data-style-id="${row.target}"][data-style-id][data-style-id][data-style-id]`
+    // Only opted-in toggles retain their hover colors while pressed. A
+    // fixed attribute selector also keeps the rule independent of row order.
+    const pressed = ((target.pressedUsesHoverColor && row.property === 'hoverColor')
+      || (target.pressedUsesHoverBackground && row.property === 'hoverBackground'))
+      ? `,${selector}[aria-pressed="true"]` : ''
+    return [`${selector}${spec.state || ''}${pressed}{${spec.css}:${value};${row.property==='borderWidth'?'border-style:solid;':''}}`]
   }).join('\n')
 }
 

@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Isolated backup volume UI test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import DatabaseBackups from '/src/pages/DatabaseBackups.jsx'
+import '/src/index.css'
+
+const state = window.backupVolumeTest = { requests: [], errors: [], fail: false, pending: false }
+window.addEventListener('error', e => state.errors.push(e.message))
+window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
+const realTimeout = window.setTimeout.bind(window)
+window.setTimeout = (fn, delay, ...args) => {
+  if (delay === 2500 || delay === 60000) { state.refreshVolume = fn; return realTimeout(fn, 600000, ...args) }
+  return realTimeout(fn, delay, ...args)
+}
+state.volume = {
+  available: true, total_bytes: 847000000000, used_bytes: 168000000000, free_bytes: 679000000000,
+  free_floor_bytes: 150000000000, measured_at: '2026-10-13T03:00:00Z', refreshing: false,
+  allocations: [
+    { id: 'chessism', label: 'Chessism', is_application: true, reserved_bytes: 200000000000, used_bytes: 125500000000 },
+    { id: 'real-butler', label: 'real-butler', reserved_bytes: 50000000000, used_bytes: 12000000000 },
+    { id: 'timeshift', label: 'timeshift', reserved_bytes: null, used_bytes: 22000000000 },
+    { id: 'tiny', label: 'tiny app', reserved_bytes: null, used_bytes: 4096 },
+    { id: 'empty', label: 'empty app', reserved_bytes: null, used_bytes: 0 },
+  ],
+}
+window.fetch = async (input, options = {}) => {
+  const pathname = new URL(input, location.href).pathname.replace(/^\/api/, '')
+  const method = options.method || 'GET'; state.requests.push({ pathname, method })
+  if (method !== 'GET') throw Error('No writes allowed in this test')
+  const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
+  if (pathname === '/backups/database/volume') {
+    if (state.fail) throw Error('Synthetic disk read error')
+    return reply(state.pending ? { ...state.volume, allocations: undefined, refreshing: true } : state.volume)
+  }
+  if (pathname === '/backups/database') return reply({
+    storage: { ...state.volume, application_bytes: 125500000000, quota_bytes: 200000000000,
+      database_backup_bytes: 44000000000, archived_wal_bytes: 76000000000 },
+    status: { status: 'success', detail: 'The latest backup was verified.' },
+    restore_test: { status: 'success' }, policy: { manual_only: true }, backups: [],
+  })
+  throw Error('Unexpected API request: ' + pathname)
+}
+createRoot(document.getElementById('root')).render(React.createElement(DatabaseBackups))
+</script></body></html>

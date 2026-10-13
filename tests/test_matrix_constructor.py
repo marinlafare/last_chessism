@@ -108,7 +108,7 @@ class MatrixConstructorTests(unittest.TestCase):
         })
         _, select_sql, params = matrix_sql(config)
         self.assertIn("EXISTS", select_sql)
-        self.assertIn("scope_gfa.fen_fen = f.fen", select_sql)
+        self.assertIn("scope_gfa.fen_id = f.fen_id", select_sql)
         self.assertIn("f.score IS NOT NULL", select_sql)
         self.assertEqual(params["players"], ["lafareto"])
 

@@ -332,14 +332,14 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
         <div><span>Scored positions</span><strong {...pageStyleTarget('value')}>{formatNumber(coverage.scored_positions || 0)}</strong></div>
       </div>
       <div className="player-analysis-chart-list">
-        <PlayerAnalysisDisclosure label="Accuracy">
+        <PlayerAnalysisDisclosure label="Accuracy" buttonTarget="player.accuracy.toggle">
         <PlayerDailyEfficiencyChart
           availableModes={availableModes}
           playerName={playerName}
           onSelectPoint={setExplorerSelection}
         />
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Days">
+        <PlayerAnalysisDisclosure label="Days" buttonTarget="player.qualityDays.toggle">
         <MeasureDaysChart
           quality={dayQuality}
           activeModes={dayModes}
@@ -348,7 +348,7 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
           onExplore={setExplorerSelection}
         />
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Hours">
+        <PlayerAnalysisDisclosure label="Hours" buttonTarget="player.qualityHours.toggle">
         <MeasureHoursChart
           quality={hourQuality}
           activeModes={hourModes}

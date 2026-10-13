@@ -1,5 +1,6 @@
 .git
 .codex
+.local-migrations/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/

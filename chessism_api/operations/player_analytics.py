@@ -137,7 +137,7 @@ sequenced AS MATERIALIZED (
         LAG(f.analysis_source) OVER game_order AS previous_analysis_source
     FROM eligible_games eligible
     JOIN game_fen_association gfa ON gfa.game_link = eligible.link
-    JOIN fen f ON f.fen = gfa.fen_fen
+    JOIN fen f ON f.fen_id = gfa.fen_id
     WINDOW game_order AS (
         PARTITION BY eligible.link
         ORDER BY gfa.n_move, CASE WHEN gfa.move_color = 'white' THEN 0 ELSE 1 END

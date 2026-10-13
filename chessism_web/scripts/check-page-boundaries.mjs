@@ -10,6 +10,7 @@ const routeFiles = [
   ['pages/Games.jsx', './games/games.css'],
   ['pages/Players.jsx', './players/players.css'],
   ['pages/SystemStatus.jsx', './system-status/systemStatus.css'],
+  ['pages/Database.jsx', './database/database.css'],
   ['pages/DownloadNewGames.jsx', './download-new-games/downloadNewGames.css'],
   ['pages/MainCharacters.jsx', './main-characters/mainCharacters.css'],
   ['pages/SecondaryCharacter.jsx', './secondary-character/secondaryCharacter.css'],
@@ -25,6 +26,7 @@ const routeFiles = [
 ]
 
 const apiBoundaryFiles = [
+  'pages/database/databaseApi.js',
   'pages/home/homeApi.js',
   'pages/system-status/systemStatusApi.js',
   'pages/games/gamesApi.js',

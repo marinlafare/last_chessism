@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 
 from chessism_api.operations.backup_coordination import release_backup, reserve_backup
+from chessism_api.operations import database_backups
+from chessism_api.operations.backup_volume_usage import volume_usage
 from chessism_api.operations.database_backups import (
     BackupCapacityError,
     BackupUnavailableError,
@@ -31,6 +33,20 @@ router = APIRouter()
 async def api_database_backup_overview() -> dict:
     """Return backup storage, policy, current status, and verified history."""
     return database_backup_overview()
+
+
+@router.get("/database/volume")
+async def api_backup_volume() -> dict:
+    """Read-only allocation diagram; an independent, bounded background scan."""
+    storage = database_backups.storage_snapshot(include_app_usage=False)
+    if not storage['available']:
+        return {**storage, 'allocations': [], 'refreshing': False}
+    return {
+        **storage,
+        **volume_usage(database_backups.BACKUP_VOLUME_ROOT,
+                       database_backups.EXPECTED_VOLUME_UUID,
+                       database_backups.APP_ID, database_backups.APP_QUOTA_BYTES),
+    }
 
 
 @router.post("/database")

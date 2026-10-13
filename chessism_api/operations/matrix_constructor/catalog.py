@@ -103,7 +103,7 @@ GAME_COLUMNS = (
     MatrixColumn("analyzed_positions", "Analyzed positions", "gas.analyzed_positions", "game_analysis_summary.analyzed_positions", storage_dtype="int32"),
     MatrixColumn("total_positions", "Total positions", "gas.total_positions", "game_analysis_summary.total_positions", storage_dtype="int32"),
     MatrixColumn("fully_analyzed", "Fully analyzed", "CASE WHEN gas.is_fully_analyzed THEN 1 ELSE 0 END", "game_analysis_summary.is_fully_analyzed", storage_dtype="uint8"),
-    MatrixColumn("average_abs_score", "Average absolute CP", "gas.avg_abs_score", "game_analysis_summary.avg_abs_score"),
+    MatrixColumn("average_abs_score", "Average absolute CP", "score_stats.avg_abs_score", "fen.score via game_fen_association"),
 )
 
 GAME_PLAYER_COLUMNS = (
@@ -162,7 +162,7 @@ MOVE_COLUMNS = (
     MatrixColumn("game_salience", "Game salience", "gsl.salience", "game_player_salience.salience"),
     MatrixColumn(
         "corpus_games_with_position", "Player corpus games with position",
-        "CASE WHEN pss.status = 'ready' AND gfa.fen_fen IS NOT NULL THEN COALESCE(ppf.games_with_position, 1) END",
+        "CASE WHEN pss.status = 'ready' AND gfa.fen_id IS NOT NULL THEN COALESCE(ppf.games_with_position, 1) END",
         "player_position_frequency.games_with_position", storage_dtype="int64",
     ),
     MatrixColumn(
@@ -172,17 +172,17 @@ MOVE_COLUMNS = (
     ),
     MatrixColumn(
         "position_salience", "Position salience",
-        "CASE WHEN pss.status = 'ready' AND gfa.fen_fen IS NOT NULL THEN 1.0 / COALESCE(ppf.games_with_position, 1) / salience_occurrence.occurrence_index END",
+        "CASE WHEN pss.status = 'ready' AND gfa.fen_id IS NOT NULL THEN 1.0 / COALESCE(ppf.games_with_position, 1) / salience_occurrence.occurrence_index END",
         "player_position_frequency",
     ),
     MatrixColumn(
         "depth_weight", "Salience depth weight",
-        "CASE WHEN gfa.fen_fen IS NOT NULL THEN 0.25 + 0.75 * LEAST((((m.n_move - 1) * 2 + side.color_order)::double precision) / 16.0, 1.0) END",
+        "CASE WHEN gfa.fen_id IS NOT NULL THEN 0.25 + 0.75 * LEAST((((m.n_move - 1) * 2 + side.color_order)::double precision) / 16.0, 1.0) END",
         "game_fen_association",
     ),
     MatrixColumn(
         "weighted_move_salience", "Weighted move salience",
-        "CASE WHEN pss.status = 'ready' AND gfa.fen_fen IS NOT NULL THEN (1.0 / COALESCE(ppf.games_with_position, 1) / salience_occurrence.occurrence_index) * (0.25 + 0.75 * LEAST((((m.n_move - 1) * 2 + side.color_order)::double precision) / 16.0, 1.0)) END",
+        "CASE WHEN pss.status = 'ready' AND gfa.fen_id IS NOT NULL THEN (1.0 / COALESCE(ppf.games_with_position, 1) / salience_occurrence.occurrence_index) * (0.25 + 0.75 * LEAST((((m.n_move - 1) * 2 + side.color_order)::double precision) / 16.0, 1.0)) END",
         "player_position_frequency",
     ),
 )

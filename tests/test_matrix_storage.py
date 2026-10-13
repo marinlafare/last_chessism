@@ -3,6 +3,7 @@ import json
 import tempfile
 import unittest
 import uuid
+from contextlib import ExitStack
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -204,9 +205,11 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
                 calls.append("matrices"); return matrices
             async def pg_backup(*args, **kwargs):
                 calls.append("database"); self.assertEqual(kwargs["baseline_app_bytes"], 125)
-            with (
+            patches = (
                 patch.object(job, "ensure_backup_reservation", AsyncMock()),
                 patch.object(job, "release_backup", AsyncMock()),
+                patch('chessism_api.database.fen_identity.schema_version', return_value='numeric_v2'),
+                patch('chessism_api.database.fen_reference_identity.schema_version', return_value='numeric_v1'),
                 patch.object(job, "backup_completed_matrices", side_effect=save_matrices),
                 patch.object(job, "definition_backup_manifest", AsyncMock(return_value={"count": 0, "storage": "postgresql"})),
                 patch.object(job, "algorithm_backup_manifest", AsyncMock(return_value={"schema_version": 1, "definitions": {"count": 0}, "completed_runs": {"count": 0}})),
@@ -223,12 +226,18 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
                 patch.object(backup, "_run_command_capture", AsyncMock()),
                 patch.object(backup, "_run_backup_command", side_effect=pg_backup),
                 patch.object(backup, "record_application_usage", return_value=135),
-            ):
-                result = await job._run_database_backup_job({"job_id": "test", "redis": AsyncMock()}, AsyncMock())
+            )
+            with ExitStack() as stack:
+                for context in patches:
+                    stack.enter_context(context)
+                session = AsyncMock()
+                session.execute.return_value = MagicMock()
+                result = await job._run_database_backup_job({"job_id": "test", "redis": AsyncMock()}, session)
             self.assertEqual(calls, ["matrices", "database"])
             self.assertEqual(result["matrices"], matrices)
             manifest = json.loads((root / "manifests" / "testF.json").read_text())
-            self.assertEqual(manifest["schema_version"], 5)
+            self.assertEqual(manifest["schema_version"], 6)
+            self.assertEqual(manifest["fen_reference_version"], 'numeric_v1')
             self.assertEqual(manifest["algorithms"]["completed_runs"]["count"], 0)
             self.assertEqual(manifest["matrices"], matrices)
             self.assertEqual(manifest["matrix_definitions"], {"count": 0, "storage": "postgresql"})

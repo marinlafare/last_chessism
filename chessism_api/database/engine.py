@@ -553,12 +553,23 @@ async def _ensure_fen_analysis_schema(
             await connection.close()
     return migrated_no_move_games
 
-async def init_db(connection_string: str):
+async def init_db(connection_string: str, *, relational_storage=None):
     """
     Initializes the asynchronous SQLAlchemy database engine and ensures
     the database and all mapped tables exist.
     """
     global async_engine
+
+    if relational_storage is not None:
+        from chessism_api.database.relational_storage import (
+            create_relational_engine, SESSION_KEY, RelationalStorage,
+        )
+        if not isinstance(relational_storage, RelationalStorage):
+            raise TypeError('Invalid relational storage configuration')
+        connection_string = connection_string.replace('postgresql://','postgresql+asyncpg://',1)
+        async_engine = await create_relational_engine(connection_string,relational_storage)
+        AsyncDBSession.configure(bind=async_engine,info={SESSION_KEY:relational_storage})
+        return
 
     # Parse connection string for asyncpg (used for initial DB creation check)
     parsed_url = urlparse(connection_string)
@@ -612,6 +623,19 @@ async def init_db(connection_string: str):
 
     async_engine = create_async_engine(connection_string, echo=False) # echo=True for SQL logging
 
+    # An explicit, rehearsed migration owns the large rewrite. Never silently
+    # launch it from an API/worker restart or accept a half-migrated schema.
+    from chessism_api.database.fen_identity import require_numeric_fen_schema
+    from chessism_api.database.fen_reference_identity import require_numeric_reference_schema
+    async with async_engine.connect() as connection:
+        normalized = await connection.scalar(text("""SELECT EXISTS(
+            SELECT 1 FROM information_schema.columns WHERE table_schema='public'
+              AND table_name='game' AND column_name='white_player_id')"""))
+        if normalized:
+            raise RuntimeError('Normalized game storage requires explicit relational configuration; legacy startup refused')
+        await require_numeric_fen_schema(connection)
+        await require_numeric_reference_schema(connection)
+
     max_retries = 10
     retry_delay_seconds = 5
     
@@ -663,7 +687,7 @@ async def init_db(connection_string: str):
                 raise # Re-raise the unknown error
     else: # This 'else' block runs if the 'for' loop completes without 'break'
         raise RuntimeError("Database connection failed after all retries. The database may be down.")
-    AsyncDBSession.configure(bind=async_engine)
+    AsyncDBSession.configure(bind=async_engine,info={})
     if migrated_no_move_games:
         # Refresh only projections whose game counts changed. FEN rows and
         # scored-position summaries are deliberately untouched.

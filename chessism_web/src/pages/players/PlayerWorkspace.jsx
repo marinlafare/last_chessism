@@ -415,10 +415,10 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
           {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
 
           <section {...pageStyleTarget('panel')} className="players-top-grid">
-            <div className="games-mode-detail players-profile-navigation-section">
+            <div {...pageStyleTarget('player.profile')} className="games-mode-detail players-profile-navigation-section">
               <div className="section-head">
                 <div className="players-title-navigation">
-                  <button {...pageStyleTarget('button')}
+                  <button {...pageStyleTarget('player.previous')}
                     className="players-title-arrow"
                     type="button"
                     aria-label={`Previous player${playerNeighbors?.previous_player ? `: ${playerNeighbors.previous_player}` : ''}`}
@@ -431,7 +431,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                     </svg>
                   </button>
                   <div className="players-title-picker" ref={playerPickerRef}>
-                    <button {...pageStyleTarget('button')}
+                    <button {...pageStyleTarget('player.name')}
                       className="games-action-title players-title-select"
                       type="button"
                       aria-haspopup="menu"
@@ -464,7 +464,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                       </div>
                     ) : null}
                   </div>
-                  <button {...pageStyleTarget('button')}
+                  <button {...pageStyleTarget('player.next')}
                     className="players-title-arrow"
                     type="button"
                     aria-label={`Next player${playerNeighbors?.next_player ? `: ${playerNeighbors.next_player}` : ''}`}
@@ -478,7 +478,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                   </button>
                 </div>
                 <div className="players-profile-actions">
-                  <button {...pageStyleTarget('button')}
+                  <button {...pageStyleTarget('player.update')}
                     className="btn btn-primary btn-inline players-update-button"
                     type="button"
                     title="Fetch games from the player's latest saved month through the current month"
@@ -487,7 +487,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                   >
                     {gamesUpdateLoading ? 'queueing…' : gamesUpdateActive ? 'updating…' : 'update'}
                   </button>
-                  <button {...pageStyleTarget('button')}
+                  <button {...pageStyleTarget('player.delete')}
                     className="btn btn-danger btn-inline players-delete-button"
                     type="button"
                     disabled={!activePlayer || loading || deletePreviewLoading || deleteActive || gamesUpdateActive || Boolean(profile?.deleted_at)}
@@ -499,7 +499,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
               </div>
             </div>
 
-            <div className="games-mode-detail players-profile-section">
+            <div {...pageStyleTarget('player.profile')} className="games-mode-detail players-profile-section">
               <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
               <div className="players-profile-layout">

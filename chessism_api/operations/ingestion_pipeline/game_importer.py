@@ -77,6 +77,7 @@ async def format_games(
 
 def _prepare_game_bundle(
     formatted_games: list[dict[str, Any]],
+    *, archive_nonstandard: bool = False,
 ) -> dict[str, Any]:
     bundle: dict[str, Any] = {
         "games": [],
@@ -105,10 +106,18 @@ def _prepare_game_bundle(
             continue
 
         if int(game["n_moves"]) == 0:
-            bundle["no_move_games"].append({
-                "game_id": game["link"],
-                "played_at": game["played_at"],
-            })
+            from .relational_repository import standard_game
+            if archive_nonstandard and not standard_game(game):
+                # The typed archive retains setup/rules even when no move was
+                # played; a timestamp-only tombstone would lose that metadata.
+                bundle['games'].append(game)
+                bundle['affected_players'].update((game['white'],game['black']))
+                bundle['affected_months'].add((int(game['year']),int(game['month'])))
+            else:
+                bundle["no_move_games"].append({
+                    "game_id": game["link"],
+                    "played_at": game["played_at"],
+                })
             continue
 
         game_moves = format_one_game_moves(moves_data) if moves_data else []
@@ -132,7 +141,11 @@ async def insert_games_months_moves_and_players(
 ) -> str:
     """Validate and atomically persist a parsed game import."""
     started = time.monotonic()
-    bundle = _prepare_game_bundle(formatted_games)
+    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.relational_storage import storage_for
+    async with AsyncDBSession() as selection_session:
+        archive_nonstandard = storage_for(selection_session) is not None
+    bundle = _prepare_game_bundle(formatted_games,archive_nonstandard=archive_nonstandard)
     durable_row_count = sum(
         len(bundle[key])
         for key in (

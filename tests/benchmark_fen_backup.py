@@ -38,7 +38,7 @@ async def run(count):
             await conn.execute(text('''INSERT INTO fen (fen,n_games,moves_counter,score,next_moves,analyzed_at)
                 SELECT repeat('synthetic-',6)||i,1,'{}',i%200,'e2e4',now()-interval '1 day'
                 FROM generate_series(1,:n) AS i'''), {'n': count})
-            await conn.execute(text("INSERT INTO fen_continuation (fen_fen,rank,move,score) SELECT fen,1,'e2e4',score FROM fen"))
+            await conn.execute(text("INSERT INTO fen_continuation (fen_id,rank,move,score) SELECT fen_id,1,'e2e4',score FROM fen"))
             await conn.execute(text('ANALYZE fen'))
             await conn.execute(text('ANALYZE fen_continuation'))
         with tempfile.TemporaryDirectory() as tmp:

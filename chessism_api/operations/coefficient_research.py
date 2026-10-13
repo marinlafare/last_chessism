@@ -360,7 +360,7 @@ async def _load_aggregated_observations(
             FROM game
             JOIN game_analysis_summary coverage ON coverage.link = game.link
             JOIN game_fen_association association ON association.game_link = game.link
-            JOIN fen ON fen.fen = association.fen_fen
+            JOIN fen ON fen.fen_id = association.fen_id
             WHERE {_common_game_filters()}
               AND association.n_move > :opening_moves_excluded
               AND fen.score IS NOT NULL

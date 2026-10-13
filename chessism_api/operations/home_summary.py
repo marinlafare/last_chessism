@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.compact_storage import compact_for
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES as TITLES
 
 LOG = logging.getLogger(__name__)
@@ -80,14 +81,33 @@ async def get_home_summary(redis):
 
 
 async def run_home_summary_refresh(ctx):
-    async with AsyncDBSession.begin() as session:
+    return await refresh_home_summary()
+
+
+async def refresh_home_summary(*, session_factory=None, transaction_managed=False):
+    """Allow migration tooling to own the transaction without changing workers.
+
+    A managed caller must supply sessions bound to one REPEATABLE READ (or
+    SERIALIZABLE) transaction. Its sessions use savepoints, never commit the
+    caller's transaction. Ordinary queue workers retain their existing path.
+    """
+    if transaction_managed and session_factory is None:
+        raise ValueError('Managed summary refresh requires an explicit session factory')
+    factory = session_factory or AsyncDBSession
+    if transaction_managed:
+        async with factory() as session:
+            isolation = await session.scalar(text('SHOW transaction_isolation'))
+            if isolation not in ('repeatable read', 'serializable'):
+                raise RuntimeError('Managed homepage refresh requires a stable snapshot')
+    async with factory.begin() as session:
         await session.execute(text("""
             INSERT INTO home_titled_summary (id, attempted_at) VALUES (1, clock_timestamp())
             ON CONFLICT (id) DO UPDATE SET attempted_at = EXCLUDED.attempted_at
         """))
     try:
-        async with AsyncDBSession() as session:
-            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+        async with factory() as session:
+            if not transaction_managed:
+                await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
             await session.execute(text("SET LOCAL statement_timeout = '900s'"))
             await session.execute(text("SET LOCAL lock_timeout = '5s'"))
             await session.execute(text("SET LOCAL work_mem = '64MB'"))
@@ -95,9 +115,11 @@ async def run_home_summary_refresh(ctx):
             if not await session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_ID}):
                 return {"status": "already_refreshing"}
             revision = await session.scalar(text("SELECT revision FROM home_summary_source WHERE id = 1"))
-            await session.execute(text("""
+            compact = compact_for(session)
+            owner_projection = 'id AS player_id,' if compact else ''
+            await session.execute(text(f"""
                 CREATE TEMP TABLE home_titles ON COMMIT DROP AS
-                SELECT player_name, UPPER(TRIM(title)) AS title FROM player
+                SELECT {owner_projection} player_name, UPPER(TRIM(title)) AS title FROM player
                 WHERE deleted_at IS NULL AND UPPER(TRIM(title)) = ANY(CAST(:titles AS text[]))
             """), {"titles": list(TITLES)})
             await session.execute(text("CREATE UNIQUE INDEX ON home_titles (player_name)"))
@@ -120,15 +142,17 @@ async def run_home_summary_refresh(ctx):
             """))).mappings().one()
             titled_fens = await session.scalar(text("""
                 SELECT count(*) FROM (
-                    SELECT a.fen_fen FROM game_fen_association a
+                    SELECT a.fen_id FROM game_fen_association a
                     JOIN home_titled_games g ON g.link = a.game_link
-                    GROUP BY a.fen_fen
+                    GROUP BY a.fen_id
                 ) distinct_titled_fens
             """))
-            await session.execute(text("DELETE FROM home_titled_player_summary"))
-            await session.execute(text("""
-                INSERT INTO home_titled_player_summary (player_name, title, games, game_half_units)
-                SELECT p.player_name, p.title, count(c.player_name), coalesce(sum(c.units), 0)
+            target = compact.table('home_titled_player_summary') if compact else 'home_titled_player_summary'
+            owner_key = 'player_id' if compact else 'player_name'
+            await session.execute(text(f"DELETE FROM {target}"))
+            await session.execute(text(f"""
+                INSERT INTO {target} ({owner_key}, title, games, game_half_units)
+                SELECT p.{owner_key}, p.title, count(c.player_name), coalesce(sum(c.units), 0)
                 FROM home_titles p LEFT JOIN (
                     SELECT white AS player_name, CASE WHEN black IS NULL THEN 2 ELSE 1 END AS units
                     FROM home_titled_games WHERE white IS NOT NULL
@@ -136,7 +160,7 @@ async def run_home_summary_refresh(ctx):
                     SELECT black, CASE WHEN white IS NULL THEN 2 ELSE 1 END
                     FROM home_titled_games WHERE black IS NOT NULL
                 ) c ON c.player_name = p.player_name
-                GROUP BY p.player_name, p.title
+                GROUP BY p.{owner_key}, p.title
             """))
             half_units = await session.scalar(text("SELECT coalesce(sum(game_half_units),0) FROM home_titled_player_summary"))
             if half_units != 2 * counts["titled_games"]:
@@ -149,7 +173,7 @@ async def run_home_summary_refresh(ctx):
             await session.commit()
     except Exception:
         LOG.exception("Homepage summary rebuild failed; retaining previous snapshot")
-        async with AsyncDBSession.begin() as session:
+        async with factory.begin() as session:
             await session.execute(text("""
                 UPDATE home_titled_summary SET last_error=
                     'Summary refresh failed; the previous snapshot is retained.' WHERE id=1

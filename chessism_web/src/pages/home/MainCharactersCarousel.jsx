@@ -65,22 +65,6 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
 
   return (
     <section {...pageStyleTarget('characters.panel')} className="main-characters-carousel" aria-labelledby="main-characters-title">
-      <div className="carousel-head">
-        <h2 {...pageStyleTarget('title')} className="character-list-title" id="main-characters-title">
-          {titledOnly ? 'TITLED' : 'UNTITLED'}
-        </h2>
-        <button {...pageStyleTarget('button')} type="button" className="character-medal-toggle"
-          aria-label="Titled players" aria-pressed={titledOnly}
-          title={titledOnly ? 'Show untitled players · Blitz rating' : 'Show titled players · Blitz rating'}
-          onClick={() => { onTitleFilterChange?.(!titledOnly); setPlayers([]); setPage(1); setLoading(true) }}>
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
-            <path d="M7 3H3l6 8m8-8h4l-6 8M7 3l5 7 5-7" />
-            <circle cx="12" cy="16" r="6" />
-            <path d="m12 12 1.1 2.3 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4Z" fill="currentColor" stroke="none" />
-          </svg>
-        </button>
-      </div>
-
       {error ? <div className="status-banner warn">{error}</div> : null}
 
       <div className="character-rating-list" aria-label={`${titledOnly ? 'Titled' : 'Untitled'} players by blitz rating`} aria-busy={loading}>
@@ -105,7 +89,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
                   }}>
                   <span className="character-rating-rank">#{absoluteIndex + 1}</span>
                   <span className="character-rating-name">{getDisplayName(player)}</span>
-                  <strong {...pageStyleTarget('value')} className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
+                  <strong {...pageStyleTarget('characters.rating')} className="character-rating-value">{formatNumber(getPlayerRating(player))}</strong>
                 </a>
               )
             })}
@@ -134,6 +118,21 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
           </div>
         </div>
       </div>}
+      <div className="character-list-heading-row">
+        <h2 {...pageStyleTarget('title')} className="character-list-title" id="main-characters-title">
+          {titledOnly ? 'TITLED' : 'UNTITLED'}
+        </h2>
+        <button {...pageStyleTarget('characters.medal')} type="button" className="character-medal-toggle"
+          aria-label="Titled players" aria-pressed={titledOnly}
+          title={titledOnly ? 'Show untitled players · Blitz rating' : 'Show titled players · Blitz rating'}
+          onClick={() => { onTitleFilterChange?.(!titledOnly); setPlayers([]); setPage(1); setLoading(true) }}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            <path d="M7 3H3l6 8m8-8h4l-6 8M7 3l5 7 5-7" />
+            <circle cx="12" cy="16" r="6" />
+            <path d="m12 12 1.1 2.3 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4Z" fill="currentColor" stroke="none" />
+          </svg>
+        </button>
+      </div>
     </section>
   )
 }

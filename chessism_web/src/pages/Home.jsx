@@ -5,7 +5,6 @@ import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MainCharactersCarousel from './home/MainCharactersCarousel'
 import { DashboardSummaryPanel } from './home/Hero'
-import ProofPoints from './home/ProofPoints'
 import { playerFromLocation, playerHomeHref } from '../services/navigation'
 
 const PlayerWorkspace = lazy(() => import('./players/PlayerWorkspace'))
@@ -51,7 +50,6 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
               <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={selectPlayer} />
             </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a player to explore their profile and analysis here.</p>}
           </section>
-          <ProofPoints />
         </main>
         <Footer />
       </div>

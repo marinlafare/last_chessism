@@ -451,7 +451,7 @@ export default function PlayerBehaviouralPanel({
       </div>
 
       <div className="player-analysis-chart-list">
-        <PlayerAnalysisDisclosure label="Rating">
+        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle">
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">
@@ -534,7 +534,7 @@ export default function PlayerBehaviouralPanel({
           </div>
         </div>
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Hours">
+        <PlayerAnalysisDisclosure label="Hours" buttonTarget="player.activityHours.toggle">
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.outcomes')} className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
@@ -653,7 +653,7 @@ export default function PlayerBehaviouralPanel({
           </div>
         </div>
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Days">
+        <PlayerAnalysisDisclosure label="Days" buttonTarget="player.activityDays.toggle">
         <WeekdayStartChart
           availableModes={availableActivityModes}
           onExplore={setExplorerSelection}

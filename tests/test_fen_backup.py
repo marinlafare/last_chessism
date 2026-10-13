@@ -38,6 +38,13 @@ def legacy(root, rows):
 
 
 class ArchiveTests(unittest.TestCase):
+    def test_tablebase_wdl_is_a_signed_numeric_code_not_text(self):
+        for value in (None,-2,-1,0,1,2,2.0):
+            archive.validate_record(record(tablebase_wdl=value))
+        for value in ('win','2',True,0.5,3,float('nan'),float('inf')):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                archive.validate_record(record(tablebase_wdl=value))
+
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
@@ -124,7 +131,8 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
                                  analyzed_at=datetime.now(timezone.utc) - timedelta(days=1))
                              for i, fen in enumerate((self.a, self.b))])
             await session.flush()
-            session.add(FenContinuation(fen_fen=self.a, rank=1, move='a1a2', score=0))
+            identifier = await session.scalar(select(Fen.fen_id).where(Fen.fen == self.a))
+            session.add(FenContinuation(fen_id=identifier, rank=1, move='a1a2', score=0))
 
     async def asyncTearDown(self):
         await self.engine.dispose()
@@ -174,6 +182,24 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         fourth = await self.create()
         self.assertEqual(fourth['mode'], 'snapshot')
         self.assertEqual(fourth['exported_records'], 3)
+
+    async def test_portable_backup_survives_different_numeric_ids(self):
+        first = await self.create()
+        old_id = None
+        async with AsyncDBSession() as session, session.begin():
+            old_id = await session.scalar(select(Fen.fen_id).where(Fen.fen == self.a))
+            await session.execute(text('DELETE FROM fen_continuation'))
+            await session.execute(text('UPDATE fen SET fen_id=fen_id+1000,score=NULL'))
+        records = self.effective(first['filename'])
+        self.assertNotIn('fen_id', records[self.a])
+        self.assertNotIn('_fen_id', records[self.a])
+        self.assertNotIn('fen_id', records[self.a]['continuations'][0])
+        result = await jobs.restore({}, self.root, first['filename'], AsyncMock())
+        self.assertEqual(result['missing'], 0)
+        async with AsyncDBSession() as session:
+            continuation = (await session.scalars(select(FenContinuation))).one()
+            self.assertEqual(continuation.fen_id, old_id + 1000)
+            self.assertEqual((continuation.move, continuation.score), ('a1a2', 0))
 
     async def test_legacy_is_retained_and_latest_values_win(self):
         path, _ = legacy(self.root, [record(self.a, -1), record(self.b, -2)])

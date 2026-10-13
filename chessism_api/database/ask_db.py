@@ -183,7 +183,7 @@ async def _read_database_summary() -> Optional[Dict[str, int]]:
     return _database_summary_from_row(row)
 
 
-async def refresh_database_summary() -> Dict[str, int]:
+async def refresh_database_summary(*, session_factory=None) -> Dict[str, int]:
     """
     Rebuilds the full dashboard summary. This intentionally does the expensive
     FEN counts in a refresh path, not in page-render endpoints.
@@ -233,7 +233,7 @@ async def refresh_database_summary() -> Dict[str, int]:
             refreshed_at = EXCLUDED.refreshed_at
         RETURNING {DATABASE_SUMMARY_COLUMNS};
     """
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         try:
             result = await session.execute(text(query))
             row = result.mappings().first()
@@ -554,6 +554,7 @@ def _fen_pipeline_summary_from_row(row: Any) -> Dict[str, Any]:
 async def refresh_fen_pipeline_summary(
     *,
     mark_tablebase_current: bool = False,
+    session_factory=None,
 ) -> Dict[str, Any]:
     """Refresh stage totals once after pipeline writes, never during UI polling."""
     tablebase_insert = "counts.fen_extracted_games" if mark_tablebase_current else "0"
@@ -611,7 +612,7 @@ async def refresh_fen_pipeline_summary(
         RETURNING parsed_games, analyzable_games, excluded_games,
                   fen_extracted_games, tablebase_marked_games, refreshed_at;
     """
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         try:
             result = await session.execute(text(query))
             row = result.mappings().first() or {}
@@ -760,12 +761,14 @@ async def _read_scored_position_summary() -> Optional[Dict[str, Any]]:
     return _scored_position_summary_from_row(row)
 
 
-async def refresh_scored_position_summary() -> Dict[str, Any]:
+async def refresh_scored_position_summary(*, session_factory=None, database_summary=None) -> Dict[str, Any]:
     """
     Rebuilds scored-position aggregates. This scans only scored FEN rows and
     should run in refresh paths, not page-render code.
     """
-    summary = await ensure_database_summary()
+    if session_factory is not None and database_summary is None:
+        raise ValueError('An explicit session factory requires its own database summary')
+    summary = database_summary if database_summary is not None else await ensure_database_summary()
     query = f"""
         WITH scored AS (
             SELECT
@@ -874,7 +877,7 @@ async def refresh_scored_position_summary() -> Dict[str, Any]:
         "nonzero_scored_fens": int(summary.get("nonzero_scored_fens") or 0),
         "unscored_fens": int(summary.get("unscored_fens") or 0),
     }
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         try:
             result = await session.execute(text(query), params)
             row = result.mappings().first()
@@ -1104,11 +1107,18 @@ async def get_main_character_time_control_counts() -> Dict[str, int]:
     return counts
 
 
-async def refresh_main_character_mode_summary() -> Dict[str, int]:
+async def refresh_main_character_mode_summary(*, session_factory=None) -> Dict[str, int]:
     """
     Rebuilds the small precomputed table used by main-character time-control filters.
     The expensive scan happens here instead of on every filter click.
     """
+    from chessism_api.database.compact_storage import compact_for
+    async with (session_factory or AsyncDBSession)() as numeric_session:
+        if compact_for(numeric_session):
+            from chessism_api.operations.compact_summaries import refresh_mode_summary
+            counts = await refresh_mode_summary(numeric_session)
+            await numeric_session.commit()
+            return counts
     delete_query = "DELETE FROM main_character_mode_summary;"
     insert_query = """
         INSERT INTO main_character_mode_summary (
@@ -1184,7 +1194,7 @@ async def refresh_main_character_mode_summary() -> Dict[str, int]:
         RETURNING mode;
     """
 
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         try:
             await session.execute(text(delete_query))
             result = await session.execute(text(insert_query))
@@ -1219,6 +1229,12 @@ async def refresh_main_character_mode_summary_for_players(player_names: Set[str]
 
     async with AsyncDBSession() as session:
         try:
+            from chessism_api.database.compact_storage import compact_for
+            if compact_for(session):
+                from chessism_api.operations.compact_summaries import refresh_mode_summary
+                counts = await refresh_mode_summary(session, clean_players)
+                await session.commit()
+                return counts
             await session.execute(text("""
                 CREATE TEMPORARY TABLE IF NOT EXISTS temp_main_summary_players (
                     player_name VARCHAR PRIMARY KEY
@@ -1376,6 +1392,13 @@ async def sync_game_analytics_projection(game_links: Optional[Tuple[int, ...]] =
     set of game links. Postgres remains the source of truth.
     """
     clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
+    from chessism_api.database.relational_storage import storage_for
+    async with AsyncDBSession() as selection_session:
+        if storage_for(selection_session):
+            from chessism_api.operations.relational_projection import sync_projection
+            await sync_projection(selection_session,clean_links)
+            await selection_session.commit()
+            return {'games':len(clean_links),'scope':'links' if clean_links else 'all'}
     source_join = ""
     source_from = ""
     source_where = ""
@@ -2501,7 +2524,14 @@ async def reset_player_game_fens_done_to_false(player_name: str) -> int:
                 )
                 .values(fens_done=False)
             )
-            result = await session.execute(stmt)
+            from chessism_api.database.relational_storage import storage_for
+            layout = storage_for(session)
+            if layout:
+                result = await session.execute(text(f"""UPDATE {layout.table('game')} SET fens_done=false
+                    WHERE white_player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player)
+                       OR black_player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player)"""),{'player':player_name})
+            else:
+                result = await session.execute(stmt)
             await session.commit()
             print(f"Successfully reset 'fens_done' to False for {result.rowcount} game(s) involving player '{player_name}'.")
             return result.rowcount
@@ -2676,7 +2706,7 @@ async def get_scored_positions_overview() -> Dict[str, Any]:
     return await ensure_scored_position_summary()
 
 
-async def _build_scored_advantage_by_rating_payload() -> Dict[str, Any]:
+async def _build_scored_advantage_by_rating_payload(*, session_factory=None) -> Dict[str, Any]:
     """
     Splits fully analyzed games into three avg_elo groups using weighted Jenks
     natural breaks, then counts scored position occurrences by advantage bucket
@@ -2722,7 +2752,7 @@ async def _build_scored_advantage_by_rating_payload() -> Dict[str, Any]:
         ORDER BY rating ASC, g.link ASC;
     """
 
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         rating_result = await session.execute(text(rating_query))
         rating_rows = rating_result.mappings().all()
         rating_points_result = await session.execute(text(rating_points_query))
@@ -2919,12 +2949,12 @@ async def _read_scored_rating_summary(*, include_ratings: bool = True) -> Option
     return payload
 
 
-async def refresh_scored_rating_summary() -> Dict[str, Any]:
+async def refresh_scored_rating_summary(*, session_factory=None) -> Dict[str, Any]:
     """
     Rebuilds the rating-group chart projection. The weighted Jenks calculation
     is intentionally kept out of page-render requests.
     """
-    payload = await _build_scored_advantage_by_rating_payload()
+    payload = await _build_scored_advantage_by_rating_payload(session_factory=session_factory)
     groups = payload.get("groups") or []
     ratings = payload.get("ratings") or []
     distinct_ratings = len({int(point.get("rating") or 0) for point in ratings})
@@ -2964,7 +2994,7 @@ async def refresh_scored_rating_summary() -> Dict[str, Any]:
         "groups_payload": json.dumps(groups),
         "ratings_payload": json.dumps(ratings),
     }
-    async with AsyncDBSession() as session:
+    async with (session_factory or AsyncDBSession)() as session:
         try:
             result = await session.execute(text(query), params)
             row = result.mappings().first()
@@ -3090,6 +3120,17 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
     only those games are refreshed.
     """
     clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
+    from chessism_api.database.relational_storage import storage_for
+    async with AsyncDBSession() as relational_session:
+        if storage_for(relational_session):
+            from chessism_api.operations.relational_coverage import refresh_coverage
+            from chessism_api.operations.player_game_scores import refresh_game_player_engine_summaries
+            rows = await refresh_coverage(relational_session, clean_links or None)
+            await relational_session.commit()
+            # A normalized refresh must report summary failures, not silently
+            # return success with player coverage out of sync.
+            await refresh_game_player_engine_summaries(clean_links or None)
+            return {'games': len(rows), 'scope': 'links' if clean_links else 'all'}
     source_join = ""
     source_filter = ""
 
@@ -3159,7 +3200,7 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
                     COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 9000)::int AS mate_positions,
                     CURRENT_TIMESTAMP AS refreshed_at
                 FROM game_fen_association gfa
-                JOIN fen f ON f.fen = gfa.fen_fen
+                JOIN fen f ON f.fen_id = gfa.fen_id
                 {source_join}
                 GROUP BY gfa.game_link
                 ON CONFLICT (link) DO UPDATE SET
@@ -3227,6 +3268,18 @@ async def increment_game_analysis_summary_for_scored_fens(
     if not clean_rows:
         return {"games": 0, "fens": 0}
 
+    from chessism_api.database.relational_storage import storage_for
+    async with AsyncDBSession() as relational_session:
+        if storage_for(relational_session):
+            from chessism_api.operations.relational_coverage import refresh_coverage
+            from chessism_api.operations.player_game_scores import refresh_game_player_engine_summaries
+            rows = await refresh_coverage(relational_session, fens=[r['fen'] for r in clean_rows])
+            await relational_session.commit()
+            completed = tuple(r['link'] for r in rows if r['is_fully_analyzed'])
+            if completed:
+                await refresh_game_player_engine_summaries(completed)
+            return {'games': len(rows), 'fully_analyzed_games': len(completed), 'fens': len(clean_rows)}
+
     async with AsyncDBSession() as session:
         try:
             await session.execute(text("""
@@ -3265,7 +3318,8 @@ async def increment_game_analysis_summary_for_scored_fens(
                         COUNT(*) FILTER (WHERE ABS(tsf.score) >= 300 AND ABS(tsf.score) < 9000)::int AS decisive_delta,
                         COUNT(*) FILTER (WHERE ABS(tsf.score) >= 9000)::int AS mate_delta
                     FROM game_fen_association gfa
-                    JOIN temp_scored_fens tsf ON tsf.fen = gfa.fen_fen
+                    JOIN fen position ON position.fen_id = gfa.fen_id
+                    JOIN temp_scored_fens tsf ON tsf.fen = position.fen
                     GROUP BY gfa.game_link
                 )
                 UPDATE game_analysis_summary gas
@@ -3403,6 +3457,25 @@ async def get_scored_game_analysis_page(
     """
 
     async with AsyncDBSession() as session:
+        from chessism_api.database.relational_storage import storage_for
+        if storage_for(session):
+            # Removed aggregates must not be sorted over the whole corpus.
+            # Keep response fields for old clients, deriving them only for the
+            # visible page; fully scored games now tie-break by game ID.
+            normalized_order = (
+                'gas.total_positions DESC, gas.link DESC' if target_status == 'fully' else order_sql
+            )
+            data_query = f"""WITH page AS MATERIALIZED (
+                SELECT gas.* FROM game_analysis_summary gas WHERE {where_sql}
+                ORDER BY {normalized_order} OFFSET :offset LIMIT :limit
+            ) SELECT gas.*,g.white,g.black,g.mode,g.played_at,g.white_result,g.black_result,
+                scores.avg_score,scores.avg_abs_score,scores.max_abs_score
+                FROM page gas JOIN game g ON g.link=gas.link
+                LEFT JOIN LATERAL (
+                    SELECT AVG(f.score)::float8 AS avg_score,AVG(ABS(f.score))::float8 AS avg_abs_score,
+                        MAX(ABS(f.score))::float8 AS max_abs_score
+                    FROM game_fen_association a JOIN fen f ON f.fen_id=a.fen_id WHERE a.game_link=gas.link
+                ) scores ON TRUE ORDER BY {normalized_order}"""
         count_result = await session.execute(text(count_query))
         count_row = count_result.mappings().first() or {}
         total = int(count_row.get("total") or 0)
@@ -3486,7 +3559,7 @@ def _player_fens_for_analysis_stmt(player_name: str, limit: int):
     player_has_fen = exists(
         select(GameFenAssociation.game_link)
         .join(Game, GameFenAssociation.game_link == Game.link)
-        .where(GameFenAssociation.fen_fen == Fen.fen)
+        .where(GameFenAssociation.fen_id == Fen.fen_id)
         .where((Game.white == player_name) | (Game.black == player_name))
     )
     return (
@@ -3727,10 +3800,10 @@ async def preview_player_games_for_analysis(
                 COUNT(*)::bigint AS position_occurrences,
                 COUNT(*) FILTER (WHERE f.score IS NOT NULL)::bigint AS analyzed_occurrences,
                 COUNT(*) FILTER (WHERE f.score IS NULL)::bigint AS unscored_occurrences,
-                COUNT(DISTINCT gfa.fen_fen)::bigint AS unique_fens,
-                COUNT(DISTINCT gfa.fen_fen) FILTER (WHERE f.score IS NOT NULL)::bigint AS analyzed_unique_fens,
-                COUNT(DISTINCT gfa.fen_fen) FILTER (WHERE f.score IS NULL)::bigint AS fens_to_analyze,
-                COUNT(DISTINCT gfa.fen_fen) FILTER (
+                COUNT(DISTINCT gfa.fen_id)::bigint AS unique_fens,
+                COUNT(DISTINCT gfa.fen_id) FILTER (WHERE f.score IS NOT NULL)::bigint AS analyzed_unique_fens,
+                COUNT(DISTINCT gfa.fen_id) FILTER (WHERE f.score IS NULL)::bigint AS fens_to_analyze,
+                COUNT(DISTINCT gfa.fen_id) FILTER (
                     WHERE f.score IS NULL
                       AND COALESCE(f.analysis_source, '') <> 'tablebase_unavailable'
                       AND COALESCE(
@@ -3739,7 +3812,7 @@ async def preview_player_games_for_analysis(
                           ) BETWEEN 2 AND 5
                 )::bigint AS tablebase_fens
             FROM game_fen_association gfa
-            JOIN fen f ON f.fen = gfa.fen_fen
+            JOIN fen f ON f.fen_id = gfa.fen_id
             WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]));
         """), {"game_links": game_links})
         stats = stats_result.mappings().first() or {}
@@ -3767,9 +3840,9 @@ async def count_game_set_fens_for_analysis(game_links: List[int]) -> int:
         return 0
     async with AsyncDBSession() as session:
         result = await session.execute(text("""
-            SELECT COUNT(DISTINCT gfa.fen_fen)::bigint AS remaining
+            SELECT COUNT(DISTINCT gfa.fen_id)::bigint AS remaining
             FROM game_fen_association gfa
-            JOIN fen f ON f.fen = gfa.fen_fen
+            JOIN fen f ON f.fen_id = gfa.fen_id
             WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
               AND f.score IS NULL;
         """), {"game_links": clean_links})
@@ -3818,7 +3891,7 @@ async def get_game_set_fens_for_analysis(
             ),
             candidate_fens AS MATERIALIZED (
                 SELECT
-                    gfa.fen_fen,
+                    gfa.fen_id,
                     MIN(selected.priority) AS game_priority,
                     MIN(
                         (gfa.n_move * 2) +
@@ -3826,11 +3899,11 @@ async def get_game_set_fens_for_analysis(
                     ) AS move_priority
                 FROM selected_games selected
                 JOIN game_fen_association gfa ON gfa.game_link = selected.link
-                GROUP BY gfa.fen_fen
+                GROUP BY gfa.fen_id
             )
             SELECT f.fen
             FROM candidate_fens candidate
-            JOIN fen f ON f.fen = candidate.fen_fen
+            JOIN fen f ON f.fen_id = candidate.fen_id
             WHERE f.score IS NULL
               AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
             ORDER BY candidate.game_priority, candidate.move_priority, f.fen
@@ -4014,7 +4087,8 @@ async def get_player_performance_summary(player_name: str) -> Optional[Dict[str,
         WHERE player_name = :player;
     """
     async with AsyncDBSession() as session:
-        result = await session.execute(text(sql_query), {"player": player_name})
+        from .relational_reads import player_rows_sql
+        result = await session.execute(player_rows_sql(session,sql_query,('color','result')), {"player": player_name})
         row = result.mappings().first()
         return dict(row) if row else None
 
@@ -4030,7 +4104,8 @@ async def get_player_game_averages(player_name: str) -> Optional[Dict[str, Any]]
         WHERE player_name = :player;
     """
     async with AsyncDBSession() as session:
-        result = await session.execute(text(sql_query), {"player": player_name})
+        from .relational_reads import player_rows_sql
+        result = await session.execute(player_rows_sql(session,sql_query,('n_moves','opponent_rating')), {"player": player_name})
         row = result.mappings().first()
         return dict(row) if row else None
 
@@ -4049,7 +4124,16 @@ async def get_player_termination_stats(player_name: str) -> Optional[Dict[str, A
         WHERE gp.player_name = :player;
     """
     async with AsyncDBSession() as session:
-        result = await session.execute(text(sql_query), {"player": player_name})
+        from .relational_storage import storage_for
+        from .relational_reads import player_rows_sql
+        if storage_for(session):
+            sql_query = """SELECT
+                SUM(CASE WHEN end_by='checkmated' THEN 1 ELSE 0 END) AS checkmated,
+                SUM(CASE WHEN end_by='resigned' THEN 1 ELSE 0 END) AS resigned,
+                SUM(CASE WHEN end_by='timeout' THEN 1 ELSE 0 END) AS timeout,
+                SUM(CASE WHEN end_by='abandoned' THEN 1 ELSE 0 END) AS abandoned
+                FROM game_player WHERE player_name=:player"""
+        result = await session.execute(player_rows_sql(session,sql_query,('end_by',)), {"player": player_name})
         row = result.mappings().first()
         return dict(row) if row else None
 
@@ -4117,16 +4201,17 @@ async def get_player_games_page(player_name: str, page: int = 1, page_size: int 
             result AS player_score
         FROM game_player
         WHERE player_name = :player
-        ORDER BY played_at DESC, link DESC
+        ORDER BY played_at DESC, link DESC, color ASC
         LIMIT :limit OFFSET :offset;
     """
 
     async with AsyncDBSession() as session:
-        count_result = await session.execute(text(count_query), {"player": player_name})
+        from .relational_reads import player_rows_sql
+        count_result = await session.execute(player_rows_sql(session,count_query,()), {"player": player_name})
         total = count_result.scalar() or 0
 
         rows_result = await session.execute(
-            text(games_query),
+            player_rows_sql(session,games_query,('link','played_at','color','result')),
             {"player": player_name, "limit": safe_page_size, "offset": offset}
         )
         rows = rows_result.mappings().all()
@@ -4187,14 +4272,15 @@ async def get_player_game_summary(player_name: str) -> Dict[str, Any]:
         FROM game_player
         WHERE player_name = :player
         GROUP BY mode
-        ORDER BY total DESC;
+        ORDER BY total DESC, mode ASC;
     """
 
     async with AsyncDBSession() as session:
-        summary_result = await session.execute(text(summary_query), {"player": player_name})
+        from .relational_reads import player_rows_sql
+        summary_result = await session.execute(player_rows_sql(session,summary_query,('result','played_at')), {"player": player_name})
         summary_row = summary_result.mappings().first()
 
-        tc_result = await session.execute(text(time_control_query), {"player": player_name})
+        tc_result = await session.execute(player_rows_sql(session,time_control_query,('mode',)), {"player": player_name})
         tc_rows = tc_result.mappings().all()
 
     def format_ts(ts):

@@ -4,6 +4,10 @@ export const fetchDatabaseBackups = ({ signal } = {}) => (
   getJson('/backups/database', { signal })
 )
 
+export const fetchBackupVolume = ({ signal } = {}) => (
+  getJson('/backups/database/volume', { signal })
+)
+
 export const queueDatabaseBackup = () => (
   requestJson('/backups/database', { method: 'POST' })
 )

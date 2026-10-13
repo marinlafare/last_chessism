@@ -14,32 +14,41 @@ from .catalog import MatrixRowType
 
 REFERENCE = re.compile(r"\b([a-z_][a-z_0-9]*)\.([a-z_][a-z_0-9]*)\b")
 JOINS = {
+    # Preserve saved recipes after removing the stored score aggregates. Only
+    # selecting this column pays for it, after the bounded matrix scope.
+    "score_stats": """LEFT JOIN LATERAL (
+        SELECT AVG(ABS(position.score))::double precision AS avg_abs_score
+        FROM game_fen_association score_association
+        JOIN fen position ON position.fen_id=score_association.fen_id
+        WHERE score_association.game_link=g.link
+    ) score_stats ON TRUE""",
     "gas": "LEFT JOIN game_analysis_summary gas ON gas.link = g.link",
     "gps": """LEFT JOIN game_player_engine_summary gps
         ON gps.game_link = gp.link AND gps.player_color = gp.color""",
     "gfa": """LEFT JOIN game_fen_association gfa
         ON gfa.game_link = m.link AND gfa.n_move = m.n_move
         AND gfa.move_color = side.move_color""",
-    "f": "LEFT JOIN fen f ON f.fen = gfa.fen_fen",
+    "f": "LEFT JOIN fen f ON f.fen_id = gfa.fen_id",
     "pss": "LEFT JOIN player_salience_summary pss ON pss.player_name = gp.player_name",
     "gsl": """LEFT JOIN game_player_salience gsl
         ON gsl.game_link = gp.link AND gsl.player_color = gp.color
         AND gsl.player_name = gp.player_name AND pss.status = 'ready'""",
     "ppf": """LEFT JOIN player_position_frequency ppf
         ON ppf.player_name = gp.player_name AND ppf.player_color = gp.color
-        AND ppf.fen_fen = gfa.fen_fen AND pss.status = 'ready'""",
+        AND ppf.fen_id = gfa.fen_id AND pss.status = 'ready'""",
     "salience_occurrence": """LEFT JOIN LATERAL (
         SELECT COUNT(*)::integer AS occurrence_index
         FROM game_fen_association earlier
-        WHERE earlier.game_link = gfa.game_link AND earlier.fen_fen = gfa.fen_fen
+        WHERE earlier.game_link = gfa.game_link AND earlier.fen_id = gfa.fen_id
           AND (earlier.n_move < gfa.n_move OR (
               earlier.n_move = gfa.n_move
               AND CASE WHEN earlier.move_color = 'white' THEN 1 ELSE 2 END
                   <= CASE WHEN gfa.move_color = 'white' THEN 1 ELSE 2 END
           ))
-    ) salience_occurrence ON gfa.fen_fen IS NOT NULL""",
+    ) salience_occurrence ON gfa.fen_id IS NOT NULL""",
 }
 DEPENDENCIES = {
+    "score_stats": (),
     "gas": (), "gps": (), "gfa": (), "f": ("gfa",), "pss": (),
     "gsl": ("pss",), "ppf": ("gfa", "pss"), "salience_occurrence": ("gfa",),
 }
@@ -83,7 +92,9 @@ def select_statements(
     joins = "\n".join(JOINS[key] for key in enrichment)
     references = sorted({
         (alias, column)
-        for alias, column in REFERENCE.findall(select_columns + row_type.order_sql + joins)
+        # Keep token boundaries: e.g. color_order + LEFT JOIN must not become
+        # color_orderLEFT and hide the ordering column from the projection.
+        for alias, column in REFERENCE.findall(' '.join((select_columns, row_type.order_sql, joins)))
         if alias in present
     })
     def scoped(sql: str) -> str:

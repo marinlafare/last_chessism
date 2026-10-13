@@ -5,7 +5,7 @@ import './player-analysis-disclosure.css'
 const AnalysisVisible = createContext(true)
 export const useAnalysisVisible = () => useContext(AnalysisVisible)
 
-export default function PlayerAnalysisDisclosure({ label, children, target = 'card', level = 3, disabled = false }) {
+export default function PlayerAnalysisDisclosure({ label, children, buttonTarget, target = 'card', level = 3, disabled = false }) {
   const [open, setOpen] = useState(false)
   const [visited, setVisited] = useState(false)
   const parentVisible = useAnalysisVisible()
@@ -14,7 +14,7 @@ export default function PlayerAnalysisDisclosure({ label, children, target = 'ca
   return (
     <section {...pageStyleTarget(target)} className={`player-analysis-disclosure${level === 2 ? ' player-analysis-group' : ''}`}>
       <Heading {...pageStyleTarget('title')} className="player-analysis-disclosure-heading">
-        <button {...pageStyleTarget('button')} type="button" className="player-analysis-disclosure-toggle"
+        <button {...pageStyleTarget(buttonTarget)} type="button" className="player-analysis-disclosure-toggle"
           id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} disabled={disabled}
           onClick={() => { setVisited(true); setOpen(value => !value) }}>
           <span>{label}</span>

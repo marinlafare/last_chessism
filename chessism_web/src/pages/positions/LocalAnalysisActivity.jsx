@@ -1,42 +1,14 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { EstimatedTime } from './JobStatus'
-import FenPipelineStages from './FenPipelineStages'
-import { formatDuration, formatNumber } from './positionPageSupport'
+import FenIngestionPanel from './FenIngestionPanel'
+import { formatNumber } from './positionPageSupport'
 
 export default function LocalAnalysisActivity({ page }) {
   const { analysisProcessViews, analysisProcessesError, deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, handleDeleteAnalysisProcess, ingestionTiming, jobState } = page
   return (
     <details className="local-activity">
       <summary {...pageStyleTarget('disclosure')}>Local activity and ingestion · {analysisProcessViews.length} analysis processes</summary>
-    <section {...pageStyleTarget('panel')} className="local-ingestion-status" aria-live="polite">
-      <div>
-        <p {...pageStyleTarget('text')} className="eyebrow">INGESTION PIPELINE</p>
-      </div>
-      <FenPipelineStages jobState={jobState} />
-      {ingestionTiming ? (
-        <div className="fen-pipeline-timing" aria-label="Latest ingestion timing">
-          <strong {...pageStyleTarget('value')}>
-            Latest run
-            {ingestionTiming.player_name ? ` · ${ingestionTiming.player_name}` : ''}
-            {ingestionTiming.elapsed_ms != null
-              ? ` · ${formatPipelineTime(ingestionTiming.elapsed_ms)}`
-              : ' · running'}
-          </strong>
-          <div>
-            {(ingestionTiming.stages || []).map((stage) => (
-              <span key={stage.stage}>
-                {formatStageName(stage.stage)} · {formatPipelineTime(stage.elapsed_ms)}
-              </span>
-            ))}
-          </div>
-        </div>
-      ) : null}
-      {['gameParsing', 'fen', 'tablebase'].map((key) => (
-        jobState[key]?.error
-          ? <div className="status-banner warn" key={key}>{jobState[key].error}</div>
-          : null
-      ))}
-    </section>
+    <FenIngestionPanel className="local-ingestion-status" title="Ingestion pipeline" jobState={jobState} ingestionTiming={ingestionTiming} />
     <section {...pageStyleTarget('panel')} className="local-process-status" aria-live="polite">
       <div className="analysis-processes-heading">
         <div>
@@ -103,14 +75,4 @@ export default function LocalAnalysisActivity({ page }) {
     </section>
     </details>
   )
-}
-
-function formatStageName(value) {
-  return String(value || '').replaceAll('_', ' ')
-}
-
-function formatPipelineTime(milliseconds) {
-  const seconds = Math.max(0, Number(milliseconds || 0) / 1000)
-  if (seconds < 60) return `${seconds.toFixed(1)}s`
-  return formatDuration(seconds)
 }

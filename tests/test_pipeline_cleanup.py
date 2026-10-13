@@ -57,22 +57,37 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
                     await database_restore_tests.run_database_restore_test_job({}, backup_id='backup')
                 run.assert_not_awaited()
 
-    async def exercise_restore(self, root, *, existing_cluster=False, stop_fails=False):
+    async def exercise_restore(self, root, *, existing_cluster=False, stop_fails=False,
+                               restore_fails=False, start_fails=False):
         workspace = root / 'rehearsal-job'
         if existing_cluster:
             (workspace / 'pgdata').mkdir(parents=True)
             (workspace / 'pgdata/postmaster.pid').write_text('999999\n')
         async def restore(**kwargs):
+            if restore_fails:
+                raise RuntimeError('restore failed')
             if stop_fails:
                 (kwargs['pgdata'] / 'postmaster.pid').write_text('999999\n')
+        sockets = []
+        create_socket = database_restore_tests._create_restore_socket_directory
+        def capture_socket():
+            directory = create_socket()
+            sockets.append(directory)
+            # Even tests simulating an unkillable PG must remove their empty
+            # socket fixture afterward; no actual PostgreSQL runs here.
+            self.addCleanup(lambda: directory.rmdir() if directory.exists() else None)
+            return directory
         with ExitStack() as stack:
             for name, value in {
                 'RESTORE_TEST_ROOT': root, 'RESTORE_TEST_HEADROOM_BYTES': 0,
                 'latest_backup_for_restore_test': lambda: {'backup_id': 'backup', 'database_bytes': 0},
                 '_read_json': lambda *_: {}, '_validate_probe': lambda _: None,
+                '_validate_fen_identity': AsyncMock(return_value={'version': 'text_v1'}),
                 '_catalog_with_restore_result': lambda **_: None, '_update_manifest': lambda **_: None,
                 '_run_restore': AsyncMock(side_effect=restore),
-                '_run_command_capture': AsyncMock(return_value=(0, '{}')),
+                '_run_command_capture': AsyncMock(return_value=(0, '{}'),
+                    side_effect=RuntimeError('start failed') if start_fails else None),
+                '_create_restore_socket_directory': capture_socket,
                 '_write_progress': AsyncMock(), 'ensure_backup_reservation': AsyncMock(),
                 'release_backup': AsyncMock(),
             }.items():
@@ -85,17 +100,65 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
                 self.assertTrue((workspace / 'pgdata/postmaster.pid').exists())
                 if existing_cluster:
                     stop.assert_not_awaited()
+                    self.assertEqual(sockets, [])
+                else:
+                    self.assertTrue(sockets[0].exists())
                 self.assertNotIn('success', [call.args[1]['status'] for call in writes.call_args_list])
+            elif restore_fails or start_fails:
+                with self.assertRaisesRegex(RuntimeError, 'restore failed|start failed'):
+                    await database_restore_tests.run_database_restore_test_job({'job_id': 'job'}, backup_id='backup')
+                self.assertFalse(workspace.exists())
+                self.assertFalse(sockets[0].exists())
             else:
                 result = await database_restore_tests.run_database_restore_test_job({'job_id': 'job'}, backup_id='backup')
                 self.assertTrue(result['restore_tested'])
                 self.assertFalse(workspace.exists())
+                self.assertFalse(sockets[0].exists())
                 self.assertEqual(writes.call_args.args[1]['status'], 'success')
             database_restore_tests.release_backup.assert_awaited_once()
 
     async def test_restore_success_removes_copy_before_reporting_success(self):
         with tempfile.TemporaryDirectory() as temporary:
             await self.exercise_restore(Path(temporary))
+
+    async def test_restore_nested_root_uses_short_socket(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary) / ('deep-workspace-' * 10) / 'restore-tests'
+            await self.exercise_restore(root)
+
+    async def test_restore_copy_failure_removes_private_socket(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            await self.exercise_restore(Path(temporary), restore_fails=True)
+
+    async def test_restore_start_failure_removes_private_socket(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            await self.exercise_restore(Path(temporary), start_fails=True)
+
+    async def test_invalid_socket_path_fails_before_copying_backup(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            socket_dir = root / ('x' * 120)
+            socket_dir.mkdir(mode=0o700)
+            with ExitStack() as stack:
+                for name, value in {
+                    'RESTORE_TEST_ROOT': root, 'RESTORE_TEST_HEADROOM_BYTES': 0,
+                    'latest_backup_for_restore_test': lambda: {'backup_id': 'backup', 'database_bytes': 0},
+                    '_create_restore_socket_directory': lambda: socket_dir,
+                    '_atomic_write_json': lambda *_: None,
+                    '_catalog_with_restore_result': lambda **_: None,
+                    '_update_manifest': lambda **_: None,
+                    '_write_progress': AsyncMock(), 'ensure_backup_reservation': AsyncMock(),
+                    'release_backup': AsyncMock(), '_run_restore': AsyncMock(),
+                    '_run_command_capture': AsyncMock(),
+                }.items():
+                    stack.enter_context(patch.object(database_restore_tests, name, value))
+                with self.assertRaisesRegex(database_restore_tests.RestoreTestUnavailableError, '107-byte'):
+                    await database_restore_tests.run_database_restore_test_job({'job_id': 'job'}, backup_id='backup')
+                database_restore_tests._run_restore.assert_not_awaited()
+                database_restore_tests._run_command_capture.assert_not_awaited()
+                database_restore_tests.release_backup.assert_awaited_once()
+                self.assertFalse(socket_dir.exists())
+                self.assertFalse((root / 'rehearsal-job').exists())
 
     async def test_restore_failed_stop_preserves_cluster_and_reports_failure(self):
         with tempfile.TemporaryDirectory() as temporary:

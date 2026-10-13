@@ -1,4 +1,4 @@
-"""On-demand, incremental PostgreSQL backups stored outside the repository."""
+"""Manual compressed PostgreSQL backups and legacy recovery compatibility."""
 
 from __future__ import annotations
 
@@ -94,7 +94,8 @@ def _directory_size(path: Path) -> int:
 
 def _measure_application_usage() -> dict[str, Any]:
     """Measure the live repository without reading backup file contents."""
-    backup_bytes = _directory_size(PGBACKREST_BACKUP_DIRECTORY)
+    backup_bytes = (_directory_size(PGBACKREST_BACKUP_DIRECTORY)
+                    + _directory_size(DATABASE_BACKUP_ROOT / "snapshots"))
     archived_wal_bytes = _directory_size(PGBACKREST_ARCHIVE_DIRECTORY)
     fen_analysis_bytes = _directory_size(FEN_ANALYSIS_BACKUP_ROOT)
     research_bytes = _directory_size(RESEARCH_BACKUP_ROOT)
@@ -266,7 +267,8 @@ def database_backup_overview() -> dict[str, Any]:
     backups = catalog.get("backups", []) if isinstance(catalog, dict) else []
     backups = backups if isinstance(backups, list) else []
     active_storage_mode = _latest_catalog_full_storage_mode(backups)
-    migration_required = bool(backups) and active_storage_mode != BACKUP_STORAGE_MODE
+    from .database_snapshot import STORAGE_MODE as snapshot_mode
+    migration_required = bool(backups) and active_storage_mode != snapshot_mode
     return {
         "storage": storage,
         "status": status,
@@ -274,10 +276,10 @@ def database_backup_overview() -> dict[str, Any]:
         "policy": {
             "manual_only": True,
             "selection_trigger": "superuser_button",
-            "full_after_incrementals": FULL_AFTER_INCREMENTALS,
-            "full_after_days": FULL_AFTER_DAYS,
-            "retained_full_chains": 2,
-            "storage_mode": BACKUP_STORAGE_MODE,
+            "retained_verified_snapshots": 1,
+            "maximum_pending_snapshots": 1,
+            "requires_restore_before_replacement": True,
+            "storage_mode": snapshot_mode,
             "active_storage_mode": active_storage_mode or (
                 LEGACY_STORAGE_MODE if backups else None
             ),
@@ -595,8 +597,8 @@ def _write_catalog(backups: list[dict[str, Any]], *, updated_at: str) -> None:
     _atomic_write_json(BACKUP_CATALOG_PATH, {
         "schema_version": 2,
         "updated_at": updated_at,
-        "backup_format_version": BACKUP_FORMAT_VERSION,
-        "storage_mode": BACKUP_STORAGE_MODE,
+        "backup_format_version": backups[0].get("backup_format_version", BACKUP_FORMAT_VERSION) if backups else BACKUP_FORMAT_VERSION,
+        "storage_mode": backups[0].get("storage_mode", BACKUP_STORAGE_MODE) if backups else BACKUP_STORAGE_MODE,
         "backups": backups,
     })
 

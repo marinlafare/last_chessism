@@ -5,7 +5,8 @@ import os
 from arq.worker import func
 from sqlalchemy import select, update
 
-from chessism_api.database.engine import init_db, AsyncDBSession
+from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.runtime import init_runtime_db
 from chessism_api.database.models import AlgorithmRun
 from chessism_api.redis_client import redis_settings
 from .config import QUEUE
@@ -18,7 +19,7 @@ async def startup(ctx):
     handle = acquire_worker_lock()
     ctx["algorithm_workspace_lock"] = handle
     try:
-        await init_db(os.environ["DATABASE_URL"])
+        await init_runtime_db(os.environ["DATABASE_URL"])
         removed = cleanup_interrupted_workspaces()
         async with AsyncDBSession() as session, session.begin():
             await session.execute(update(AlgorithmRun).where(AlgorithmRun.status == "running").values(

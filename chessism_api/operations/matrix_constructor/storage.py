@@ -33,7 +33,7 @@ def display_manifest_path(artifact_id: str) -> str:
 
 
 @asynccontextmanager
-async def matrix_catalog_lock(*, wait: bool = True):
+async def matrix_catalog_lock(*, wait: bool = True, repeatable_read: bool = False):
     """Freeze recipe changes and legacy snapshot metadata during a backup.
 
     An advisory transaction lock releases even after a crashed worker; it never
@@ -42,6 +42,10 @@ async def matrix_catalog_lock(*, wait: bool = True):
     """
     async with AsyncDBSession() as session:
         async with session.begin():
+            if repeatable_read:
+                # Must precede the first SELECT. A logical backup exports this
+                # snapshot so its manifest and pg_dump see exactly the same DB.
+                await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
             if wait:
                 await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK})
             elif not await session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK}):

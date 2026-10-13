@@ -12,7 +12,8 @@ import {
 
 export default function PlayerAnalysisWorkspace({ playerName, disabled = false }) {
   return <>
-    <PlayerAnalysisDisclosure key={playerName} label="Behavioral analysis" target="player.analysis" level={2} disabled={disabled}>
+    <PlayerAnalysisDisclosure key={playerName} label="Behavioral analysis" target="player.analysis"
+      buttonTarget="player.analysis.toggle" level={2} disabled={disabled}>
       <BehaviouralContent playerName={playerName} disabled={disabled} />
     </PlayerAnalysisDisclosure>
     <PlayerMeasuresWorkspace key={`measures-${playerName}`} playerName={playerName} disabled={disabled} />

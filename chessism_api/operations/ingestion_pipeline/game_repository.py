@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from chessism_api.database.db_interface import DBInterface
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.database.models import (
     Game,
     GameOpening,
@@ -58,20 +59,31 @@ async def _sync_player_month_counts(
             ON CONFLICT DO NOTHING;
         """), parameters)
 
-    await session.execute(text("""
-        INSERT INTO months (player_name, year, month, n_games)
+    layout = storage_for(session)
+    compact = bool(layout and layout.compact)
+    month_table = layout.table('months') if compact else 'months'
+    month_owner = 'player_id' if compact else 'player_name'
+    owner_value = f"(SELECT id FROM {layout.table('player')} WHERE player_name=:player_name)" if compact else ':player_name'
+    game_table = layout.table('game') if layout else 'game'
+    owner_filter = (
+        f"(game.white_player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player_name) "
+        f"OR game.black_player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player_name))"
+        if layout else "(game.white = :player_name OR game.black = :player_name)"
+    )
+    await session.execute(text(f"""
+        INSERT INTO {month_table} ({month_owner}, year, month, n_games)
         SELECT
-            :player_name,
+            {owner_value},
             ingested.year,
             ingested.month,
             COUNT(game.link)::int
         FROM temp_ingested_months AS ingested
-        LEFT JOIN game
+        LEFT JOIN {game_table} AS game
           ON game.year = ingested.year
          AND game.month = ingested.month
-         AND (game.white = :player_name OR game.black = :player_name)
+         AND {owner_filter}
         GROUP BY ingested.year, ingested.month
-        ON CONFLICT (player_name, year, month) DO UPDATE SET
+        ON CONFLICT ({month_owner}, year, month) DO UPDATE SET
             n_games = EXCLUDED.n_games;
     """), {"player_name": player_name})
 
@@ -113,14 +125,23 @@ async def insert_game_bundle(
     )
     async with AsyncDBSession() as session:
         try:
-            for model, rows in model_rows:
-                if rows:
-                    await DBInterface(model).create_all_with_session(session, rows)
+            layout = storage_for(session)
+            imported_links = [int(game['link']) for game in games]
+            if layout:
+                from .relational_repository import ingest_bundle
+                result = await ingest_bundle(session, games, moves, game_openings)
+                imported_links = result['standard']
+                if no_move_games:
+                    await DBInterface(NoMovesGame).create_all_with_session(session, no_move_games)
+            else:
+                for model, rows in model_rows:
+                    if rows:
+                        await DBInterface(model).create_all_with_session(session, rows)
             await _sync_player_month_counts(session, player_name, affected_months)
-            if games:
+            if imported_links:
                 await mark_player_salience_stale(
                     affected_players,
-                    game_links=[int(game["link"]) for game in games],
+                    game_links=imported_links,
                     session=session,
                 )
             await session.commit()
@@ -153,7 +174,10 @@ async def _existing_game_links(links: set[int]) -> set[int]:
                 """),
                 {f"link_{index}": link for index, link in enumerate(chunk)},
             )
-        result = await session.execute(text("""
+        layout = storage_for(session)
+        archive_union = (f"UNION SELECT archived.link FROM {layout.table('game', archived=True)} archived "
+                         "JOIN temp_game_links_check candidate ON candidate.link=archived.link" if layout else "")
+        result = await session.execute(text(f"""
             SELECT game.link
             FROM game
             JOIN temp_game_links_check candidate ON candidate.link = game.link
@@ -161,7 +185,8 @@ async def _existing_game_links(links: set[int]) -> set[int]:
             SELECT empty_game.game_id
             FROM no_moves_games AS empty_game
             JOIN temp_game_links_check candidate
-              ON candidate.link = empty_game.game_id;
+              ON candidate.link = empty_game.game_id
+            {archive_union};
         """))
         existing = {int(link) for link in result.scalars().all()}
 

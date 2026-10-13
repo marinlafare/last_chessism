@@ -30,7 +30,7 @@ def _position_scope_clause(filters: dict[str, Any], params: dict[str, Any]) -> s
         FROM game_fen_association scope_gfa
         JOIN game g ON g.link = scope_gfa.game_link
         JOIN game_player gp ON gp.link = g.link
-        WHERE scope_gfa.fen_fen = f.fen
+        WHERE scope_gfa.fen_id = f.fen_id
           AND %s
     )""" % " AND ".join(scope_parts)
 

@@ -6,6 +6,28 @@ invalidates this summary. No per-FEN tracking or per-row trigger is introduced.
 from sqlalchemy import text
 
 
+async def install_relational_home_triggers(connection, layout):
+    """Explicit migration step, never run by normalized application startup."""
+    from .relational_storage import require_storage_contract, identifier
+    await require_storage_contract(connection,layout)
+    source = layout.table('home_summary_source')
+    function = f'{identifier(layout.core)}.invalidate_home_summary_v2'
+    await connection.execute(text(f"INSERT INTO {source}(id,revision) VALUES(1,1) ON CONFLICT DO NOTHING"))
+    await connection.execute(text(f"""CREATE OR REPLACE FUNCTION {function}() RETURNS trigger
+        LANGUAGE plpgsql SET search_path=pg_catalog AS $$ BEGIN
+        UPDATE {source} SET revision=revision+1 WHERE id=1; RETURN NULL; END $$"""))
+    for table, columns in (
+        ('player','title,deleted_at,player_name'),('game','white_player_id,black_player_id'),
+        ('fen','fen'),('game_fen_association','game_link,fen_id'),
+    ):
+        relation = 'public.fen' if table=='fen' else layout.table(table)
+        for suffix,event in (('rows','INSERT OR DELETE OR TRUNCATE'),('values',f'UPDATE OF {columns}')):
+            name=f'home_summary_v2_{table}_{suffix}'
+            await connection.execute(text(f'DROP TRIGGER IF EXISTS {name} ON {relation}'))
+            await connection.execute(text(f'CREATE TRIGGER {name} AFTER {event} ON {relation} '
+                                          f'FOR EACH STATEMENT EXECUTE FUNCTION {function}()'))
+
+
 async def ensure_home_summary_triggers(connection):
     await connection.execute(text("""
         INSERT INTO home_summary_source (id, revision) VALUES (1, 1)
@@ -34,7 +56,7 @@ async def ensure_home_summary_triggers(connection):
         ("player", "title, deleted_at, player_name"),
         ("game", "white, black"),
         ("fen", "fen"),
-        ("game_fen_association", "game_link, fen_fen"),
+        ("game_fen_association", "game_link, fen_id"),
     ):
         for suffix, events in (
             ("rows", "INSERT OR DELETE OR TRUNCATE"),

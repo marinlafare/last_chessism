@@ -62,14 +62,14 @@ async def count_union(session, draft_id):
             JOIN cloud_game_draft_entry e ON e.id = dg.entry_id
             WHERE e.draft_id = :draft_id
         ), positions AS (
-            SELECT DISTINCT gfa.fen_fen
+            SELECT DISTINCT gfa.fen_id
             FROM games JOIN game_fen_association gfa ON gfa.game_link = games.game_link
         )
         SELECT (SELECT count(*) FROM games) AS games,
                count(*) FILTER (WHERE f.score IS NULL) AS missing,
                count(*) FILTER (WHERE f.score IS NULL AND c.fen IS NULL) AS eligible,
                count(*) FILTER (WHERE f.score IS NULL AND c.fen IS NOT NULL) AS claimed
-        FROM positions p JOIN fen f ON f.fen = p.fen_fen
+        FROM positions p JOIN fen f ON f.fen_id = p.fen_id
         LEFT JOIN cloud_fen_claim c ON c.fen = f.fen
     '''), {'draft_id': draft_id})).mappings().one()
     return {key: int(value) for key, value in row.items()}

@@ -10,6 +10,12 @@ import '/src/index.css'
 const count = Number(new URLSearchParams(location.search).get('count') || 0)
 const state = window.scoredTest = { errors: [], requests: [], aborted: [], holdChart: false,
   failChart: false, holdGameOverview: new URLSearchParams(location.search).has('independent') }
+state.pipelinePhase = 'saving_fens'
+state.pipelineKind = 'fen_extraction'
+state.pipelineActive = new URLSearchParams(location.search).has('pipeline')
+state.pipelineJob = () => ({ job_id: 'pipeline-test', status: state.pipelineActive ? 'in_progress' : 'complete',
+  progress: { kind: state.pipelineKind, phase: state.pipelinePhase, processed: 25, total: 100, updated_at: 42,
+    detail: state.pipelinePhase === 'failed' ? 'Synthetic pipeline failure' : '' } })
 // Exercise page-summary polling explicitly without waiting 15 seconds per case.
 const realInterval = window.setInterval.bind(window)
 window.setInterval = (fn, delay, ...args) => {
@@ -70,6 +76,13 @@ window.fetch = async (input, options = {}) => {
   state.requests.push({ pathname, method })
   if (method !== 'GET') throw new Error('No writes allowed in this test')
   const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
+  if (pathname === '/jobs/active') {
+    if (state.failPipeline) return new Response(JSON.stringify({detail:'Pipeline status unavailable'}), {status:503})
+    return reply({jobs: state.pipelineActive ? [state.pipelineJob()] : []})
+  }
+  if (pathname === '/jobs/pipeline-test') return reply(state.pipelineJob())
+  if (pathname === '/fens/pipeline/timings/latest') return reply({run: state.pipelineActive
+    ? {player_name:'test-player',elapsed_ms:12000,stages:[{stage:'fen_extraction',elapsed_ms:2500}]} : null})
   if (pathname === '/fens/scored/overview') return reply({ scored_positions: 4000000, unscored_fens: 1000000 })
   if (pathname === '/fens/scored/games/overview') {
     if (state.holdGameOverview) await wait('GameOverview', true, options.signal)
@@ -117,5 +130,7 @@ window.fetch = async (input, options = {}) => {
       bytes: 1048576, elapsed_seconds: 125 } })
   throw new Error(`Unexpected request ${pathname}; no production requests allowed`)
 }
-createRoot(document.getElementById('root')).render(React.createElement(ScoredPositions))
+const root = createRoot(document.getElementById('root'))
+state.unmount = () => root.unmount()
+root.render(React.createElement(ScoredPositions))
 </script></body></html>

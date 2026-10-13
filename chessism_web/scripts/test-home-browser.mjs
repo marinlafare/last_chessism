@@ -70,6 +70,7 @@ try {
 
   await load('/')
   await waitFor("document.querySelectorAll('.character-rating-row:not(.loading)').length===50")
+  await assert("!document.querySelector('.proof-points, [aria-label=\"Core capabilities\"]')")
   await waitFor("getComputedStyle(document.querySelector('.home-overview')).gridTemplateColumns.split(' ').length===2")
   await assert("document.querySelector('.home-page main').children[0].classList.contains('home-overview') && document.querySelector('.home-overview').children[0].classList.contains('dashboard-panel') && document.querySelector('.home-overview').children[1].classList.contains('main-characters-carousel')")
   await waitFor("document.querySelectorAll('.home-summary-slice').length===2 && document.querySelectorAll('.home-games-bar').length===4")
@@ -116,8 +117,9 @@ try {
   await assert("!document.querySelector('.home-shell > .site-header') && !document.body.textContent.includes('Chess analytics workstation')")
   await assert("document.querySelector('.dashboard-panel').getBoundingClientRect().top===document.querySelector('.main-characters-carousel').getBoundingClientRect().top && document.querySelector('.dashboard-panel').getBoundingClientRect().right < document.querySelector('.main-characters-carousel').getBoundingClientRect().left")
   await assert("(()=>{const left=document.querySelector('.dashboard-panel').getBoundingClientRect(),right=document.querySelector('.main-characters-carousel').getBoundingClientRect();return left.height>=270 && left.height<=330 && Math.abs(left.height-right.height)<1 && parseFloat(getComputedStyle(document.querySelector('.character-rating-list')).height)>=164})()")
-  await assert("document.querySelector('.carousel-head .character-medal-toggle') && !document.querySelector('.carousel-footer .character-medal-toggle')")
+  await assert("document.querySelector('.main-characters-carousel').lastElementChild.matches('.character-list-heading-row') && document.querySelector('.character-list-heading-row .character-medal-toggle')")
   await assert("(()=>{const title=document.querySelector('.character-list-title').getBoundingClientRect(),medal=document.querySelector('.character-medal-toggle').getBoundingClientRect();return Math.abs((title.top+title.bottom)-(medal.top+medal.bottom))<2})()")
+  await assert("Math.abs(document.querySelector('.character-list-heading-row').getBoundingClientRect().height-34*.75)<1 && document.querySelector('.character-list-heading-row').getBoundingClientRect().top>=document.querySelector('.character-rating-list').getBoundingClientRect().bottom")
   await assert("!document.querySelector('.status') && !document.querySelector('.mode-summary') && !document.querySelector('.players-top-grid')")
   await assert("!window.homeTest.requests.some(r=>r.path==='/status' || r.path==='/games/time_controls' || (r.path.startsWith('/players/') && r.path.split('/').length===3))")
   await assert("document.querySelector('.rail-nav a[href=\"/system_status\"]').textContent.includes('System Status')")
@@ -445,7 +447,7 @@ try {
     await send('input.performActions',{context,actions:[{type:'pointer',id:'mouse',parameters:{pointerType:'mouse'},actions:[{type:'pointerMove',...point}]}]})
     await waitFor(`document.querySelector('.home-summary-pie-tooltip')?.textContent.split(String.fromCharCode(10)).join('|')==='${label}|50%|3.8M'`)
   }
-  console.log('PASS: medal in the title row, list reclaims footer space; three-line pie hover uses one-decimal millions; bar hover shows only username and integer count.')
+  console.log('PASS: compact title and medal row at the bottom of the list; three-line pie hover uses one-decimal millions; bar hover shows only username and integer count.')
   await waitFor("document.querySelectorAll('.character-rating-row:not(.loading)').length===50")
   for (const titled of [false, false, true, true]) {
     const sameSelection = await evaluate(`document.querySelector('.character-medal-toggle').getAttribute('aria-pressed')==='${titled}'`)

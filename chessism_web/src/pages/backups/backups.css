@@ -1,10 +1,13 @@
 .database-backups-main {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
   gap: 16px;
 }
 
 .database-backups-hero,
 .database-backups-panel {
+  min-width: 0;
   padding: 18px;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
@@ -28,33 +31,6 @@
   gap: 10px;
 }
 
-.database-backups-stats {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 10px;
-  margin: 14px 0;
-}
-
-.database-backups-breakdown {
-  margin-top: 12px;
-  margin-bottom: 0;
-}
-
-.database-backups-breakdown article {
-  background: #0a1118;
-}
-
-.database-backups-stats article {
-  display: grid;
-  gap: 7px;
-  padding: 14px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius);
-  background: #070c11;
-  text-align: center;
-}
-
-.database-backups-stats span,
 .database-backups-progress span {
   color: var(--muted);
   font-size: 11px;
@@ -62,33 +38,17 @@
   text-transform: uppercase;
 }
 
-.database-backups-stats strong,
 .database-backups-progress,
 .database-backups-table,
 .database-backups-location {
   font-family: "IBM Plex Mono", monospace;
 }
 
-.database-backups-stats strong {
-  font-size: 18px;
-}
-
-.database-backups-meter {
-  height: 10px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: #030609;
-}
-
-.database-backups-meter div {
-  height: 100%;
-  background: var(--accent);
-}
-
 .database-backups-location {
   margin: 10px 0 0;
   text-align: center;
   font-size: 12px;
+  overflow-wrap: anywhere;
 }
 
 .database-backups-storage-note {
@@ -214,18 +174,6 @@
 
 .database-backups-table tbody tr:last-child td {
   border-bottom: 0;
-}
-
-@media (max-width: 900px) {
-  .database-backups-stats {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 560px) {
-  .database-backups-stats {
-    grid-template-columns: 1fr;
-  }
 }
 
 @media (prefers-reduced-motion: reduce) {

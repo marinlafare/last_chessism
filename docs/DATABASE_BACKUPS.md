@@ -1,5 +1,71 @@
 # Chessism database backups
 
+## Current policy: simple compressed snapshots
+
+New backups use PostgreSQL 15 `pg_dump --format=custom --compress=6 --create`.
+Each `database/snapshots/snapshot-*.dump` is a standalone compressed database,
+not an incremental chain. Tables/data, indexes, sequences, views and archive
+schemas are included. An exported repeatable-read snapshot ties the dump to
+its integrity manifest. The live app can continue reading and ingesting games.
+Matrix/algorithm publication still uses the catalog lock for consistency.
+
+Use **Backup database**, followed by **Test backup**. Operations remain manual;
+app startup never starts either. The test verifies SHA-256, restores into a
+new isolated PostgreSQL cluster with no TCP listener, verifies the schema and
+existing Chessism integrity checks, then removes that disposable database.
+Restore can take longer than physical recovery because indexes are rebuilt.
+Progress reports compressed bytes written and the active PostgreSQL operation;
+it does not invent a total-size percentage from an unknown compression ratio.
+
+Schema validation compares all recorded columns, constraints, views and indexes.
+For logical restores, PostgreSQL can print a constant `varchar[]` to `text[]`
+cast either around the whole array or around each element. That exact,
+equivalent expression is canonicalized; changed values, other casts, missing
+constraints/indexes and changed validation flags still fail. The read-only
+`scripts/check_snapshot_schema.py` diagnostic can compare the schema from an
+archive without restoring all its data. A failed transition can retry the same
+latest archive with `database_snapshot_transition --resume-backup-id ID` after
+the cause is resolved; it need not create a second compressed dump.
+
+Keep one restore-tested snapshot plus at most one pending replacement. After
+a successful restore test, old snapshots are retired automatically. During
+the one-time transition, the old pgBackRest repository is retained until a
+compressed replacement has passed, and is deleted only when the live database
+reports `archive_mode=off`. A failed backup/test does not delete the previous
+recovery point. Cleanup has a durable journal and errors are reported separately
+from restore success. Review `database/snapshot-cleanup.json` if cleanup fails.
+
+Compose disables WAL **archiving**. PostgreSQL's normal WAL/crash protection,
+fsync and durability remain enabled. There is no historical point-in-time
+recovery between manual snapshots. Saving creates a new compressed file; it
+does not modify the only verified backup in place.
+
+Separate FEN exports and legacy research/matrix companions remain protected.
+Timeshift and every other application's backup directory are never selected
+for Chessism cleanup. The existing UUID, 200 GB allocation and 150 GB free-space
+floor remain enforced. A temporary replacement requires space beside the old
+backup; if capacity is insufficient the operation stops rather than pruning
+the only valid recovery point.
+
+This is a database backup, not a machine/configuration/credentials backup.
+The supported layout has one owner (`chessism_user`) and default tablespaces;
+new backup creation fails explicitly if extra cluster roles/tablespaces appear.
+Passwords are not stored in the archive/manifest. Keep deployment secrets safe
+separately. Disaster recovery requires a PostgreSQL 15 instance with that owner
+and the recorded locale, then `pg_restore --create --exit-on-error` against an
+**empty, explicitly selected recovery instance**, plus any recorded matrix
+companions. Never point restore commands at the running production database.
+
+The older physical format remains readable during transition. Old migration
+rehearsal scripts and the following historical notes describe that former
+format, **not the current save policy**. Do not reapply the migration maintenance
+Compose override that turns WAL archiving back on.
+
+## Historical physical-backup notes
+
+Numeric FEN-reference compatibility and the pre/post-migration recovery gates
+are documented in [FEN_IDENTITY_MIGRATION.md](FEN_IDENTITY_MIGRATION.md).
+
 Chessism keeps these recovery files on the backup disk whose UUID
 is `1ebffac6-4b7a-4906-9e07-9586060d3825`:
 
@@ -85,6 +151,31 @@ Timeshift. Chessism never creates, edits, moves, or removes anything inside it.
 - Validation: pgBackRest verifies the selected recovery point and required WAL
   before Chessism publishes a successful status.
 - Restore rehearsal: manual only, from the superuser-only `Test backup` button.
+
+### Backup-volume diagram
+
+The Storage panel shows the entire backup filesystem as an 8-rem-high bar
+(at least 5 rem on small screens). Each application gets an outlined rectangle:
+an explicitly published reservation determines its width, otherwise its measured
+usage does. Blue fill shows stored filesystem blocks. Chessism uses the existing
+200-GB policy; the 150-GB free-space floor is shown separately, as are unallocated
+space and unattributed filesystem usage. These are logical allocations, not
+partitions or changes to other applications' quotas. The file-size breakdown
+remains available in a collapsed details section.
+
+`GET /backups/database/volume` uses the existing superuser authorization. A
+read-only background `du` scan is bounded to 30 seconds and cached for five
+minutes per API process. It reads filesystem metadata, counts hard links once,
+does not follow symlinks/cross filesystems, and never opens backup contents or
+writes inside another application's directory (including Timeshift). Small
+`backup-allocation.json`, `backup-policy.json`, `setup.json`, `backup-usage.json`,
+and `backup-status.json` documents may publish `quota_bytes`, `allocation_bytes`,
+or `reserved_bytes`, at the top level or in `storage`/`policy`. Missing quotas
+remain unknown; original database sizes are never treated as reservations.
+Missing/failed measurements show a warning and retain any previous measurement.
+An overcommitted diagram reports the conflict instead of scaling allocations
+to misleading percentages. The browser refreshes this read-only display without
+starting backups, restore tests, or cleanup.
 
 While a backup runs, its status file and Redis job progress contain pgBackRest's
 factual completed and total byte counters. The Backups page uses those counters
@@ -188,3 +279,13 @@ the repository mounted at `/main-monitor-db-backups`, use the same
 The Backups page reports `Restore tested: not yet` until this disposable
 cluster rehearsal passes. A successful backup or repository verification is
 not falsely presented as a restore test.
+
+## Game/player numeric FEN references
+
+Candidate schema-v6 backup manifests additionally record
+`fen_reference_version: numeric_v1`. Restore tests verify numeric game and
+player references, primary/foreign keys, cascade behavior and the association
+sequence. Older manifests remain testable with the old reference layout.
+Deploy these changes only with the explicit, rehearsed migration described in
+[FEN_REFERENCE_MIGRATION.md](FEN_REFERENCE_MIGRATION.md); do not upgrade the
+backup worker alone against unmigrated association/frequency tables.

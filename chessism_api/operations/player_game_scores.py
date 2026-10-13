@@ -7,6 +7,7 @@ import math
 from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 
 
 # Kept in sync with Lichess's current move-judgment implementation:
@@ -90,15 +91,7 @@ async def refresh_game_player_engine_summaries(
                 AND coverage.total_positions > 0
           )
     """)
-    refresh_sql = text(f"""
-        INSERT INTO game_player_engine_summary (
-            game_link, player_name, player_color, analyzed_player_moves,
-            own_move_cp_gain, own_move_cp_loss,
-            game_efficiency, mean_win_percent_loss, median_win_percent_loss,
-            blunder_count,
-            mate_for_positions, mate_against_positions,
-            final_player_cp, result, end_by
-        )
+    refresh_values = f"""
         WITH eligible AS MATERIALIZED (
             SELECT
                 gp.link AS game_link,
@@ -164,7 +157,7 @@ async def refresh_game_player_engine_summaries(
             FROM normalized
             JOIN game_fen_association association
               ON association.game_link = normalized.game_link
-            JOIN fen ON fen.fen = association.fen_fen
+            JOIN fen ON fen.fen_id = association.fen_id
             WHERE fen.score IS NOT NULL
         ),
         sequenced AS MATERIALIZED (
@@ -403,6 +396,16 @@ async def refresh_game_player_engine_summaries(
             result,
             end_by
         FROM aggregated
+    """
+    refresh_sql = text("""
+        INSERT INTO game_player_engine_summary (
+            game_link, player_name, player_color, analyzed_player_moves,
+            own_move_cp_gain, own_move_cp_loss,
+            game_efficiency, mean_win_percent_loss, median_win_percent_loss,
+            blunder_count, mate_for_positions, mate_against_positions,
+            final_player_cp, result, end_by
+        )
+    """ + refresh_values + """
         ON CONFLICT (game_link, player_color) DO UPDATE SET
             player_name = EXCLUDED.player_name,
             analyzed_player_moves = EXCLUDED.analyzed_player_moves,
@@ -421,6 +424,27 @@ async def refresh_game_player_engine_summaries(
     """)
     async with AsyncDBSession() as session:
         try:
+            layout = storage_for(session)
+            if layout:
+                target = layout.table('game_player_engine_summary')
+                owners = layout.table('game_player')
+                coverage = layout.table('game_analysis_coverage')
+                fields = ('analyzed_player_moves', 'own_move_cp_gain', 'own_move_cp_loss',
+                          'game_efficiency', 'mean_win_percent_loss', 'median_win_percent_loss',
+                          'blunder_count', 'mate_for_positions', 'mate_against_positions',
+                          'final_player_cp', 'result', 'end_by')
+                delete_sql = text(f"""DELETE FROM {target} s USING {owners} gp
+                    WHERE s.game_player_id=gp.id
+                      AND (:all_games OR gp.game_link=ANY(CAST(:game_links AS bigint[])))
+                      AND NOT EXISTS(SELECT 1 FROM {coverage} c WHERE c.link=gp.game_link
+                          AND c.is_fully_analyzed AND c.total_positions>0)""")
+                refresh_sql = text(f"""WITH projected AS ({refresh_values})
+                    INSERT INTO {target}(game_player_id,{','.join(fields)})
+                    SELECT gp.id,{','.join('p.'+field for field in fields)} FROM projected p
+                    JOIN {owners} gp ON gp.game_link=p.game_link AND gp.is_white=(p.player_color='white')
+                    ORDER BY gp.id ON CONFLICT(game_player_id) DO UPDATE SET
+                    {','.join(field+'=EXCLUDED.'+field for field in fields)}
+                    RETURNING (SELECT game_link FROM {owners} WHERE id=game_player_id) AS game_link""")
             await session.execute(delete_sql, params)
             result = await session.execute(refresh_sql, params)
             rows = result.mappings().all()

@@ -7,8 +7,10 @@ import json
 import os
 import re
 import shutil
+import tempfile
 import time
 import uuid
+import asyncpg
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -161,6 +163,10 @@ async def _write_progress(
     detail: str,
     result: dict[str, Any] | None = None,
 ) -> None:
+    saved = _read_json(RESTORE_TEST_STATUS_PATH, {})
+    if saved.get("job_id") == job_id:
+        saved.update(phase=phase, detail=detail, progress_updated_at=_iso_now())
+        _atomic_write_json(RESTORE_TEST_STATUS_PATH, saved)
     if redis is None:
         return
     await redis.set(
@@ -356,6 +362,13 @@ def _validate_probe(probe: dict[str, Any]) -> None:
 
 
 def _postgres_start_options(socket_dir: Path) -> str:
+    # Linux sockaddr_un allows 107 path bytes, including PostgreSQL's filename.
+    # Check before the expensive restore, not after copying the database.
+    socket_path = socket_dir / ".s.PGSQL.55432"
+    if len(os.fsencode(socket_path)) > 107:
+        raise RestoreTestUnavailableError(
+            "The restore PostgreSQL socket path exceeds the 107-byte limit."
+        )
     # Recovery refuses to start if WAL was generated with higher shared-memory
     # limits than the temporary server. Keep those settings from the restored
     # postgresql.conf instead of overriding them with smaller rehearsal values.
@@ -366,6 +379,47 @@ def _postgres_start_options(socket_dir: Path) -> str:
         "-c port=55432 "
         "-c archive_mode=off"
     )
+
+
+def _create_restore_socket_directory() -> Path:
+    # Do not use TMPDIR or the potentially deeply nested restore workspace.
+    # mkdtemp creates an unpredictable, job-owned 0700 directory; PostgreSQL
+    # still listens only on this private socket, never on a TCP interface.
+    return Path(tempfile.mkdtemp(prefix="chessism-pg-", dir="/tmp"))
+
+
+async def _validate_fen_identity(socket_dir, manifest):
+    from chessism_api.database.fen_identity import validate_identity
+    expected = manifest.get('fen_identity_version')
+    connection = await asyncpg.connect(host=str(socket_dir), port=55432,
+                                      user=RESTORE_USER, database=RESTORE_DATABASE,
+                                      server_settings={'default_transaction_read_only': 'on', 'statement_timeout': '30000'})
+    try:
+        result = await validate_identity(connection, allow_legacy=expected is None)
+        if expected is not None and result['version'] != expected:
+            raise RuntimeError('Restored FEN identity differs from its backup manifest')
+        from chessism_api.database.fen_reference_identity import validate_references
+        reference_expected = manifest.get('fen_reference_version')
+        if int(manifest.get('schema_version') or 0) >= 7:
+            if reference_expected not in ('relational_v2', 'relational_v3'):
+                raise RuntimeError('Backup manifest lacks the normalized game/player version')
+            if (manifest.get('relational_storage') or {}).get('version') != reference_expected:
+                raise RuntimeError('Backup storage versions disagree')
+            from sqlalchemy.engine import URL
+            from chessism_api.database.relational_storage import validate_backup_contract
+            result['references'] = await validate_backup_contract(
+                URL.create('postgresql+asyncpg',username=RESTORE_USER,database=RESTORE_DATABASE,
+                           port=55432,query={'host':str(socket_dir)}),manifest.get('relational_storage'))
+            return result
+        if int(manifest.get('schema_version') or 0) >= 6 and reference_expected != 'numeric_v1':
+            raise RuntimeError('Backup manifest lacks the required numeric FEN reference version')
+        references = await validate_references(connection, allow_legacy=reference_expected is None)
+        if reference_expected is not None and references['version'] != reference_expected:
+            raise RuntimeError('Restored FEN references differ from their backup manifest')
+        result['references'] = references
+        return result
+    finally:
+        await connection.close()
 
 
 def _catalog_with_restore_result(
@@ -495,7 +549,7 @@ async def _run_database_restore_test_job(
     started_monotonic = time.monotonic()
     workspace = RESTORE_TEST_ROOT / f"rehearsal-{job_id}"
     pgdata = workspace / "pgdata"
-    socket_dir = workspace / "socket"
+    socket_dir: Path | None = None
     postgres_log = workspace / "postgres.log"
     validation: dict[str, Any] | None = None
     backup: dict[str, Any] | None = None
@@ -546,7 +600,16 @@ async def _run_database_restore_test_job(
             raise RestoreTestUnavailableError("An existing restore workspace may still be running.")
         workspace_owned = True
         pgdata.mkdir(parents=True, mode=0o700)
-        socket_dir.mkdir(parents=True, mode=0o700)
+        socket_dir = _create_restore_socket_directory()
+        postgres_options = _postgres_start_options(socket_dir)
+        from .database_snapshot import STORAGE_MODE as SNAPSHOT_MODE
+        logical_snapshot = backup.get("storage_mode") == SNAPSHOT_MODE
+        backup_manifest = _read_json(MANIFEST_DIRECTORY / f"{backup_id}.json", {})
+
+        async def snapshot_progress(detail):
+            running_status.update(phase="restoring", detail=detail, progress_updated_at=_iso_now())
+            _atomic_write_json(RESTORE_TEST_STATUS_PATH, running_status)
+            await _write_progress(redis, job_id, phase="restoring", detail=detail)
 
         await _write_progress(
             redis,
@@ -554,12 +617,11 @@ async def _run_database_restore_test_job(
             phase="restoring",
             detail=f"Restoring {backup_id} into an isolated local volume.",
         )
-        await _run_restore(
-            backup_id=backup_id,
-            pgdata=pgdata,
-            redis=redis,
-            job_id=job_id,
-        )
+        if logical_snapshot:
+            from .database_snapshot_restore import prepare_cluster
+            await prepare_cluster(backup, backup_manifest, pgdata, snapshot_progress)
+        else:
+            await _run_restore(backup_id=backup_id, pgdata=pgdata, redis=redis, job_id=job_id)
 
         await _write_progress(
             redis,
@@ -567,7 +629,6 @@ async def _run_database_restore_test_job(
             phase="starting_restore",
             detail="Starting the restored PostgreSQL cluster on a private socket.",
         )
-        postgres_options = _postgres_start_options(socket_dir)
         await _run_command_capture(
             PG_CTL,
             "-D",
@@ -581,6 +642,10 @@ async def _run_database_restore_test_job(
             postgres_options,
             "start",
         )
+
+        if logical_snapshot:
+            from .database_snapshot_restore import restore_archive
+            await restore_archive(backup_id, socket_dir, pgdata, snapshot_progress)
 
         await _write_progress(
             redis,
@@ -609,6 +674,7 @@ async def _run_database_restore_test_job(
         _validate_probe(validation)
 
         backup_manifest = _read_json(MANIFEST_DIRECTORY / f"{backup_id}.json", {})
+        validation['fen_identity'] = await _validate_fen_identity(socket_dir, backup_manifest)
         if "algorithms" in backup_manifest:
             from chessism_api.operations.research_algorithms.backups import ALGORITHM_BACKUP_QUERY, validate_algorithm_backup
             await _write_progress(redis, job_id, phase="validating_algorithms",
@@ -668,6 +734,10 @@ async def _run_database_restore_test_job(
         await _stop_restored_postgres(pgdata)
         if not remove_workspace(RESTORE_TEST_ROOT, workspace):
             raise RestoreTestUnavailableError("Restored PostgreSQL did not stop; workspace retained.")
+        # A clean PostgreSQL shutdown removes its socket and lock file. Only
+        # remove our empty directory; never recursively delete socket paths.
+        socket_dir.rmdir()
+        socket_dir = None
         elapsed_seconds = time.monotonic() - started_monotonic
         completed_at = _iso_now()
         detail = f"Restored and validated backup {backup_id}; temporary data was removed."
@@ -693,6 +763,17 @@ async def _run_database_restore_test_job(
             "elapsed_seconds": round(elapsed_seconds, 2),
             "validation": validation,
         }
+        if logical_snapshot:
+            from .database_snapshot_retention import retire_after_restore
+            await _write_progress(redis, job_id, phase="retiring_backups",
+                                  detail="Restore passed; retiring superseded Chessism snapshots.")
+            # Retention is separate from restore validity. A cleanup error must
+            # not turn a proven recovery point into an unverified backup.
+            try:
+                result["cleanup"] = await retire_after_restore(backup_id)
+            except Exception as cleanup_error:
+                result["cleanup"] = {"state": "failed", "error": str(cleanup_error)}
+                detail += " Backup cleanup needs attention: " + str(cleanup_error)
         success_status = {
             **running_status,
             "status": "success",
@@ -700,6 +781,7 @@ async def _run_database_restore_test_job(
             "elapsed_seconds": round(elapsed_seconds, 2),
             "validation": validation,
             "detail": detail,
+            "cleanup": result.get("cleanup"),
         }
         _atomic_write_json(RESTORE_TEST_STATUS_PATH, success_status)
         await _write_progress(
@@ -720,8 +802,6 @@ async def _run_database_restore_test_job(
         except OSError:
             pass
         detail = str(error)
-        if log_tail:
-            detail = f"{detail}\nPostgreSQL: {log_tail}"
         if backup is not None:
             try:
                 _catalog_with_restore_result(
@@ -752,6 +832,7 @@ async def _run_database_restore_test_job(
             "validation": validation,
             "error_code": error.__class__.__name__,
             "error_message": detail,
+            "postgres_log_tail": log_tail,
             "detail": detail,
         })
         await _write_progress(
@@ -769,5 +850,7 @@ async def _run_database_restore_test_job(
             finally:
                 if workspace_owned and not remove_workspace(RESTORE_TEST_ROOT, workspace):
                     raise RestoreTestUnavailableError("Restored PostgreSQL did not stop; workspace retained.")
+                if socket_dir is not None:
+                    socket_dir.rmdir()
         finally:
             await release_backup(redis, job_id)

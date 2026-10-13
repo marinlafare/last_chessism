@@ -4,6 +4,7 @@ export const PAGE_SCOPES = {
   "/players": "home",
   "/games": "games",
   "/system_status": "system_status",
+  "/database": "database",
   "/add_games": "download_games",
   "/download_new_games": "download_games",
   "/main_characters": "main_characters",

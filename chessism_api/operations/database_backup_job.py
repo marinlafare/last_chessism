@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from sqlalchemy import text
 from typing import Any
 
 from chessism_api.operations import database_backups as backup
@@ -13,13 +14,14 @@ from chessism_api.operations.research_algorithms.backups import algorithm_backup
 
 
 async def run_database_backup_job(ctx: dict[str, Any], **_kwargs: Any) -> dict[str, Any]:
-    # Hold through both the file copy and pgBackRest's recovery point. Only
+    # Hold through both the file copy and pg_dump's exported snapshot. Only
     # recipe changes/legacy publication wait; Stockfish/ingestion continue.
     ctx = {**ctx, "job_id": str(ctx.get("job_id") or uuid.uuid4())}
     await ensure_backup_reservation(ctx.get("redis"), ctx["job_id"])
     try:
-        async with matrix_catalog_lock() as session:
-            return await _run_database_backup_job(ctx, session)
+        from chessism_api.operations.database_snapshot import run_snapshot_backup
+        async with matrix_catalog_lock(repeatable_read=True) as session:
+            return await run_snapshot_backup(ctx, session)
     finally:
         await release_backup(ctx.get("redis"), ctx["job_id"])
 
@@ -87,6 +89,27 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         definitions = await definition_backup_manifest(session)
         algorithms = await algorithm_backup_manifest(session)
+        from chessism_api.database.fen_identity import SHAPE_SQL, schema_version
+        from chessism_api.database.relational_storage import storage_for, describe_contract
+        layout = storage_for(session)
+        original_search_path = None
+        if layout:
+            original_search_path = await session.scalar(text("SHOW search_path"))
+            await session.execute(text("SELECT set_config('search_path','public',true)"))
+        fen_identity_version = schema_version((await session.execute(text(SHAPE_SQL))).mappings().all())
+        if original_search_path is not None:
+            await session.execute(text("SELECT set_config('search_path',:value,true)"),{'value':original_search_path})
+        if fen_identity_version != 'numeric_v2':
+            raise RuntimeError('Refusing a new backup from a partially migrated FEN schema')
+        from chessism_api.database.fen_reference_identity import SHAPE_SQL as REFERENCE_SHAPE_SQL, schema_version as reference_version
+        relational_contract = None
+        if layout:
+            relational_contract = await describe_contract(session,layout)
+            fen_reference_version = layout.version
+        else:
+            fen_reference_version = reference_version((await session.execute(text(REFERENCE_SHAPE_SQL))).mappings().all())
+            if fen_reference_version != 'numeric_v1':
+                raise RuntimeError('Refusing a new backup before the game/player FEN reference migration')
         matrices = await backup_completed_matrices(session, publish_progress=publish_progress)
         info = await backup._pgbackrest_info(tolerate_missing=True)
         stanza_ready = bool(
@@ -175,7 +198,9 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         completed_at = backup._iso_now()
         manifest = {
-            "schema_version": 5,
+            "schema_version": 7 if relational_contract else 6,
+            "fen_identity_version": fen_identity_version,
+            "fen_reference_version": fen_reference_version,
             "algorithms": algorithms,
             "matrix_definitions": definitions,
             "matrices": matrices,
@@ -199,6 +224,8 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
             "destination_uuid": backup.EXPECTED_VOLUME_UUID,
             "restore_tested": False,
         }
+        if relational_contract:
+            manifest['relational_storage'] = relational_contract
         manifest_path = backup.MANIFEST_DIRECTORY / f"{newest['backup_id']}.json"
         backup._atomic_write_json(manifest_path, manifest)
         manifest_sha256 = backup._sha256(manifest_path)

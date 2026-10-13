@@ -34,7 +34,7 @@ async def check():
                 "CREATE TABLE main_character_mode_summary (player_name text, mode text, n_games bigint)",
                 "CREATE TABLE game (link bigint PRIMARY KEY, white text, black text, fens_done boolean)",
                 "CREATE TABLE fen (fen text PRIMARY KEY, score integer)",
-                "CREATE TABLE game_fen_association (game_link bigint, fen_fen text)",
+                "CREATE TABLE game_fen_association (game_link bigint, fen_id bigint)",
             ):
                 await conn.execute(text(sql))
             await ensure_home_summary_triggers(conn)
@@ -55,7 +55,7 @@ async def check():
             await conn.execute(text("INSERT INTO game VALUES (1,'a','b',false),(2,'a','c',false),(3,'c','d',false),(4,'deleted','c',false)"))
             await conn.execute(text("INSERT INTO fen VALUES ('shared',NULL),('titled',0),('other',NULL),('orphan',NULL)"))
             await conn.execute(text("""INSERT INTO game_fen_association VALUES
-                (1,'shared'),(1,'shared'),(1,'titled'),(2,'shared'),(3,'shared'),(3,'other'),(4,'other')"""))
+                (1,1),(1,1),(1,2),(2,1),(3,1),(3,3),(4,3)"""))
         assert (await get_home_summary(redis))['stale']
         await run_home_summary_refresh({})
         result = await get_home_summary(redis)

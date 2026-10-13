@@ -464,7 +464,7 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
                 moves.white_reaction_time, moves.black_reaction_time,
                 moves.white_time_left, moves.black_time_left
             FROM game_fen_association association
-            JOIN fen ON fen.fen = association.fen_fen
+            JOIN fen ON fen.fen_id = association.fen_id
             LEFT JOIN moves
               ON moves.link = association.game_link AND moves.n_move = association.n_move
             WHERE association.game_link = :game_id

@@ -238,6 +238,93 @@
             "padding"
           ]
         },
+        "characters.rating": {
+          "label": "Player list rating numbers",
+          "initialStyleFrom": "value",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "summary.games.previous": {
+          "label": "Games chart · previous arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "summary.games.next": {
+          "label": "Games chart · next arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "characters.medal": {
+          "label": "Player list · medal",
+          "initialStyleFrom": "button",
+          "pressedUsesHoverColor": true,
+          "pressedUsesHoverBackground": true,
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.name": {
+          "label": "Player name button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.update": {
+          "label": "Player update button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.delete": {
+          "label": "Player delete button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.previous": {
+          "label": "Player profile · previous arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.next": {
+          "label": "Player profile · next arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.analysis.toggle": {
+          "label": "Behavioral analysis button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.measures.toggle": {
+          "label": "Stockfish analysis button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.rating.toggle": {
+          "label": "Behavioral analysis · Rating button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.activityHours.toggle": {
+          "label": "Behavioral analysis · Hours button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.activityDays.toggle": {
+          "label": "Behavioral analysis · Days button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.accuracy.toggle": {
+          "label": "Stockfish analysis · Accuracy button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.qualityDays.toggle": {
+          "label": "Stockfish analysis · Days button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.qualityHours.toggle": {
+          "label": "Stockfish analysis · Hours button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
         "player.panel": {
           "label": "Player workspace",
           "properties": [
@@ -829,8 +916,33 @@
         "/backups"
       ],
       "targets": {
+        "storage.disk": {
+          "label": "Backup volume outline",
+          "properties": ["background", "borderColor", "borderWidth", "radius"]
+        },
+        "storage.allocation": {
+          "label": "Backup allocations",
+          "properties": ["background", "borderColor", "borderWidth", "radius"]
+        },
+        "storage.used": {
+          "label": "Stored backup data",
+          "properties": ["background"]
+        },
+        "storage.reserve": {
+          "label": "Protected free reserve",
+          "properties": ["background", "borderColor"]
+        },
+        "storage.other": {
+          "label": "Other filesystem usage",
+          "properties": ["background", "borderColor"]
+        },
+        "storage.free": {
+          "label": "Unallocated backup space",
+          "properties": ["background", "borderColor"]
+        },
         "storage.panel": {
           "label": "Backup storage",
+          "initialStyleFrom": "panel",
           "properties": [
             "background",
             "borderColor",
@@ -868,6 +980,33 @@
             "radius",
             "padding"
           ]
+        }
+      }
+    },
+    "database": {
+      "label": "Database",
+      "routes": ["/database"],
+      "targets": {
+        "canvas": {
+          "label": "Database canvas and connections",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "color"],
+          "propertyLabels": {"color": "Connection color"}
+        },
+        "table.card": {
+          "label": "Database table cards",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "color"]
+        },
+        "table.header": {
+          "label": "Database table headers",
+          "properties": ["background", "color", "textAlign", "hoverBackground", "hoverColor"]
+        },
+        "table.column": {
+          "label": "Database columns",
+          "properties": ["color", "fontSize", "fontFamily"]
+        },
+        "relationships.panel": {
+          "label": "Database relationship details",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "padding"]
         }
       }
     },

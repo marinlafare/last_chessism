@@ -1,8 +1,9 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import BackupVolume from './backups/BackupVolume.jsx'
 import {
   fetchBackupJob,
   fetchDatabaseBackups,
@@ -220,6 +221,7 @@ export default function DatabaseBackups() {
   const backups = Array.isArray(overview?.backups) ? overview.backups : []
   const policy = overview?.policy || {}
   const latestBackup = backups[0] || null
+  const snapshotNeedsTest = latestBackup?.storage_mode === 'compressed_snapshot_v1' && !latestBackup?.restore_tested
   const trackedJobActive = Boolean(job?.jobId && !TERMINAL_PHASES.has(job.phase))
   const backupActive = Boolean(
     queueingAction === 'backup'
@@ -295,11 +297,6 @@ export default function DatabaseBackups() {
         : backupProgressTotal > 0
           ? 'Calculating transfer ETA…'
           : 'Measuring database bytes…'
-  const usagePercent = useMemo(() => {
-    const application = Number(storage.application_bytes || 0)
-    const quota = Number(storage.quota_bytes || 0)
-    return quota > 0 ? Math.min(100, (application / quota) * 100) : 0
-  }, [storage.application_bytes, storage.quota_bytes])
 
   useEffect(() => {
     if (!backupActive) return undefined
@@ -340,10 +337,10 @@ export default function DatabaseBackups() {
                 <button {...pageStyleTarget('button')}
                   className="btn btn-primary btn-inline"
                   type="button"
-                  disabled={active || !storage.available || storage.error}
+                  disabled={active || !storage.available || storage.error || snapshotNeedsTest}
                   onClick={startBackup}
                 >
-                  {backupActive ? 'Backup running' : policy.migration_required ? 'Create new full base' : 'Backup database'}
+                  {backupActive ? 'Backup running' : 'Backup database'}
                 </button>
                 <button {...pageStyleTarget('button')}
                   className="btn btn-inline"
@@ -361,33 +358,24 @@ export default function DatabaseBackups() {
             {storage.available && storage.error ? <div className="status-banner warn">{storage.error}</div> : null}
             {policy.migration_required ? (
               <div className="status-banner">
-                Block-incremental storage is ready. The existing chain stays intact until the new full verifies, then its superseded files are removed.
+                Compressed snapshots are ready. Existing recovery data stays intact until a new snapshot passes Test backup. Archived WAL is retired only after database archiving is disabled.
               </div>
             ) : null}
+            {snapshotNeedsTest ? <div className="status-banner">Test the new compressed snapshot before replacing the previous backup.</div> : null}
           </section>
 
-          <section {...pageStyleTarget('panel')} className="database-backups-panel">
+          <section {...pageStyleTarget('storage.panel')} className="database-backups-panel">
             <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">STORAGE</p><h2 {...pageStyleTarget('title')}>Protected Allocation</h2></div></div>
-            <div className="database-backups-stats">
-              <article {...pageStyleTarget('card')}><span>Available</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.free_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Database protected</span><strong {...pageStyleTarget('value')}>{formatBytes(latestBackup?.database_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Current total used</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.application_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Chessism allocation</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.quota_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Protected reserve</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.free_floor_bytes)}</strong></article>
-            </div>
-            <div className="database-backups-meter" aria-label={`${usagePercent.toFixed(1)} percent of the Chessism backup allocation used`}>
-              <div style={{ width: `${usagePercent}%` }} />
-            </div>
-            <div className="database-backups-stats database-backups-breakdown">
-              <article {...pageStyleTarget('card')}><span>Backup chains</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.database_backup_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Archived WAL</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.archived_wal_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>FEN exports</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.fen_analysis_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Research files</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.research_bytes)}</strong></article>
-              <article {...pageStyleTarget('card')}><span>Metadata / other</span><strong {...pageStyleTarget('value')}>{formatBytes(storage.other_bytes)}</strong></article>
-            </div>
-            <p {...pageStyleTarget('text')} className="database-backups-storage-note">
-              Current storage is measured at most once per minute · last measured {formatDate(storage.usage_measured_at)}. The protected database value is its uncompressed size at the latest recovery point{latestBackup ? `; that recovery point added ${formatBytes(latestBackup.repository_delta_bytes)} to the repository` : ''}.
-            </p>
+            <BackupVolume />
+            <details className="backup-volume-details">
+              <summary>Chessism file breakdown</summary>
+              <dl>{[
+                ['Database snapshots', storage.database_backup_bytes], ['Legacy archived WAL', storage.archived_wal_bytes],
+                ['FEN exports', storage.fen_analysis_bytes], ['Research files', storage.research_bytes],
+                ['Metadata / other', storage.other_bytes],
+              ].map(([label, size]) => <div key={label}><dt>{label}</dt><dd>{formatBytes(size)}</dd></div>)}</dl>
+              <p>File sizes measured {formatDate(storage.usage_measured_at)}. The disk diagram measures allocated filesystem blocks, so totals can differ.</p>
+            </details>
             <p {...pageStyleTarget('text')} className="database-backups-location">{storage.storage_location || '/main-monitor-db-backups/chessism'}</p>
           </section>
 
@@ -429,7 +417,9 @@ export default function DatabaseBackups() {
                     <span>
                       {backupProgressTotal > 0
                         ? `${formatBytes(backupProgressCompleted)} / ${formatBytes(backupProgressTotal)} · ${backupProgressPercent.toFixed(1)}%`
-                        : 'Waiting for pgBackRest progress data'}
+                        : status.storage_mode === 'compressed_snapshot_v1'
+                          ? `${formatBytes(status.compressed_bytes_written || 0)} compressed · total size known when complete`
+                          : 'Waiting for backup progress'}
                     </span>
                     <span>{backupEtaLabel}</span>
                     {Number.isFinite(backupRateBytesPerSecond) && backupRateBytesPerSecond > 0 ? (
@@ -441,7 +431,7 @@ export default function DatabaseBackups() {
               <span>Latest verified: {formatDate(status.last_verified_at)}</span>
               <span>Backup type: {status.backup_type || (job?.kind === 'backup' ? job?.result?.type : null) || '-'}</span>
               <span>Backup ID: {status.backup_id || (job?.kind === 'backup' ? job?.result?.backup_id : null) || '-'}</span>
-              <span>Storage mode: {policy.active_storage_mode === 'block_incremental_v1' ? 'block incremental' : policy.active_storage_mode ? 'legacy file incremental' : 'not initialized'}</span>
+              <span>Storage mode: {policy.active_storage_mode === 'compressed_snapshot_v1' ? 'standalone compressed snapshot' : policy.active_storage_mode ? 'legacy recovery chain' : 'not initialized'}</span>
             </div>
           </section>
 
@@ -473,18 +463,18 @@ export default function DatabaseBackups() {
           </section>
 
           <section {...pageStyleTarget('panel')} className="database-backups-panel">
-            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">RECOVERY CHAINS</p><h2 {...pageStyleTarget('title')}>Verified Backups</h2></div></div>
+            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">RECOVERY</p><h2 {...pageStyleTarget('title')}>Database Snapshots</h2></div></div>
             <div className="database-backups-table-wrap">
               <table {...pageStyleTarget('table')} className="database-backups-table">
-                <thead><tr><th {...pageStyleTarget('table.header')}>Backup</th><th {...pageStyleTarget('table.header')}>Type</th><th {...pageStyleTarget('table.header')}>Storage</th><th {...pageStyleTarget('table.header')}>Completed</th><th {...pageStyleTarget('table.header')}>Changed data</th><th {...pageStyleTarget('table.header')}>Repository data</th><th {...pageStyleTarget('table.header')}>Restore tested</th></tr></thead>
+                <thead><tr><th {...pageStyleTarget('table.header')}>Backup</th><th {...pageStyleTarget('table.header')}>Type</th><th {...pageStyleTarget('table.header')}>Storage</th><th {...pageStyleTarget('table.header')}>Completed</th><th {...pageStyleTarget('table.header')}>Database size</th><th {...pageStyleTarget('table.header')}>Compressed size</th><th {...pageStyleTarget('table.header')}>Restore tested</th></tr></thead>
                 <tbody>
                   {backups.map((backup) => (
                     <tr key={backup.backup_id}>
                       <td {...pageStyleTarget('table.cell')}>{backup.backup_id}</td>
                       <td {...pageStyleTarget('table.cell')}>{backup.type}</td>
-                      <td {...pageStyleTarget('table.cell')}>{backup.storage_mode === 'block_incremental_v1' ? 'block' : 'legacy'}</td>
+                      <td {...pageStyleTarget('table.cell')}>{backup.storage_mode === 'compressed_snapshot_v1' ? 'compressed' : 'legacy'}</td>
                       <td {...pageStyleTarget('table.cell')}>{formatDate(backup.completed_at)}</td>
-                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.database_delta_bytes)}</td>
+                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.database_bytes)}</td>
                       <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.repository_delta_bytes)}</td>
                       <td {...pageStyleTarget('table.cell')}>
                         {backup.restore_tested
@@ -500,7 +490,7 @@ export default function DatabaseBackups() {
               </table>
             </div>
             <p {...pageStyleTarget('text')} className="database-backups-copy">
-              Backups run only after a superuser clicks Backup database. That manual request starts a new full chain after {policy.full_after_incrementals ?? 10} incrementals, when the full base is at least {policy.full_after_days ?? 7} days old, or after interrupted WAL continuity; otherwise it stores a block incremental.
+              Backup database creates one standalone compressed snapshot. Test backup restores it privately and, only after validation passes, removes older snapshots. The last tested backup stays protected until its replacement passes. No archived change history is required. Separate FEN exports and research files are retained.
             </p>
           </section>
         </main>

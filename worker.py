@@ -41,7 +41,7 @@ from chessism_api.operations.database_restore_tests import (
     run_database_restore_test_job,
 )
 
-from chessism_api.database.engine import init_db
+from chessism_api.database.runtime import init_runtime_db
 from chessism_api.redis_client import redis_settings
 
 
@@ -66,7 +66,7 @@ async def startup(ctx):
             )
     if not constants.CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set for worker.")
-    await init_db(constants.CONN_STRING)
+    await init_runtime_db(constants.CONN_STRING)
     print(f"--- [WORKER] Database connection initialized. ---", flush=True)
     
     ctx['redis'] = await create_pool(redis_settings)

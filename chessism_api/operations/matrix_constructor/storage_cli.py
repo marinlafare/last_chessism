@@ -12,7 +12,7 @@ import re
 import shutil
 
 from sqlalchemy import select, update
-from sqlalchemy.ext.asyncio import create_async_engine
+from chessism_api.database.runtime import bind_runtime_engine
 
 import constants
 from chessism_api.database.engine import AsyncDBSession
@@ -69,8 +69,7 @@ async def main():
     args = parser.parse_args()
     if args.action == "restore" and not args.backup_id:
         parser.error("restore requires --backup-id")
-    engine = create_async_engine(constants.CONN_STRING.replace("postgresql://", "postgresql+asyncpg://", 1))
-    AsyncDBSession.configure(bind=engine)
+    engine = await bind_runtime_engine(constants.CONN_STRING.replace("postgresql://", "postgresql+asyncpg://", 1))
     try:
         print(json.dumps(await restore_working_copies(backup_id=args.backup_id), indent=2))
     finally:

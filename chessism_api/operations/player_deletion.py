@@ -13,6 +13,7 @@ from arq.jobs import Job, JobStatus
 from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.database.ask_db import (
     refresh_database_summary_game_counts,
     refresh_fen_pipeline_summary,
@@ -273,6 +274,11 @@ async def _delete_exclusive_game_batch(
             clean_candidates = [int(link) for link in candidate_links if link is not None]
             if not clean_candidates:
                 return 0
+            if storage_for(session):
+                from .relational_deletion import delete_exclusive_batch
+                deleted = await delete_exclusive_batch(session,player_name,clean_candidates)
+                await session.commit()
+                return deleted
             links_result = await session.execute(text("""
                 SELECT target.link
                 FROM game_player target
@@ -296,15 +302,15 @@ async def _delete_exclusive_game_batch(
             # never double-decrement. Scores, WDL, PVs and continuations remain.
             await session.execute(text("""
                 WITH removed AS (
-                    SELECT fen_fen, COUNT(*)::bigint AS occurrences
+                    SELECT fen_id, COUNT(*)::bigint AS occurrences
                     FROM game_fen_association
                     WHERE game_link = ANY(CAST(:game_links AS BIGINT[]))
-                    GROUP BY fen_fen
+                    GROUP BY fen_id
                 )
                 UPDATE fen current_fen
                 SET n_games = GREATEST(0, current_fen.n_games - removed.occurrences)
                 FROM removed
-                WHERE current_fen.fen = removed.fen_fen;
+                WHERE current_fen.fen_id = removed.fen_id;
             """), {"game_links": game_links})
             await session.execute(text("""
                 DELETE FROM game_fen_association
@@ -339,27 +345,19 @@ async def _demote_player(player_name: str) -> None:
             if int(remaining_result.scalar() or 0) != 0:
                 raise RuntimeError("Exclusive games remain; refusing to demote the player.")
 
-            await session.execute(text(
-                "DELETE FROM months WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM player_stats WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM main_character_mode_summary WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM game_player_salience WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM player_position_frequency WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM player_salience_pending_game WHERE player_name = :player;"
-            ), {"player": player_name})
-            await session.execute(text(
-                "DELETE FROM player_salience_summary WHERE player_name = :player;"
-            ), {"player": player_name})
+            layout = storage_for(session)
+            for table in ('months', 'player_stats', 'main_character_mode_summary'):
+                query = (f"DELETE FROM {layout.table(table)} WHERE player_id="
+                         f"(SELECT id FROM {layout.table('player')} WHERE player_name=:player)"
+                         if layout and layout.compact else f"DELETE FROM {table} WHERE player_name=:player")
+                await session.execute(text(query), {'player':player_name})
+            if storage_for(session):
+                from .relational_deletion import clear_player_projections
+                await clear_player_projections(session,player_name)
+            else:
+                for table in ('game_player_salience','player_position_frequency',
+                              'player_salience_pending_game','player_salience_summary'):
+                    await session.execute(text(f"DELETE FROM {table} WHERE player_name=:player"),{'player':player_name})
             updated = await session.execute(text("""
                 UPDATE player
                 SET

@@ -6,11 +6,11 @@ from datetime import datetime, timezone
 import os
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 
 from . import runtime
 from cloud_job.launch import Client
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.runtime import bind_runtime_engine
 from chessism_api.database.models import CloudControllerHeartbeat
 
 CONTROLLER_LOCK = 731946219
@@ -37,11 +37,9 @@ async def serve(args):
     if not url.startswith("postgresql+asyncpg://"):
         raise ValueError("Set DATABASE_URL to the local PostgreSQL asyncpg connection URL")
     from .controller import Controller
-    engine = create_async_engine(url, pool_pre_ping=True,
-                                 connect_args=getattr(args, "database_connect_args", {}))
-    AsyncDBSession.configure(bind=engine)
-    controller = Controller(Client(gcloud=args.gcloud), args.local_image)
+    engine = await bind_runtime_engine(url, connect_args=getattr(args, "database_connect_args", {}))
     try:
+        controller = Controller(Client(gcloud=args.gcloud), args.local_image)
         async with engine.connect() as connection:
             if not await connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": CONTROLLER_LOCK}):
                 raise RuntimeError("Another cloud controller already owns this database")

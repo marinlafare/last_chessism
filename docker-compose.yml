@@ -6,6 +6,7 @@ services:
       - "8003:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - SUPERADMIN_GATE_CODE=${SUPERADMIN_GATE_CODE}
       - AUTH_COOKIE_NAME=${AUTH_COOKIE_NAME}
@@ -22,8 +23,6 @@ services:
       - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
       - DATABASE_BACKUP_QUOTA_BYTES=200000000000
       - BACKUP_FREE_FLOOR_BYTES=150000000000
-      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
-      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
       - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
       - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
@@ -100,6 +99,7 @@ services:
       - /tmp:rw,noexec,nosuid,size=128m,mode=1777
     environment:
       DATABASE_URL: ${DATABASE_URL}
+      CHESSISM_DATABASE_PROFILE: ${CHESSISM_DATABASE_PROFILE:-legacy}
       CLOUD_WORKER_IMAGE: chessism-stockfish-batch:fen-compat-v1
       CLOUD_CLEANUP_DIRECTORY: /tmp/chessism-cloud-cleanup
     volumes:
@@ -196,6 +196,8 @@ services:
       dockerfile: postgres-backup/Dockerfile
       target: database
     image: chessism-postgres:15-backup
+    # Match the production-sized migration rehearsal; parallel queries use /dev/shm.
+    shm_size: "256m"
     environment:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -207,15 +209,15 @@ services:
       - -c
       - checkpoint_timeout=15min
       - -c
-      - archive_mode=on
+      # Standalone pg_dump snapshots: no growing historical WAL archive.
+      # PostgreSQL still keeps its normal WAL for crash safety.
+      - archive_mode=off
       - -c
-      - archive_command=/usr/local/bin/pgbackrest-chessism-archive-push %p
+      - archive_command=
     ports:
       - "5433:5432"
     volumes:
       - ./db_data:/var/lib/postgresql/data
-      - /main-monitor-db-backups:/backup-volume
-      - pgbackrest_spool:/var/spool/pgbackrest
       - postgres_socket:/var/run/postgresql
     networks:
       - chessism_net
@@ -245,6 +247,7 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=analysis_queue
       - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY:-4}
@@ -299,6 +302,7 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=games_queue
       - BACKUP_VOLUME_ROOT=/backup-volume
@@ -322,6 +326,7 @@ services:
     cpus: "1.00"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=research_queue
       - BACKUP_VOLUME_ROOT=/backup-volume
@@ -351,6 +356,7 @@ services:
     mem_limit: 1g
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
       - ALGORITHM_FREE_FLOOR_BYTES=20000000000
@@ -375,6 +381,7 @@ services:
     cpus: "0.50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=salience_queue
     networks:
@@ -391,11 +398,14 @@ services:
       dockerfile: postgres-backup/Dockerfile
       target: backup-worker
     image: chessism-backup-worker:latest
+    # Restore tests start a private PostgreSQL; give it the same tested shared memory.
+    shm_size: "256m"
     command: arq worker.WorkerSettings
     user: postgres
     cpus: "1.00"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=backup_queue
       - MATRIX_ARTIFACT_DIR=/research-data/matrices
@@ -405,8 +415,6 @@ services:
       - DATABASE_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/database
       - DATABASE_BACKUP_QUOTA_BYTES=200000000000
       - BACKUP_FREE_FLOOR_BYTES=150000000000
-      - DATABASE_BACKUP_FULL_AFTER_INCREMENTALS=${DATABASE_BACKUP_FULL_AFTER_INCREMENTALS:-10}
-      - DATABASE_BACKUP_FULL_AFTER_DAYS=${DATABASE_BACKUP_FULL_AFTER_DAYS:-7}
       - DATABASE_BACKUP_USAGE_CACHE_SECONDS=${DATABASE_BACKUP_USAGE_CACHE_SECONDS:-60}
       - PGBACKREST_STANZA=chessism
       - CHESSISM_ARCHIVE_GAP_PATH=/var/spool/pgbackrest/chessism-archive-gap
@@ -437,6 +445,7 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -457,6 +466,7 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -473,6 +483,7 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -493,6 +504,7 @@ services:
     cpus: "0.50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
       - BACKUP_VOLUME_ROOT=/backup-volume

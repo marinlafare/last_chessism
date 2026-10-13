@@ -44,9 +44,10 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
                     white_str_result='win', black_str_result='resigned', time_control='180',
                     eco='B01', time_elapsed=60, n_moves=2, fens_done=True))
             await s.flush()
+            fen_ids = dict((await s.execute(select(Fen.fen, Fen.fen_id))).all())
             for link, indexes in ((101, (0, 1)), (102, (0, 2)), (103, (1, 2))):
                 for move, index in enumerate(indexes):
-                    s.add(GameFenAssociation(game_link=link, fen_fen=self.fens[index], n_move=move, move_color='white'))
+                    s.add(GameFenAssociation(game_link=link, fen_id=fen_ids[self.fens[index]], n_move=move, move_color='white'))
         self.draft = await create_draft()
 
     async def add(self, links=(101, 102), player='hikaru', replace=None):

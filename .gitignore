@@ -1,4 +1,5 @@
 # local
+.local-migrations/
 .virtual_documents/
 .codex
 /backups/

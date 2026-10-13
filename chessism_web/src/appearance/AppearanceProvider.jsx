@@ -1,7 +1,7 @@
 import { createContext, lazy, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { fetchAppearance, saveAppearance } from './appearanceApi'
-import { appearanceCss, sameOverrides, registryTarget, registryScope } from './styleCore'
+import { appearanceCss, sameOverrides, registryTarget, registryScope, seedIndependentStyles } from './styleCore'
 import { scopeForPath } from './pageScopes'
 import './appearance.css'
 
@@ -16,7 +16,10 @@ export default function AppearanceProvider({ account, pageKey, children }) {
   const dirty = Boolean(saved && !sameOverrides(draft,saved.overrides))
   const current = useRef({dirty,saved}); current.current={dirty,saved}
   useEffect(()=>setSelection(null),[pageKey])
-  const accept = useCallback(data => { current.current={dirty:false,saved:data};setSaved(data); setDraft(data.overrides); setError('') },[])
+  const accept = useCallback(data => {
+    const snapshot = { ...data, overrides: seedIndependentStyles(data.registry, data.overrides) }
+    current.current={dirty:false,saved:snapshot};setSaved(snapshot); setDraft(snapshot.overrides); setError('')
+  },[])
   const load = useCallback(async () => {
     try {
       const data=await fetchAppearance()

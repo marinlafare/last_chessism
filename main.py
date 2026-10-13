@@ -14,9 +14,10 @@ from chessism_api.routers import auth, players, games, fens, analysis, jobs, ana
 from chessism_api.auth import require_superuser
 from chessism_api.routers import cloud_analysis
 from chessism_api.routers import appearance
+from chessism_api.routers import database_catalog
 
 # --- NEW: Import the init_db function ---
-from chessism_api.database.engine import init_db
+from chessism_api.database.runtime import init_runtime_db
 from chessism_api.database.ask_db import ensure_main_character_mode_summary
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
 # --- NEW: Import Redis functions ---
@@ -70,7 +71,7 @@ async def lifespan(app: FastAPI):
     # --- Database Setup ---
     if not CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set.")
-    await init_db(CONN_STRING)
+    await init_runtime_db(CONN_STRING)
     await ensure_main_character_mode_summary()
     
     # --- NEW: Redis Setup ---
@@ -189,6 +190,7 @@ async def read_status():
 # --- NEW: Include the router ---
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(appearance.router, prefix="/appearance", tags=["Appearance"])
+app.include_router(database_catalog.router, prefix="/database", tags=["Database workspace"])
 
 # This makes the endpoint available at /players/current_players
 app.include_router(players.router, prefix="/players", tags=["Players"], dependencies=[Depends(require_superuser)])

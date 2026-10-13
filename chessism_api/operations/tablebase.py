@@ -126,7 +126,7 @@ async def count_tablebase_candidates(game_links: Sequence[int] | None = None) ->
         query = f"""
             SELECT COUNT(DISTINCT f.fen)::bigint
             FROM game_fen_association gfa
-            JOIN fen f ON f.fen = gfa.fen_fen
+            JOIN fen f ON f.fen_id = gfa.fen_id
             WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
               AND {TABLEBASE_CANDIDATE_SQL};
         """
@@ -155,7 +155,7 @@ async def _lease_tablebase_batch(
                 WITH candidate_fens AS MATERIALIZED (
                     SELECT f.fen, MIN(gfa.n_move) AS first_move
                     FROM game_fen_association gfa
-                    JOIN fen f ON f.fen = gfa.fen_fen
+                    JOIN fen f ON f.fen_id = gfa.fen_id
                     WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
                       AND {TABLEBASE_CANDIDATE_SQL}
                     GROUP BY f.fen
@@ -285,7 +285,12 @@ async def _save_tablebase_batch(
     solved: list[dict[str, Any]],
     unavailable: list[dict[str, Any]],
 ) -> None:
+    from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
+    layout = compact_for(session)
+    target = compact_table(Fen, layout.core) if layout else Fen.__table__
     if solved:
+        if layout:
+            solved = [integer_result(row) for row in solved]
         prepared = [{
             "p_fen": item["fen"],
             "p_piece_count": item["piece_count"],
@@ -298,8 +303,8 @@ async def _save_tablebase_batch(
             "p_tablebase_dtz": item["tablebase_dtz"],
         } for item in solved]
         statement = (
-            update(Fen.__table__)
-            .where(Fen.fen == bindparam("p_fen"))
+            update(target)
+            .where(target.c.fen == bindparam("p_fen"))
             .values(
                 piece_count=bindparam("p_piece_count"),
                 score=bindparam("p_score"),
@@ -325,8 +330,8 @@ async def _save_tablebase_batch(
             "p_piece_count": item["piece_count"],
         } for item in unavailable]
         unavailable_statement = (
-            update(Fen.__table__)
-            .where(Fen.fen == bindparam("p_fen"))
+            update(target)
+            .where(target.c.fen == bindparam("p_fen"))
             .values(
                 piece_count=bindparam("p_piece_count"),
                 analysis_source="tablebase_unavailable",

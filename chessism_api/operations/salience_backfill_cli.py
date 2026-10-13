@@ -7,7 +7,7 @@ import asyncio
 import json
 
 import constants
-from chessism_api.database.engine import init_db
+from chessism_api.database.runtime import init_runtime_db
 from chessism_api.operations.player_salience import (
     enqueue_player_salience,
     enqueue_stale_player_salience_jobs,
@@ -17,7 +17,7 @@ from chessism_api.redis_client import close_redis_pool, get_redis_pool
 
 
 async def queue_backfill(player_name: str | None, limit: int) -> dict:
-    await init_db(constants.CONN_STRING)
+    await init_runtime_db(constants.CONN_STRING)
     redis = await get_redis_pool()
     try:
         seeded = await seed_player_salience_summaries()

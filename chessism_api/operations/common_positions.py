@@ -26,7 +26,8 @@ MODAL_MOVE_SQL = """
         SELECT white_move, black_move FROM moves
         WHERE link = a.game_link AND n_move = a.n_move ORDER BY id LIMIT 1
     ) m ON TRUE
-    WHERE a.fen_fen = :fen AND a.n_move > 0 AND a.move_color IN ('white', 'black')
+    WHERE a.fen_id = (SELECT fen_id FROM fen WHERE fen = :fen)
+      AND a.n_move > 0 AND a.move_color IN ('white', 'black')
       AND NULLIF(BTRIM(CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END), '') IS NOT NULL
       AND CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END <> '--'
     GROUP BY a.n_move, a.move_color, san

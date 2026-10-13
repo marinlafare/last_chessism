@@ -79,7 +79,12 @@ def validate_record(record):
     for field in ('piece_count', 'wdl_win', 'wdl_draw', 'wdl_loss', 'tablebase_dtz'):
         if record.get(field) is not None and type(record[field]) not in (int, float):
             raise ValueError(f'Invalid {field} in FEN-backup record')
-    for field in ('next_moves', 'analysis_source', 'tablebase_wdl'):
+    tablebase_wdl = record.get('tablebase_wdl')
+    if tablebase_wdl is not None and (type(tablebase_wdl) not in (int, float)
+            or not math.isfinite(tablebase_wdl) or tablebase_wdl != int(tablebase_wdl)
+            or not -2 <= tablebase_wdl <= 2):
+        raise ValueError('Invalid numeric tablebase WDL')
+    for field in ('next_moves', 'analysis_source'):
         if record.get(field) is not None and not isinstance(record[field], str):
             raise ValueError(f'Invalid {field} in FEN-backup record')
     continuations = record.get('continuations') or []

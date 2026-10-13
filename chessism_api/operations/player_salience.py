@@ -14,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_salience_calculation import calculate_player_salience
 from chessism_api.operations.player_hero_analytics import CHART_MODES, _analytics_scope
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
@@ -86,6 +87,9 @@ async def mark_player_salience_stale(
     links = sorted({int(link) for link in game_links})
 
     async def execute(working_session: AsyncSession) -> int:
+        if storage_for(working_session):
+            from chessism_api.operations.ingestion_pipeline.relational_repository import mark_stale
+            return await mark_stale(working_session, normalized, links)
         result = await working_session.execute(statement, {"players": normalized})
         rows = result.fetchall()
         if links:
@@ -116,17 +120,21 @@ async def mark_player_salience_stale(
 async def seed_player_salience_summaries() -> int:
     """Create stale projection rows for every tracked, non-deleted player."""
     async with AsyncDBSession() as session:
-        result = await session.execute(text("""
-            INSERT INTO player_salience_summary (
-                player_name, status, source_game_count,
+        layout = storage_for(session)
+        target = layout.table('player_salience_summary') if layout else 'player_salience_summary'
+        owner_column = 'player_id' if layout else 'player_name'
+        source_column = 'id' if layout else 'player_name'
+        result = await session.execute(text(f"""
+            INSERT INTO {target} (
+                {owner_column}, status, source_game_count,
                 source_position_count, effective_game_count, error
             )
-            SELECT player_name, 'stale', 0, 0, 0, NULL
+            SELECT {source_column}, 'stale', 0, 0, 0, NULL
             FROM player
             WHERE COALESCE(joined, 0) > 0
               AND deleted_at IS NULL
-            ON CONFLICT (player_name) DO NOTHING
-            RETURNING player_name
+            ON CONFLICT ({owner_column}) DO NOTHING
+            RETURNING {owner_column}
         """))
         rows = result.fetchall()
         await session.commit()
@@ -180,17 +188,21 @@ async def enqueue_player_salience(
         """), {"player": player})
         if not exists:
             raise ValueError(f"Tracked player {player!r} was not found.")
-        await session.execute(text("""
-            INSERT INTO player_salience_summary (
-                player_name, status, source_game_count,
+        layout = storage_for(session)
+        target = layout.table('player_salience_summary') if layout else 'player_salience_summary'
+        owner_column = 'player_id' if layout else 'player_name'
+        owner = f"(SELECT id FROM {layout.table('player')} WHERE player_name=:player)" if layout else ':player'
+        await session.execute(text(f"""
+            INSERT INTO {target} (
+                {owner_column}, status, source_game_count,
                 source_position_count, effective_game_count, error
-            ) VALUES (:player, 'stale', 0, 0, 0, NULL)
-            ON CONFLICT (player_name) DO NOTHING
+            ) VALUES ({owner}, 'stale', 0, 0, 0, NULL)
+            ON CONFLICT ({owner_column}) DO NOTHING
         """), {"player": player})
-        current_status = await session.scalar(text("""
+        current_status = await session.scalar(text(f"""
             SELECT status
-            FROM player_salience_summary
-            WHERE player_name = :player
+            FROM {target}
+            WHERE {owner_column} = {owner}
             FOR UPDATE
         """), {"player": player})
         if current_status in ("queued", "running"):
@@ -199,10 +211,10 @@ async def enqueue_player_salience(
         if current_status == "ready" and not force:
             await session.commit()
             return {"status": "up_to_date", "player_name": player, "job_id": None}
-        await session.execute(text("""
-            UPDATE player_salience_summary
+        await session.execute(text(f"""
+            UPDATE {target}
             SET status = 'queued', error = NULL
-            WHERE player_name = :player
+            WHERE {owner_column} = {owner}
         """), {"player": player})
         await session.commit()
 
@@ -227,10 +239,10 @@ async def enqueue_player_salience(
         return {"status": "queued", "player_name": player, "job_id": job_id}
     except Exception:
         async with AsyncDBSession() as session:
-            await session.execute(text("""
-                UPDATE player_salience_summary
+            await session.execute(text(f"""
+                UPDATE {target}
                 SET status = 'stale'
-                WHERE player_name = :player AND status = 'queued'
+                WHERE {owner_column} = {owner} AND status = 'queued'
             """), {"player": player})
             await session.commit()
         raise
