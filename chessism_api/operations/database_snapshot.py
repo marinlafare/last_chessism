@@ -110,17 +110,15 @@ async def snapshot_metadata(session, publish):
         (await session.execute(text(REF_SQL))).mappings().all())
     if references not in {"relational_v2", "relational_v3", "numeric_v1"}:
         raise RuntimeError("Refusing a snapshot of partially migrated FEN references")
-    # pg_dump is database-scoped, not a cluster/credentials backup. Refuse to
-    # silently lose extra roles or external tablespaces; add support explicitly
-    # if Chessism's single-owner layout ever changes.
-    roles = list((await session.execute(text(
-        "SELECT rolname FROM pg_roles WHERE rolname !~ '^pg_' ORDER BY rolname"
-    ))).scalars())
+    # pg_dump does not contain cluster roles/passwords. Only explicitly supported
+    # export-role identities can accompany the owner; restore them NOLOGIN.
+    from .exports.backup_roles import role_manifest
     owner = await session.scalar(text("SELECT current_user"))
-    if roles != [owner] or await session.scalar(text(
+    support_roles = await role_manifest(session, owner)
+    if await session.scalar(text(
         "SELECT count(*) FROM pg_tablespace WHERE spcname NOT IN ('pg_default','pg_global')"
     )):
-        raise RuntimeError("Snapshot requires the supported single-owner/default-tablespace layout")
+        raise RuntimeError("Snapshot requires the supported default-tablespace layout")
     locale = (await session.execute(text("""SELECT datname AS name, pg_encoding_to_char(encoding) AS encoding,
         datcollate AS collate, datctype AS ctype FROM pg_database WHERE datname=current_database()"""))).mappings().one()
     metadata = {
@@ -129,6 +127,7 @@ async def snapshot_metadata(session, publish):
         "algorithms": await algorithm_backup_manifest(session),
         "matrices": await backup_completed_matrices(session, publish_progress=publish),
         "database": {**dict(locale), "owner": owner},
+        "database_support_roles": support_roles,
         "database_bytes": int(await session.scalar(text("SELECT pg_database_size(current_database())"))),
     }
     if contract:

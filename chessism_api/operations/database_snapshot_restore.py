@@ -31,6 +31,8 @@ async def prepare_cluster(backup, manifest, pgdata, progress):
 
 async def restore_archive(backup_id, socket_dir, pgdata, progress):
     from . import database_restore_tests as r
+    from . import database_backups as b
+    from .exports.backup_roles import restore_role_sql
     # Never use DATABASE_URL/PGHOST for a restore. The private socket is
     # mandatory and pgdata is checked against the owned rehearsal workspace.
     if not pgdata.resolve().is_relative_to(r.RESTORE_TEST_ROOT.resolve()):
@@ -39,6 +41,12 @@ async def restore_archive(backup_id, socket_dir, pgdata, progress):
         raise RuntimeError("The private restore PostgreSQL socket is missing")
     env = {k: v for k, v in os.environ.items() if not k.startswith("PG")}
     env["PGOPTIONS"] = "-c maintenance_work_mem=256MB -c statement_timeout=0"
+    manifest = b._read_json(b.MANIFEST_DIRECTORY / f'{backup_id}.json', {})
+    roles_sql = restore_role_sql(manifest)
+    if roles_sql:
+        await run_progress_command('psql','--no-psqlrc','--no-password','--set=ON_ERROR_STOP=1',
+            f'--host={socket_dir}','--port=55432',f'--username={r.RESTORE_USER}',
+            '--dbname=postgres','--command',roles_sql,env=env,progress=progress)
     def capacity():
         import shutil
         if shutil.disk_usage(r.RESTORE_TEST_ROOT).free < 2_000_000_000:

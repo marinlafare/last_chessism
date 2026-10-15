@@ -29,8 +29,11 @@ services:
       - MATRIX_ARTIFACT_DIR=/research-data/matrices
       - MATRIX_ARTIFACT_DISPLAY_DIR=${MATRIX_ARTIFACT_DISPLAY_DIR:-/home/jon/Desktop/workshop/last_chessism/research_data/matrices}
       - MATRIX_FREE_FLOOR_BYTES=${MATRIX_FREE_FLOOR_BYTES:-20000000000}
+      - CHESSISM_EXPORT_ROOT=/research-data/exports
+      - CHESSISM_EXPORT_READER_FILE=/research-data/integrations/export-reader.json
     networks:
       - chessism_net
+      - chessism_exports
     depends_on:
       db:
         condition: service_healthy
@@ -42,6 +45,33 @@ services:
       - ./research_data:/research-data
       - ./api_logs:/app/logs
       - /main-monitor-db-backups:/backup-volume
+
+  worker-exports:
+    build: .
+    image: chessism-api:latest
+    command: arq chessism_api.operations.exports.jobs.WorkerSettings
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    cpus: "1.0"
+    mem_limit: 1g
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - REDIS_HOST=${REDIS_HOST}
+      - CHESSISM_EXPORT_ROOT=/research-data/exports
+      - CHESSISM_EXPORT_READER_FILE=/run/secrets/chessism_export_reader
+    secrets:
+      - chessism_export_reader
+    volumes:
+      - ./research_data/exports:/research-data/exports
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   chessism-web:
     build: ./chessism_web
@@ -524,6 +554,14 @@ services:
 networks:
   chessism_net:
     driver: bridge
+  chessism_exports:
+    name: chessism_exports
+    driver: bridge
+    internal: true
+
+secrets:
+  chessism_export_reader:
+    file: ./research_data/integrations/export-reader.json
 
 volumes:
   redis_data:

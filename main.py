@@ -15,6 +15,7 @@ from chessism_api.auth import require_superuser
 from chessism_api.routers import cloud_analysis
 from chessism_api.routers import appearance
 from chessism_api.routers import database_catalog
+from chessism_api.routers import exports
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.runtime import init_runtime_db
@@ -191,6 +192,7 @@ async def read_status():
 app.include_router(auth.router, prefix="/auth", tags=["Auth"])
 app.include_router(appearance.router, prefix="/appearance", tags=["Appearance"])
 app.include_router(database_catalog.router, prefix="/database", tags=["Database workspace"])
+app.include_router(exports.router, prefix="/exports/v1", tags=["Dataset exports"])
 
 # This makes the endpoint available at /players/current_players
 app.include_router(players.router, prefix="/players", tags=["Players"], dependencies=[Depends(require_superuser)])

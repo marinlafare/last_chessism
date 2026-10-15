@@ -10,3 +10,4 @@ python-chess
 arq[redis]
 argon2-cffi
 numpy>=1.26,<3
+pyarrow>=21,<26

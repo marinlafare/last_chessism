@@ -30,7 +30,7 @@ class ProfileTests(unittest.TestCase):
                         if lines[index].strip().startswith('-') else
                         '      CHESSISM_DATABASE_PROFILE: ${CHESSISM_DATABASE_PROFILE:-legacy}')
             self.assertEqual(lines[index+1],expected)
-        self.assertEqual(len(consumers),12)
+        self.assertEqual(len(consumers),13)
 
     def test_services_use_shared_initializers(self):
         for path, initializer in (
@@ -39,6 +39,8 @@ class ProfileTests(unittest.TestCase):
             ('chessism_api/operations/salience_backfill_cli.py','init_runtime_db'),
             ('chessism_api/operations/cloud_analysis/__main__.py','bind_runtime_engine'),
             ('chessism_api/operations/matrix_constructor/storage_cli.py','bind_runtime_engine'),
+            ('chessism_api/operations/exports/jobs.py','bind_runtime_engine'),
+            ('chessism_api/operations/exports/cli.py','bind_runtime_engine'),
         ):
             tree = ast.parse((ROOT/path).read_text())
             calls = [node.func.id for node in ast.walk(tree) if isinstance(node,ast.Call) and isinstance(node.func,ast.Name)]

@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from chessism_api.database.relational_storage import RelationalStorage, describe_contract
 from chessism_api.database.backup_contract import contract_differences
 from chessism_api.operations import database_restore_tests as r
+from chessism_api.operations.exports.backup_roles import restore_role_sql
 
 
 def differences(expected, actual):
@@ -55,6 +56,11 @@ async def main(args):
                 f"--encoding={database['encoding']}", f"--lc-collate={database['collate']}", f"--lc-ctype={database['ctype']}")
             await r._run_command_capture(r.PG_CTL, "-D", str(pgdata), "-l", str(root / "postgres.log"),
                                          "-o", r._postgres_start_options(socket), "-w", "start")
+            roles_sql = restore_role_sql(manifest)
+            if roles_sql:
+                await r._run_command_capture('psql','--no-psqlrc','--set=ON_ERROR_STOP=1',
+                    f'--host={socket}','--port=55432',f"--username={database['owner']}",
+                    '--dbname=postgres','--command',roles_sql)
             await r._run_command_capture("pg_restore", "--schema-only", "--create", "--exit-on-error",
                 f"--host={socket}", "--port=55432", f"--username={database['owner']}", "--dbname=postgres", str(args.archive))
             url = URL.create("postgresql+asyncpg", username=database["owner"], database=database["name"],

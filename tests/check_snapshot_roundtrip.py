@@ -56,6 +56,8 @@ async def main():
             await source_connection.close()
             source_connection = await asyncpg.connect(host=str(source_socket), port=55433, user="chessism_user", database="chessism_db")
             await source_connection.execute("""
+                CREATE ROLE chessism_export_reader NOLOGIN NOINHERIT;
+                CREATE ROLE chessism_export_view_owner NOLOGIN NOINHERIT;
                 CREATE SCHEMA chessism_archive;
                 CREATE SCHEMA chessism_reads;
                 CREATE TABLE public.player(id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY, name text NOT NULL UNIQUE);
@@ -67,12 +69,20 @@ async def main():
                 CREATE VIEW chessism_reads.games AS SELECT g.*, p.name FROM public.game g JOIN public.player p ON p.id=g.player_id;
                 CREATE TABLE chessism_archive.game(id bigint PRIMARY KEY, rules text NOT NULL);
                 INSERT INTO chessism_archive.game VALUES (1,'chess960');
+                CREATE SCHEMA exports_data_v1 AUTHORIZATION chessism_export_view_owner;
+                GRANT USAGE ON SCHEMA public TO chessism_export_view_owner;
+                GRANT SELECT ON public.game TO chessism_export_view_owner;
+                CREATE VIEW exports_data_v1.games WITH(security_barrier=true) AS SELECT id FROM public.game;
+                ALTER VIEW exports_data_v1.games OWNER TO chessism_export_view_owner;
+                GRANT USAGE ON SCHEMA exports_data_v1 TO chessism_export_reader;
+                GRANT SELECT ON exports_data_v1.games TO chessism_export_reader;
             """)
             url = URL.create("postgresql+asyncpg", host=str(source_socket), port=55433,
                              username="chessism_user", database="chessism_db")
             engine = create_async_engine(url)
 
             async def metadata(session, publish):
+                from chessism_api.operations.exports.backup_roles import role_manifest
                 # pg_export_snapshot was already called. This concurrent write
                 # must not leak into the archive or its snapshot-bound metadata.
                 await source_connection.execute("INSERT INTO public.player(name) VALUES ('after_snapshot')")
@@ -81,6 +91,7 @@ async def main():
                 locale = (await session.execute(text("""SELECT datname AS name,pg_encoding_to_char(encoding) AS encoding,
                     datcollate AS collate,datctype AS ctype FROM pg_database WHERE datname=current_database()"""))).mappings().one()
                 return {"database": {**dict(locale), "owner": "chessism_user"},
+                        "database_support_roles": await role_manifest(session,'chessism_user'),
                         "database_bytes": int(await session.scalar(text("SELECT pg_database_size(current_database())"))),
                         "matrices": {"count": 0, "bytes_added": 0}, "matrix_definitions": {"count": 0}}
 
@@ -99,6 +110,9 @@ async def main():
             restored = await asyncpg.connect(host=str(target_socket), port=55432, user="chessism_user", database="chessism_db")
             assert await restored.fetchval("SELECT count(*) FROM public.player") == 1, "Consistent exported snapshot"
             assert await restored.fetchval("SELECT count(*) FROM chessism_reads.games") == 1000
+            assert await restored.fetchval("SELECT count(*) FROM exports_data_v1.games") == 1000
+            assert await restored.fetchval("SELECT bool_and(NOT rolcanlogin) FROM pg_roles WHERE rolname IN ('chessism_export_reader','chessism_export_view_owner')")
+            assert await restored.fetchval("SELECT has_table_privilege('chessism_export_reader','exports_data_v1.games','SELECT')")
             assert await restored.fetchval("SELECT rules FROM chessism_archive.game") == "chess960"
             assert await restored.fetchval("SELECT count(*) FROM pg_indexes WHERE indexname='game_player'") == 1
             identity = await restored.fetchval("INSERT INTO public.player(name) VALUES ('new') RETURNING id")
