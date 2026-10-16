@@ -16,7 +16,8 @@ from chessism_api.operations.exports import config, service
 from chessism_api.operations.exports.analytical_reader import AnalyticalError
 from chessism_api.operations.exports.analytical_query import check_scores, prepare
 from chessism_api.operations.exports.analytical_spec import (MoveMatrixSpec, AnalyticalPreviewSpec, SQLExportSpec,
-    StoredLegacyMoveMatrixSpec, StoredRangeMoveMatrixSpec, parse_request, MATRIX_CONTRACT_KEY)
+    StoredLegacyMoveMatrixSpec, StoredRangeMoveMatrixSpec, parse_request, MATRIX_CONTRACT_KEY,
+    MATRIX_CONTRACT_VERSION)
 from chessism_api.operations.exports.analytical_preview import preview
 from chessism_api.operations.exports.move_matrix import plan
 from chessism_api.redis_client import get_redis_pool
@@ -26,14 +27,14 @@ from chessism_api.routers.exports import router
 class CompleteScoreContractTests(unittest.TestCase):
     def test_strict_flag_modes_conflict_and_query_has_no_candidate_limit(self):
         spec=MoveMatrixSpec(player='hikaru',first_move=5,last_move=6,require_complete_scores=True)
-        sql,params,checks=plan(spec)
+        sql,params,checks=plan(spec,start_year=2022)
         self.assertLess(sql.index('bool_and(eligible.score_cp IS NOT NULL)'),sql.index('LIMIT $3'))
-        self.assertLess(sql.index('ORDER BY game_id ASC OFFSET 0'),sql.index('bool_and(eligible.score_cp IS NOT NULL)'))
+        self.assertLess(sql.index('ORDER BY CASE WHEN played_at'),sql.index('bool_and(eligible.score_cp IS NOT NULL)'))
         self.assertEqual(sql.count('LIMIT'),1)
         self.assertIn('count(DISTINCT (eligible.is_white,eligible.move_number))',sql)
         self.assertIn('BETWEEN 5 AND 6',sql)
         self.assertIn(') = 2',sql)
-        self.assertEqual(params,['hikaru','bullet',1000])
+        self.assertEqual(params,['hikaru','bullet',1000,2022])
         self.assertIn(') = 4',plan(spec.model_copy(update={'players':'both'}))[0])
         self.assertNotIn('eligible.score_cp',plan(spec.model_copy(update={'require_complete_scores':False}))[0])
         self.assertNotIn('ORDER BY game_id ASC OFFSET 0',plan(spec.model_copy(update={'require_complete_scores':False}))[0])
@@ -49,18 +50,18 @@ class CompleteScoreContractTests(unittest.TestCase):
     def test_internal_contract_version_is_not_a_user_setting(self):
         spec=MoveMatrixSpec(player='hikaru',require_complete_scores=True)
         document=service.request_document(spec)
-        self.assertEqual(document[MATRIX_CONTRACT_KEY],2)
+        self.assertEqual(document[MATRIX_CONTRACT_KEY],MATRIX_CONTRACT_VERSION)
         self.assertEqual(parse_request(document).complete_score_scope,'whole_game')
         old=dict(document);old.pop(MATRIX_CONTRACT_KEY)
         self.assertEqual(parse_request(old).complete_score_scope,'requested_moves')
-        for version in (2,1):
+        for version in (1,2,3,4):
             with self.assertRaises(ValidationError):MoveMatrixSpec(player='hikaru',**{MATRIX_CONTRACT_KEY:version})
-        for version in (0,3,True,'2'):
+        for version in (0,5,True,'2'):
             with self.assertRaises(ValueError):parse_request(dict(document,**{MATRIX_CONTRACT_KEY:version}))
-        self.assertNotIn(MATRIX_CONTRACT_KEY,service.request_document(spec.model_copy(update={'require_complete_scores':False})))
+        self.assertEqual(service.request_document(spec.model_copy(update={'require_complete_scores':False}))[MATRIX_CONTRACT_KEY],MATRIX_CONTRACT_VERSION)
 
 
-class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
+class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
     async def test_whole_game_rejects_opponent_or_later_missing_scores_before_limit(self):
         await self.complete_fixture()
         async with self.engine.begin() as conn:
@@ -72,7 +73,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         spec=self.design(max_games=1)
         for mode in ('sample','design'):
             result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=1,preview_mode=mode))
-            self.assertEqual(result['rows'],[[14,'hikaru','white',0,20]])
+            self.assertEqual(result['rows'],[[14,'hikaru','white',None,0,20]])
             self.assertEqual(result['selection']['complete_score_scope'],'whole_game')
             self.assertEqual(result['column_selection']['dropped_columns'],[])
         status,path=await self.run_spec(spec)
@@ -116,7 +117,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
             await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association VALUES(14,3,TRUE,4)'))
         spec=self.design(first_move=3,last_move=3,max_games=100)
         result=await preview(AnalyticalPreviewSpec(design=spec))
-        self.assertEqual(result['rows'],[[14,'hikaru','white',20]])
+        self.assertEqual(result['rows'],[[14,'hikaru','white',None,20]])
         both=await preview(AnalyticalPreviewSpec(design=spec.model_copy(update={'players':'both'})))
         self.assertEqual(both['rows'],[])  # requested Black move 3 never happened
 
@@ -127,8 +128,10 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         request_path=Path(self.directory.name)/submitted['id']/'request.json'
         before=request_path.read_bytes()
         new=MoveMatrixSpec(player='hikaru',game_mode='blitz',max_games=2,last_move=2)
-        replay=await service.submit(self.client,new,'old-matrix-key',self.redis)
-        self.assertEqual(replay['id'],submitted['id'])
+        # New year selection/schema must not reuse an old dataset's key.
+        with self.assertRaises(HTTPException) as error:
+            await service.submit(self.client,new,'old-matrix-key',self.redis)
+        self.assertEqual(error.exception.status_code,409)
         self.assertEqual(request_path.read_bytes(),before)
         with self.assertRaises(HTTPException) as error:
             await service.submit(self.client,new.model_copy(update={'last_move':3}),'old-matrix-key',self.redis)
@@ -177,7 +180,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         self.assertEqual(status.status,'complete',status.error)
         table=pq.read_table(request_path.parent/'data.parquet')
         self.assertEqual(table.num_rows,4)
-        self.assertEqual(table.column_names,['game_id','player_name','color','move_1','move_2'])
+        self.assertEqual(table.column_names,['game_id','player_name','color','played_at','move_1','move_2'])
 
     async def complete_fixture(self):
         # Original game 10 has only one scored Black move; game 11 is unscored.
@@ -226,9 +229,9 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         self.assertEqual(executed.limit,1)
         self.assertEqual(spec.model_dump(),before)
         self.assertEqual(result['kind'],'analytical_sample')
-        self.assertEqual(result['rows'],[[12,'hikaru','white',0,20]])
+        self.assertEqual(result['rows'],[[12,'hikaru','white',None,0,20]])
         self.assertEqual(result['row_count'],1)
-        self.assertEqual(len(result['columns']),5)
+        self.assertEqual(len(result['columns']),6)
         self.assertEqual(result['column_selection']['dropped_columns'],[])
         self.assertFalse(result['entire_result_checked'])
         for name in ('has_more','total_row_count'):self.assertIsNone(result[name])
@@ -255,7 +258,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
             result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=3,preview_mode='sample'))
         self.assertEqual(prepared.call_args.args[1].max_games,2)
         self.assertEqual(result['rows'],[
-            [12,'hikaru','white',0,20],[12,'alice','black',30,-20],[13,'alice','white',20,20]])
+            [12,'hikaru','white',None,0,20],[12,'alice','black',None,30,-20],[13,'alice','white',None,20,20]])
         self.assertEqual(result['selection']['returned_games'],2)
         self.assertEqual(result['selection']['returned_participants'],3)
         # A sample never selects beyond the design's max_games either.
@@ -298,7 +301,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         empty=await preview(AnalyticalPreviewSpec(design=self.design(first_move=40,last_move=41),
             preview_mode='sample',preview_rows=2))
         self.assertEqual(empty['rows'],[])
-        self.assertEqual([c['name'] for c in empty['columns']],['game_id','player_name','color','move_40','move_41'])
+        self.assertEqual([c['name'] for c in empty['columns']],['game_id','player_name','color','played_at','move_40','move_41'])
         self.assertIsNone(empty['has_more']);self.assertIsNone(empty['total_row_count'])
         self.assertEqual(empty['selection']['returned_games'],0)
         nullable=await preview(AnalyticalPreviewSpec(design=self.design(require_complete_scores=False),
@@ -329,7 +332,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         await self.complete_fixture()
         spec=self.design()
         result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=1))
-        self.assertEqual(result['rows'],[[12,'hikaru','white',0,20]])
+        self.assertEqual(result['rows'],[[12,'hikaru','white',None,0,20]])
         self.assertTrue(result['has_more'])
         self.assertEqual(result['selection']['selected_games'],2)
         self.assertTrue(result['selection']['require_complete_scores'])
@@ -338,10 +341,10 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         with patch.object(config,'BATCH_ROWS',1):status,path=await self.run_spec(spec)
         self.assertEqual(status.status,'complete',status.error)
         table=pq.read_table(path/'data.parquet')
-        self.assertEqual(table.column_names,['game_id','player_name','color','move_1','move_2'])
+        self.assertEqual(table.column_names,['game_id','player_name','color','played_at','move_1','move_2'])
         self.assertEqual(table.to_pylist(),[
-            {'game_id':12,'player_name':'hikaru','color':'white','move_1':0,'move_2':20},
-            {'game_id':13,'player_name':'hikaru','color':'black','move_1':30,'move_2':0}])
+            {'game_id':12,'player_name':'hikaru','color':'white','played_at':None,'move_1':0,'move_2':20},
+            {'game_id':13,'player_name':'hikaru','color':'black','played_at':None,'move_1':30,'move_2':0}])
         self.assertFalse(table.schema.field('move_1').nullable)
         manifest=json.loads((path/'manifest.json').read_text())
         self.assertEqual(manifest['columns'],result['columns'])
@@ -381,11 +384,11 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         # NULLs outside the output range (including the opponent) disqualify it.
         third_only=await preview(AnalyticalPreviewSpec(design=self.design(first_move=3,last_move=3,max_games=100,max_result_rows=100)))
         self.assertEqual(third_only['rows'],[])
-        self.assertEqual([c['name'] for c in third_only['columns']],['game_id','player_name','color','move_3'])
+        self.assertEqual([c['name'] for c in third_only['columns']],['game_id','player_name','color','played_at','move_3'])
         absent=self.design(first_move=4,last_move=5)
         empty=await preview(AnalyticalPreviewSpec(design=absent))
         self.assertEqual(empty['rows'],[]);self.assertEqual(empty['selection']['selected_games'],0)
-        self.assertEqual([c['name'] for c in empty['columns']],['game_id','player_name','color','move_4','move_5'])
+        self.assertEqual([c['name'] for c in empty['columns']],['game_id','player_name','color','played_at','move_4','move_5'])
         status,path=await self.run_spec(absent)
         self.assertEqual(status.status,'complete',status.error)
         self.assertEqual(pq.read_table(path/'data.parquet').num_rows,0)
@@ -438,5 +441,5 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseTests):
         submitted=await service.submit(self.client,legacy,'legacy-matrix-key',self.redis)
         stored=json.loads((Path(self.directory.name)/submitted['id']/'request.json').read_text())
         self.assertNotIn('require_complete_scores',stored)
-        replay=await service.submit(self.client,MoveMatrixSpec.model_validate(stored),'legacy-matrix-key',self.redis)
+        replay=await service.submit(self.client,parse_request(stored),'legacy-matrix-key',self.redis)
         self.assertEqual(replay['id'],submitted['id'])

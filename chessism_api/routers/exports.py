@@ -9,17 +9,14 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from fastapi.routing import APIRoute
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
-from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from redis.exceptions import RedisError
 
-from chessism_api.database.engine import AsyncDBSession
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.exports import files, service
 from chessism_api.operations.exports.auth import authorize_spec, require_client
-from chessism_api.operations.exports.catalog import public_catalog, tables_for, SOURCES
-from chessism_api.operations.exports.query import ExportSpec, compile_query, effective_order
-from chessism_api.operations.exports.writer import preview_value
+from chessism_api.operations.exports.catalog import public_catalog
+from chessism_api.operations.exports.query import ExportSpec
+from chessism_api.operations.exports.preview import preview_slot, structured_preview as preview_rows
 from chessism_api.operations.exports.analytical_spec import SQLExportSpec, MoveMatrixSpec, AnalyticalPreviewSpec, AnalyticalPreviewResult
 from chessism_api.operations.exports.analytical_reader import AnalyticalError
 from chessism_api.operations.exports.analytical_preview import preview as analytical_preview_rows, SAMPLE_TIMEOUT_SECONDS
@@ -86,14 +83,11 @@ async def create_matrix(spec: MoveMatrixSpec, client=Depends(require_client), re
              summary='Preview the final rows of a SQL or move-matrix design')
 async def analytical_preview(request: AnalyticalPreviewSpec, client=Depends(require_client), redis=Depends(get_redis_pool)):
     authorize_spec(client, request.design)
-    lease = f'export-preview:{client.id}'
-    owner = uuid.uuid4().hex
-    try:
-        acquired = await redis.set(lease, owner, nx=True, ex=30)
-    except RedisError:
-        raise HTTPException(503, {'code': 'PREVIEW_UNAVAILABLE', 'message': 'Preview admission is temporarily unavailable.'}) from None
-    if not acquired:
-        raise HTTPException(429, {'code': 'PREVIEW_BUSY', 'message': 'A preview is already running for this integration.'}, headers={'Retry-After': '3'})
+    async with preview_slot(redis, client.id, analytical=True):
+        return await run_analytical_preview(request)
+
+
+async def run_analytical_preview(request):
     try:
         deadline = SAMPLE_TIMEOUT_SECONDS if request.preview_mode == 'sample' else 15
         return await asyncio.wait_for(analytical_preview_rows(request), timeout=deadline)
@@ -109,44 +103,16 @@ async def analytical_preview(request: AnalyticalPreviewSpec, client=Depends(requ
         # Do not expose query text, database details or private credential paths.
         logging.getLogger(__name__).error('Analytical preview failed (%s)', type(error).__name__)
         raise HTTPException(503, {'code': 'PREVIEW_UNAVAILABLE', 'message': 'The analytical preview is temporarily unavailable.'}) from None
-    finally:
-        try:
-            await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, lease, owner)
-        except RedisError:
-            logging.getLogger(__name__).warning('Preview lease release unavailable; lease will expire.')
-
-
-async def preview_rows(spec):
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
-        await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
-        await session.execute(text("SET LOCAL statement_timeout = '12s'"))
-        await session.execute(text("SET LOCAL lock_timeout = '1s'"))
-        await session.execute(text('SET LOCAL max_parallel_workers_per_gather = 1'))
-        snapshot_at = await session.scalar(text('SELECT transaction_timestamp()'))
-        limit = min(spec.limit, 100)
-        statement, params = compile_query(spec, tables_for(session), limit=limit+1)
-        rows = (await session.execute(statement, params)).mappings().all()
-    return {'kind': 'live_preview', 'source': spec.source, 'snapshot_at': snapshot_at,
-        'columns': [{'name': key, 'type': SOURCES[spec.source].columns[key].dtype} for key in spec.select],
-        'rows': [[preview_value(row[key]) for key in spec.select] for row in rows[:limit]],
-        'row_count': min(len(rows), limit), 'has_more': len(rows) > limit,
-        'selection_order': effective_order(spec), 'json_integer_encoding': 'decimal string when outside JavaScript safe range'}
 
 
 @router.post('/preview')
 async def preview(spec: ExportSpec, client=Depends(require_client), redis=Depends(get_redis_pool)):
     authorize_spec(client, spec)
-    lease = f'export-preview:{client.id}'
-    lease_owner = uuid.uuid4().hex
-    if not await redis.set(lease, lease_owner, nx=True, ex=30):
-        raise HTTPException(429, 'A preview is already running for this integration.', headers={'Retry-After': '3'})
-    try:
-        return await asyncio.wait_for(preview_rows(spec), timeout=15)
-    except (SQLAlchemyError, asyncio.TimeoutError):
-        raise HTTPException(503, 'Preview exceeded its query limit or is unavailable. Narrow the request.') from None
-    finally:
-        await redis.eval("if redis.call('get', KEYS[1]) == ARGV[1] then return redis.call('del', KEYS[1]) else return 0 end", 1, lease, lease_owner)
+    async with preview_slot(redis, client.id):
+        try:
+            return await asyncio.wait_for(preview_rows(spec), timeout=15)
+        except (SQLAlchemyError, asyncio.TimeoutError):
+            raise HTTPException(503, 'Preview exceeded its query limit or is unavailable. Narrow the request.') from None
 
 
 @router.post('', status_code=202)

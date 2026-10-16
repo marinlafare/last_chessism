@@ -1,11 +1,8 @@
 """Incremental, shard-aware imports and the fleet's final receipt gate."""
-import asyncio
-import json
-
+from .artifacts import read_manifest, read_performance
 from .importer import validate_manifest
 from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
-from stockfish_batch.storage import MAX_MANIFEST_BYTES
 from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
 from .ingestion import ingest_ready
 from .result_receipts import task_receipts, completion_manifest
@@ -23,16 +20,15 @@ async def collect(storage, run, launch):
     for task in launch["tasks"]:
         cfg = Config(**task["config"]).validate()
         receipts = task_receipts(run.receipts, task['index'])
-        raw = await asyncio.to_thread(storage.read, cfg.output + "/manifest.json", MAX_MANIFEST_BYTES)
-        if raw is None:
+        manifest = await read_manifest(storage, cfg.output)
+        if manifest is None:
             raise ValueError("Successful Batch VM has no completion manifest; cleanup withheld")
-        manifest = json.loads(raw)
         subset = run.positions[task["start"]:task["start"] + task["count"]]
         validate_manifest(manifest, subset, task["contract"], receipts)
-        raw_report = await asyncio.to_thread(storage.read, cfg.output + "/performance.json", 128 * 1024)
-        if raw_report is None:
+        report = await read_performance(storage, cfg.output)
+        if report is None:
             raise ValueError("Successful Batch VM has no performance report; cleanup withheld")
-        reports.append(validate_performance(json.loads(raw_report), task["contract"], CPUS))
+        reports.append(validate_performance(report, task["contract"], CPUS))
         manifests.append(manifest)
     launch = {**launch, "task_performance": reports, "task_manifests": manifests,
               "manifest": completion_manifest(run.contract, len(run.positions), run.receipts)}

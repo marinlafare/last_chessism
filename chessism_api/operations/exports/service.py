@@ -37,28 +37,6 @@ def request_document(spec):
     return document
 
 
-def compatible_matrix_replay(previous, spec, document):
-    """Recognize an old, equivalent key without rewriting its saved instructions."""
-    from .analytical_spec import MoveMatrixSpec, StoredLegacyMoveMatrixSpec, MATRIX_CONTRACT_KEY, MATRIX_CONTRACT_VERSION
-    if not isinstance(spec, MoveMatrixSpec) or isinstance(spec, StoredLegacyMoveMatrixSpec):
-        return False
-    try:
-        stored = files.read_request(previous.id)
-        if hashlib.sha256(files.canonical_bytes(stored)).hexdigest() != previous.request_sha256:
-            return False
-        if stored.get('mode') != 'move_matrix':
-            return False
-        version = stored.pop(MATRIX_CONTRACT_KEY, 1)
-        if version != MATRIX_CONTRACT_VERSION:
-            return False  # old ordering/eligibility/schema is not the new dataset
-        # Validation rejects old column dropping and smaller result guards;
-        # neither can be treated as equivalent to the new semantics.
-        normalized = MoveMatrixSpec.model_validate(stored)
-        return request_document(normalized) == document
-    except (OSError, ValueError):
-        return False
-
-
 def payload(job):
     return {key: getattr(job, key) for key in (
         'id', 'name', 'source', 'status', 'phase', 'row_limit', 'rows_written', 'file_bytes',
@@ -86,7 +64,10 @@ async def submit(client, spec, key, redis):
                 previous = await session.scalar(select(ExportJob).where(ExportJob.client_id == client.id,
                                                                         ExportJob.idempotency_key == key))
                 if previous:
-                    if previous.request_sha256 != fingerprint and not compatible_matrix_replay(previous, spec, document):
+                    # request_document already canonicalizes every accepted
+                    # alias/default. Different versions describe different
+                    # datasets and must never reinterpret a saved request.
+                    if previous.request_sha256 != fingerprint:
                         raise HTTPException(409, 'Idempotency key already belongs to a different request.')
                     job = previous
                 else:

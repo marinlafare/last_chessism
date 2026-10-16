@@ -35,8 +35,9 @@ CPUs, instance count, external IPs and balanced-disk storage **before publishing
 Positive dedicated preemptible CPU quota replaces the N2D pool; zero/ungranted
 quota uses the standard pool, as in this project's successful tests. Google is
 still authoritative about Spot capacity and quota applicability. There is no
-fallback to STANDARD VMs or a larger machine. As checked on 2026-10-07, this
-project’s N2D quota was 16 CPUs: only one such VM could run concurrently.
+fallback to STANDARD VMs or a larger machine. Do not treat historical quota
+measurements as current limits: the preflight reads the requested fleet's
+current quotas before publishing.
 
 The durable `batch_work_units_v1` execution format preserves unit IDs, contracts,
 workflow ownership and receipts across restarts. Partial launch resumes only
@@ -179,7 +180,9 @@ The Compose controller runs on your PC using your existing `gcloud` login:
 1. The authenticated UI records a bounded request in PostgreSQL.
 2. The controller selects unscored FENs using `FOR UPDATE SKIP LOCKED`, inserts
    durable cloud reservations, and commits **before uploading anything**. Batch
-   requests reserve at most 50,000 per unit, up to 500,000 per loop; Cloud Run retains
+   requests reserve at most 50,000 per unit, up to 1,000,000 per VM per cycle
+   for new automatic sequences; older explicit 500,000-FEN loops retain their
+   saved partitioning. Cloud Run retains
    its 200,000-FEN whole-request bound.
 3. Before fleet creation, it verifies that earlier Batch jobs, compute resources,
    repository images and live/noncurrent bucket objects are gone. Unexpected
@@ -599,6 +602,20 @@ These do not replace the next user-launched, paid 500,000-FEN integration test.
   projections refresh once at the end of the UI request, avoiding repeated scans.
 
 ## What cleanup retains
+
+Code cleanup is separate from deleting a completed cloud job's resources.
+The API's `cloud_analysis/artifacts.py` owns the bounded completion-manifest and
+performance-report reads for single-VM, fleet, Cloud Run and work-unit paths.
+Only an absent object returns `None`; malformed JSON and storage/permission
+failures abort. Each backend still validates its own contract, committed receipts
+and recovery state before authorizing cleanup. Reading a report is not proof of
+successful database import.
+
+Keep the saved-format dispatchers and migration commands: legacy single-VM,
+`batch_sequence_v1` and current `batch_sequence_v2` jobs have different durable
+recovery formats. Old benchmark folders are retained intentionally for comparison.
+Do not prune those modules, pending downloads, checkpoints, credentials or job
+history merely because no job is currently running.
 
 Empty bucket/repository, the reusable recovery workflow/service account,
 IAM/firewall configuration, and local durable job history remain. Google-managed

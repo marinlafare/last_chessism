@@ -2,17 +2,16 @@
 import asyncio
 from .result_receipts import task_receipts, completion_manifest
 from dataclasses import asdict
-import json
 
 from . import runtime
-from .importer import import_batch, validate_manifest, refresh_projections
+from .importer import validate_manifest, refresh_projections
+from .artifacts import read_manifest, read_performance
 from .preflight import verify_clean_workspace
 from cloud_job import cloud_run as api
 from cloud_job.launch import inspect_worker, expected_contract
 from stockfish_batch.config import Config
-from stockfish_batch.checkpoints import encode, BatchCheckpoints
+from stockfish_batch.checkpoints import encode
 from stockfish_batch.performance import validate_performance
-from stockfish_batch.storage import MAX_MANIFEST_BYTES
 from stockfish_core import PROFILE_ID
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisRun
@@ -120,14 +119,14 @@ async def advance(controller, job, run):
             for task in launch["tasks"]:
                 cfg = api.task_config(config, task["index"], len(launch["tasks"]))
                 receipts = task_receipts(current.receipts, task['index'])
-                raw = await asyncio.to_thread(storage.read, cfg.output + "/manifest.json", MAX_MANIFEST_BYTES)
-                if raw is None:
+                manifest = await read_manifest(storage, cfg.output)
+                if manifest is None:
                     raise ValueError("Successful Cloud Run task has no manifest")
-                validate_manifest(json.loads(raw), run.positions[task["start"]:task["start"] + task["count"]], task["contract"], receipts)
-                report = await asyncio.to_thread(storage.read, cfg.output + "/performance.json", 128 * 1024)
+                validate_manifest(manifest, run.positions[task["start"]:task["start"] + task["count"]], task["contract"], receipts)
+                report = await read_performance(storage, cfg.output)
                 if report is None:
                     raise ValueError("Cloud Run task performance report missing")
-                performance.append(validate_performance(json.loads(report), task["contract"], 1))
+                performance.append(validate_performance(report, task["contract"], 1))
             launch["task_performance"] = performance
             launch["execution_summary"] = execution
             launch["manifest"] = completion_manifest(run.contract, len(run.positions), current.receipts)

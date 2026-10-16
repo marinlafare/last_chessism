@@ -126,6 +126,22 @@ not promise a shared snapshot; use one dataset request when consistency matters.
 
 ## Execution, integrity and cleanup
 
+Code responsibilities:
+
+- `routers/exports.py`: authentication, request boundaries and HTTP responses.
+- `preview.py`: the shared per-client lease and structured preview query.
+  Analytical and structured previews cannot run concurrently for one client;
+  a Redis release outage does not discard a successful response.
+- `analytical_spec.py`, `move_matrix.py`, `analytical_query.py`: versioned designs,
+  game selection, finished result schema and shared preview/export validation.
+- `analytical_reader.py`, `sql_policy.py`: isolated reader and permitted SQL.
+- `service.py`, `jobs.py`, `files.py`, `writer.py`: durable admission, execution,
+  expiry and atomic Parquet publication. Metadata writes never use the reader role.
+
+Request normalization happens once, before hashing. An idempotency key can only
+replay the same canonical request/contract version; older stored instructions
+remain readable by workers, but are not converted into a new dataset on replay.
+
 The dedicated `worker-exports` runs one job at a time, including a cross-worker
 PostgreSQL advisory lock. Admission permits two unfinished jobs/client and
 eight globally. A queue outage cannot lose committed jobs; the worker repairs
@@ -151,7 +167,8 @@ lock wait; 2 GiB file limit; 20 GB filesystem free reserve; 24-hour retention
 after completion. `CHESSISM_EXPORT_TIMEOUT_SECONDS`, `CHESSISM_EXPORT_MAX_BYTES`,
 `CHESSISM_EXPORT_FREE_FLOOR_BYTES`, `CHESSISM_EXPORT_RETENTION_SECONDS` and
 `CHESSISM_EXPORT_ROOT` configure these bounds (set consistently on API/worker).
-Preview has a 15-second deadline and one concurrent preview per token.
+Structured and full-design previews have a 15-second deadline; matrix samples
+have a five-second deadline. Both routes share one concurrent preview per token.
 
 Files live in `research_data/exports/<id>/`, excluded from Git and database
 backups. Small normal-column PostgreSQL tables `export_client` and `export_job`

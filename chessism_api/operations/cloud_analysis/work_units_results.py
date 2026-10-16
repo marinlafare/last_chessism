@@ -2,14 +2,14 @@
 import asyncio
 from collections import defaultdict
 from datetime import datetime, timezone
-import json
 
 from sqlalchemy import select, func
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim, CloudResultBatch
 from chessism_api.database.cloud_codec import checksum
-from stockfish_batch.storage import MAX_MANIFEST_BYTES
 from stockfish_batch.performance import validate_performance
+from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
+from .artifacts import read_manifest, read_performance
 from .ingestion import ingest_ready
 from .importer import validate_manifest
 
@@ -35,11 +35,11 @@ async def import_unit(cloud, unit):
             CloudAnalysisRun.id == unit['run_id']))
     if imported != unit['count']:
         return unit
-    raw = await asyncio.to_thread(storage.read, unit['config']['output'] + '/manifest.json', MAX_MANIFEST_BYTES)
-    report = await asyncio.to_thread(storage.read, unit['config']['output'] + '/performance.json', 128 * 1024)
-    if raw is None or report is None:
+    manifest = await read_manifest(storage, unit['config']['output'])
+    report = await read_performance(storage, unit['config']['output'])
+    if manifest is None or report is None:
         return unit
-    manifest, performance = json.loads(raw), validate_performance(json.loads(report), unit['contract'], 16)
+    performance = validate_performance(report, unit['contract'], CPUS)
     async with AsyncDBSession() as session, session.begin():
         run = await session.get(CloudAnalysisRun, unit['run_id'], with_for_update=True)
         validate_manifest(manifest, run.positions, run.contract, run.receipts)
@@ -85,7 +85,6 @@ async def verify_saved(root, launch):
 
 def performance(launch):
     """Unit-success measurements, not billed time; include reused completed units."""
-    from cloud_job.batch_spot import MACHINE
     vms, reports = [], []
     for task in launch['tasks']:
         units = [u for u in launch['units'] if u['vm_index'] == task['index']]
@@ -110,7 +109,7 @@ def performance(launch):
         vms.append({'index': task['index'], 'positions': report['position_count'],
                     **{k: report[k] for k in ('analyzed_this_attempt', 'resumed', 'workers', 'metrics')}})
     return {**launch, 'task_performance': reports, 'performance': {
-        'backend': 'batch_spot', 'vm_count': len(vms), 'cpus_per_vm': 16, 'memory_gib_per_vm': 16,
+        'backend': 'batch_spot', 'vm_count': len(vms), 'cpus_per_vm': CPUS, 'memory_gib_per_vm': VM_MEMORY_MIB // 1024,
         'machine_type': MACHINE, 'position_count': sum(u['count'] for u in launch['units']),
         'worker_seconds_sum': sum(p['metrics']['worker_seconds'] for p in reports), 'vms': vms,
         'note': 'Successful unit-attempt measurements only; container transitions and interrupted attempts are not billed-time measurements.'}}

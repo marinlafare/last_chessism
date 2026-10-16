@@ -15,7 +15,7 @@ from cleaning_job.cleanup import prepare
 from stockfish_batch.checkpoints import BatchCheckpoints, encode, parse_input
 from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
-from stockfish_batch.storage import MAX_MANIFEST_BYTES
+from .artifacts import read_manifest, read_performance
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
@@ -301,17 +301,16 @@ class Controller:
             await save_run(run.id, status="failed", error=message)
             await save_job(run.job_id, status="failed", error=message)
         elif state == "SUCCEEDED":
-            raw_manifest = await asyncio.to_thread(storage.read, config.output + "/manifest.json", MAX_MANIFEST_BYTES)
-            if raw_contract is None or raw_manifest is None:
+            manifest = await read_manifest(storage, config.output)
+            if raw_contract is None or manifest is None:
                 raise ValueError("Cloud reported success without a contract/completion manifest")
             async with AsyncDBSession() as session:
                 current = await session.get(CloudAnalysisRun, run.id)
-            manifest = json.loads(raw_manifest)
             validate_manifest(manifest, current.positions, current.contract, current.receipts)
             launch = {**run.launch, "manifest": manifest, "batch_status": remote["status"]}
             if launch.get("workflow_version") == 2:
-                raw_report = await asyncio.to_thread(storage.read, config.output + "/performance.json", 128 * 1024)
-                if raw_report is None:
+                report = await read_performance(storage, config.output)
+                if report is None:
                     raise ValueError("Successful worker is missing its performance summary; cleanup withheld")
-                launch["performance"] = validate_performance(json.loads(raw_report), run.contract, config.workers)
+                launch["performance"] = validate_performance(report, run.contract, config.workers)
             await save_run(run.id, status="finalizing", launch=launch)

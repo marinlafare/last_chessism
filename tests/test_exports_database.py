@@ -63,7 +63,7 @@ DDL = [
 
 
 @unittest.skipUnless(os.environ.get('EXPORT_TEST_DATABASE') == '1', 'isolated database test only')
-class ExportDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class ExportDatabaseFixture(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         url=os.environ['DATABASE_URL']
         if not url.endswith('/chessism_export_test'):
@@ -93,6 +93,8 @@ class ExportDatabaseTests(unittest.IsolatedAsyncioTestCase):
         spec=ExportSpec(source='games',select=['game_id','played_at','white_player'],**kwargs)
         return await service.submit(self.client,spec,uuid.uuid4().hex,self.redis)
 
+
+class ExportDatabaseTests(ExportDatabaseFixture):
     async def test_all_sources_have_exact_row_semantics_and_no_unneeded_fanout(self):
         expected={'games':3,'players':3,'positions':2,'game_positions':3,'moves':3,'player_games':4}
         async with AsyncDBSession() as session:

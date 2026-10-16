@@ -11,7 +11,7 @@ from fastapi import FastAPI
 import pyarrow.parquet as pq
 from sqlalchemy import text
 
-from tests.test_exports_database import ExportDatabaseTests, SCHEMA
+from tests.test_exports_database import ExportDatabaseFixture, SCHEMA
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.operations.exports import analytical_admin, analytical_reader, jobs, service
 from chessism_api.operations.exports.catalog import tables_for
@@ -25,9 +25,14 @@ from chessism_api.redis_client import get_redis_pool
 from chessism_api.routers.exports import router
 
 
-class AnalyticalDatabaseTests(ExportDatabaseTests):
+class AnalyticalDatabaseFixture(ExportDatabaseFixture):
     async def asyncSetUp(self):
         await super().asyncSetUp()
+        # Stable fixture selection; dedicated year-expansion tests override it.
+        year_choice=patch('chessism_api.operations.exports.analytical_query.random.Random.choice',
+                          lambda _random, years: years[-1])
+        year_choice.start()
+        self.addCleanup(year_choice.stop)
         self.credential=Path(self.directory.name)/'reader.json'
         async with AsyncDBSession() as session:tables=tables_for(session)
         await analytical_admin.install(self.engine,tables,str(self.credential))
@@ -48,6 +53,8 @@ class AnalyticalDatabaseTests(ExportDatabaseTests):
         status=await service.owned_job(self.client,job['id'])
         return status,Path(self.directory.name)/job['id']
 
+
+class AnalyticalDatabaseTests(AnalyticalDatabaseFixture):
     async def test_preview_matrix_uses_entire_game_selection_and_preserves_schema(self):
         spec=MoveMatrixSpec(player='hikaru',game_mode='blitz',max_games=2,
                             first_move=1,last_move=40,score_perspective='player')
@@ -56,12 +63,13 @@ class AnalyticalDatabaseTests(ExportDatabaseTests):
         self.assertFalse(result['entire_result_checked'])
         self.assertEqual(result['selection']['selected_games'],2)
         self.assertEqual(result['selection']['selected_participants'],2)
-        self.assertEqual(len(result['columns']),43)
-        self.assertEqual(result['rows'][0][:4],[10,'hikaru','black',30])
-        self.assertEqual(result['columns'][3]['type'],'int32')
+        self.assertEqual(len(result['columns']),44)
+        self.assertEqual(result['rows'][0][:5],[10,'hikaru','black','2026-01-01T00:00:00.123456+00:00',30])
+        self.assertEqual(result['columns'][3]['type'],'timestamp[us, tz=UTC]')
+        self.assertEqual(result['columns'][4]['type'],'int32')
         empty=await preview(AnalyticalPreviewSpec(design=spec.model_copy(update={'player':'unknown'})))
         self.assertEqual(empty['rows'],[]);self.assertFalse(empty['has_more'])
-        self.assertEqual(empty['total_row_count'],0);self.assertEqual(len(empty['columns']),43)
+        self.assertEqual(empty['total_row_count'],0);self.assertEqual(len(empty['columns']),44)
         both=await preview(AnalyticalPreviewSpec(design=spec.model_copy(update={'players':'both'}),preview_rows=1))
         self.assertEqual(both['selection']['selected_participants'],4)
         self.assertEqual(both['selection']['result_row_bound'],4)
@@ -126,7 +134,7 @@ class AnalyticalDatabaseTests(ExportDatabaseTests):
         # New designs preserve all requested columns, including missing scores.
         status,path=await self.run_spec(MoveMatrixSpec(player='hikaru',game_mode='blitz',max_games=2,last_move=2))
         self.assertEqual(status.status,'complete',status.error)
-        self.assertEqual(pq.read_table(path/'data.parquet').column_names,['game_id','player_name','color','move_1','move_2'])
+        self.assertEqual(pq.read_table(path/'data.parquet').column_names,['game_id','player_name','color','played_at','move_1','move_2'])
         empty=SQLExportSpec(sql='SELECT NULL::int4 AS score WHERE FALSE',exclude_null_columns=True)
         result=await preview(AnalyticalPreviewSpec(design=empty))
         self.assertEqual(result['columns'],[{'name':'score','type':'int32','nullable':False}])
@@ -185,8 +193,9 @@ class AnalyticalDatabaseTests(ExportDatabaseTests):
             self.assertEqual(await conn.fetchval('SELECT count(*) FROM exports_data_v1.games'),3)
             self.assertEqual(await conn.fetchval('SELECT current_user'),'chessism_export_reader')
         credential=json.loads(self.credential.read_text())
+        owner = self.engine.url.username.replace('"', '""')
         for sql in ('SELECT * FROM public.export_client',f'SELECT * FROM {SCHEMA}.game',
-                    'SET ROLE exports_test','CREATE TEMP TABLE hacked(id int)',
+                    f'SET ROLE "{owner}"','CREATE TEMP TABLE hacked(id int)',
                     'CREATE SCHEMA hacked','UPDATE exports_data_v1.players SET name=\'changed\'',
                     "SELECT pg_read_file('/etc/passwd')"):
             conn=await asyncpg.connect(**credential)
@@ -219,7 +228,7 @@ class AnalyticalDatabaseTests(ExportDatabaseTests):
         status,path=await self.run_spec(spec)
         self.assertEqual(status.status,'complete',status.error)
         rows=pq.read_table(path/'data.parquet').to_pylist()
-        self.assertEqual(len(rows),2);self.assertEqual(len(rows[0]),43)
+        self.assertEqual(len(rows),2);self.assertEqual(len(rows[0]),44)
         self.assertEqual(rows[0]['color'],'black');self.assertEqual(rows[0]['move_1'],30)
         self.assertIsNone(rows[1]['move_1']);self.assertEqual(rows[1]['move_2'],0)
         self.assertIsNone(rows[1]['move_40'])

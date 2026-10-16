@@ -3,7 +3,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from .config import MAX_ROWS
 from .query import typed_value
-from .sql_policy import validate_sql, PARAM_TYPES
+from .sql_policy import validate_sql
 
 MAX_ANALYTICAL_COLUMNS = 128
 MATRIX_CONTRACT_KEY = '_matrix_contract_version'
