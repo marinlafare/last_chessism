@@ -1,0 +1,24 @@
+{
+  "properties": {
+    "chartColor1": {"label":"Primary color","kind":"color","css":"--chart-color-1","default":"#15c780"},
+    "chartColor2": {"label":"Secondary color","kind":"color","css":"--chart-color-2","default":"#d55c5c"},
+    "chartColor3": {"label":"Third color","kind":"color","css":"--chart-color-3","default":"#8d6bb4"},
+    "chartColor4": {"label":"Fourth color","kind":"color","css":"--chart-color-4","default":"#4ea3c7"},
+    "barHoverColor": {"label":"Bar hover color","kind":"color","css":"--bar-hover-color","default":"#2adca2"},
+    "barHoverBorder": {"label":"Bar hover border","kind":"color","css":"--bar-hover-border","default":"#ffffff"}
+  },
+  "targets": {
+    "chart.bars": {"label":"Bar chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Bars"}},
+    "chart.pending": {"label":"Unscored appearances chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Bars"}},
+    "chart.appearances": {"label":"All appearances chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Bars"}},
+    "chart.coverage": {"label":"Coverage chart colors","properties":["chartColor1","chartColor2","chartColor3","chartColor4"],"propertyLabels":{"chartColor1":"Games","chartColor2":"Analyzed games","chartColor3":"Positions","chartColor4":"Analyzed positions"}},
+    "chart.ratingGroups": {"label":"Rating group colors","properties":["chartColor1","chartColor2","chartColor3"],"propertyLabels":{"chartColor1":"Low / cluster 1","chartColor2":"Medium / cluster 2","chartColor3":"High / cluster 3"}},
+    "chart.accuracy": {"label":"Position quality chart colors","properties":["chartColor1","chartColor2","chartColor3","chartColor4"],"propertyLabels":{"chartColor1":"Excellent","chartColor2":"Strong","chartColor3":"Mixed","chartColor4":"Poor"}},
+    "chart.ratingModes": {"label":"Rating timeline colors","properties":["chartColor1","chartColor2","chartColor3"],"propertyLabels":{"chartColor1":"Bullet","chartColor2":"Blitz","chartColor3":"Rapid"}},
+    "chart.outcomes": {"label":"Result chart colors","properties":["chartColor1","chartColor2","chartColor3"],"propertyLabels":{"chartColor1":"Wins","chartColor2":"Draws","chartColor3":"Losses"}},
+    "chart.measures": {"label":"Stockfish chart colors","properties":["chartColor1","chartColor2"],"propertyLabels":{"chartColor1":"Positive","chartColor2":"Negative / losses"}},
+    "chart.coefficients": {"label":"Coefficient chart colors","properties":["chartColor1","chartColor2","chartColor3"],"propertyLabels":{"chartColor1":"Fitted line","chartColor2":"Fitted points","chartColor3":"Lichess baseline"}},
+    "chart.research": {"label":"Research chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Series"}},
+    "chart.bubbles": {"label":"Player bubble chart colors","properties":["chartColor1"],"propertyLabels":{"chartColor1":"Point color"}}
+  }
+}

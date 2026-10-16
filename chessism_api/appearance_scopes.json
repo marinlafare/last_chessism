@@ -1,0 +1,1030 @@
+{
+  "common_targets": {
+    "page": {
+      "label": "Page background",
+      "properties": [
+        "background",
+        "color",
+        "fontFamily"
+      ]
+    },
+    "panel": {
+      "label": "Panels on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "card": {
+      "label": "Cards on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "heading": {
+      "label": "Page heading",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "title": {
+      "label": "Section titles",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "text": {
+      "label": "Body text",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "label": {
+      "label": "Field labels",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "value": {
+      "label": "Metric values",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "button": {
+      "label": "Buttons on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "field": {
+      "label": "Form fields on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "link": {
+      "label": "Links on this page",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverColor"
+      ]
+    },
+    "table": {
+      "label": "Tables on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "table.header": {
+      "label": "Table headings",
+      "properties": [
+        "background",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "table.cell": {
+      "label": "Table cells",
+      "properties": [
+        "background",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "disclosure": {
+      "label": "Expandable sections",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "toolbar": {
+      "label": "Toolbars",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "popup": {
+      "label": "Dialogs on this page",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    }
+  },
+  "scopes": {
+    "home": {
+      "label": "Home",
+      "routes": [
+        "/",
+        "/players"
+      ],
+      "targets": {
+        "overview.layout": {
+          "label": "First row spacing",
+          "properties": ["homeTopMargin"]
+        },
+        "summary.panel": {
+          "label": "Database summary",
+          "editorParent": "overview.layout",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "summary.positions": {
+          "label": "Positions pie border",
+          "properties": ["stroke", "strokeWidth"]
+        },
+        "summary.total": {
+          "label": "Total FENs",
+          "properties": ["color", "fontSize", "fontFamily"]
+        },
+        "summary.titled": {
+          "label": "Titled-player positions slice",
+          "editorParent": "summary.positions",
+          "properties": ["fill"]
+        },
+        "summary.other": {
+          "label": "Other positions slice",
+          "editorParent": "summary.positions",
+          "properties": ["fill"]
+        },
+        "summary.games": {
+          "label": "Games chart colors and border",
+          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth", "barHoverColor", "barHoverBorder"],
+          "hiddenProperties": ["chartColor2", "chartColor3", "chartColor4"],
+          "propertyLabels": {"chartColor1": "All bars", "stroke": "Bar border", "barHoverColor": "Bar hover color", "barHoverBorder": "Bar hover border"}
+        },
+        "characters.panel": {
+          "label": "Player rankings",
+          "editorParent": "overview.layout",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "characters.rating": {
+          "label": "Player list rating numbers",
+          "initialStyleFrom": "value",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "summary.games.previous": {
+          "label": "Games chart · previous arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "summary.games.next": {
+          "label": "Games chart · next arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "characters.medal": {
+          "label": "Player list · medal",
+          "initialStyleFrom": "button",
+          "pressedUsesHoverColor": true,
+          "pressedUsesHoverBackground": true,
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.name": {
+          "label": "Player name button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.update": {
+          "label": "Player update button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.delete": {
+          "label": "Player delete button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.previous": {
+          "label": "Player profile · previous arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.next": {
+          "label": "Player profile · next arrow",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.analysis.toggle": {
+          "label": "Behavioral analysis button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.measures.toggle": {
+          "label": "Stockfish analysis button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.rating.toggle": {
+          "label": "Behavioral analysis · Rating button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.activityHours.toggle": {
+          "label": "Behavioral analysis · Hours button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.activityDays.toggle": {
+          "label": "Behavioral analysis · Days button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.accuracy.toggle": {
+          "label": "Stockfish analysis · Accuracy button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.qualityDays.toggle": {
+          "label": "Stockfish analysis · Days button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.qualityHours.toggle": {
+          "label": "Stockfish analysis · Hours button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.panel": {
+          "label": "Player workspace",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.profile": {
+          "label": "Player profile",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.behavior": {
+          "label": "Behavioral map",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.analysis": {
+          "label": "Player analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "player.measures": {
+          "label": "Player measures",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "games": {
+      "label": "Games",
+      "routes": [
+        "/games"
+      ],
+      "targets": {
+        "overview.panel": {
+          "label": "Game overview",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "modes.panel": {
+          "label": "Time controls",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "ratings.panel": {
+          "label": "Ratings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "moves.panel": {
+          "label": "Top moves",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "openings.panel": {
+          "label": "Openings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "lengths.panel": {
+          "label": "Game lengths",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "activity.panel": {
+          "label": "Activity",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "explorer.panel": {
+          "label": "Games explorer",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "system_status": {
+      "label": "System Status",
+      "routes": [
+        "/system_status"
+      ],
+      "targets": {
+        "local.panel": {
+          "label": "Local system status",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.panel": {
+          "label": "Cloud status",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "billing.panel": {
+          "label": "Cloud billing",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "download_games": {
+      "label": "Add Games",
+      "routes": [
+        "/add_games",
+        "/download_new_games"
+      ],
+      "targets": {
+        "download.panel": {
+          "label": "Download games",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "update.panel": {
+          "label": "Update player games",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "main_characters": {
+      "label": "Main Characters",
+      "routes": [
+        "/main_characters"
+      ],
+      "targets": {
+        "modes.panel": {
+          "label": "Time controls",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "ratings.panel": {
+          "label": "Player ratings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "players.panel": {
+          "label": "Player list",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "secondary_character": {
+      "label": "Secondary Character",
+      "routes": [
+        "/secondary_character"
+      ],
+      "targets": {}
+    },
+    "positions": {
+      "label": "Analyze Positions",
+      "routes": [
+        "/analize_positions",
+        "/positions"
+      ],
+      "targets": {
+        "coverage.panel": {
+          "label": "Position coverage",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "local.panel": {
+          "label": "Local analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "local.selection": {
+          "label": "Local FEN selection",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.panel": {
+          "label": "Cloud analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.selection": {
+          "label": "Cloud job configuration",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.job": {
+          "label": "Cloud job progress",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "cloud.draft": {
+          "label": "Combined player-game selection",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "live_analysis": {
+      "label": "Live Analysis",
+      "routes": [
+        "/live_analysis",
+        "/live_analyzis"
+      ],
+      "targets": {
+        "analysis.panel": {
+          "label": "Live analysis",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "scored_positions": {
+      "label": "Scored Positions",
+      "routes": [
+        "/scored_positions"
+      ],
+      "targets": {}
+    },
+    "analyze_times": {
+      "label": "Analyze Times",
+      "routes": [
+        "/analyze_times"
+      ],
+      "targets": {
+        "summary.panel": {
+          "label": "Analysis timing summary",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "workers.panel": {
+          "label": "Worker timings",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Timing history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "research": {
+      "label": "Research",
+      "routes": [
+        "/research"
+      ],
+      "targets": {
+        "areas.panel": {
+          "label": "Research areas",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "accuracy_coefficient": {
+      "label": "Accuracy Coefficient",
+      "routes": [
+        "/research/chessism-coefficient"
+      ],
+      "targets": {
+        "config.panel": {
+          "label": "Experiment configuration",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Experiment history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Experiment results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "decision.panel": {
+          "label": "Coefficient decision",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "matrices": {
+      "label": "Matrices Constructor",
+      "routes": [
+        "/research/matrices"
+      ],
+      "targets": {
+        "definitions.panel": {
+          "label": "Saved matrices",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "definition.panel": {
+          "label": "Matrix definition",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "preview.panel": {
+          "label": "Matrix preview",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "algorithms": {
+      "label": "Algorithms",
+      "routes": [
+        "/research/algorithms"
+      ],
+      "targets": {
+        "definition.panel": {
+          "label": "Algorithm definition",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Algorithm history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "results.panel": {
+          "label": "Algorithm results",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "steps.panel": {
+          "label": "Algorithm steps",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "salience": {
+      "label": "Salience Research",
+      "routes": [
+        "/research/salience"
+      ],
+      "targets": {
+        "totals.panel": {
+          "label": "Salience totals",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "players.panel": {
+          "label": "Player salience",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "backups": {
+      "label": "Database Backups",
+      "routes": [
+        "/backups"
+      ],
+      "targets": {
+        "storage.disk": {
+          "label": "Backup volume outline",
+          "properties": ["background", "borderColor", "borderWidth", "radius"]
+        },
+        "storage.allocation": {
+          "label": "Backup allocations",
+          "properties": ["background", "borderColor", "borderWidth", "radius"]
+        },
+        "storage.used": {
+          "label": "Stored backup data",
+          "properties": ["background"]
+        },
+        "storage.reserve": {
+          "label": "Protected free reserve",
+          "properties": ["background", "borderColor"]
+        },
+        "storage.other": {
+          "label": "Other filesystem usage",
+          "properties": ["background", "borderColor"]
+        },
+        "storage.free": {
+          "label": "Unallocated backup space",
+          "properties": ["background", "borderColor"]
+        },
+        "storage.panel": {
+          "label": "Backup storage",
+          "initialStyleFrom": "panel",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "backup.panel": {
+          "label": "Create backup",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "restore.panel": {
+          "label": "Restore checks",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "history.panel": {
+          "label": "Backup history",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    },
+    "database": {
+      "label": "Database",
+      "routes": ["/database"],
+      "targets": {
+        "canvas": {
+          "label": "Database canvas and connections",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "color"],
+          "propertyLabels": {"color": "Connection color"}
+        },
+        "table.card": {
+          "label": "Database table cards",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "color"]
+        },
+        "table.header": {
+          "label": "Database table headers",
+          "properties": ["background", "color", "textAlign", "hoverBackground", "hoverColor"]
+        },
+        "table.column": {
+          "label": "Database columns",
+          "properties": ["color", "fontSize", "fontFamily"]
+        },
+        "relationships.panel": {
+          "label": "Database relationship details",
+          "properties": ["background", "borderColor", "borderWidth", "radius", "padding"]
+        }
+      }
+    },
+    "navigation": {
+      "label": "Navigation (all pages)",
+      "routes": [],
+      "targets": {
+        "sidebar": {
+          "label": "Sidebar",
+          "properties": [
+            "background",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        }
+      }
+    }
+  }
+}

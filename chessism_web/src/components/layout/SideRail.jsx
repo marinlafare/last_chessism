@@ -1,25 +1,30 @@
+import { styleTarget } from '../../appearance/styleCore.js'
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
+    { href: '/system_status', label: 'System Status', short: '●' },
+    { href: '/database', label: 'Database', short: 'D' },
     { href: '/scored_positions', label: 'Scored Positions', short: 'S' },
     { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
     { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
     { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
+    { href: '/research', label: 'Research', short: 'R' },
+    { href: '/backups', label: 'Backups', short: 'B' },
     { href: '/add_games', label: 'Add Games', short: '+' }
   ]
 
   return (
-    <aside className="left-rail" aria-label="Primary">
+    <aside {...styleTarget('sidebar', 'navigation')} className="left-rail" aria-label="Primary">
       <div className="left-rail-menu">
-        <a className="rail-brand" href="/" aria-label="Home">
+        <a {...styleTarget('link', 'navigation')} className="rail-brand" href="/" aria-label="Home">
           <img className="left-rail-icon" src="/chessism.jpg" alt="Chessism icon" />
           <span>Chessism</span>
         </a>
-        <nav className="rail-nav" aria-label="Main navigation">
+        <nav {...styleTarget('toolbar', 'navigation')} className="rail-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a
+            <a {...styleTarget('button', 'navigation')}
               key={item.href}
-              className={`rail-btn ${path === item.href ? 'active' : ''}`}
+              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/')) ? 'active' : ''}`}
               href={item.href}
               title={item.label}
             >

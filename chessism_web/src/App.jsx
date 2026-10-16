@@ -1,33 +1,64 @@
 import { useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Games from './pages/Games'
-import Players from './pages/Players'
+import SystemStatus from './pages/SystemStatus'
+import Database from './pages/Database'
+import { normalizePath } from './services/navigation'
+// These existing shared card styles are also used by Games/Main Characters.
+// Keep them available before the player workspace is first lazy-loaded.
+import './pages/players/players.css'
 import DownloadNewGames from './pages/DownloadNewGames'
 import MainCharacters from './pages/MainCharacters'
 import SecondaryCharacter from './pages/SecondaryCharacter'
 import Positions from './pages/Positions'
 import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
+import AppearanceProvider, { AppearanceControls } from './appearance/AppearanceProvider'
 import AnalyzeTimes from './pages/AnalyzeTimes'
-import { API_BASE_URL } from './config'
+import Research from './pages/Research'
+import AccuracyCoefficient from './pages/AccuracyCoefficient'
+import MatricesConstructor from './pages/MatricesConstructor'
+import Algorithms from './pages/Algorithms'
+import SalienceResearch from './pages/SalienceResearch'
+import DatabaseBackups from './pages/DatabaseBackups'
+import {
+  fetchAdmins,
+  fetchCurrentAccount,
+  logoutAdmin,
+  submitAdminLogin,
+  submitAdminSignup,
+  unlockSuperadmin,
+} from './services/authApi'
 
-async function fetchCurrentAccount() {
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
-    credentials: 'include'
-  })
-  if (!response.ok) return null
-  return response.json()
-}
+const APP_PATHS = new Set([
+  '/',
+  '/games',
+  '/players',
+  '/system_status',
+  '/database',
+  '/add_games',
+  '/download_new_games',
+  '/main_characters',
+  '/secondary_character',
+  '/analize_positions',
+  '/positions',
+  '/live_analysis',
+  '/live_analyzis',
+  '/scored_positions',
+  '/analyze_times',
+  '/research',
+  '/research/chessism-coefficient',
+  '/research/matrices',
+  '/research/algorithms',
+  '/research/salience',
+  '/backups'
+])
 
-async function unlockSuperadmin(code) {
-  const response = await fetch(`${API_BASE_URL}/auth/gate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ code })
-  })
-  if (!response.ok) return null
-  return response.json()
+const getLocationKey = () => `${normalizePath(window.location.pathname)}${window.location.search}`
+
+const isAppPath = (pathname) => {
+  const normalized = normalizePath(pathname)
+  return APP_PATHS.has(normalized) || /^\/games\/[^/]+$/.test(normalized)
 }
 
 function SuperadminGate({ onUnlock }) {
@@ -55,51 +86,6 @@ function SuperadminGate({ onUnlock }) {
       />
     </main>
   )
-}
-
-async function fetchAdmins() {
-  const response = await fetch(`${API_BASE_URL}/auth/admins`, {
-    credentials: 'include'
-  })
-  if (!response.ok) {
-    throw new Error('Gate access required.')
-  }
-  return response.json()
-}
-
-async function submitAdminSignup(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/admins/signup`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || 'Could not create admin.')
-  }
-  return payload
-}
-
-async function submitAdminLogin(data) {
-  const response = await fetch(`${API_BASE_URL}/auth/admins/login`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify(data)
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    throw new Error(payload.detail || 'Could not sign in.')
-  }
-  return payload
-}
-
-async function logoutAdmin() {
-  await fetch(`${API_BASE_URL}/auth/logout`, {
-    method: 'POST',
-    credentials: 'include'
-  }).catch(() => {})
 }
 
 function AdminsPage({ onAuthenticated, onGateExpired }) {
@@ -207,14 +193,15 @@ function AdminOnlineStatus({ account }) {
   )
 }
 
-function SuperadminSystem({ account, onLogout }) {
-  const path = window.location.pathname.replace(/\/+$/, '') || '/'
-  let page = <Home />
+function SuperadminSystem({ account, locationKey, path, onLogout }) {
+  let page = <Home locationKey={locationKey} />
 
-  if (path === '/games') {
+  if (path === '/games' || path.startsWith('/games/')) {
     page = <Games />
-  } else if (path === '/players') {
-    page = <Players />
+  } else if (path === '/system_status') {
+    page = <SystemStatus />
+  } else if (path === '/database') {
+    page = <Database account={account} />
   } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {
@@ -229,15 +216,32 @@ function SuperadminSystem({ account, onLogout }) {
     page = <ScoredPositions />
   } else if (path === '/analyze_times') {
     page = <AnalyzeTimes />
+  } else if (path === '/research') {
+    page = <Research />
+  } else if (path === '/research/chessism-coefficient') {
+    page = <AccuracyCoefficient />
+  } else if (path === '/research/matrices') {
+    page = <MatricesConstructor />
+  } else if (path === '/research/algorithms') {
+    page = <Algorithms />
+  } else if (path === '/research/salience') {
+    page = <SalienceResearch />
+  } else if (path === '/backups') {
+    page = <DatabaseBackups />
   }
 
   return (
     <>
-      {page}
-      <AdminOnlineStatus account={account} />
-      <button className="superadmin-logout" type="button" onClick={onLogout}>
-        Log out
-      </button>
+      <div className="app-route-transition" key={path === '/' ? 'home' : locationKey}>
+        {page}
+      </div>
+      <div className="superadmin-account-controls">
+        <AppearanceControls />
+        <AdminOnlineStatus account={account} />
+        <button className="superadmin-logout" type="button" onClick={onLogout}>
+          Log out
+        </button>
+      </div>
     </>
   )
 }
@@ -245,7 +249,47 @@ function SuperadminSystem({ account, onLogout }) {
 function App() {
   const [account, setAccount] = useState(null)
   const [checkedAuth, setCheckedAuth] = useState(false)
-  const [path, setPath] = useState(window.location.pathname.replace(/\/+$/, '') || '/')
+  const [locationKey, setLocationKey] = useState(getLocationKey)
+  const path = locationKey.split('?')[0]
+
+  useEffect(() => {
+    // Canonicalize old direct player URLs without adding a Back-history entry.
+    if (window.location.pathname.replace(/\/+$/, '') === '/players') {
+      window.history.replaceState(window.history.state, '', `/${window.location.search}${window.location.hash}`)
+    }
+    const handlePopState = () => setLocationKey(getLocationKey())
+    const handleInternalNavigation = (event) => {
+      if (
+        event.defaultPrevented ||
+        event.button !== 0 ||
+        event.metaKey ||
+        event.ctrlKey ||
+        event.shiftKey ||
+        event.altKey
+      ) return
+
+      const anchor = event.target.closest?.('a[href]')
+      if (!anchor || anchor.target === '_blank' || anchor.hasAttribute('download')) return
+
+      const url = new URL(anchor.href, window.location.href)
+      if (url.origin !== window.location.origin || !isAppPath(url.pathname)) return
+
+      event.preventDefault()
+      const nextLocationKey = `${normalizePath(url.pathname)}${url.search}`
+      if (nextLocationKey !== getLocationKey()) {
+        window.history.pushState(null, '', `${normalizePath(url.pathname)}${url.search}${url.hash}`)
+      }
+      setLocationKey(nextLocationKey)
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    }
+
+    window.addEventListener('popstate', handlePopState)
+    document.addEventListener('click', handleInternalNavigation)
+    return () => {
+      window.removeEventListener('popstate', handlePopState)
+      document.removeEventListener('click', handleInternalNavigation)
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -265,24 +309,24 @@ function App() {
   const enterSystem = (nextAccount) => {
     setAccount(nextAccount)
     window.history.pushState(null, '', '/')
-    setPath('/')
+    setLocationKey('/')
   }
 
   const openAdmins = () => {
     window.history.pushState(null, '', '/admins')
-    setPath('/admins')
+    setLocationKey('/admins')
   }
 
   const returnToGate = () => {
     window.history.pushState(null, '', '/')
-    setPath('/')
+    setLocationKey('/')
   }
 
   const handleLogout = async () => {
     await logoutAdmin()
     setAccount(null)
     window.history.pushState(null, '', '/')
-    setPath('/')
+    setLocationKey('/')
   }
 
   if (!checkedAuth) {
@@ -296,7 +340,7 @@ function App() {
     return <SuperadminGate onUnlock={openAdmins} />
   }
 
-  return <SuperadminSystem account={account} onLogout={handleLogout} />
+  return <AppearanceProvider account={account} pageKey={path}><SuperadminSystem account={account} locationKey={locationKey} path={path} onLogout={handleLogout} /></AppearanceProvider>
 }
 
 export default App

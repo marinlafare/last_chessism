@@ -46,7 +46,7 @@ async def count_fens_for_player(player_name: str) -> int:
     async with AsyncDBSession() as session:
         stmt = (
             select(func.count(func.distinct(Fen.fen)))
-            .join(GameFenAssociation, Fen.fen == GameFenAssociation.fen_fen)
+            .join(GameFenAssociation, Fen.fen_id == GameFenAssociation.fen_id)
             .join(Game, GameFenAssociation.game_link == Game.link)
             .where((Game.white == player_name) | (Game.black == player_name))
         )

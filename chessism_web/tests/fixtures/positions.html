@@ -1,0 +1,54 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Positions isolated UI test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import Positions from '/src/pages/Positions.jsx'
+import '/src/index.css'
+
+// Every request is mocked, including submissions. Never contact the real API.
+localStorage.clear()
+const state = window.positionsTest = { requests: [], unexpected: [], errors: [],
+  job: { id: 'cloud-test', status: 'running', target: 2082, imported: 500,
+    selection: { backend: 'batch_spot', mode: 'games', player_name: 'magnuscarlsen' },
+    runs: [{ id: 'run-test', status: 'running', cloud_state: 'RUNNING', batch_jobs: ['batch-test'] }] },
+  draft: { id: 'draft-test', revision: 1, entries: [], preview: null, max_fens: 10000000, max_entries: 100 },
+}
+window.addEventListener('error', event => state.errors.push(event.message))
+window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
+window.fetch = async (input, options = {}) => {
+  const url = new URL(input, location.href), method = options.method || 'GET'
+  const request = { path: url.pathname, method, body: options.body ? JSON.parse(options.body) : null }
+  state.requests.push(request)
+  const reply = (value, status = 200) => new Response(JSON.stringify(value), {
+    status, headers: { 'Content-Type': 'application/json' },
+  })
+  const matches = suffix => url.pathname.endsWith(suffix)
+  if (method === 'GET') {
+    if (matches('/analysis/cloud')) return reply({ controller_online: true, cloud_busy: true,
+      blocking_job_id: state.job.id, jobs: [state.job] })
+    if (matches('/analysis/cloud/drafts/current')) return reply(state.draft)
+    if (matches('/games/generalities')) return reply({ n_games_in_db: 2000, n_positions: 100000 })
+    if (matches('/fens/scored/games/overview')) return reply({ fully_analyzed_games: 1000 })
+    if (url.pathname.includes('/fens/players/') && matches('/analysis_counts')) {
+      return reply({ total_positions: 3000, analyzed_positions: 1000 })
+    }
+    if (matches('/fens/analysis_counts')) return reply({ analyzed_fens: 10000, unscored_fens: 90000 })
+    if (matches('/fens/pipeline/timings/latest')) return reply({ run: null })
+    if (matches('/jobs/active') || matches('/jobs/analysis')) return reply({ jobs: [] })
+    if (url.pathname.includes('/jobs/local-test-')) return reply({ job_id: url.pathname.split('/').at(-1), status: 'queued' })
+  }
+  if (method === 'POST') {
+    if (matches('/analysis/player_games/scope')) return reply({ incomplete_games: 300, total_games: 400 })
+    if (matches('/analysis/player_games/preview')) return reply({ plan_id: 'frozen-local',
+      player_name: request.body.player_name, selected_games: 200, fens_to_analyze: 1500, stockfish_fens: 1500,
+      selection_mode: request.body.selection_mode, selection_order: 'latest', estimated_seconds: 300 })
+    if (['/analysis/run_job', '/analysis/run_player_job', '/analysis/run_loop_job', '/analysis/player_games/run_job'].some(matches)) {
+      return reply({ job_id: 'local-test-' + state.requests.length }, 202)
+    }
+  }
+  state.unexpected.push(request)
+  throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
+}
+createRoot(document.getElementById('root')).render(React.createElement(Positions))
+</script></body></html>

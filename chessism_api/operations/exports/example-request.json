@@ -1,0 +1,8 @@
+{
+  "name": "Small game sample",
+  "source": "games",
+  "select": ["game_id", "played_at", "white_player", "black_player", "white_rating", "black_rating", "mode", "moves"],
+  "order_by": [{"field": "game_id", "direction": "asc"}],
+  "limit": 1000,
+  "format": "parquet"
+}

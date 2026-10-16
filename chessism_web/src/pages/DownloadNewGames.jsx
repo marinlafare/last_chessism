@@ -1,67 +1,22 @@
+import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
+import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
-import { API_BASE_URL } from '../config'
-
-const UPDATE_JOB_STORAGE_KEY = 'chessism:download-new-games:update-job'
-const DOWNLOAD_JOB_STORAGE_KEY = 'chessism:download-new-games:download-job'
-
-async function sendPlayerAction(path, playerName) {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ player_name: playerName })
-  })
-
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
-
-async function fetchJobStatus(jobId) {
-  const response = await fetch(`${API_BASE_URL}/jobs/${jobId}`)
-  const payload = await response.json().catch(() => ({ message: `HTTP ${response.status}` }))
-
-  if (!response.ok) {
-    throw new Error(payload.detail || payload.message || `HTTP ${response.status}`)
-  }
-
-  return payload
-}
-
-function loadStoredJob(storageKey) {
-  if (typeof window === 'undefined') return null
-  try {
-    const parsed = JSON.parse(window.localStorage.getItem(storageKey) || 'null')
-    return parsed?.jobId ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function storeJob(storageKey, job) {
-  if (typeof window === 'undefined') return
-  if (!job?.jobId) {
-    window.localStorage.removeItem(storageKey)
-    return
-  }
-  window.localStorage.setItem(storageKey, JSON.stringify(job))
-}
-
-function isTerminalJobStatus(status) {
-  const phase = status?.progress?.phase
-  return status?.status === 'complete' || status?.status === 'not_found' || phase === 'complete' || phase === 'failed'
-}
-
-function formatStatusMessage(value) {
-  if (!value) return ''
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
+import {
+  DOWNLOAD_JOB_STORAGE_KEY,
+  UPDATE_JOB_STORAGE_KEY,
+  formatStatusMessage,
+  isTerminalJobStatus,
+  loadStoredJob,
+  storeJob
+} from '../services/gameJobService'
+import {
+  downloadPlayerGames,
+  fetchGameJobStatus,
+  updatePlayerGames,
+} from './download-new-games/downloadNewGamesApi'
 
 function renderUpdateProgress(status) {
   const progress = status?.progress
@@ -75,13 +30,13 @@ function renderUpdateProgress(status) {
   return (
     <div className="job-progress" aria-label="Update progress">
       <div className="job-progress-head">
-        <strong>{phase}</strong>
+        <strong {...pageStyleTarget('value')}>{phase}</strong>
         <span>{percent}%</span>
       </div>
       <div className="job-progress-track">
         <div className="job-progress-fill" style={{ width: `${percent}%` }} />
       </div>
-      <p className="result-line">{progress.detail || `${processed} of ${total}`}</p>
+      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || `${processed} of ${total}`}</p>
     </div>
   )
 }
@@ -108,7 +63,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(downloadJob.jobId)
+        const status = await fetchGameJobStatus(downloadJob.jobId)
         if (cancelled) return
         setDownloadJobStatus(status)
 
@@ -142,7 +97,7 @@ function DownloadNewGames() {
 
     const poll = async () => {
       try {
-        const status = await fetchJobStatus(updateJob.jobId)
+        const status = await fetchGameJobStatus(updateJob.jobId)
         if (cancelled) return
         setUpdateJobStatus(status)
 
@@ -180,7 +135,7 @@ function DownloadNewGames() {
     setDownloadLoading(true)
     setDownloadResult('')
     try {
-      const payload = await sendPlayerAction('/games', player)
+      const payload = await downloadPlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
@@ -208,7 +163,7 @@ function DownloadNewGames() {
     setUpdateResult('')
     setUpdateJobStatus(null)
     try {
-      const payload = await sendPlayerAction('/games/update', player)
+      const payload = await updatePlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
         storeJob(UPDATE_JOB_STORAGE_KEY, job)
@@ -225,20 +180,20 @@ function DownloadNewGames() {
   }
 
   return (
-    <div className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame download-games-page">
       <SideRail />
       <div className="home-shell">
         <Header />
         <main>
-          <section className="games-hero">
-            <h1>Add Games</h1>
+          <section {...pageStyleTarget('panel')} className="games-hero">
+            <h1 {...pageStyleTarget('heading')}>Add Games</h1>
           </section>
 
-          <section className="games-actions" aria-label="Games actions">
-            <article className="game-card">
-              <h2>Download Games of a Player</h2>
-              <label htmlFor="download-player">Player name</label>
-              <input
+          <section {...pageStyleTarget('panel')} className="games-actions" aria-label="Games actions">
+            <article {...pageStyleTarget('card')} className="game-card">
+              <h2 {...pageStyleTarget('title')}>Download Games of a Player</h2>
+              <label {...pageStyleTarget('label')} htmlFor="download-player">Player name</label>
+              <input {...pageStyleTarget('field')}
                 id="download-player"
                 className="text-input"
                 type="text"
@@ -247,17 +202,17 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleDownload()}
                 placeholder="e.g. hikaru"
               />
-              <button className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
+              <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
                 {downloadLoading ? 'Queueing...' : downloadJobActive ? 'Downloading...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
               {renderUpdateProgress(downloadJobStatus)}
-              <p className="result-line">{downloadResult || '-'}</p>
+              <p {...pageStyleTarget('text')} className="result-line">{downloadResult || '-'}</p>
             </article>
 
-            <article className="game-card">
-              <h2>Update Games of a Player</h2>
-              <label htmlFor="update-player">Player name</label>
-              <input
+            <article {...pageStyleTarget('card')} className="game-card">
+              <h2 {...pageStyleTarget('title')}>Update Games of a Player</h2>
+              <label {...pageStyleTarget('label')} htmlFor="update-player">Player name</label>
+              <input {...pageStyleTarget('field')}
                 id="update-player"
                 className="text-input"
                 type="text"
@@ -266,11 +221,11 @@ function DownloadNewGames() {
                 onKeyDown={(event) => event.key === 'Enter' && handleUpdate()}
                 placeholder="e.g. magnuscarlsen"
               />
-              <button className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
+              <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
                 {updateLoading ? 'Queueing...' : updateJobActive ? 'Updating...' : actionBusy ? 'Busy...' : 'Update Games'}
               </button>
               {renderUpdateProgress(updateJobStatus)}
-              <p className="result-line">{updateResult || '-'}</p>
+              <p {...pageStyleTarget('text')} className="result-line">{updateResult || '-'}</p>
             </article>
           </section>
         </main>

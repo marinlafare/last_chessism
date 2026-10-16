@@ -7,7 +7,8 @@ WORKDIR /app
 
 # Install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY chessism_api/operations/exports/requirements.txt ./requirements-analytics.txt
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-analytics.txt
 
 # Copy the application code
 COPY main.py .

@@ -1,0 +1,12 @@
+/* Reuse the established chart and player-card primitives while this route owns
+   its composition rules and API boundary. */
+@import '../games/games.css';
+@import '../players/players.css';
+
+.main-characters-page .games-main {
+  min-width: 0;
+}
+
+.main-characters-page .main-character-grid {
+  align-items: stretch;
+}

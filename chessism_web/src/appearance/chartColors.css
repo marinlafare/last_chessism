@@ -1,0 +1,40 @@
+/* Defaults match the existing charts. Overrides are scoped to a page + chart
+   family, never to data values, point order, or a transient DOM identity. */
+[data-style-id="chart.bars"] { --chart-color-1:var(--accent, #15c780); }
+[data-style-id="chart.pending"],[data-style-id="chart.appearances"] { --chart-color-1:var(--accent, #15c780); }
+[data-style-id="chart.coverage"] { --chart-color-1:var(--info, #5cb1ff); --chart-color-2:#9270c7; --chart-color-3:var(--accent-2, #d3b66d); --chart-color-4:var(--accent, #15c780); }
+[data-style-id="chart.accuracy"] { --chart-color-1:#15c780; --chart-color-2:#4ea3c7; --chart-color-3:#c9a84c; --chart-color-4:#d55c5c; }
+[data-style-id="chart.outcomes"] { --chart-color-1:#15c780; --chart-color-2:#8d6bb4; --chart-color-3:#d55c5c; }
+[data-style-id="chart.measures"] { --chart-color-1:#15c780; --chart-color-2:#d55c5c; }
+[data-style-id="chart.coefficients"] { --chart-color-1:var(--info, #5cb1ff); --chart-color-2:var(--accent, #15c780); --chart-color-3:var(--accent-2, #d3b66d); }
+[data-style-id="chart.research"] { --chart-color-1:#59b6e5; }
+[data-style-id="chart.ratingGroups"] { --chart-color-1:#f07167; --chart-color-2:#f4c057; --chart-color-3:#3fd089; }
+[data-style-id="chart.ratingModes"] { --chart-color-1:#3aa7ff; --chart-color-2:#d3b66d; --chart-color-3:#f08ac0; }
+.wl-bar[data-style-id="chart.outcomes"] { --chart-color-1:var(--ok); --chart-color-2:var(--warn); --chart-color-3:var(--danger); }
+
+[data-style-id="chart.bars"] .analytics-bar-fill,
+[data-style-id="chart.bars"] .mode-moves-chart-bar { background:var(--chart-color-1); }
+[data-style-id="chart.pending"] .repetition-bar,
+[data-style-id="chart.appearances"] .repetition-bar { fill:var(--chart-color-1); }
+[data-style-id="chart.coverage"] .coverage-bar-fill-games { background:var(--chart-color-1); }
+[data-style-id="chart.coverage"] .coverage-bar-fill-games-analyzed { background:var(--chart-color-2); }
+[data-style-id="chart.coverage"] .coverage-bar-fill-positions { background:var(--chart-color-3); }
+[data-style-id="chart.coverage"] .coverage-bar-fill-analyzed { background:var(--chart-color-4); }
+[data-style-id="chart.accuracy"] .measure-daily-efficiency-point.excellent { fill:var(--chart-color-1); }
+[data-style-id="chart.accuracy"] .measure-daily-efficiency-point.strong { fill:var(--chart-color-2); }
+[data-style-id="chart.accuracy"] .measure-daily-efficiency-point.mixed { fill:var(--chart-color-3); }
+[data-style-id="chart.accuracy"] .measure-daily-efficiency-point.poor { fill:var(--chart-color-4); }
+[data-style-id="chart.outcomes"] .behavior-bar-win { fill:var(--chart-color-1); }
+[data-style-id="chart.outcomes"] .behavior-bar-draw { fill:var(--chart-color-2); }
+[data-style-id="chart.outcomes"] .behavior-bar-loss { fill:var(--chart-color-3); }
+[data-style-id="chart.outcomes"] .wins { background:var(--chart-color-1); }
+[data-style-id="chart.outcomes"] .draws { background:var(--chart-color-2); }
+[data-style-id="chart.outcomes"] .losses { background:var(--chart-color-3); }
+[data-style-id="chart.outcomes"] .wl-fill-win { background:var(--chart-color-1); }
+[data-style-id="chart.outcomes"] .wl-fill-draw { background:var(--chart-color-2); }
+[data-style-id="chart.outcomes"] .wl-fill-loss { background:var(--chart-color-3); }
+[data-style-id="chart.measures"] .measure-hour-bar { fill:var(--chart-color-1); }
+[data-style-id="chart.measures"] .measure-hour-bar.negative { fill:var(--chart-color-2); }
+[data-style-id="chart.coefficients"] .coefficient-line { stroke:var(--chart-color-1); }
+[data-style-id="chart.coefficients"] .coefficient-point { fill:var(--chart-color-2); }
+[data-style-id="chart.coefficients"] .coefficient-baseline { stroke:var(--chart-color-3); }

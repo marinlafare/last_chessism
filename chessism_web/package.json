@@ -5,7 +5,13 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 6789 --strictPort",
-    "build": "vite build",
+    "check:architecture": "node scripts/check-page-boundaries.mjs",
+    "check:source-size": "node scripts/check-source-size.mjs",
+    "test:matrices": "node --test tests/matrixForm.test.mjs",
+    "test:algorithms": "node --test tests/algorithmForm.test.mjs",
+    "test:algorithms:browser": "node scripts/test-algorithms-browser.mjs",
+    "test:matrices:browser": "node scripts/test-matrix-browser.mjs",
+    "build": "npm run check:architecture && npm run check:source-size && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 6789 --strictPort"
   },
   "dependencies": {
