@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'r
 import { styleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import AppearanceChartDetails from './AppearanceChartDetails'
-import { circleDistribution, pieSegments } from './appearanceCircles'
+import { circleDistribution, coverageDistribution, pieSegments } from './appearanceCircles'
 import useCircleRotation from '../../hooks/useCircleRotation'
 import { circlePercentage } from '../../utils/circleRotation'
 import AppearanceCircleTooltip from './AppearanceCircleTooltip'
@@ -19,7 +19,8 @@ export default function AppearanceCircles({ data, error, view, active }) {
     { key: 'unique', value: highlightValue }, { key: 'non-unique', value: nonUniqueValue },
   ]), [highlightValue, nonUniqueValue])
   const segments = useMemo(() => pieSegments(items), [items])
-  const uniqueRotation = useCircleRotation(), pieRotation = useCircleRotation()
+  const coverageSegments = useMemo(() => pieSegments(coverageDistribution(data?.rows)), [data?.rows])
+  const uniqueRotation = useCircleRotation(), pieRotation = useCircleRotation(), coverageRotation = useCircleRotation()
   useEffect(() => { setSelected(null) }, [data?.refreshed_at, active])
   useEffect(() => { if(!active)setExplorer(null) },[active])
   useEffect(() => {
@@ -37,8 +38,8 @@ export default function AppearanceCircles({ data, error, view, active }) {
       const label = slice.dataset.tooltipLabel, percentage = circlePercentage(Number(slice.dataset.fraction))
       return label === current.label && percentage === current.percentage ? current : { ...current, label, percentage }
     })
-  }, [uniqueRotation.angle, pieRotation.angle])
-  const pieTitle = '2–10 appearances'
+  }, [uniqueRotation.angle, pieRotation.angle, coverageRotation.angle])
+  const pieTitle = 'Less common'
   const interactions = (label, fraction, scope) => {
     const percentage = circlePercentage(fraction)
     const show = (event, pointer = true) => {
@@ -47,12 +48,13 @@ export default function AppearanceCircles({ data, error, view, active }) {
         y: pointer ? event.clientY : rect.top + rect.height / 2 })
     }
     const open=event=>{
+      if (!scope) return
       const rect=event.currentTarget.getBoundingClientRect()
       setSelected(null)
       setExplorer({scope,key:performance.now(),x:event.detail?event.clientX+12:rect.right+12,y:event.detail?event.clientY+12:rect.top})
     }
     return {
-      tabIndex: 0, role: 'button', 'aria-label': `${label} · ${percentage}`,
+      tabIndex: 0, role: scope ? 'button' : 'img', 'aria-label': `${label} · ${percentage}`,
       'data-circle-slice': '', 'data-tooltip-label': label,
       'aria-describedby': selected?.label === label ? 'appearance-circle-tooltip' : undefined,
       onMouseEnter: event => show(event), onMouseMove: event => show(event), onMouseLeave: () => setSelected(null),
@@ -67,9 +69,10 @@ export default function AppearanceCircles({ data, error, view, active }) {
     <div className="pending-repetition-heading">
       <AppearanceChartDetails>
         <p>The left pie compares distinct FENs appearing exactly once (green) with all FENs appearing more than once (red), including those appearing more than ten times. FENs without recorded appearances are excluded.</p>
-        <p>The right pie counts distinct FENs with 2–10 appearances, not their combined appearances. FENs appearing more than ten times are excluded from the right pie.</p>
-        <p>Both views include scored and unscored FENs. Equal circle sizes do not compare totals. Hover, tap or focus for percentages and exact counts; each percentage is relative to its own pie.</p>
-        <p>Scroll over either circle to rotate it, without zooming. Double-click to reset. Keyboard: arrow keys to rotate, 0 to reset.</p>
+        <p>Less common counts distinct FENs with 2–10 appearances, not their combined appearances. FENs appearing more than ten times are excluded from this pie.</p>
+        <p>The Positions pie compares scored and unscored FENs across the entire database, including FENs without recorded appearances, using the same cached snapshot.</p>
+        <p>Equal circle sizes do not compare totals. Hover or focus for percentages and exact counts; each percentage is relative to its own pie.</p>
+        <p>Scroll over any circle to rotate it, without zooming. Double-click to reset. Keyboard: arrow keys to rotate, 0 to reset.</p>
         <p>Click a slice for ten sampled positions at a time. Select a position to explore the games containing it.</p>
         {data?.refreshed_at && <p>Snapshot: <time dateTime={data.refreshed_at}>{new Date(data.refreshed_at).toLocaleString()}</time>
           {data.stale ? ' · Changes pending; summary refreshes in the background.' : ''}</p>}
@@ -123,6 +126,25 @@ export default function AppearanceCircles({ data, error, view, active }) {
             </svg>
           </div>
           <figcaption {...styleTarget('circle.caption')}>{pieTitle}</figcaption>
+        </figure>
+        <figure>
+          <div className="appearance-circle-frame">
+            <svg {...styleTarget('coverage.outline')} className="appearance-circle appearance-coverage" {...coverageRotation.svg} role="group" aria-label="Scored and unscored FENs">
+              {!coverageSegments.length && <><circle className="appearance-empty" cx="100" cy="100" r="94" />
+                <text x="100" y="105" textAnchor="middle">No FENs</text></>}
+              <g transform={`rotate(${coverageRotation.angle} 100 100)`}>
+                {coverageSegments.map(segment => <g key={segment.key}
+                  {...interactions(`${segment.key}: ${formatNumber(segment.value)}`, segment.fraction)}
+                  {...styleTarget(segment.key === 'scored' ? 'coverage.scored' : 'coverage.unscored')}
+                  data-coverage-part={segment.key} data-value={segment.value} data-fraction={segment.fraction}
+                  fill={segment.key === 'scored' ? '#17bc91' : '#e76e65'}>
+                  {segment.full ? <circle cx="100" cy="100" r="94" /> : <path d={segment.path} />}
+                </g>)}
+              </g>
+              <circle className="appearance-circle-outline" cx="100" cy="100" r="94" />
+            </svg>
+          </div>
+          <figcaption {...styleTarget('circle.caption')}>Positions</figcaption>
         </figure>
       </div>}
   </div>

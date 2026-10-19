@@ -2,8 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchMatrixDefinitions } from './matrixApi'
 import { mergeDefinitions } from './matrixForm'
 
-export default function useMatrixDefinitions() {
-  const [state, setState] = useState({ definitions: [], hasMore: false, legacyCount: 0, loading: true, error: '' })
+export default function useMatrixDefinitions({ collection = 'all', enabled = true } = {}) {
+  const [state, setState] = useState({ definitions: [], hasMore: false, loading: enabled, error: '' })
   const rows = useRef([])
   const request = useRef(null)
   const mounted = useRef(false)
@@ -14,7 +14,7 @@ export default function useMatrixDefinitions() {
   }, [])
 
   const load = useCallback(async (append = false) => {
-    if (!mounted.current) return
+    if (!mounted.current || !enabled) return
     // Duplicate load-more clicks cannot request the same offset twice.
     if (append && request.current) return
     cancel()
@@ -22,16 +22,16 @@ export default function useMatrixDefinitions() {
     request.current = controller
     setState((current) => ({ ...current, loading: true, error: '' }))
     try {
-      const payload = await fetchMatrixDefinitions({ offset: append ? rows.current.length : 0, signal: controller.signal })
+      const payload = await fetchMatrixDefinitions({ offset: append ? rows.current.length : 0, collection, signal: controller.signal })
       if (controller.signal.aborted) return
       rows.current = mergeDefinitions(append ? rows.current : [], payload.definitions || [])
-      setState({ definitions: rows.current, hasMore: Boolean(payload.has_more), legacyCount: payload.legacy_snapshot_count || 0, loading: false, error: '' })
+      setState({ definitions: rows.current, hasMore: Boolean(payload.has_more), loading: false, error: '' })
     } catch (error) {
       if (!controller.signal.aborted) setState((current) => ({ ...current, loading: false, error: error.message || 'Unable to load definitions.' }))
     } finally {
       if (request.current === controller) request.current = null
     }
-  }, [cancel])
+  }, [cancel, collection, enabled])
 
   useEffect(() => {
     mounted.current = true
@@ -42,6 +42,7 @@ export default function useMatrixDefinitions() {
   // Successful writes already return authoritative metadata. Avoid a second
   // request, and prevent an older list response from undoing the local change.
   const updateRows = (next) => {
+    if (!mounted.current) return
     cancel()
     rows.current = next
     setState((current) => ({ ...current, definitions: next, loading: false, error: '' }))

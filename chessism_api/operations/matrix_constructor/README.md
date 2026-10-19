@@ -1,8 +1,10 @@
 # Matrix constructor
 
-The constructor now saves **definitions**, not datasets. `matrix_definition`
-contains a name, row unit, selected fields/roles, filters, row cap, deterministic
-ordering and encoding instructions. Saving never counts chess records, creates
+The constructor saves **reusable column formulas**, not datasets. New
+`matrix_definition` entries use `definition_kind: "template"` and contain a name,
+row unit, selected fields/roles, dynamic move-column instructions, deterministic
+ordering and encoding instructions. They do **not** store a selected player,
+date range, game count, minimum game length or fixed move range. Saving never counts chess records, creates
 files, calls Redis, or starts a worker. A future algorithm runner can materialize
 a definition when needed; that runner is not implemented by this change.
 
@@ -10,6 +12,174 @@ Existing `matrix_artifact` rows and files are retained as legacy snapshots. On
 the first creation of the definition table, completed snapshots' configurations
 are imported under the same UUIDs. The import is transactional with table
 creation and runs only once, so deleted definitions do not reappear on restart.
+
+## Game move-score recipe and algorithm inputs
+
+`/research/matrices` is the formula editor. `/research/algorithms` contains the
+formula browser and execution editor. The former `/research/matrices/collection`
+URL redirects there, preserving preview query parameters. Its page and Research
+hub card have been removed; no formulas, datasets or results are deleted by this
+change. Saving a formula never overwrites a previous definition and requires no
+count or preview request.
+
+### Built-in defaults versus custom formulas
+
+The algorithm input browser's collapsed **Default** section shows formulas
+from `defaults.py`. It currently contains **Game move scores**. Built-ins are
+versioned code-owned templates, not auto-created database rows; they cannot be
+edited or deleted through definition endpoints. They require per-use parameters
+and use the same bounded preview implementation as user-created templates.
+
+The constructor excludes the specialized `move_scores` template from its row-unit
+selector and starts with the generic `game` row type for custom column selection.
+The full API catalog retains `move_scores` for preview parameters, existing
+definitions and backwards compatibility. Previously saved move-score formulas
+remain in their custom/foreign groups, unchanged. Old constructor links to those
+formulas explain the move to Default instead of silently changing a saved record.
+
+`GET /research/matrices/defaults` lists metadata only, with stable `builtin_key`
+and `builtin_version` values. `POST /research/matrices/defaults/{key}/preview`
+accepts the same `MatrixParameters` body and `limit`/`role` query options as a
+saved-template preview. Both inherit the existing superuser authorization. No
+default dataset is generated simply by expanding the Default section.
+
+### Custom and foreign collections; retired snapshots
+
+User-created formulas default to `collection: "custom"`. Imported or integration-
+related formulas can use `collection: "foreign"`; this is an explicit metadata
+tag in the existing instruction document, not a name heuristic or a change to
+their query. Algorithm inputs group formula metadata into **Default**, **Your
+formulas** and **Foreign formulas**. Saved inputs use one paginated metadata
+request; default inputs are loaded separately and do not affect the saved-list
+offset. Opening groups does not fetch game records.
+`GET /research/matrices?collection=custom|foreign|all` retains filtering and
+defaults to `all` for compatibility with existing consumers.
+
+The five carried-forward October 4–5 validation/test recipes were placed in the
+foreign collection with `origin: "legacy_snapshot_import"`. They are not evidence
+of export-API-created recipes: that API does not create these definition rows.
+Their five old materialized working snapshots were explicitly retired, including
+the UUID folders and `matrix_artifact` records, while retaining all definitions
+and leaving backup copies untouched. The Legacy UI component has been removed.
+There is no HTTP endpoint for creating new legacy snapshots. Compatibility reads,
+guarded deletion and backup-restore handling remain for historical backups.
+
+### Formula versus runtime parameters
+
+The constructor chooses the row type, columns and name only. In the algorithm
+input browser, the **eye** opens the sample viewer directly without changing
+the selected input or opening data controls. For templates, the frontend
+supplies transient sample parameters: all players/modes, no date or minimum-
+length filter, and a server-bounded sample (50 displayed rows by default, at
+most 100). Move-score samples use fully scored games and all played moves.
+The viewer labels this as an automatic sample, not an algorithm's chosen scope.
+Nothing queries chess records until preview or an explicit algorithm action.
+Selecting a formula (its columns for a default, **Use in algorithm** for a saved
+formula) opens the data-selection form in the algorithm page. **Apply data
+selection** calls `POST /research/algorithms/input` to resolve the columns and
+parameters in memory only; it does not query game records or write data.
+The body identifies either `matrix_definition_id` or `builtin_matrix_key`, plus
+`matrix_parameters` using the same scope schema as a preview. The response is
+`{config, materialized: false}`.
+
+Builder validation, save, sample and preflight accept those same source fields.
+Saving freezes the resolved recipe and `matrix_source` metadata in the algorithm;
+the underlying formula is unchanged. Built-ins use a null matrix-definition
+foreign key, not a synthetic database row. Reopening an algorithm retains its
+frozen input, including when the original formula was deleted. Existing bounded
+CPU limits remain: 12 input columns, up to 100,000 source rows for a pipeline,
+an explicit input row cap, and a fixed move range. All-moves/unlimited selections
+remain preview-only. Run and sample calculations still require explicit actions.
+
+`definitions.resolve_definition()` combines the saved shape with validated
+per-use parameters in memory. It does not modify the database definition. A
+fixed runtime move range expands into its numbered feature columns; all moves
+uses the bounded sample-width discovery below. The response reports
+`applied_parameters`. A template without runtime parameters is rejected rather
+than interpreted as a query of all games.
+
+For a saved template use:
+
+```http
+POST /research/matrices/definitions/{id}/preview?limit=50&role=all
+```
+
+```json
+{
+  "filters": {
+    "players": ["hikaru"], "modes": ["bullet"], "max_rows": null,
+    "min_moves": 0, "analyzed_only": true
+  },
+  "move_scores": {
+    "all_moves": false, "first_move": 1, "last_move": 40,
+    "score_perspective": "player"
+  }
+}
+```
+
+Previously saved scoped formulas are not migrated or rewritten. Their existing
+GET previews retain their original instructions. Loading one in the constructor
+copies its column structure into a **new** reusable formula, leaving the source
+unchanged. Legacy snapshot and CPU calculation paths reject unresolved templates
+before queueing; the algorithm input step now resolves templates explicitly.
+
+The `move_scores` row unit supplies `player`, `game` (exact int64 ID), `result`
+(`w`, `d`, `l`, or null for unknown/inconsistent outcomes), and
+`move_score_<number>` columns. Runtime `move_scores` options choose `first_move`,
+`last_move` (1–500), and `score_perspective` (`player` by default,
+or `white`). Each score is the stored evaluation AFTER that player's own move;
+mate-encoded scores are not ordinary centipawns. This is not an accuracy input
+containing both players' complete half-move sequence.
+
+The row limit counts player/game pairs, not raw moves or distinct games across
+multiple selected players. Ordering is date, game ID, color. `analyzed_only`
+requires complete game coverage, checks actual scores for all played moves, and
+requires every requested own move before the row cap. When disabled, missing
+moves/scores remain null; zero stays zero. The bounded preview selects only its
+small player/game prefix before pivoting; it never constructs the full saved cap.
+Cheap candidate filters and ordering sit inside an `OFFSET 0` subquery barrier
+before the expensive per-game score checks. The outer limit can stop after enough
+qualifying games instead of checking all moves in the player's history before
+sorting. There is no pre-limit that could discard later qualifying games.
+Live preview transactions also disable JIT locally and retain the 15-second
+statement timeout; full execution and export settings are unchanged.
+
+`move_scores.py` owns the parameterized pivot and options. The standard 48-column
+limit is unchanged for other recipes; this one allows its three identity/result
+columns plus at most 500 scores. Definitions use the existing database table and
+backup contract. No CUDA work, Stockfish run, export job, or schema migration is
+started by creating or previewing this formula.
+
+### All matching games and all available moves
+
+`filters.max_rows: null` means all matching rows, with no hidden numeric cap.
+Omitting the field keeps the existing default; numeric limits remain supported.
+Other filters still apply, and a game with both selected participants still
+produces two player/game rows. `min_moves: 0` means any game length, not a move
+column selection. The UI distinguishes this minimum-length filter from the
+move range.
+
+`move_scores.all_moves: true` stores a dynamic recipe with `first_move: 1` and
+`last_move: null`. Supply only identity/result columns in `feature_columns`;
+numbered score columns are generated automatically as features. Fully scored
+selection still checks every actually played move, but no longer requires all
+games to reach the same fixed move number. Shorter rows are padded with null.
+Explicit-range recipes remain backward compatible (`all_moves` defaults false).
+
+All-moves previews first select at most 100 qualifying player/game rows (plus
+one lookahead), then fetch their moves in the same read-only statement. They
+expand columns through the longest **displayed sample** game, not the entire
+requested dataset, and return `column_scope: "sample_moves"`. They do not pivot
+the full scope or compute its total. Duplicates or a sampled move above the
+500-column preview guard fail clearly; no moves are silently dropped. Estimates
+still scan at most 10,001 matches even when there is no row limit.
+
+This is a formula/preview feature, not full matrix execution. Existing CPU
+algorithms require a fixed-column recipe with an explicit row limit. Dynamic
+all-move or unlimited-row execution belongs to the later calculation pipeline;
+it is rejected before queueing in the existing fixed-column runners. Legacy
+snapshot materialization requires an explicit row limit. Saving an all-data
+definition does not launch an unlimited query or allocate a complete matrix.
 
 ## Definitions and live previews
 
@@ -35,9 +205,11 @@ the future materialized representation. Saving an empty scope is valid.
 Superuser endpoints under `/research/matrices`:
 
 - `POST /`: save instructions only (201); `GET /`: paginated definitions.
-- `POST /preview`: bounded preview of an unsaved recipe.
+- `POST /preview`: bounded preview of an unsaved scoped recipe.
 - `POST /estimate`: optional bounded live count; does not gate saving.
 - `GET /definitions/{id}` and `GET /definitions/{id}/preview`: saved instructions/sample.
+- `POST /definitions/{id}/preview`: saved column template + per-use parameters;
+  bounded sample, no mutation or dataset materialization.
 - `DELETE /definitions/{id}`: removes only the instructions.
 - `GET /snapshots` and `/snapshots/{id}/preview`: retained legacy files.
 - `DELETE /snapshots/{id}`: removes only legacy working files, never a definition or backup.
@@ -61,7 +233,8 @@ legacy construction worker implicitly.
 `chessism_web/src/pages/MatricesConstructor.jsx` owns page layout. Everything
 specific to this page is in `pages/research/matrices/`:
 
-- `MatrixDefinitionForm.jsx`: the four form sections, without request logic.
+- `MatrixDefinitionForm.jsx`: the custom formula's three form sections, without
+  request logic. `MatrixParametersForm.jsx` is mounted only in the algorithm page.
 - `matrixForm.js`: pure, tested form conversions; copies never mutate recipes.
 - `useMatrixConstructor.js`: form actions, saved/draft preview selection, and
   abortable estimates. Changes and navigation discard stale responses.
@@ -69,14 +242,16 @@ specific to this page is in `pages/research/matrices/`:
   load-more clicks cannot request one page twice. Save/delete update the list
   from their successful response, avoiding a redundant follow-up GET.
 - `matrixApi.js`: all page-owned HTTP calls, including cancellation signals.
-- `MatrixDefinitionList.jsx` and `LegacyMatrixSnapshots.jsx`: clearly separated
-  saved instructions and preserved files.
+- `MatrixDefinitionList.jsx`: saved instructions and selectable default columns.
+  `algorithms/MatrixFormulaBrowser.jsx` groups default/custom/foreign formulas;
+  `useAlgorithms.js` owns selection, pagination and per-algorithm scope.
 - `MatrixDataFrameModal.jsx`, `MatrixPreviewButton.jsx`, and the two stylesheets:
   the bounded live/legacy viewer and presentation.
 
 Legacy materialization remains for existing jobs, validation utilities, and
 future algorithm reuse; it is not reachable from the constructor's save button.
-This cleanup changes no stored definitions, snapshot files, or backup format.
+The retired local snapshots and their preserved formulas are described above.
+Backup formats and historical restore compatibility remain unchanged.
 
 ## Shared query and legacy materialization infrastructure
 

@@ -12,6 +12,7 @@ const displayValue = (value) => {
 
 export default function MatrixDataFrameModal({ artifact, onClose }) {
   const isLive = artifact.storage_kind === 'definition'
+  const automaticSample = isLive && artifact.config?.definition_kind === 'template' && !artifact.runtime_parameters
   const dialogRef = useRef(null)
   const [offset, setOffset] = useState(0)
   const [limit, setLimit] = useState(50)
@@ -49,7 +50,7 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
         }
       })
     return () => controller.abort()
-  }, [artifact.id, artifact.config, isLive, offset, limit, role, sliceIndex, retry])
+  }, [artifact.id, artifact.config, artifact.runtime_parameters, isLive, offset, limit, role, sliceIndex, retry])
 
   const data = request.data
   const total = data?.total_rows ?? artifact.row_count ?? 0
@@ -57,6 +58,9 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
   const currentPage = Math.floor(offset / limit) + 1
   const lastOffset = (pages - 1) * limit
   const hasCategories = data?.columns?.some((column) => column.encoding === 'dictionary')
+  const previewScope = automaticSample
+    ? 'sample only · no algorithm data selected'
+    : data ? `${data.applied_parameters ? 'requested scope' : 'definition limit'}: ${data.row_limit === null ? 'all matching rows' : data.row_limit?.toLocaleString()}` : ''
   const changeRole = (value) => { setRole(value); setOffset(0); setSliceIndex(0) }
   const closeFromBackdrop = (event) => {
     if (event.target !== event.currentTarget) return
@@ -73,7 +77,7 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
       onClick={closeFromBackdrop}
     >
       <header className="matrix-dataframe-header">
-        <div><p {...pageStyleTarget('text')} className="eyebrow">{isLive ? 'LIVE PREVIEW—NOT A SAVED SNAPSHOT' : 'LEGACY SNAPSHOT · DATAFRAME VIEW'}</p><h2 {...pageStyleTarget('title')} id="matrix-dataframe-title">{artifact.name}</h2></div>
+        <div><p {...pageStyleTarget('text')} className="eyebrow">{automaticSample ? 'FORMULA PREVIEW · AUTOMATIC SAMPLE' : isLive ? 'LIVE PREVIEW—NOT A SAVED SNAPSHOT' : 'LEGACY SNAPSHOT · DATAFRAME VIEW'}</p><h2 {...pageStyleTarget('title')} id="matrix-dataframe-title">{artifact.name}</h2></div>
         <div className="matrix-dataframe-actions">
           {isLive ? <button {...pageStyleTarget('button')} type="button" disabled={request.loading} onClick={() => setRetry((value) => value + 1)}>refresh sample</button> : null}
           <button {...pageStyleTarget('button')} type="button" onClick={() => setFullscreen((current) => !current)}>{fullscreen ? 'restore size' : 'full screen'}</button>
@@ -97,10 +101,18 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
         <span className="matrix-dataframe-shape">{data ? `${data.dimensions}D ${isLive ? 'sample' : ''} · ${data.shape.join(' × ')}` : isLive ? 'Live sample' : `${total.toLocaleString()} rows`} · read only</span>
       </div>
       <p {...pageStyleTarget('text')} className="matrix-dataframe-note">
+        {automaticSample ? 'This sample illustrates the formula only. It does not select data for an algorithm run. ' : ''}
         {isLive ? 'Live source values; they may change as the database changes. No matrix files are saved. Categories show source labels, not permanent codes.' : 'Saved snapshot values, not recalculated from the live games.'} N/A marks missing values; hover a value for full precision.
         {hasCategories ? ' Categorical columns show their stored dictionary codes.' : ''}
+        {data?.column_scope === 'sample_moves' ? ' All-moves formula: columns extend to the longest game in this preview only. The full dataset may contain additional move columns; N/A after a game ends is expected.' : ''}
         {data?.dimensions === 3 ? ' Axes: slice × row × column.' : ''}
       </p>
+      {data?.applied_parameters ? <p {...pageStyleTarget('text')} className="matrix-dataframe-note">
+        {automaticSample ? 'Automatic sample source: ' : 'This preview: '}{data.applied_parameters.filters.players.join(', ') || 'all players'} · {data.applied_parameters.filters.modes.join(' / ') || 'all modes'}
+        {data.applied_parameters.move_scores ? data.applied_parameters.move_scores.all_moves ? ' · all played moves' : ` · moves ${data.applied_parameters.move_scores.first_move}–${data.applied_parameters.move_scores.last_move}` : ''}.
+        {automaticSample && data.applied_parameters.filters.analyzed_only ? ' Fully scored games only.' : ''}
+        The saved formula is unchanged.
+      </p> : null}
       <div className="matrix-dataframe-scroll" aria-busy={request.loading} tabIndex="0" aria-label="Matrix rows, scroll to see more columns">
         {request.loading ? <p {...pageStyleTarget('text')} role="status">Loading matrix rows…</p> : null}
         {request.error ? <div role="alert"><p {...pageStyleTarget('text')}>{request.error}</p><button {...pageStyleTarget('button')} type="button" onClick={() => setRetry((current) => current + 1)}>retry</button></div> : null}
@@ -123,7 +135,7 @@ export default function MatrixDataFrameModal({ artifact, onClose }) {
         {!request.loading && data && !data.rows.length ? <p {...pageStyleTarget('text')}>No matching rows in the current scope.</p> : null}
       </div>
       <footer className="matrix-dataframe-footer">
-        <span aria-live="polite">{!request.loading && data ? isLive ? `${data.rows.length} preview rows${data.more_matching_rows ? ' · more rows available' : ''} · definition limit: ${data.row_limit.toLocaleString()}` : `Rows ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length} of ${total.toLocaleString()}` : request.loading ? 'Loading…' : 'Preview unavailable'}</span>
+        <span aria-live="polite">{!request.loading && data ? isLive ? `${data.rows.length} preview rows${data.more_matching_rows ? ' · more rows available' : ''} · ${previewScope}` : `Rows ${data.rows.length ? data.offset + 1 : 0}–${data.offset + data.rows.length} of ${total.toLocaleString()}` : request.loading ? 'Loading…' : 'Preview unavailable'}</span>
         {!isLive ? <nav {...pageStyleTarget('toolbar')} aria-label="Matrix pagination">
           <button {...pageStyleTarget('button')} type="button" disabled={request.loading || !offset} onClick={() => setOffset(0)} aria-label="First page">«</button>
           <button {...pageStyleTarget('button')} type="button" disabled={request.loading || !offset} onClick={() => setOffset(Math.max(0, offset - limit))} aria-label="Previous page">‹</button>

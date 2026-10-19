@@ -1,43 +1,32 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchCommonPositionPage } from './scoredPositionsApi'
+import { createCommonPositionLoader } from './commonPositionLoader'
 
 export default function useCommonPositionPages(firstPage, active) {
-  const [history, setHistory] = useState([null])
-  const [index, setIndex] = useState(0)
-  const [response, setResponse] = useState(null)
-  const [retryCount, setRetryCount] = useState(0)
-  const pages = useRef(new Map())
+  const snapshot = firstPage?.snapshot
+  const [navigation, setNavigation] = useState({ snapshot, history: [null], index: 0 })
+  const [, redraw] = useState(0)
+  const loader = useMemo(() => createCommonPositionLoader(fetchCommonPositionPage), [snapshot])
+  // Reset synchronously on source changes so an old cursor cannot start a
+  // request against the new snapshot in the render before effects run.
+  const current = navigation.snapshot === snapshot ? navigation : { snapshot, history: [null], index: 0 }
+  const { history, index } = current
   const cursor = history[index]
+  const data = index === 0 ? firstPage : loader.get(cursor)
+  const nextCursor = data?.status === 'complete' && !data.stale ? data.next_cursor : null
   useEffect(() => {
-    pages.current.clear(); setHistory([null]); setIndex(0); setResponse(null)
-  }, [firstPage?.snapshot])
+    const unsubscribe = loader.subscribe(() => redraw(n => n + 1))
+    return () => { unsubscribe(); loader.stop() }
+  }, [loader])
   useEffect(() => {
-    if (!cursor || !active) return undefined
-    const controller = new AbortController()
-    let timer
-    if (pages.current.has(cursor)) { setResponse({ cursor, data: pages.current.get(cursor) }); return undefined }
-    setResponse({ cursor, data: { status: 'pending', rows: [] } })
-    const read = async (retry = false) => {
-      try {
-        const data = await fetchCommonPositionPage(cursor, { signal: controller.signal, retry })
-        if (controller.signal.aborted) return
-        setResponse({ cursor, data })
-        if (data.status === 'complete') pages.current.set(cursor, data)
-        if (data.status === 'pending') timer = setTimeout(read, 2000)
-      } catch (error) {
-        if (!controller.signal.aborted) setResponse({ cursor, data: { status: 'error', detail: error.message || 'Positions unavailable.' } })
-      }
-    }
-    read(retryCount > 0)
-    return () => { controller.abort(); clearTimeout(timer) }
-  }, [cursor, active, retryCount])
-  const data = index === 0 ? firstPage : response?.cursor === cursor ? response.data : null
+    loader.retain(active ? [cursor, nextCursor] : [])
+  }, [loader, cursor, nextCursor, active])
   return { data, index,
-    first: () => setIndex(0), previous: () => setIndex(i => Math.max(0, i - 1)),
+    first: () => setNavigation({ ...current, index: 0 }),
+    previous: () => setNavigation({ ...current, index: Math.max(0, index - 1) }),
     next: () => {
       if (!data?.next_cursor) return
-      setHistory(current => [...current.slice(0, index + 1), data.next_cursor])
-      setIndex(i => i + 1)
-    }, retry: () => { pages.current.delete(cursor); setRetryCount(n => n + 1) },
+      setNavigation({ snapshot, history: [...history.slice(0, index + 1), data.next_cursor], index: index + 1 })
+    }, retry: () => loader.retry(cursor),
   }
 }

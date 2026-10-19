@@ -20,18 +20,19 @@ export default function Database({ account }) {
     }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [allowed, revision])
-  return <div {...pageStyleTarget('page')} className="page-frame database-page">
-    <SideRail />
-    <main className="home-shell database-main" aria-label="Database">
-      <header className="database-heading"><h1 {...pageStyleTarget('heading')}>Database</h1>
+  const heading = <header className="database-heading"><h1 {...pageStyleTarget('heading')}>Database</h1>
         {allowed && <><span {...pageStyleTarget('text')}>{catalog ? `${catalog.tables.length} tables / views · ${catalog.relationships.length} foreign keys` : 'Read-only workspace'}</span>
           <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>{loading ? 'Loading structure…' : 'Refresh structure'}</button></>}
       </header>
+  return <div {...pageStyleTarget('page')} className="page-frame database-page">
+    <SideRail />
+    <main className="home-shell database-main" aria-label="Database">
       {!allowed ? <p role="alert">Superuser access is required.</p> : <>
         {error && <p {...pageStyleTarget('text')} className="database-error" role="alert">{error}{catalog ? ' Showing the previous structure.' : ''}</p>}
-        {catalog ? <DatabaseWorkspace key={account.id} catalog={catalog} accountId={account.id} />
+        {catalog ? <DatabaseWorkspace key={account.id} catalog={catalog} accountId={account.id} heading={heading} />
           : <p {...pageStyleTarget('text')} role="status">{loading ? 'Reading table and column metadata…' : 'Use Refresh structure to try again.'}</p>}
       </>}
+      {(!allowed || !catalog) && heading}
     </main>
   </div>
 }

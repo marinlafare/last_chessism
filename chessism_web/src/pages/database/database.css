@@ -1,6 +1,7 @@
 .database-page .database-main { min-width: 0; width: 100%; padding-bottom: 110px; }
 .database-heading { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
 .database-heading h1 { margin: 0; color: var(--accent); font-size: 23px; }
+.database-bottom-controls { margin-top: 20px; }
 .database-heading > span { color: var(--muted); font-size: 13px; flex: 1; }
 .database-tools { display: flex; align-items: end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .database-search { position: relative; width: min(390px, 100%); }

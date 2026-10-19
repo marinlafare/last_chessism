@@ -135,6 +135,10 @@
   outline: none;
 }
 
+.game-explorer-list-compact > button {
+  grid-template-columns: 32px minmax(0, 1fr) minmax(70px, auto) 58px;
+}
+
 .game-result-mark {
   display: grid;
   place-items: center;
@@ -148,6 +152,7 @@
 
 .game-result-mark.win { background: #15c780; }
 .game-result-mark.draw { background: #9170ad; }
+.game-result-mark.unknown { background: #9ba8b3; }
 
 .game-list-opponent,
 .game-explorer-list > button > span:not(.game-result-mark) {
@@ -437,6 +442,10 @@
 
   .game-explorer-list > button {
     grid-template-columns: 30px minmax(160px, 1fr) 70px;
+  }
+
+  .game-explorer-list-compact > button {
+    grid-template-columns: 30px minmax(0, 1fr) 60px;
   }
 
   .game-explorer-list > button > span:nth-child(4),

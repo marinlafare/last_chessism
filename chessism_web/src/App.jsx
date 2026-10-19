@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import Home from './pages/Home'
 import Games from './pages/Games'
 import SystemStatus from './pages/SystemStatus'
@@ -30,12 +30,15 @@ import {
   unlockSuperadmin,
 } from './services/authApi'
 
+const Hegel = lazy(() => import('./pages/Hegel'))
+
 const APP_PATHS = new Set([
   '/',
   '/games',
   '/players',
   '/system_status',
   '/database',
+  '/hegel',
   '/add_games',
   '/download_new_games',
   '/main_characters',
@@ -49,12 +52,17 @@ const APP_PATHS = new Set([
   '/research',
   '/research/chessism-coefficient',
   '/research/matrices',
+  '/research/matrices/collection',
   '/research/algorithms',
   '/research/salience',
   '/backups'
 ])
 
-const getLocationKey = () => `${normalizePath(window.location.pathname)}${window.location.search}`
+const canonicalAppPath = (pathname) => {
+  const path = normalizePath(pathname)
+  return path === '/research/matrices/collection' ? '/research/algorithms' : path
+}
+const getLocationKey = () => `${canonicalAppPath(window.location.pathname)}${window.location.search}`
 
 const isAppPath = (pathname) => {
   const normalized = normalizePath(pathname)
@@ -202,6 +210,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <SystemStatus />
   } else if (path === '/database') {
     page = <Database account={account} />
+  } else if (path === '/hegel') {
+    page = <Suspense fallback={<p role="status">Loading Hegel…</p>}><Hegel /></Suspense>
   } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {
@@ -257,7 +267,13 @@ function App() {
     if (window.location.pathname.replace(/\/+$/, '') === '/players') {
       window.history.replaceState(window.history.state, '', `/${window.location.search}${window.location.hash}`)
     }
-    const handlePopState = () => setLocationKey(getLocationKey())
+    const redirectCollection = () => {
+      if (normalizePath(window.location.pathname) === '/research/matrices/collection') {
+        window.history.replaceState(window.history.state, '', `/research/algorithms${window.location.search}${window.location.hash}`)
+      }
+    }
+    redirectCollection()
+    const handlePopState = () => { redirectCollection(); setLocationKey(getLocationKey()) }
     const handleInternalNavigation = (event) => {
       if (
         event.defaultPrevented ||
@@ -275,9 +291,9 @@ function App() {
       if (url.origin !== window.location.origin || !isAppPath(url.pathname)) return
 
       event.preventDefault()
-      const nextLocationKey = `${normalizePath(url.pathname)}${url.search}`
+      const nextLocationKey = `${canonicalAppPath(url.pathname)}${url.search}`
       if (nextLocationKey !== getLocationKey()) {
-        window.history.pushState(null, '', `${normalizePath(url.pathname)}${url.search}${url.hash}`)
+        window.history.pushState(null, '', `${canonicalAppPath(url.pathname)}${url.search}${url.hash}`)
       }
       setLocationKey(nextLocationKey)
       window.scrollTo({ top: 0, left: 0, behavior: 'auto' })

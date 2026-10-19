@@ -1,0 +1,70 @@
+.hegel-main {
+  min-width: 0;
+  padding-top: 3rem;
+}
+
+.hegel-document {
+  max-width: 90ch;
+  padding: clamp(20px, 4vw, 48px);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+
+.hegel-document :is(h1, h2, h3, h4, h5, h6) {
+  line-height: 1.3;
+  margin: 1.5em 0 0.6em;
+}
+
+.hegel-document h1 {
+  color: var(--accent);
+  font-size: clamp(26px, 4vw, 38px);
+}
+
+.hegel-document > :first-child { margin-top: 0; }
+.hegel-document > :last-child { margin-bottom: 0; }
+.hegel-document :is(p, ul, ol, blockquote, pre, table) { margin-block: 1em; }
+.hegel-document :is(ul, ol) { padding-left: 1.8em; }
+.hegel-document li + li { margin-top: 0.3em; }
+.hegel-document a { color: var(--accent); }
+
+.hegel-document blockquote {
+  margin-inline: 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--accent);
+  color: var(--muted);
+}
+
+.hegel-document pre {
+  overflow-x: auto;
+  padding: 16px;
+  background: var(--surface);
+  border-radius: var(--radius);
+  line-height: 1.5;
+}
+
+.hegel-document :not(pre) > code {
+  padding: 0.15em 0.35em;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.hegel-document table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.hegel-document :is(th, td) {
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  text-align: left;
+}
+
+.hegel-document th { background: var(--surface); }
+.hegel-document img { max-width: 100%; height: auto; }
+.hegel-document hr { border: 0; border-top: 1px solid var(--border); margin-block: 2em; }

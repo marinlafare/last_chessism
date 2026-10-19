@@ -74,7 +74,9 @@ services:
         condition: service_healthy
 
   chessism-web:
-    build: ./chessism_web
+    build:
+      context: .
+      dockerfile: chessism_web/Dockerfile
     image: chessism-web:latest
     ports:
       - "6789:6789"
@@ -85,6 +87,7 @@ services:
     volumes:
       - ./chessism_web:/app
       - chessism_web_node_modules:/app/node_modules
+      - ./hegel_.md:/hegel_.md:ro
     networks:
       - chessism_net
     depends_on:

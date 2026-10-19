@@ -46,6 +46,7 @@ try {
   await send('browsingContext.navigate', { context, wait: 'complete',
     url: (process.env.BACKUP_UI_TEST_URL || 'http://localhost:6789') + '/tests/fixtures/backupVolume.html' })
   await waitFor('document.querySelectorAll(".backup-volume-region").length === 7')
+  await assert(`document.querySelector('.backup-volume-region').dataset.allocation==='chessism' && document.querySelectorAll('.backup-volume-region')[1].dataset.allocation==='__free' && Array.from(document.querySelectorAll('.backup-volume-region')).at(-1).dataset.allocation==='__reserve'`)
   await assert(`!document.querySelector('.database-backups-stats, .database-backups-meter')`)
   await assert(`document.querySelector('.backup-volume-disk').getBoundingClientRect().height >= 5 * parseFloat(getComputedStyle(document.documentElement).fontSize)`)
   await assert(`Math.abs(parseFloat(document.querySelector('[data-allocation="chessism"]').style.width) - 200 / 847 * 100) < 0.001`)

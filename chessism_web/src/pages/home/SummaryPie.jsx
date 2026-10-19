@@ -34,12 +34,16 @@ export default function SummaryPie({ items, ready, totalFens, titledOnly = true,
         <g transform={`rotate(${rotation.angle} 100 100)`}>
         {slices.map(slice => {
           const Shape = slice.full ? 'circle' : 'path'
+          const selected = titledOnly === (slice.key === 'titled')
+          // Keep the existing bright/dim palette, but let selection determine
+          // which category receives each color (including saved style overrides).
+          const palette = selected ? 'titled' : 'other'
           const selectGroup = () => onTitleFilterChange?.(slice.key === 'titled')
-          return <Shape key={slice.key} {...(slice.target ? pageStyleTarget(slice.target) : {})}
-            className={`home-summary-slice ${slice.key === 'titled' ? 'titled' : slice.key === 'other' ? 'other' : ''}`}
+          return <Shape key={slice.key} {...pageStyleTarget(`summary.${palette}`)}
+            className={`home-summary-slice ${palette}`} data-category={slice.key}
             {...(slice.full ? { cx: 100, cy: 100, r: 94 } : { d: slice.path })}
             tabIndex="0" role="button" aria-label={sliceDescription(slice)}
-            aria-pressed={titledOnly === (slice.key === 'titled')}
+            aria-pressed={selected}
             onClick={selectGroup}
             onPointerMove={event => show(event, slice)} onPointerLeave={() => setTip(null)}
             onFocus={event => show(event, slice)} onBlur={() => setTip(null)}

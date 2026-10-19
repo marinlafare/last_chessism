@@ -4,6 +4,7 @@ from datetime import date
 from typing import Any
 
 from .catalog import ROW_TYPES
+from .move_scores import normalize_options, MAX_COLUMNS as MOVE_SCORE_MAX_COLUMNS
 
 
 MAXIMUM_ROWS = 5_000_000
@@ -12,6 +13,8 @@ DEFAULT_ROWS = 100_000
 
 
 def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
+    if config.get('definition_kind') == 'template':
+        raise ValueError('Choose runtime parameters for this reusable formula before reading data.')
     row_type_key = str(config.get("row_type") or "").strip().lower()
     row_type = ROW_TYPES.get(row_type_key)
     if row_type is None:
@@ -28,8 +31,17 @@ def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError(f"Columns cannot be both features and labels: {', '.join(overlap)}")
     if not features:
         raise ValueError("Select at least one feature column.")
-    if len(features) + len(labels) > MAXIMUM_COLUMNS:
-        raise ValueError(f"A matrix can contain at most {MAXIMUM_COLUMNS} selected columns.")
+    column_limit = MOVE_SCORE_MAX_COLUMNS if row_type_key == 'move_scores' else MAXIMUM_COLUMNS
+    if len(features) + len(labels) > column_limit:
+        raise ValueError(f"A matrix can contain at most {column_limit} selected columns.")
+    options = normalize_options(config.get('move_scores')) if row_type_key == 'move_scores' else None
+    if options:
+        for key in [*features, *labels]:
+            if key.startswith('move_score_'):
+                if options['all_moves']:
+                    raise ValueError('All-moves recipes generate their score columns automatically; do not select numbered score columns.')
+                if not options['first_move'] <= int(key.removeprefix('move_score_')) <= options['last_move']:
+                    raise ValueError(f'{key} is outside the selected move range.')
     invalid_labels = [key for key in labels if not available[key].label_allowed]
     if invalid_labels:
         raise ValueError(f"These columns cannot be labels: {', '.join(invalid_labels)}")
@@ -46,7 +58,9 @@ def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
     if date_from and date_to and date_from > date_to:
         raise ValueError("The start date must not be after the end date.")
 
-    max_rows = max(1, min(MAXIMUM_ROWS, int(filters.get("max_rows") or DEFAULT_ROWS)))
+    # Explicit null means all matching rows, not the default or a large sentinel.
+    raw_max_rows = filters.get("max_rows", DEFAULT_ROWS)
+    max_rows = None if raw_max_rows is None else max(1, min(MAXIMUM_ROWS, int(raw_max_rows or DEFAULT_ROWS)))
     min_moves = max(0, min(10_000, int(filters.get("min_moves") or 0)))
     name = str(config.get("name") or f"{row_type.label} matrix").strip()[:100]
     if not name:
@@ -57,6 +71,7 @@ def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
         "row_type": row_type_key,
         "feature_columns": features,
         "label_columns": labels,
+        **({'move_scores': options} if options else {}),
         "filters": {
             "players": players,
             "modes": modes,

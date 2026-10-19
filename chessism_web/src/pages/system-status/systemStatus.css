@@ -1,4 +1,7 @@
 .system-status-page main { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
+.system-status-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; align-items: stretch; }
+.system-status-row > * { min-width: 0; }
+@media (max-width: 1050px) { .system-status-row { grid-template-columns: 1fr; } }
 .system-status-page .status {
   padding: 18px;
   border: 1px solid var(--border-soft);

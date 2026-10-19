@@ -15,7 +15,9 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Account, AlgorithmDefinition, AlgorithmRun, MatrixDefinition
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.matrix_constructor.storage import matrix_catalog_lock, MatrixCatalogBusy
-from chessism_api.operations.matrix_constructor.definitions import estimate_definition
+from chessism_api.operations.matrix_constructor.definitions import estimate_definition, resolve_definition
+from chessism_api.operations.matrix_constructor.defaults import default_formula
+from chessism_api.routers.matrices.schemas import MatrixParameters
 from chessism_api.operations.research_algorithms.config import ACTIVE, MAX_COLUMNS, MAX_ROWS, QUEUE, algorithm_catalog, normalize_algorithm, source_config
 from chessism_api.operations.research_algorithms.repository import definition_payload, list_runs, now, run_payload, terminal
 from chessism_api.operations.research_algorithms.storage import capacity
@@ -42,6 +44,8 @@ class BuilderRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     operation: Literal['pipeline']
     matrix_definition_id: uuid.UUID | None = None
+    builtin_matrix_key: str | None = Field(None, max_length=100)
+    matrix_parameters: MatrixParameters | None = None
     parent_definition_id: uuid.UUID | None = None
     columns: list[str] = Field(min_length=1, max_length=12)
     steps: list[dict] = Field(min_length=1, max_length=20)
@@ -52,23 +56,69 @@ class BuilderRequest(BaseModel):
     seed: int = Field(42, ge=0, le=2**32 - 1)
 
 
+class MatrixInputRequest(BaseModel):
+    matrix_definition_id: uuid.UUID | None = None
+    builtin_matrix_key: str | None = Field(None, max_length=100)
+    matrix_parameters: MatrixParameters
+
+
+async def load_input_formula(request, session):
+    builtin = getattr(request, 'builtin_matrix_key', None)
+    if builtin:
+        if request.matrix_definition_id is not None:
+            raise HTTPException(422, 'Choose one input formula, not both a default and a saved formula.')
+        try:
+            return default_formula(builtin)['config']
+        except KeyError as error:
+            raise HTTPException(404, 'Default matrix formula not found.') from error
+    if request.matrix_definition_id is None:
+        raise HTTPException(422, 'Select an input formula.')
+    matrix = await session.get(MatrixDefinition, str(request.matrix_definition_id))
+    if matrix is None:
+        raise HTTPException(404, 'Matrix definition not found. Refresh the input list.')
+    return matrix.config
+
+
+@router.post('/input')
+async def configure_matrix_input(request: MatrixInputRequest):
+    """Resolve column instructions and scope only. No source query or writes."""
+    async with AsyncDBSession() as session:
+        recipe = await load_input_formula(request, session)
+    try:
+        config = resolve_definition(recipe, request.matrix_parameters.model_dump(mode='json'))
+    except (ValueError, TypeError, KeyError) as error:
+        raise HTTPException(422, str(error)) from error
+    return {'config': config, 'materialized': False}
+
+
 async def request_config(request, session):
     parent_id = getattr(request, 'parent_definition_id', None)
     parent = await session.get(AlgorithmDefinition, str(parent_id)) if parent_id else None
     if parent_id and parent is None:
         raise HTTPException(404, 'Parent algorithm not found. Start a new definition instead.')
-    if parent and (request.matrix_definition_id is None or str(request.matrix_definition_id) == parent.matrix_definition_id):
+    builtin = getattr(request, 'builtin_matrix_key', None)
+    parameters = getattr(request, 'matrix_parameters', None)
+    reuse_parent = parent and not builtin and parameters is None and (
+        request.matrix_definition_id is None or str(request.matrix_definition_id) == parent.matrix_definition_id)
+    if reuse_parent:
         recipe = parent.config['matrix']
     else:
-        matrix = await session.get(MatrixDefinition, str(request.matrix_definition_id))
-        if matrix is None:
-            raise HTTPException(404, "Matrix definition not found. Refresh the input list.")
-        recipe = matrix.config
+        recipe = await load_input_formula(request, session)
     try:
+        if parameters is not None:
+            recipe = resolve_definition(recipe, parameters.model_dump(mode='json'))
         config = normalize_algorithm(request.model_dump(mode="json"), recipe)
         if request.operation == 'pipeline':
             config['revision'] = int(parent.config.get('revision', 1)) + 1 if parent else 1
             config['parent_definition_id'] = str(parent_id) if parent else None
+            if reuse_parent and 'matrix_source' in parent.config:
+                config['matrix_source'] = deepcopy(parent.config['matrix_source'])
+            else:
+                config['matrix_source'] = {
+                    'builtin_key': builtin,
+                    'definition_id': str(request.matrix_definition_id) if request.matrix_definition_id else None,
+                    'parameters': parameters.model_dump(mode='json') if parameters is not None else None,
+                }
         return config
     except (ValueError, TypeError, KeyError, AttributeError) as error:
         raise HTTPException(422, str(error)) from error

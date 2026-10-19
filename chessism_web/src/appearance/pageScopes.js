@@ -18,6 +18,7 @@ export const PAGE_SCOPES = {
   "/research": "research",
   "/research/chessism-coefficient": "accuracy_coefficient",
   "/research/matrices": "matrices",
+  "/research/matrices/collection": "algorithms",
   "/research/algorithms": "algorithms",
   "/research/salience": "salience",
   "/backups": "backups"

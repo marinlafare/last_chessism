@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 import chess
 from chessism_api.operations import common_positions as cache
+from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
 
 NOW = datetime(2026, 10, 11, tzinfo=timezone.utc)
 E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -"
@@ -27,6 +28,26 @@ def result(rows=(), scalar=None):
 
 
 class CommonPositionsTests(unittest.IsolatedAsyncioTestCase):
+    async def test_compact_labels_and_example_do_not_reference_removed_move_id(self):
+        session = AsyncMock()
+        session.info = {SESSION_KEY: RelationalStorage('public', 'chessism_archive', 'chessism_reads', 'relational_v3')}
+        session.execute.side_effect = [
+            result([{'n_move': 1, 'move_color': 'white', 'san': 'e4', 'label_occurrences': 40, 'example_game_link': 7}]),
+            result([{'n_move': 1, 'white_move': 'e4', 'black_move': 'e5'}]),
+        ]
+        rows = await cache.describe_positions(session, [{'fen': E4, 'fen_id': 123, 'appearances': 42}], start_rank=11)
+        self.assertEqual(rows[0]['rank'], 11)
+        self.assertEqual(rows[0]['example_line'], '1. e4')
+        for call in session.execute.call_args_list:
+            self.assertNotRegex(str(call.args[0]), r'\bid\b')
+        self.assertNotIn('DISTINCT', str(session.execute.call_args_list[1].args[0]))
+        sql = str(session.execute.call_args_list[0].args[0])
+        self.assertNotIn('LATERAL', sql)
+        self.assertIn('a.fen_id = :fen_id', sql)
+        self.assertIn('a.is_white IS NOT NULL', sql)
+        self.assertIn('ORDER BY label_occurrences DESC, a.n_move, move_color, san', sql)
+        self.assertEqual(session.execute.call_args_list[0].args[1], {'fen_id': 123})
+
     def test_summary_lock_does_not_overlap_cloud_controller_or_histogram(self):
         self.assertNotIn(cache.LOCK_ID, (731_946_219, 731_946_218))
 

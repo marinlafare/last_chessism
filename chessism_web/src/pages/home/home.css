@@ -44,7 +44,7 @@
 .home-summary-charts figcaption { color: var(--text); font-weight: 700; }
 .home-summary-positions { --titled-fill: #21b787; --other-fill: #d9685b; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
 .home-summary-games { margin: 0; min-width: 0; text-align: center; --chart-color-1: #21b787; --bar-hover-color: #2adca2; --bar-hover-border: #ffffff; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
-.home-games-navigation { display: grid; grid-template-columns: 18px minmax(0, 1fr) 18px; gap: 3px; align-items: stretch; }
+.home-games-navigation { display: grid; grid-template-columns: 12.6px minmax(0, 1fr) 12.6px; gap: 3px; align-items: stretch; }
 .home-games-chart { display: block; width: 100%; height: auto; }
 .home-games-chart text { fill: var(--muted); stroke: none; font-size: 14px; }
 .home-games-tick line { stroke: var(--border-soft); stroke-width: 1; }
@@ -57,7 +57,7 @@
 .home-games-avatar-frame { fill: none; }
 .home-games-player:hover .home-games-avatar-frame, .home-games-player:focus-visible .home-games-avatar-frame { stroke-width: 2; }
 .home-games-pagination { margin-top: 6px; font-size: 11px; color: var(--muted); }
-.home-games-navigation button { display: grid; place-items: center; min-width: 0; padding: 0; border: 1px solid var(--border-soft); border-radius: 4px; color: var(--text); background: transparent; font-size: 20px; cursor: pointer; }
+.home-games-navigation button { display: grid; place-items: center; min-width: 0; padding: 0; border: 1px solid var(--border-soft); border-radius: 4px; color: var(--text); background: transparent; font-size: 16px; cursor: pointer; }
 .home-games-navigation button:disabled { opacity: .35; cursor: default; }
 .home-games-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .home-summary-slice.titled { fill: var(--titled-fill); }

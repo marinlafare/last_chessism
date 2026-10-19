@@ -17,8 +17,10 @@ export default function SystemStatus() {
     <SideRail />
     <div className="home-shell">
       <main aria-label="System status">
-        <StatusPanel {...status} />
-        <CloudStatusPanel {...cloudStatus} />
+        <div className="system-status-row">
+          <StatusPanel {...status} />
+          <CloudStatusPanel {...cloudStatus} />
+        </div>
         <CloudBillingPanel />
       </main>
       <Footer />

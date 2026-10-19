@@ -54,7 +54,7 @@ class CommonPositionPageTests(unittest.IsolatedAsyncioTestCase):
 
     async def build(self, count):
         session = AsyncMock()
-        session.execute.side_effect = [result() for _ in range(5)] + [result(scalar=NOW),
+        session.execute.side_effect = [result() for _ in range(6)] + [result(scalar=NOW),
             result([{"fen": f"fen-{i}", "appearances": 40-i} for i in range(count)])]
         described = [{"rank": 11+i, "fen": E4, "appearances": 40-i, "n_move": 1,
             "move_color": "white", "san": "e4", "label_occurrences": 2, "example_line": "1. e4"} for i in range(min(10,count))]
@@ -67,6 +67,8 @@ class CommonPositionPageTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("OFFSET", str(session.execute.call_args.args[0]))
         self.assertEqual(len(describe.call_args.args[1]), min(10,count))
         self.assertEqual(describe.call_args.args[2], 11)
+        self.assertEqual(describe.call_args.kwargs['snapshot'], NOW.isoformat())
+        self.assertTrue(any('force_custom_plan' in str(call.args[0]) for call in session.execute.call_args_list))
         return payload
 
     async def test_keyset_tie_breaker_lookahead_final_partial_and_empty_pages(self):

@@ -5,21 +5,22 @@ import BuilderSteps from './BuilderSteps'
 import BuilderOutputs from './BuilderOutputs'
 
 export default function AlgorithmForm({ model }) {
-  const { form, inputs, catalog, matrix, working, update, estimate, schemas } = model
+  const { form, catalog, matrix, working, update, estimate, schemas } = model
   if (!form) return (
     <section {...pageStyleTarget('panel')} className="algorithm-panel">
       <h2 {...pageStyleTarget('title')}>1. Input matrix</h2>
-      <p {...pageStyleTarget('text')}>{working ? 'Loading matrix definitions…' : 'Save a matrix definition first.'}</p>
-      <a {...pageStyleTarget('link')} href="/research/matrices">Open matrices constructor</a>
+      <p {...pageStyleTarget('text')}>{working ? 'Loading matrix definitions…' : 'Select a formula above, or open a saved algorithm below.'}</p>
     </section>
   )
   const available = inputColumns(matrix, catalog)
-  const valid = form.name.trim() && form.columns.length && form.steps.length && form.outputs.length
+  const template = matrix?.config.definition_kind === 'template'
+  const previewOnly = matrix?.config.move_scores?.all_moves || matrix?.config.filters?.max_rows === null
+  const valid = Boolean(matrix) && !template && !previewOnly && form.name.trim() && form.columns.length && form.steps.length && form.outputs.length
   const toggle = (key) => update({
     columns: form.columns.includes(key) ? form.columns.filter((item) => item !== key) : [...form.columns, key],
   })
   return (
-    <form onSubmit={(event) => { event.preventDefault(); model.save() }}>
+    <form onSubmit={(event) => { event.preventDefault(); if (valid) model.save() }}>
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
         <h2 {...pageStyleTarget('title')}>Create an algorithm</h2>
         <p {...pageStyleTarget('text')}>Build your own calculation from steps and formulas. Open a saved algorithm below to make a new revision.</p>
@@ -45,17 +46,11 @@ export default function AlgorithmForm({ model }) {
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
         <h2 {...pageStyleTarget('title')}>1. Input matrix</h2>
         <div className="algorithm-fields">
-          <label {...pageStyleTarget('label')}>Saved matrix instructions
-            <select {...pageStyleTarget('field')} value={form.matrix_definition_id || ''} onChange={(event) => model.selectInput(event.target.value)}>
-              {inputs.map((item) => <option key={item.id || 'frozen'} value={item.id || ''}>{item.name}</option>)}
-            </select>
-          </label>
+          <p {...pageStyleTarget('text')}>{matrix?.name || 'No input selected'} · <a {...pageStyleTarget('link')} href="#matrix-formulas" onClick={(event) => {
+            event.preventDefault(); document.getElementById('matrix-formulas')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+          }}>Change formula</a></p>
           <div className="algorithm-actions">
-            <button {...pageStyleTarget('button')} type="button" disabled={!matrix} onClick={() => model.setPreview({
-              ...matrix, id: null, storage_kind: 'definition',
-              feature_count: matrix.config.feature_columns.length, label_count: matrix.config.label_columns.length,
-            })}>Preview live rows</button>
-            {model.inputMore && <button {...pageStyleTarget('button')} type="button" onClick={model.moreInputs}>Load more matrices</button>}
+            <button {...pageStyleTarget('button')} type="button" disabled={!matrix || template} onClick={model.previewInput}>Preview selected data</button>
           </div>
         </div>
         <div className="algorithm-checks">
@@ -68,9 +63,11 @@ export default function AlgorithmForm({ model }) {
         </div>
         <p {...pageStyleTarget('text')}>
           Select up to 12 input columns. Text columns are valid grouping keys, not numeric measurements.
-          Source: {matrix?.config.row_type} · {matrix?.config.filters.modes?.join(', ') || 'all game types'}.
+          Source: {matrix?.config.row_type} · {template ? 'scope chosen when used' : matrix?.config.filters?.modes?.join(', ') || 'all game types'}.
           Inputs are read from current database values only when you run or explicitly preview.
         </p>
+        {template ? <p {...pageStyleTarget('text')} className="algorithm-warning">Choose and apply the data selection above. Formula samples do not configure a run.</p> : null}
+        {!template && previewOnly ? <p {...pageStyleTarget('text')} className="algorithm-warning">This selection can be previewed. For the current bounded CPU runner, choose a fixed move range and an explicit input row limit. All-moves and unlimited-row execution are not enabled.</p> : null}
       </fieldset>
 
       <fieldset className="algorithm-panel" disabled={Boolean(working)}>
@@ -96,7 +93,7 @@ export default function AlgorithmForm({ model }) {
             </select>
           </label>
           <label {...pageStyleTarget('label')}>Maximum source rows
-            <input {...pageStyleTarget('field')} type="number" min="1" max={Math.min(matrix?.config.filters.max_rows || 100000, 100000)}
+            <input {...pageStyleTarget('field')} type="number" min="1" max={Math.min(matrix?.config.filters?.max_rows || 100000, 100000)}
               required value={form.max_rows} onChange={(event) => update({ max_rows: Number(event.target.value) })} />
           </label>
           <label {...pageStyleTarget('label')}>Scatter sampling seed

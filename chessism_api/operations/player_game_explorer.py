@@ -154,12 +154,24 @@ async def explore_player_games(
     timezone_name: str | None = None,
     limit: int = 30,
     cursor: str | None = None,
+    rating_from: int | None = None,
+    result: str | None = None,
 ) -> dict[str, Any]:
     """Return compact analyzed games belonging to one visual chart bin."""
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100.")
     salience_filtered = validate_range(salience_min, salience_max)
     selected_modes = _normalize_modes(modes)
+    if scope_kind in {'rating', 'result'}:
+        if analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None:
+            raise ValueError('Rating and result bars include all games; use analyzed_only=false without analysis filters.')
+        from chessism_api.operations.player_chart_games import explore_chart_games
+        return await explore_chart_games(
+            player_name, scope_kind=scope_kind, modes=selected_modes, rating_from=rating_from,
+            result=result, timezone_name=timezone_name, limit=limit, cursor=cursor,
+        )
+    if rating_from is not None or result is not None:
+        raise ValueError('Rating and result filters require a matching chart scope.')
     selection_sql, selection_params, label = _selection_clause(
         scope_kind, target_date, weekday, hour
     )

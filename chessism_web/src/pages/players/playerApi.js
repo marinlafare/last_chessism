@@ -5,8 +5,11 @@ const playerPath = (playerName) => encodeURIComponent(playerName)
 export const fetchPlayerProfile = (playerName, options) => getJson(`/players/${playerPath(playerName)}`, options)
 export const fetchPlayerHours = (playerName, options) => getJson(`/games/${playerPath(playerName)}/hours_played`, options)
 export const fetchPlayerPositionStats = (playerName, options) => getJson(`/fens/players/${playerPath(playerName)}/analysis_counts`, options)
+export const fetchPlayerLatestGame = (playerName, options) => getJson(`/games/${playerPath(playerName)}/recent?page=1&page_size=1`, options)
 export const fetchPlayerNeighbors = (playerName, options) => getJson(`/players/${playerPath(playerName)}/neighbors`, options)
-export const fetchPlayerNavigation = () => getJson('/players/navigation')
+export const fetchPlayerNavigation = (sameGroupAs, options) => getJson(
+  `/players/navigation${sameGroupAs ? `?same_group_as=${playerPath(sameGroupAs)}` : ''}`, options
+)
 export const fetchPlayerDeletionPreview = (playerName) => getJson(`/players/${playerPath(playerName)}/deletion-preview`)
 export const fetchPlayerJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
 export const downloadPlayerGames = (playerName, options) => postJson('/games', { player_name: playerName }, options)

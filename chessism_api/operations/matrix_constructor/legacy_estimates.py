@@ -52,6 +52,8 @@ def storage_status(required_bytes: int) -> dict[str, Any]:
 
 async def estimate_matrix(config: dict[str, Any], *, session: Any | None = None) -> dict[str, Any]:
     safe_config = normalize_matrix_config(config)
+    if safe_config['filters']['max_rows'] is None:
+        raise ValueError('Legacy snapshots require an explicit row limit. All-rows definitions can be saved and previewed without materializing them.')
     count_sql, _, params = matrix_sql(safe_config)
 
     async def _count(active_session: Any) -> int:

@@ -3,33 +3,28 @@ export const defaultFeatures = (rowType) => (rowType?.columns || [])
   .filter((column) => column.default).map((column) => column.key)
 
 export const createMatrixForm = () => ({
-  name: 'Player-game research matrix', rowTypeKey: 'game_player', features: [], labels: [],
-  filters: {
-    players: '', modes: ['bullet', 'blitz', 'rapid'], date_from: '', date_to: '',
-    min_moves: 0, analyzed_only: false, max_rows: 100000,
-  },
+  name: 'Custom game matrix', rowTypeKey: 'game', features: [], labels: [],
 })
 
-export const matrixFormPayload = ({ name, rowTypeKey, features, labels, filters }) => ({
-  name, row_type: rowTypeKey, feature_columns: [...features], label_columns: [...labels],
-  filters: {
-    ...filters, modes: [...filters.modes],
-    players: filters.players.split(',').map((player) => player.trim()).filter(Boolean),
-    min_moves: Number(filters.min_moves === '' ? 0 : filters.min_moves),
-    max_rows: Number(filters.max_rows === '' ? 100000 : filters.max_rows),
-    date_from: filters.date_from || null, date_to: filters.date_to || null,
-  },
+export const matrixFormPayload = ({ name, rowTypeKey, features, labels }) => ({
+  name, definition_kind: 'template', row_type: rowTypeKey, feature_columns: [...features], label_columns: [...labels],
+  ...(rowTypeKey === 'move_scores' ? { move_scores: {
+    all_moves: true, first_move: 1, last_move: null, score_perspective: 'player',
+  } } : {}),
 })
 
 export const formFromDefinition = ({ name, config }) => ({
   name: `${name} copy`, rowTypeKey: config.row_type,
-  features: [...config.feature_columns], labels: [...config.label_columns],
-  filters: {
-    ...createMatrixForm().filters, ...config.filters, modes: [...config.filters.modes],
-    players: config.filters.players.join(', '),
-    date_from: config.filters.date_from || '', date_to: config.filters.date_to || '',
-  },
+  features: config.row_type === 'move_scores' ? ['player', 'game', 'result'] : [...config.feature_columns],
+  labels: config.row_type === 'move_scores' ? [] : [...config.label_columns],
 })
+
+export const moveScoreColumns = (options, maximum = 500) => {
+  if (options.all_moves) return ['player', 'game', 'result']
+  const first = Number(options.first_move), last = Number(options.last_move)
+  if (!Number.isInteger(first) || !Number.isInteger(last) || first < 1 || last < first || last > maximum) return []
+  return ['player', 'game', 'result', ...Array.from({ length: last - first + 1 }, (_, i) => `move_score_${first + i}`)]
+}
 
 const toggle = (items, value) => items.includes(value)
   ? items.filter((item) => item !== value) : [...items, value]

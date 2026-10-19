@@ -48,7 +48,7 @@
 
 .behavior-summary {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -56,7 +56,7 @@
   display: grid;
   gap: 4px;
   min-width: 0;
-  padding: 10px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--border-soft);
   border-radius: 6px;
   background: #0b1117;
@@ -77,6 +77,17 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.behavior-results-summary { align-content: start; }
+.behavior-results-chart { display: block; width: 100%; max-width: none; margin: 0; height: 136px; }
+.behavior-results-chart text { fill: var(--muted); font-size: 12px; }
+.behavior-results-grid line { stroke: var(--border-soft); stroke-width: 1; }
+.behavior-results-chart .behavior-results-value { fill: var(--text); font-size: 13px; font-weight: 700; }
+.behavior-results-column { outline: none; }
+.behavior-results-column[aria-disabled="false"] { cursor: pointer; }
+.behavior-results-column:hover rect,
+.behavior-results-column:focus-visible rect { filter: brightness(1.15); stroke: var(--text); stroke-width: 2; }
+.behavior-summary small { color: var(--muted); font-size: 11px; }
 
 .behavior-graph-card {
   min-width: 0;

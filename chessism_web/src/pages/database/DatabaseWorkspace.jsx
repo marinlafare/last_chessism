@@ -8,7 +8,7 @@ import { useDatabaseLayout } from './useDatabaseLayout'
 import { centerTable, fitBounds, fitTables, inViewport, normalizeLayout, relatedTables, relationshipPath, searchTables, workspaceBounds, zoomAt } from './workspaceGeometry'
 import { buildDatabaseHierarchy, regionsForPositions, tableGroup, TABLE_GROUPS } from './workspaceHierarchy'
 
-export default function DatabaseWorkspace({ catalog, accountId }) {
+export default function DatabaseWorkspace({ catalog, accountId, heading }) {
   const { tables, relationships } = catalog
   const { layout, setLayout, storageError, notice, hasSavedLayout, saveLayout, loadLayout } = useDatabaseLayout(tables, accountId)
   const [selected, setSelected] = useState(null), [query, setQuery] = useState(''), [searchOpen, setSearchOpen] = useState(false)
@@ -113,7 +113,7 @@ export default function DatabaseWorkspace({ catalog, accountId }) {
     return () => window.removeEventListener('blur', blur)
   }, [finish])
 
-  return <>
+  const controls = <>
     <div {...pageStyleTarget('toolbar')} className="database-tools">
       <div className="database-search">
         <label htmlFor="database-search">Find a table or column</label>
@@ -150,6 +150,8 @@ export default function DatabaseWorkspace({ catalog, accountId }) {
       </div>
     </div>
     <p {...pageStyleTarget('text')} className="database-hint">Left-drag a title to move its table · double-click or Enter to expand · hold the mouse wheel and drag to pan · wheel or + / − to zoom · Shift + wheel to scroll columns.</p>
+  </>
+  return <>
     <div {...pageStyleTarget('canvas')} className={`database-canvas${dragging ? ' dragging' : ''}`} ref={canvas} tabIndex={0}
       role="region" aria-label="Database table canvas"
       onPointerDownCapture={event => { if (event.button === 1) start(event) }}
@@ -187,6 +189,10 @@ export default function DatabaseWorkspace({ catalog, accountId }) {
       </div>
       {!tables.length && <p className="database-empty">No accessible application tables or views found.</p>}
     </div>
+    <section className="database-bottom-controls" aria-label="Database information and controls">
+      {heading}
+      {controls}
+    </section>
     <p {...pageStyleTarget('text')} className="database-hint" role="status">{storageError || notice || 'The default hierarchy opens every time. Adjustments are temporary until you choose Save layout; use Load saved layout to reopen your personal arrangement.'}</p>
     {tableIndex.has(selected) && <DatabaseRelationships table={tableIndex.get(selected)} relationships={links} onSelect={focusTable} onClose={() => setSelected(null)} />}
     {preview && <DatabaseTablePreview key={preview.id} table={preview} onClose={() => setPreview(null)} />}

@@ -23,7 +23,7 @@ const RESEARCH_AREAS = [
     href: '/research/algorithms',
     eyebrow: 'CALCULATIONS',
     title: 'Algorithm creation',
-    description: 'Build algorithms from editable steps and formulas, test a small sample, and save revisions with tables and charts.',
+    description: 'Browse matrix formulas, choose their data, and build calculations from editable steps with tables and charts.',
     action: 'Open algorithm creation',
   },
   {

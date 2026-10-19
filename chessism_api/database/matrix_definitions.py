@@ -20,6 +20,7 @@ async def import_snapshot_definitions(connection) -> int:
             rows = []
             for item in batch:
                 config = definition_config(item["config"])
+                config = {**config, 'collection': 'foreign', 'origin': 'legacy_snapshot_import'}
                 rows.append({
                     "id": item["id"], "name": config["name"], "row_type": config["row_type"],
                     "config": config, "created_by": item["created_by"], "created_at": item["created_at"],

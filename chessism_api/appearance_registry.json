@@ -191,11 +191,25 @@
       ]
     },
     "repeated.outline": {
-      "label": "2–10 circle border",
+      "label": "Less common circle border",
       "properties": [
         "stroke",
         "strokeWidth"
       ]
+    },
+    "coverage.outline": {
+      "label": "Scored/unscored circle border",
+      "properties": ["stroke", "strokeWidth"]
+    },
+    "coverage.scored": {
+      "label": "Scored FEN slice",
+      "editorParent": "coverage.outline",
+      "properties": ["fill"]
+    },
+    "coverage.unscored": {
+      "label": "Unscored FEN slice",
+      "editorParent": "coverage.outline",
+      "properties": ["fill"]
     },
     "unique.slice": {
       "label": "Unique slice",

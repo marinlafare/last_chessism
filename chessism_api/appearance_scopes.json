@@ -837,7 +837,8 @@
     "algorithms": {
       "label": "Algorithms",
       "routes": [
-        "/research/algorithms"
+        "/research/algorithms",
+        "/research/matrices/collection"
       ],
       "targets": {
         "definition.panel": {

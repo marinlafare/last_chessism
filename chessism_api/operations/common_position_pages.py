@@ -77,7 +77,7 @@ async def get_common_position_page(redis, cursor, retry=False):
     return {"status": "pending", "start_rank": after["rank"] + 1, "rows": []}
 
 
-async def build_page(cursor):
+async def build_page(cursor, redis=None):
     after = parse_cursor(cursor)
     async with AsyncDBSession() as session:
         await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
@@ -85,15 +85,19 @@ async def build_page(cursor):
         await session.execute(text("SET LOCAL lock_timeout = '5s'"))
         await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 2"))
         await session.execute(text("SET LOCAL jit = off"))
+        # Common and rare FENs need different plans even after prepared queries
+        # have been reused; do not let the generic estimate serialize hot FENs.
+        await session.execute(text("SET LOCAL plan_cache_mode = force_custom_plan"))
         if await current_snapshot(session) != after["snapshot"]:
             return changed_payload()
         rows = (await session.execute(text("""
-            SELECT fen, n_games AS appearances FROM fen
+            SELECT fen, fen_id, n_games AS appearances FROM fen
             WHERE n_games > 1 AND n_games <= :appearances
               AND (n_games < :appearances OR (n_games = :appearances AND fen > :fen))
             ORDER BY n_games DESC, fen LIMIT 11
         """), {"appearances": after["appearances"], "fen": after["fen"]})).mappings().all()
-        described = await describe_positions(session, rows[:10], after["rank"] + 1)
+        described = await describe_positions(session, rows[:10], after["rank"] + 1,
+                                              redis=redis, snapshot=after["snapshot"])
     output = [{"rank": row["rank"], "fen": row["fen"], "appearances": row["appearances"],
                "label": move_label(row["n_move"], row["move_color"], row["san"]),
                "label_occurrences": row["label_occurrences"], "example_line": row["example_line"]}
@@ -107,7 +111,7 @@ async def run_commonness_page_refresh(ctx, cursor):
     parse_cursor(cursor)
     key = cache_key(cursor)
     try:
-        payload = await asyncio.wait_for(build_page(cursor), timeout=540)
+        payload = await asyncio.wait_for(build_page(cursor, redis=ctx["redis"]), timeout=540)
         await ctx["redis"].set(key, json.dumps(payload), ex=CACHE_SECONDS)
     except Exception:
         LOG.exception("Common-position page refresh failed")

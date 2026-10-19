@@ -3,6 +3,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import './players.css'
 import PlayerAnalysisWorkspace from './PlayerAnalysisWorkspace'
+import PlayerCoveragePie from './PlayerCoveragePie'
+import PlayerProfileDates from './PlayerProfileDates'
 import { formatNumber } from '../../utils/formatters'
 import { formatPlayerCount } from './playerSummary.js'
 import { playerHomeHref } from '../../services/navigation'
@@ -26,6 +28,18 @@ import {
   fetchPlayerProfile,
   updatePlayerGames,
 } from './playerApi'
+
+function PlayerMenuAvatar({ name, src }) {
+  const [failedUrl, setFailedUrl] = useState(null)
+  return (
+    <span className="players-title-menu-avatar" aria-hidden="true">
+      {src && failedUrl !== src ? (
+        <img src={src} alt="" width="28" height="28" loading="lazy" decoding="async"
+          onError={() => setFailedUrl(src)} />
+      ) : name.charAt(0).toUpperCase()}
+    </span>
+  )
+}
 
 function GameUpdateProgress({ status, message }) {
   const progress = status?.progress
@@ -233,34 +247,39 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
     window.dispatchEvent(new PopStateEvent('popstate'))
   }
 
-  const togglePlayerMenu = async () => {
-    if (playerMenuOpen) {
-      setPlayerMenuOpen(false)
-      return
-    }
-    setPlayerMenuOpen(true)
-    if (playerMenuPlayers.length || playerMenuLoading) return
-
-    setPlayerMenuLoading(true)
-    setPlayerMenuError('')
-    try {
-      const payload = await fetchPlayerNavigation()
-      setPlayerMenuPlayers(
-        (Array.isArray(payload?.players) ? payload.players : [])
-          .map((name) => String(name || '').trim().toLowerCase())
-          .filter(Boolean)
-          .sort((left, right) => left.localeCompare(right))
-      )
-    } catch (navigationError) {
-      setPlayerMenuError(
-        navigationError instanceof Error ? navigationError.message : 'Unable to load players.'
-      )
-    } finally {
-      setPlayerMenuLoading(false)
-    }
-  }
+  const togglePlayerMenu = () => setPlayerMenuOpen(open => !open)
 
   useEffect(() => {
+    if (!playerMenuOpen || !activePlayer || loading) return undefined
+    const controller = new AbortController()
+    setPlayerMenuPlayers([])
+    setPlayerMenuLoading(true)
+    setPlayerMenuError('')
+    fetchPlayerNavigation(activePlayer, { signal: controller.signal })
+      .then(payload => {
+        if (controller.signal.aborted) return
+        setPlayerMenuPlayers(
+          (Array.isArray(payload?.players) ? payload.players : [])
+            .map(name => String(name || '').trim().toLowerCase())
+            .filter(name => name && name !== activePlayer.toLowerCase())
+            .sort((left, right) => left.localeCompare(right))
+            .map(name => ({ name, avatar: String(payload?.avatars?.[name] || '').trim() }))
+        )
+      })
+      .catch(navigationError => {
+        if (controller.signal.aborted) return
+        setPlayerMenuError(
+          navigationError instanceof Error ? navigationError.message : 'Unable to load players.'
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPlayerMenuLoading(false)
+      })
+    return () => controller.abort()
+  }, [playerMenuOpen, activePlayer, loading])
+
+  useEffect(() => {
+    setPlayerMenuOpen(false)
     loadPlayer(playerName)
     return () => profileRequest.current?.abort()
   }, [playerName, loadPlayer])
@@ -378,12 +397,6 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
     }
   }, [deleteJob?.jobId])
 
-  const joinedDisplay = profile?.joined && Number(profile.joined) > 0
-    ? new Date(Number(profile.joined) * 1000)
-        .toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: '2-digit', timeZone: 'UTC' })
-        .replace(',', '')
-        .toUpperCase()
-    : null
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
   const profileAvatar = String(profile?.avatar || '').trim()
   const profileInitial = String(profile?.player_name || '?').trim().charAt(0).toUpperCase() || '?'
@@ -395,12 +408,6 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
   const analyzedPlayerGames = Number(playerPositionStats?.analyzed_games || 0)
   const totalPlayerFens = Number(playerPositionStats?.total_fens ?? playerPositionStats?.total_positions ?? 0)
   const analyzedPlayerFens = Number(playerPositionStats?.analyzed_fens ?? playerPositionStats?.analyzed_positions ?? 0)
-  const analyzedPlayerGamePercent = totalPlayerGames > 0
-    ? Math.min(100, (analyzedPlayerGames / totalPlayerGames) * 100)
-    : 0
-  const analyzedPlayerFenPercent = totalPlayerFens > 0
-    ? Math.min(100, (analyzedPlayerFens / totalPlayerFens) * 100)
-    : 0
   const gamesUpdateActive = Boolean(gamesUpdateJob?.jobId && !isTerminalJobStatus(gamesUpdateStatus))
   const deleteActive = Boolean(deleteJob?.jobId && !isTerminalJobStatus(deleteStatus))
   const deleteConfirmationMatches = deleteConfirmation.trim().toLowerCase() === activePlayer.toLowerCase()
@@ -414,7 +421,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
           {message ? <p {...pageStyleTarget('text')} className="result-line">{message}</p> : null}
           {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
 
-          <section {...pageStyleTarget('panel')} className="players-top-grid">
+          <section {...pageStyleTarget('panel')} className={`players-top-grid${playerMenuOpen ? ' players-menu-open' : ''}`}>
             <div {...pageStyleTarget('player.profile')} className="games-mode-detail players-profile-navigation-section">
               <div className="section-head">
                 <div className="players-title-navigation">
@@ -446,19 +453,18 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                       <div className="players-title-menu" id="player-navigation-menu" role="menu">
                         {playerMenuLoading ? <p {...pageStyleTarget('text')}>Loading players…</p> : null}
                         {playerMenuError ? <p {...pageStyleTarget('text')} className="error">{playerMenuError}</p> : null}
-                        {!playerMenuLoading && !playerMenuError ? playerMenuPlayers
-                          .filter((name) => name !== activePlayer.toLowerCase())
-                          .map((name) => (
+                        {!playerMenuLoading && !playerMenuError ? playerMenuPlayers.map(({ name, avatar }) => (
                             <button {...pageStyleTarget('button')}
                               type="button"
                               role="menuitem"
                               key={name}
                               onClick={() => navigateToPlayer(name)}
                             >
-                              {name}
+                              <PlayerMenuAvatar name={name} src={avatar} />
+                              <span>{name}</span>
                             </button>
                           )) : null}
-                        {!playerMenuLoading && !playerMenuError && playerMenuPlayers.length <= 1 ? (
+                        {!playerMenuLoading && !playerMenuError && !playerMenuPlayers.length ? (
                           <p {...pageStyleTarget('text')}>No other players available.</p>
                         ) : null}
                       </div>
@@ -518,13 +524,13 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                           ['Player', profile.player_name || 'N/A'],
                           ['Country', countryCode],
                           ['Name', profile.name || 'N/A'],
-                          ['Joined', joinedDisplay || 'N/A'],
                         ].map(([label, value]) => (
                           <div className="profile-item" key={label}>
                             <span>{label}</span>
                             <strong {...pageStyleTarget('value')}>{String(value)}</strong>
                           </div>
                         ))}
+                        <PlayerProfileDates profile={profile} />
                         <div {...pageStyleTarget('panel')} className="players-followers-card">
                           <span>Followers</span>
                           <strong {...pageStyleTarget('value')}>{followersDisplay}</strong>
@@ -538,25 +544,11 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                         </div>
                       </div>
                     </div>
-                    <div className="players-position-summary" aria-label="Player game and FEN analysis coverage">
-                      <div className="players-position-stat">
-                        <span>Games</span>
-                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(totalPlayerGames)}</strong>
-                      </div>
-                      <div className="players-position-stat players-position-stat-analyzed">
-                        <span>Stockfish</span>
-                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(analyzedPlayerGames)}</strong>
-                        <small {...pageStyleTarget('text')}>{Math.round(analyzedPlayerGamePercent)}%</small>
-                      </div>
-                      <div className="players-position-stat">
-                        <span>Positions</span>
-                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(totalPlayerFens)}</strong>
-                      </div>
-                      <div className="players-position-stat players-position-stat-analyzed">
-                        <span>Stockfish</span>
-                        <strong {...pageStyleTarget('value')}>{formatPlayerCount(analyzedPlayerFens)}</strong>
-                        <small {...pageStyleTarget('text')}>{Math.round(analyzedPlayerFenPercent)}%</small>
-                      </div>
+                    <div {...pageStyleTarget('chart.coverage')} className="players-position-summary" aria-label="Player game and FEN analysis coverage">
+                      <PlayerCoveragePie kind="games" total={totalPlayerGames} scored={analyzedPlayerGames}
+                        ready={!loading && Boolean(playerPositionStats)} />
+                      <PlayerCoveragePie kind="positions" total={totalPlayerFens} scored={analyzedPlayerFens}
+                        ready={!loading && Boolean(playerPositionStats)} />
                     </div>
                   </>
                 ) : (

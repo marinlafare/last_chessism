@@ -4,7 +4,7 @@ function Footer() {
     <footer className="site-footer">
       <p {...pageStyleTarget('text')} className="footer-note">Local Chessism stack</p>
       <div className="footer-links">
-        <a {...pageStyleTarget('link')} href="/api/docs">OpenAPI</a>
+        <a {...pageStyleTarget('link')} href="/api/docs">Documentation</a>
       </div>
     </footer>
   )

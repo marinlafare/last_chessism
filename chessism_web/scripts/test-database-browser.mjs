@@ -116,6 +116,7 @@ try {
   await load()
   await waitFor("document.querySelector('.database-table') && document.querySelector('.appearance-account-controls button')?.disabled===false")
   await assert("document.querySelector('.database-heading').textContent.includes('160 tables') && document.querySelectorAll('.database-table').length<25")
+  await assert("document.querySelector('.database-canvas').getBoundingClientRect().bottom <= document.querySelector('.database-heading').getBoundingClientRect().top && document.querySelector('.database-heading').getBoundingClientRect().bottom <= document.querySelector('.database-tools').getBoundingClientRect().top")
   await assert("!document.querySelector('.database-columns') && Array.from(document.querySelectorAll('.database-table-header')).every(n=>n.getAttribute('aria-expanded')==='false')")
   await waitFor(`(()=>{const g=document.querySelector('[data-table-id="public.game"]').getBoundingClientRect(),c=document.querySelector('.database-canvas').getBoundingClientRect();return Math.abs(g.left+g.width/2-c.left-c.width/2)<2})()`)
   await assert(`${stored}==null && Array.from(document.querySelectorAll('button')).find(b=>b.textContent==='Load saved layout').disabled`)

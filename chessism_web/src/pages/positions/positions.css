@@ -633,6 +633,15 @@
   text-transform: uppercase;
 }
 
+.coverage-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.coverage-summary-grid > .status-banner { grid-column: 1 / -1; }
+.coverage-summary-grid .coverage-bar-row { grid-template-columns: 1fr; gap: 8px; }
+
 .coverage-bar-chart {
   display: grid;
   gap: 14px;
@@ -710,5 +719,6 @@
 }
 
 @media (max-width: 720px) {
+  .coverage-summary-grid { grid-template-columns: 1fr; }
   .coverage-bar-row { grid-template-columns: 1fr; gap: 8px; }
 }

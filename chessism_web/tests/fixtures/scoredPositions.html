@@ -115,7 +115,7 @@ window.fetch = async (input, options = {}) => {
     const params = new URL(input, location.href).searchParams
     const cursor = params.get('cursor')
     state.pageCalls.push({cursor, retry: params.get('retry')})
-    if (state.holdPage) await wait('CommonPage', true, options.signal)
+    if (state.holdPage === true || state.holdPage === cursor) await wait('CommonPage', true, options.signal)
     if (state.failPage) return reply({status: 'error', detail: 'Page test failure'})
     if (state.pendingPageReads > 0) { state.pendingPageReads--; return reply({status:'pending',rows:[]}) }
     return reply(state.commonPages[cursor])

@@ -7,7 +7,7 @@ from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
 from .catalog import ROW_TYPES
-from .definitions import QUERY_TIMEOUT_MS, definition_config
+from .definitions import QUERY_TIMEOUT_MS, resolve_definition
 from .queries import matrix_sql
 
 
@@ -23,12 +23,13 @@ def source_value(value):
     return value if math.isfinite(value) else None
 
 
-async def preview_definition(config: dict, *, limit: int = 50, role: str = "all") -> dict:
+async def preview_definition(config: dict, *, limit: int = 50, role: str = "all", parameters: dict | None = None) -> dict:
     if not 1 <= limit <= MAX_PREVIEW_ROWS or role not in {"all", "features", "labels"}:
         raise ValueError("Invalid live preview limit or column selection.")
-    normalized = definition_config(config)
+    normalized = resolve_definition(config, parameters)
     row_type = ROW_TYPES[normalized["row_type"]]
     cap = normalized["filters"]["max_rows"]
+    all_moves = bool((normalized.get('move_scores') or {}).get('all_moves'))
     # Select a tiny ordered prefix BEFORE optional expensive enrichment joins.
     # There is intentionally no total-count query or unbounded OFFSET paging.
     selected_config = {
@@ -36,15 +37,29 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         "feature_columns": normalized["feature_columns"] if role in {"all", "features"} else [],
         "label_columns": normalized["label_columns"] if role in {"all", "labels"} else [],
     }
-    _, select_sql, params = matrix_sql(selected_config)
-    sample_limit = min(limit, cap)
-    params["max_rows"] = min(sample_limit + 1, cap)
+    if all_moves:
+        from .move_scores import score_matrix_sql
+        _, select_sql, params = score_matrix_sql(selected_config, sample_all_moves=True)
+    else:
+        _, select_sql, params = matrix_sql(selected_config)
+    sample_limit = min(limit, cap) if cap is not None else limit
+    params["max_rows"] = min(sample_limit + 1, cap) if cap is not None else sample_limit + 1
     async with AsyncDBSession() as session:
         await session.execute(text("SET TRANSACTION READ ONLY"))
         await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
         await session.execute(text(f"SET LOCAL statement_timeout = {QUERY_TIMEOUT_MS}"))
+        # Tiny samples should execute directly, not pay JIT compilation costs
+        # based on the estimated size of the unbounded underlying recipe.
+        await session.execute(text("SET LOCAL jit = off"))
         result = await session.execute(text(select_sql), params)
         records = list(result.mappings())
+    more_matching_rows = len(records) > sample_limit
+    records = records[:sample_limit]
+    if all_moves:
+        from .move_scores import expand_sample_moves
+        records, score_keys = expand_sample_moves(records)
+        if role in {'all', 'features'}:
+            selected_config['feature_columns'] = [*selected_config['feature_columns'], *score_keys]
     columns = []
     for group, keys in (("features", selected_config["feature_columns"]), ("labels", selected_config["label_columns"])):
         for key in keys:
@@ -56,11 +71,16 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         "preview_kind": "live", "materialized": False, "dimensions": 2,
         "shape": [len(rows), len(columns)], "offset": 0, "limit": limit,
         "total_rows": len(rows), "total_rows_is_sample": True,
-        "more_matching_rows": len(records) > sample_limit, "row_limit": cap,
+        "more_matching_rows": more_matching_rows, "row_limit": cap,
+        "column_scope": "sample_moves" if all_moves else "fixed",
         "has_more": False, "slice_count": 1, "slice_index": 0,
         "columns": columns, "rows": rows,
         "row_keys": [str(record["row_key"]) for record in records[:sample_limit]],
         "sampled_at": datetime.now(timezone.utc).isoformat(),
         "selection_order": row_type.order_sql,
         "category_values": "source_labels_not_materialized_codes",
+        "applied_parameters": {
+            "filters": normalized['filters'],
+            **({'move_scores': normalized['move_scores']} if normalized.get('move_scores') else {}),
+        } if parameters is not None else None,
     }

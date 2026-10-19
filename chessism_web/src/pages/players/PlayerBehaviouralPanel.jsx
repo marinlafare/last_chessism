@@ -10,6 +10,8 @@ import PlayerGameReviewModal from './PlayerGameReviewModal'
 import DailyYearBands from './DailyYearBands'
 import { buildYearScale, yearAtX } from './dailyYearNavigation'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
+import PlayerResultsChart from './PlayerResultsChart'
+import PlayerRatingDistribution from './PlayerRatingDistribution'
 
 const WIDTH = 1200
 const RATING_SVG_HEIGHT = 156
@@ -26,7 +28,6 @@ const HOURLY_HEIGHT = 139
 const HOURLY_BASELINE = HOURLY_TOP + HOURLY_HEIGHT
 const HOURLY_AXIS_Y = 168
 const HOURLY_AXIS_TITLE_Y = 201
-const ALL_RATING_MODES = new Set(PLAYER_ANALYSIS_MODES)
 const RESULT_FIELDS = ['games', 'wins', 'draws', 'losses']
 const LOSS_COLOR = [213, 92, 92]
 const DRAW_COLOR = [141, 107, 180]
@@ -348,6 +349,7 @@ export default function PlayerBehaviouralPanel({
   playerName,
   ratings,
 }) {
+  const [resultMode, setResultMode] = useState('all')
   const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleHourModes, setVisibleHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleDayModes, setVisibleDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
@@ -375,7 +377,10 @@ export default function PlayerBehaviouralPanel({
     1,
     ...hourRows.flatMap((row) => [numeric(row.wins), numeric(row.draws), numeric(row.losses)])
   )
-  const totals = resultTotals(activityForModes(activity, ALL_RATING_MODES).hours)
+  const totals = useMemo(
+    () => resultTotals(activityForModes(activity, new Set(resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode])).hours),
+    [activity, resultMode]
+  )
   const ratingPlot = useMemo(
     () => buildRatingPlot(ratings, selectedRatingYear),
     [ratings, selectedRatingYear]
@@ -430,6 +435,7 @@ export default function PlayerBehaviouralPanel({
   useEffect(() => {
     setExplorerSelection(null)
     setReviewGameId(null)
+    setResultMode('all')
   }, [playerName])
 
   const toggleMode = (setter, mode) => {
@@ -445,9 +451,12 @@ export default function PlayerBehaviouralPanel({
     <>
       <div className="behavior-dashboard">
       <div className="behavior-summary" aria-label="Behavioral selection summary">
-        <div><span>Games</span><strong {...pageStyleTarget('value')}>{formatNumber(totals.games)}</strong></div>
-        <div><span>Results</span><strong {...pageStyleTarget('value')}>{formatNumber(totals.wins)}W · {formatNumber(totals.draws)}D · {formatNumber(totals.losses)}L</strong></div>
-        <div><span>Rating range</span><strong {...pageStyleTarget('value')}>{ratingPlot.lines.length ? `${formatNumber(ratingPlot.minimum)}–${formatNumber(ratingPlot.maximum)}` : 'N/A'}</strong></div>
+        <PlayerResultsChart totals={totals} mode={resultMode} onModeChange={setResultMode}
+          onExplore={result => setExplorerSelection({
+            scope: 'result', result, analyzed_only: false,
+            modes: resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode],
+          })} />
+        <PlayerRatingDistribution key={playerName} playerName={playerName} onExplore={setExplorerSelection} />
       </div>
 
       <div className="player-analysis-chart-list">

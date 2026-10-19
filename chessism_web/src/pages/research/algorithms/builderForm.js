@@ -11,7 +11,7 @@ export function blankBuilder(matrix, catalog) {
     matrix_definition_id: matrix?.id || null, parent_definition_id: null,
     columns: inputColumns(matrix, catalog).slice(0, 12).map((column) => column.key),
     steps: [], outputs: [], missing: 'keep', invalid_values: 'null',
-    max_rows: Math.min(matrix?.config.filters.max_rows || 100000, 100000), seed: 42,
+    max_rows: Math.min(matrix?.config.filters?.max_rows || 100000, 100000), seed: 42,
   }
 }
 

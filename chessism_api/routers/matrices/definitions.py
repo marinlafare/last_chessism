@@ -1,6 +1,7 @@
 """Metadata-only definitions and bounded live previews (superuser router)."""
 
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, select
@@ -11,9 +12,10 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Account, MatrixArtifact, MatrixDefinition
 from chessism_api.operations.matrix_constructor.catalog import matrix_catalog
 from chessism_api.operations.matrix_constructor.definitions import definition_config, definition_payload, estimate_definition
+from chessism_api.operations.matrix_constructor.defaults import default_formula, default_formulas
 from chessism_api.operations.matrix_constructor.live_preview import preview_definition
 from chessism_api.operations.matrix_constructor.storage import MatrixCatalogBusy, matrix_catalog_lock
-from .schemas import MatrixRequest, PreviewRole, request_config
+from .schemas import MatrixRequest, MatrixParameters, PreviewRole, request_config
 
 router = APIRouter()
 
@@ -33,6 +35,29 @@ async def estimate_matrix_definition(request: MatrixRequest) -> dict:
         _query_error(error)
 
 
+@router.get('/defaults')
+async def list_default_formulas() -> dict:
+    return {'definitions': default_formulas()}
+
+
+@router.post('/defaults/{key}/preview')
+async def preview_default_formula(
+    key: str, parameters: MatrixParameters,
+    limit: int = Query(50, ge=1, le=100), role: PreviewRole = 'all',
+) -> dict:
+    try:
+        definition = default_formula(key)
+    except KeyError as error:
+        raise HTTPException(status_code=404, detail='Default matrix not found.') from error
+    try:
+        return await preview_definition(definition['config'], limit=limit, role=role,
+                                        parameters=parameters.model_dump(mode='json'))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except DBAPIError as error:
+        _query_error(error)
+
+
 def _query_error(error):
     if getattr(error.orig, "sqlstate", None) == "57014":
         raise HTTPException(status_code=504, detail="Live data query took too long. Narrow the players or date range and retry.") from error
@@ -46,14 +71,22 @@ async def preview_unsaved_definition(
 ) -> dict:
     try:
         return await preview_definition(request_config(request), limit=limit, role=role)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except DBAPIError as error:
         _query_error(error)
 
 
 @router.get("")
-async def list_matrix_definitions(limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)) -> dict:
+async def list_matrix_definitions(
+    limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0),
+    collection: Literal['all', 'custom', 'foreign'] = 'all',
+) -> dict:
+    query = select(MatrixDefinition)
+    if collection != 'all':
+        query = query.where(func.coalesce(MatrixDefinition.config['collection'].as_string(), 'custom') == collection)
     async with AsyncDBSession() as session:
-        result = await session.execute(select(MatrixDefinition).order_by(
+        result = await session.execute(query.order_by(
             MatrixDefinition.created_at.desc(), MatrixDefinition.id,
         ).limit(limit + 1).offset(offset))
         definitions = list(result.scalars())
@@ -97,6 +130,23 @@ async def preview_saved_definition(
     definition = await get_matrix_definition(definition_id)
     try:
         return await preview_definition(definition["config"], limit=limit, role=role)
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+    except DBAPIError as error:
+        _query_error(error)
+
+
+@router.post("/definitions/{definition_id}/preview")
+async def preview_parameterized_definition(
+    definition_id: uuid.UUID, parameters: MatrixParameters,
+    limit: int = Query(50, ge=1, le=100), role: PreviewRole = 'all',
+) -> dict:
+    definition = await get_matrix_definition(definition_id)
+    try:
+        return await preview_definition(definition['config'], limit=limit, role=role,
+                                        parameters=parameters.model_dump(mode='json'))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
     except DBAPIError as error:
         _query_error(error)
 

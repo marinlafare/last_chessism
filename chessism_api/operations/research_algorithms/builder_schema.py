@@ -36,6 +36,12 @@ def keys(value, schema, *, numeric=False, minimum=1):
 
 def normalize_builder(request, matrix):
     recipe = definition_config(matrix)
+    if recipe.get('definition_kind') == 'template':
+        raise ValueError('Apply the input formula’s data selection in the algorithm editor before saving or running.')
+    if (recipe.get('move_scores') or {}).get('all_moves'):
+        raise ValueError('All-moves formulas can be saved and previewed. Choose a fixed move range before running a fixed-column algorithm.')
+    if recipe['filters']['max_rows'] is None:
+        raise ValueError('All-games selections can be previewed. Set an explicit input row limit before using the bounded CPU runner.')
     available = set(recipe['feature_columns'] + recipe['label_columns'])
     row_type = ROW_TYPES[recipe['row_type']].columns_by_key
     schema = {key: row_type[key].data_type for key in available}

@@ -22,6 +22,7 @@ test('whole disk width includes allocations, actual usage, filesystem blocks, re
   assert.equal(byId.__reserve.size, 150)
   assert.equal(byId.__free.size, 400)
   assert.equal(result.overcommitted, 0)
+  assert.deepEqual(result.rows.map(row => row.id), ['chessism', '__free', 'other', 'reserved', '__system', '__reserve'])
 })
 test('no measurements means unknown, not an empty disk', () => {
   assert.equal(backupVolumeLayout(null), null)

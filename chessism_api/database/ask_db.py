@@ -4052,18 +4052,29 @@ async def get_player_neighbors(player_name: str) -> Dict[str, Optional[str]]:
     }
 
 
-async def get_tracked_player_names() -> List[str]:
-    """Return active full-profile player names for lightweight UI navigation."""
+async def get_tracked_player_navigation(same_group_as: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Return active profile names/photos within the optional title group."""
     query = """
-        SELECT player_name
+        SELECT player_name, avatar
         FROM player
         WHERE joined != 0
           AND deleted_at IS NULL
+          AND (
+            CAST(:same_group_as AS text) IS NULL
+            OR (UPPER(TRIM(COALESCE(player.title, ''))) = ANY(CAST(:titles AS text[]))) = (
+                SELECT UPPER(TRIM(COALESCE(selected.title, ''))) = ANY(CAST(:titles AS text[]))
+                FROM player selected
+                WHERE selected.player_name = :same_group_as AND selected.deleted_at IS NULL
+            )
+          )
         ORDER BY player_name ASC;
     """
     async with AsyncDBSession() as session:
-        result = await session.execute(text(query))
-        return [str(row[0]) for row in result.all()]
+        result = await session.execute(text(query), {
+            "same_group_as": same_group_as.strip().lower() if same_group_as is not None else None,
+            "titles": list(OFFICIAL_PLAYER_TITLES),
+        })
+        return [dict(row) for row in result.mappings().all()]
 
 
 # --- NEW: STATISTICAL ANALYSIS QUERIES ---

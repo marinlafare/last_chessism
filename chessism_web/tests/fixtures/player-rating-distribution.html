@@ -1,0 +1,30 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Isolated rating distribution test</title></head>
+<body><div id="root" style="max-width:1100px;margin:20px auto;padding:12px"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import PlayerBehaviouralPanel from '/src/pages/players/PlayerBehaviouralPanel.jsx'
+import '/src/index.css'
+import '/src/pages/players/player-hero-analytics.css'
+
+const state = window.ratingTest = { requests: [], unexpected: [], failBlitz: true }
+window.fetch = async (url, options = {}) => {
+  const request = new URL(url, location.origin)
+  state.requests.push({ url: request.pathname + request.search, method: options.method || 'GET' })
+  if (!request.pathname.endsWith('/players/hikaru/ppd') || (options.method && options.method !== 'GET')) {
+    state.unexpected.push(String(url))
+    throw new Error('Unexpected API request in isolated test')
+  }
+  const mode = request.searchParams.get('mode')
+  if (mode === 'blitz' && state.failBlitz) return new Response(JSON.stringify({ detail: 'Temporary rating failure' }), { status: 503 })
+  // Deliberately ignore abort in this mock: late responses must still be ignored.
+  if (mode === 'bullet') await new Promise(resolve => setTimeout(resolve, 500))
+  const data = mode === 'rapid' ? { x: [], y: [], games_count: 0 }
+    : mode === 'blitz' ? { x: [2400], y: [100], games_count: 12 }
+    : { x: [2200, 2210, 2220, 2230], y: [0.4, 50.2, 40.8, 8.6], games_count: 1000 }
+  return new Response(JSON.stringify({ ...data, mode, bin_width: 10, excluded_games_count: 0 }), { status: 200 })
+}
+const activity = { hours: [{ hour: 0, games: 1000, wins: 550, draws: 100, losses: 350 }], weekdays: [], weekday_hours: [] }
+const ratings = { series: [{ mode: 'blitz', points: [{ date: '2026-10-19', last_rating: 2200 }] }] }
+createRoot(document.getElementById('root')).render(React.createElement(PlayerBehaviouralPanel, { playerName: 'hikaru', activity, ratings }))
+</script></body></html>

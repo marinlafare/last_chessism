@@ -1,5 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatNumber } from '../../utils/formatters'
 import { explorePlayerGames } from './playerAnalysisApi.js?game-explorer=b10cbe3'
@@ -9,11 +9,14 @@ const emptyRequest = { data: null, error: '', loading: false }
 function resultLabel(value) {
   if (value === 'win') return 'W'
   if (value === 'draw') return 'D'
-  return 'L'
+  if (value === 'loss') return 'L'
+  return '—'
 }
 
 function selectionTitle(selection) {
   if (!selection) return 'Analyzed games'
+  if (selection.scope === 'rating') return `Games rated ${selection.rating_from}–${selection.rating_from + 9}`
+  if (selection.scope === 'result') return { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result]
   if (selection.scope === 'date') return `Games on ${selection.date}`
   if (selection.scope === 'hour') return `Games started at ${String(selection.hour).padStart(2, '0')}:00`
   if (selection.scope === 'weekday_hour') {
@@ -29,6 +32,7 @@ function localDateTime(value) {
 
 export default function PlayerGameExplorerModal({ playerName, selection, onClose, onOpenGame }) {
   const [request, setRequest] = useState(emptyRequest)
+  const paginationController = useRef(null)
 
   useEffect(() => {
     if (!selection || !playerName) return undefined
@@ -43,11 +47,14 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         if (!controller.signal.aborted) setRequest({ data, error: '', loading: false })
       })
       .catch((error) => {
-        if (error.name !== 'AbortError') {
+        if (!controller.signal.aborted && error.name !== 'AbortError') {
           setRequest({ data: null, error: error.message || 'Unable to load these games.', loading: false })
         }
       })
-    return () => controller.abort()
+    return () => {
+      controller.abort()
+      paginationController.current?.abort()
+    }
   }, [playerName, selection])
 
   useEffect(() => {
@@ -70,6 +77,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     const cursor = request.data?.pagination?.next_cursor
     if (!cursor || request.loading) return
     const controller = new AbortController()
+    paginationController.current = controller
     setRequest((current) => ({ ...current, error: '', loading: true }))
     try {
       const next = await explorePlayerGames({
@@ -77,6 +85,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         selection: { ...selection, limit: 30, cursor },
         signal: controller.signal,
       })
+      if (controller.signal.aborted) return
       setRequest((current) => ({
         data: {
           ...next,
@@ -86,7 +95,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         loading: false,
       }))
     } catch (error) {
-      if (error.name !== 'AbortError') {
+      if (!controller.signal.aborted && error.name !== 'AbortError') {
         setRequest((current) => ({ ...current, error: error.message, loading: false }))
       }
     }
@@ -95,6 +104,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const summary = request.data?.summary
   const games = request.data?.games || []
   const analyzedOnly = selection.analyzed_only !== false
+  const chartSelection = selection.scope === 'rating' || selection.scope === 'result'
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('panel')}
@@ -124,20 +134,22 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
 
         {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
         {!games.length && request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading games…</p> : null}
-        {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('text')} className="game-modal-message">No analyzed games are in this bin.</p> : null}
+        {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('text')} className="game-modal-message">{analyzedOnly ? 'No analyzed games are in this bin.' : 'No games are in this bin.'}</p> : null}
 
         {games.length ? (
-          <div className="game-explorer-list">
+          <div className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}>
             {games.map((game) => (
-              <button {...pageStyleTarget('button')} type="button" onClick={() => onOpenGame(game.game_id)} key={game.game_id}>
+              <button {...pageStyleTarget('button')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}>
                 <span className={`game-result-mark ${game.result}`}>{resultLabel(game.result)}</span>
                 <span className="game-list-opponent">
                   <strong {...pageStyleTarget('value')}>vs {game.opponent_name}</strong>
                   <small {...pageStyleTarget('text')}>{localDateTime(game.played_at_local || game.played_at_utc)} · {game.mode} · {game.player_color}</small>
                 </span>
-                <span><small {...pageStyleTarget('text')}>Accuracy</small><strong {...pageStyleTarget('value')}>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
-                <span><small {...pageStyleTarget('text')}>Blunders</small><strong {...pageStyleTarget('value')}>{game.blunder_count ?? 'N/A'}</strong></span>
-                <span><small {...pageStyleTarget('text')}>Rating</small><strong {...pageStyleTarget('value')}>{game.player_rating}</strong></span>
+                {!chartSelection ? <>
+                  <span><small {...pageStyleTarget('text')}>Accuracy</small><strong {...pageStyleTarget('value')}>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
+                  <span><small {...pageStyleTarget('text')}>Blunders</small><strong {...pageStyleTarget('value')}>{game.blunder_count ?? 'N/A'}</strong></span>
+                </> : null}
+                <span><small {...pageStyleTarget('text')}>Rating</small><strong {...pageStyleTarget('value')}>{game.player_rating ?? 'N/A'}</strong></span>
                 <span className="game-list-open">open →</span>
               </button>
             ))}

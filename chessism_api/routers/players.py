@@ -10,7 +10,7 @@ from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.ask_db import (
     get_player_fen_score_counts,
     get_player_neighbors,
-    get_tracked_player_names,
+    get_tracked_player_navigation,
     get_player_performance_summary,
     get_player_modes_stats,
     get_player_mode_chart
@@ -50,6 +50,10 @@ from chessism_api.operations.player_hero_efficiency import get_player_daily_effi
 from chessism_api.operations.player_game_explorer import explore_player_games
 from chessism_api.operations.player_salience import get_player_daily_salience_accuracy
 from chessism_api.operations.player_move_salience import get_player_game_salience
+from chessism_api.operations.player_rating_distribution import (
+    DistributionBusy,
+    get_player_rating_distribution,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -71,11 +75,13 @@ class RangeGamesScoreRequest(BaseModel):
 
 
 class ExploreGamesRequest(BaseModel):
-    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour)$")
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result)$")
     modes: list[str] = Field(..., min_length=1, max_length=3)
     date: str | None = Field(None, min_length=10, max_length=10)
     weekday: int | None = Field(None, ge=1, le=7)
     hour: int | None = Field(None, ge=0, le=23)
+    rating_from: int | None = Field(None, ge=0, le=2_147_483_638)
+    result: str | None = Field(None, pattern="^(win|draw|loss)$")
     analyzed_only: bool = True
     minimum_game_moves_exclusive: int | None = Field(None, ge=0, le=1_000)
     salience_min: float | None = Field(None, ge=0, le=1, allow_inf_nan=False)
@@ -207,9 +213,15 @@ async def api_get_current_players_with_games():
 
 
 @router.get("/navigation")
-async def api_get_player_navigation() -> JSONResponse:
-    """Return the alphabetical active-player list used by hero navigation."""
-    return JSONResponse(content={"players": await get_tracked_player_names()})
+async def api_get_player_navigation(
+    same_group_as: str | None = Query(None, min_length=1, max_length=128),
+) -> JSONResponse:
+    """Return hero navigation names/photos within the optional title group."""
+    players = await get_tracked_player_navigation(same_group_as)
+    return JSONResponse(content={
+        "players": [player["player_name"] for player in players],
+        "avatars": {player["player_name"]: player["avatar"] for player in players},
+    })
 
 
 @router.get("/{player_name}/neighbors")
@@ -279,6 +291,26 @@ async def api_get_player_behavioural_ratings(
         date_from,
         date_to,
     )
+
+
+@router.get("/{player_name}/ppd")
+async def api_get_player_rating_ppd(
+    player_name: str,
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Own-rating percentages by 10-point bin; all combines bullet/blitz/rapid.
+
+    x is each bin's inclusive lower rating; y is percent of games with valid
+    positive ratings. Empty bins are zero, an empty history has empty lists.
+    Counts are exact (not sampled); cache freshness is at most 60 seconds.
+    """
+    try:
+        response = await _hero_analytics_response(get_player_rating_distribution, player_name, mode, redis)
+    except DistributionBusy as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @router.get("/{player_name}/analysis/behavioural/days/{target_date}")
@@ -412,7 +444,7 @@ async def api_explore_player_games(
     player_name: str,
     request: ExploreGamesRequest,
 ) -> JSONResponse:
-    """Return compact analyzed games from one player chart bin."""
+    """Return a paginated game list for a time, rating or recorded-result bin."""
     return await _hero_analytics_response(
         explore_player_games,
         player_name,
@@ -428,6 +460,8 @@ async def api_explore_player_games(
         timezone_name=request.timezone,
         limit=request.limit,
         cursor=request.cursor,
+        rating_from=request.rating_from,
+        result=request.result,
     )
 
 

@@ -1,12 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from './algorithmApi'
-import { blankBuilder, draftSchemas, durationTemplate, openBuilder, relationshipsTemplate } from './builderForm'
+import { blankBuilder, draftSchemas, durationTemplate, inputColumns, openBuilder, relationshipsTemplate } from './builderForm'
 
 export default function useAlgorithms() {
   const [catalog, setCatalog] = useState(null)
   const [algorithmCatalog, setAlgorithmCatalog] = useState(null)
   const [inputs, setInputs] = useState([])
   const [inputMore, setInputMore] = useState(false)
+  const [inputOffset, setInputOffset] = useState(0)
+  const [resolvedInput, setResolvedInput] = useState(null)
+  const [inputRevision, setInputRevision] = useState(0)
   const [definitions, setDefinitions] = useState([])
   const [definitionMore, setDefinitionMore] = useState(false)
   const [runs, setRuns] = useState([])
@@ -30,16 +33,23 @@ export default function useAlgorithms() {
     mounted.current = true
     const controller = new AbortController()
     const options = { signal: controller.signal }
-    Promise.all([api.fetchAlgorithmCatalog(options), api.fetchInputCatalog(options), api.fetchInputs(0, options), api.fetchDefinitions(0, options)])
-      .then(([algorithms, columns, matrices, saved]) => {
+    Promise.all([api.fetchAlgorithmCatalog(options), api.fetchInputCatalog(options), api.fetchInputs(0, options), api.fetchDefinitions(0, options), api.fetchDefaultInputs(options)])
+      .then(async ([algorithms, columns, matrices, saved, defaults]) => {
         if (controller.signal.aborted) return
         setAlgorithmCatalog(algorithms)
         setCatalog(columns)
-        setInputs(matrices.definitions)
+        const available = [...defaults.definitions, ...matrices.definitions]
+        setInputs(available)
         setInputMore(matrices.has_more)
+        setInputOffset(matrices.definitions.length)
         setDefinitions(saved.definitions)
         setDefinitionMore(saved.has_more)
-        if (matrices.definitions.length) setForm(blankBuilder(matrices.definitions[0], columns))
+        // Old collection deep links still open only a preview, never select or run.
+        const previewId = new URLSearchParams(window.location.search).get('preview')
+        if (previewId) {
+          const definition = available.find((item) => item.id === previewId) || await api.fetchInput(previewId, options)
+          if (!controller.signal.aborted) setPreview(definition)
+        }
       }).catch((failure) => { if (!controller.signal.aborted) setError(failure.message) })
       .finally(() => { if (!controller.signal.aborted) setWorking('') })
     return () => { mounted.current = false; controller.abort(); resultRequest.current?.abort() }
@@ -68,8 +78,9 @@ export default function useAlgorithms() {
     finally { busy.current = false; if (mounted.current) setWorking('') }
   }, [])
 
-  const matrix = frozenInput && frozenInput.id === form?.matrix_definition_id
+  const sourceMatrix = frozenInput && frozenInput.id === form?.matrix_definition_id
     ? frozenInput : inputs.find((item) => item.id === form?.matrix_definition_id)
+  const matrix = resolvedInput?.id === sourceMatrix?.id && resolvedInput ? resolvedInput : sourceMatrix
   const schemas = validation?.schemas || (form ? draftSchemas(form, matrix, catalog) : {})
   const availableInputs = frozenInput ? [frozenInput, ...inputs.filter((item) => item.id !== frozenInput.id)] : inputs
   const update = (changes) => {
@@ -77,13 +88,50 @@ export default function useAlgorithms() {
     setEstimate(null); setValidation(null)
   }
   const selectInput = (id) => {
+    if (busy.current || !catalog) return
+    const selected = inputs.find((item) => item.id === id)
+    if (!selected) return
     setFrozenInput(null)
-    setForm((current) => ({ ...blankBuilder(inputs.find((item) => item.id === id), catalog), parent_definition_id: current?.parent_definition_id || null }))
+    setResolvedInput(null); setInputRevision((current) => current + 1)
+    setForm((current) => ({ ...blankBuilder(selected, catalog), parent_definition_id: current?.parent_definition_id || null }))
     setEstimate(null); setValidation(null)
   }
   const reset = () => {
-    setFrozenInput(null); setForm(blankBuilder(inputs[0], catalog))
-    setEstimate(null); setValidation(null); setNotice('Start with an empty algorithm or choose a template.')
+    setFrozenInput(null); setResolvedInput(null); setForm(null)
+    setInputRevision((current) => current + 1)
+    setEstimate(null); setValidation(null); setNotice('Select an input formula to begin. Nothing has been run.')
+  }
+  const inputRequest = (parameters) => ({
+    matrix_definition_id: sourceMatrix?.builtin_key ? null : sourceMatrix?.id,
+    builtin_matrix_key: sourceMatrix?.builtin_key || null,
+    matrix_parameters: parameters,
+  })
+  const requestForm = () => ({ ...form,
+    matrix_definition_id: sourceMatrix?.builtin_key ? null : form.matrix_definition_id,
+    builtin_matrix_key: sourceMatrix?.builtin_key || null,
+    matrix_parameters: resolvedInput?.runtime_parameters || null,
+  })
+  const dirtyInput = () => { setResolvedInput(null); setEstimate(null); setValidation(null) }
+  const applyInput = (parameters) => act('configuring input', async () => {
+    const reply = await api.configureInput(inputRequest(parameters))
+    if (!mounted.current) return
+    const bound = { ...sourceMatrix, config: reply.config, runtime_parameters: parameters }
+    const available = new Set(inputColumns(bound, catalog).map((column) => column.key))
+    setResolvedInput(bound)
+    setForm((current) => {
+      const columns = current.columns.filter((key) => available.has(key))
+      const changed = columns.length !== current.columns.length
+      return { ...current, columns: columns.length ? columns : [...available].slice(0, 12),
+        max_rows: Math.min(current.max_rows, reply.config.filters.max_rows || 100000),
+        ...(changed ? { steps: [], outputs: [] } : {}) }
+    })
+    setEstimate(null); setValidation(null)
+    setNotice('Input selection applied to this algorithm only. No rows were fetched or saved. If selected columns disappeared, dependent draft steps were cleared.')
+  })
+  const previewInput = () => {
+    if (!matrix) return
+    setPreview({ ...matrix, id: matrix.runtime_parameters ? matrix.id : null, storage_kind: 'definition',
+      feature_count: matrix.config.feature_columns.length, label_count: matrix.config.label_columns.length })
   }
   const template = (kind) => {
     try {
@@ -94,27 +142,28 @@ export default function useAlgorithms() {
   const openDefinition = (definition) => {
     try {
       const opened = openBuilder(definition, catalog)
+      setResolvedInput(null); setInputRevision((current) => current + 1)
       setForm(opened.form); setFrozenInput(opened.matrix); setEstimate(null); setValidation(null)
       setNotice('Editing a new revision. Saving preserves the previous definition and all existing runs.')
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (failure) { setError(failure.message) }
   }
   const save = () => act('saving', async () => {
-    const saved = await api.saveAlgorithm(form)
+    const saved = await api.saveAlgorithm(requestForm())
     if (!mounted.current) return
     setDefinitions((current) => [saved, ...current])
     setNotice('Instructions saved. Press Run on the saved algorithm to start a calculation.')
   })
   const preflight = () => act('checking', async () => {
-    const payload = await api.preflightAlgorithm(form)
+    const payload = await api.preflightAlgorithm(requestForm())
     if (mounted.current) setEstimate(payload)
   })
   const validate = () => act('validating', async () => {
-    const payload = await api.validateAlgorithm(form)
+    const payload = await api.validateAlgorithm(requestForm())
     if (mounted.current) setValidation(payload)
   })
   const sample = () => act('queueing sample', async () => {
-    const payload = await api.sampleAlgorithm(form)
+    const payload = await api.sampleAlgorithm(requestForm())
     if (!mounted.current) return
     setWatchedRun(payload.id); setRunOffset(0); setRevision((current) => current + 1)
     setNotice('Sample queued (up to 500 source rows). Results and intermediate previews will open when it finishes.')
@@ -156,15 +205,29 @@ export default function useAlgorithms() {
     }
   }, [runs, watchedRun, inspect])
   const moreInputs = () => act('loading inputs', async () => {
-    const payload = await api.fetchInputs(inputs.length)
-    if (mounted.current) { setInputs((current) => [...current, ...payload.definitions]); setInputMore(payload.has_more) }
+    const payload = await api.fetchInputs(inputOffset)
+    if (mounted.current) {
+      setInputs((current) => [...new Map([...current, ...payload.definitions].map((item) => [item.id, item])).values()])
+      setInputOffset((current) => current + payload.definitions.length); setInputMore(payload.has_more)
+    }
   })
+  const removeInput = (definition) => {
+    if (definition.builtin_key || !window.confirm(`Delete the formula “${definition.name}”? Existing algorithms and backups will be kept.`)) return
+    act('deleting formula', async () => {
+      await api.deleteInput(definition.id)
+      if (!mounted.current) return
+      setInputs((current) => current.filter((item) => item.id !== definition.id))
+      setInputOffset((current) => Math.max(0, current - 1))
+      if (!frozenInput && form?.matrix_definition_id === definition.id) reset()
+    })
+  }
   const moreDefinitions = () => act('loading definitions', async () => {
     const payload = await api.fetchDefinitions(definitions.length)
     if (mounted.current) { setDefinitions((current) => [...current, ...payload.definitions]); setDefinitionMore(payload.has_more) }
   })
   return { catalog, algorithmCatalog, inputs: availableInputs, inputMore, definitions, definitionMore, runs, runOffset, runMore, form, estimate, preview, result,
-    matrix, schemas, validation, validate, sample, reset, template, openDefinition,
+    matrix, sourceMatrix, formulaInputs: inputs, inputRevision, schemas, validation, validate, sample, reset, template, openDefinition,
+    applyInput, dirtyInput, previewInput, removeInput,
     error, notice, working, update, selectInput, save, preflight, run, cancel, remove, inspect, moreInputs, moreDefinitions,
     setPreview, setResult, setRunOffset, refresh: () => setRevision((current) => current + 1) }
 }

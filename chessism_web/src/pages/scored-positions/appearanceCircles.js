@@ -9,3 +9,15 @@ export function circleDistribution(bars) {
 }
 
 export { pieSegments } from '../../utils/pieSegments.js'
+
+// Include zero-appearance FENs too: this pie represents the whole FEN table.
+export function coverageDistribution(rows = []) {
+  let total = 0, unscored = 0
+  for (const row of rows) {
+    const count = Number(row.total_fens), missing = Number(row.unscored_fens)
+    if (!Number.isSafeInteger(count) || count < 0 || !Number.isSafeInteger(missing) || missing < 0 || missing > count) continue
+    total += count
+    unscored += missing
+  }
+  return [{ key: 'scored', value: total - unscored }, { key: 'unscored', value: unscored }]
+}

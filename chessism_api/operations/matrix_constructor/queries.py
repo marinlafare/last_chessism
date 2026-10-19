@@ -39,11 +39,11 @@ def _where_parts(row_type: MatrixRowType, config: dict[str, Any]) -> tuple[list[
     filters = config["filters"]
     parts: list[str] = []
     params: dict[str, Any] = {
-        "max_rows": int(filters["max_rows"]),
+        "max_rows": filters["max_rows"],
         # Estimation only needs to know whether the requested output cap is
         # reached. Avoid scanning tens of millions of rows just to display a
         # number that cannot change the resulting artifact size.
-        "count_limit": int(filters["max_rows"]) + 1,
+        "count_limit": filters["max_rows"] + 1 if filters["max_rows"] is not None else 10_001,
     }
     if row_type.key == "position":
         scope = _position_scope_clause(filters, params)
@@ -73,6 +73,9 @@ def _where_parts(row_type: MatrixRowType, config: dict[str, Any]) -> tuple[list[
 
 
 def matrix_sql(config: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+    if config['row_type'] == 'move_scores':
+        from .move_scores import score_matrix_sql
+        return score_matrix_sql(config)
     row_type = ROW_TYPES[config["row_type"]]
     selected = [*config["feature_columns"], *config["label_columns"]]
     expressions = [

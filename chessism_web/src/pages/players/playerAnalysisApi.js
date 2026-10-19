@@ -5,6 +5,12 @@ const RESPONSE_CACHE_LIMIT = 32
 
 const playerPath = (playerName) => encodeURIComponent(playerName)
 
+export function fetchPlayerRatingDistribution({ playerName, mode = 'all', signal }) {
+  // Server-side counts expire after 60s; do not put them in the timeless
+  // per-tab analytics cache, which would hide newly ingested games.
+  return requestJson(`/players/${playerPath(playerName)}/ppd?${new URLSearchParams({ mode })}`, { signal })
+}
+
 function analyticsSearch({ mode = 'all', dateFrom, dateTo, timezone, cursor, limitGames } = {}) {
   const search = new URLSearchParams({ mode })
   if (dateFrom) search.set('date_from', dateFrom)

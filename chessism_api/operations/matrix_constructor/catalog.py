@@ -9,6 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from .move_scores import MAX_MOVE, MAX_COLUMNS as MOVE_SCORE_MAX_COLUMNS, DEFAULT_LAST_MOVE
+
 
 @dataclass(frozen=True)
 class MatrixColumn:
@@ -269,6 +271,24 @@ PLAYER_PERIOD_COLUMNS = (
 
 
 ROW_TYPES: dict[str, MatrixRowType] = {
+    "move_scores": MatrixRowType(
+        key="move_scores", label="Game move scores",
+        description="One player/game per row, W/D/L and one score column per selected move.",
+        sources=("game_player", "game", "moves", "game_fen_association", "fen"),
+        row_key_expression="CONCAT(gp.link, ':', gp.color)", from_sql="game_player gp",
+        order_sql="gp.played_at NULLS LAST, gp.link, gp.color",
+        columns=(
+            MatrixColumn("player", "Player", "gp.player_name", "game_player", data_type="category", default=True),
+            MatrixColumn("game", "Game ID", "gp.link", "game.link", storage_dtype="int64", default=True),
+            MatrixColumn("result", "W / D / L", "gp.result", "recorded game result", data_type="category", default=True),
+            *(MatrixColumn(f"move_score_{move}", f"Move {move} score", f'scores."move_score_{move}"',
+                           "fen.score after the player's move", storage_dtype="int32", default=move <= DEFAULT_LAST_MOVE)
+              for move in range(1, MAX_MOVE + 1)),
+        ),
+        player_filter_sql="gp.player_name = ANY(CAST(:players AS text[]))",
+        mode_filter_sql="gp.mode = ANY(CAST(:modes AS text[]))", date_filter_sql="gp.played_at",
+        min_moves_filter_sql="gp.n_moves >= :min_moves", analyzed_filter_sql="__COMPLETE_MOVE_SCORES__",
+    ),
     "game": MatrixRowType(
         key="game", label="Games", description="One row per game.",
         sources=("game", "game_analysis_summary"), row_key_expression="g.link::text",
@@ -343,7 +363,8 @@ def matrix_catalog() -> dict[str, Any]:
         "workflow": "definition_only",
         "formats": ["PostgreSQL JSON definition"],
         "row_types": [row_type.public_payload() for row_type in ROW_TYPES.values()],
-        "limits": {"maximum_rows": 5_000_000, "maximum_columns": 48},
+        "limits": {"maximum_rows": 5_000_000, "maximum_columns": 48,
+                   "maximum_score_move": MAX_MOVE, "maximum_move_score_columns": MOVE_SCORE_MAX_COLUMNS},
         "notes": [
             "Saving stores instructions only; it never constructs arrays or queues a worker.",
             "Live previews contain at most 100 source rows and may change as the database changes.",

@@ -31,6 +31,9 @@ export function backupVolumeLayout(snapshot) {
   const assigned = rows.reduce((sum, row) => sum + row.size, 0)
   const overcommitted = Math.max(0, assigned - total)
   if (assigned < total) rows.push({ id: '__free', label: 'Unallocated', kind: 'free', size: total - assigned })
+  // Left to right: Chessism, unallocated space, other allocations, protected reserve.
+  const order = { application: 0, free: 1, backup: 2, other: 3, reserve: 4 }
+  rows.sort((left, right) => order[left.kind] - order[right.kind])
   return { total, free, rows: rows.map(row => ({ ...row, percent: row.size / total * 100,
     fillPercent: row.size > 0 ? Math.min(100, (row.used || 0) / row.size * 100) : 0 })),
   overcommitted, reserveShortfall: Math.max(0, requestedReserve - free) }
