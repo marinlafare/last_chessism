@@ -7,4 +7,5 @@
 
 .download-games-page .games-actions {
   margin-top: 0;
+  grid-template-columns: minmax(0, 1fr);
 }

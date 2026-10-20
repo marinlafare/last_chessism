@@ -4,6 +4,7 @@ import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import AutomaticIngestionPanel from './scored-positions/AutomaticIngestionPanel'
 import {
   DOWNLOAD_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
@@ -17,12 +18,11 @@ import {
   downloadPlayerGames,
   fetchActiveGameJobs,
   fetchGameJobStatus,
-  updatePlayerGames,
 } from './download-new-games/downloadNewGamesApi'
 
-function renderUpdateProgress(status) {
+function renderDownloadProgress(status) {
   const progress = status?.progress
-  if (!progress) return null
+  if (!progress || isTerminalJobStatus(status)) return null
 
   const total = Math.max(1, Number(progress.total || 1))
   const processed = Math.min(total, Number(progress.processed || 0))
@@ -30,7 +30,7 @@ function renderUpdateProgress(status) {
   const phase = progress.phase || status.status || 'working'
 
   return (
-    <div className="job-progress" aria-label="Update progress">
+    <div className="job-progress" aria-label="Download progress">
       <div className="job-progress-head">
         <strong {...pageStyleTarget('value')}>{phase}</strong>
         <span>{percent}%</span>
@@ -45,11 +45,8 @@ function renderUpdateProgress(status) {
 
 function DownloadNewGames() {
   const [downloadPlayer, setDownloadPlayer] = useState('')
-  const [updatePlayer, setUpdatePlayer] = useState('')
   const [downloadResult, setDownloadResult] = useState('')
-  const [updateResult, setUpdateResult] = useState('')
   const [downloadLoading, setDownloadLoading] = useState(false)
-  const [updateLoading, setUpdateLoading] = useState(false)
   const [downloadJob, setDownloadJob] = useState(() => loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY))
   const [updateJob, setUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
   const [downloadJobStatus, setDownloadJobStatus] = useState(null)
@@ -58,7 +55,7 @@ function DownloadNewGames() {
   const [recoveryMessage, setRecoveryMessage] = useState('')
   const downloadJobActive = downloadJob?.jobId && !isTerminalJobStatus(downloadJobStatus)
   const updateJobActive = updateJob?.jobId && !isTerminalJobStatus(updateJobStatus)
-  const actionBusy = recoveringJobs || downloadLoading || updateLoading || downloadJobActive || updateJobActive
+  const actionBusy = recoveringJobs || downloadLoading || downloadJobActive || updateJobActive
 
   useEffect(() => {
     let cancelled = false
@@ -83,9 +80,7 @@ function DownloadNewGames() {
           const { job, status } = recovered.update
           setUpdateJob(job)
           storeJob(UPDATE_JOB_STORAGE_KEY, job)
-          setUpdatePlayer(current => current || job.playerName)
           setUpdateJobStatus(status)
-          setUpdateResult(`Reconnected to the update for ${job.playerName}.`)
         }
         setRecoveringJobs(false)
         setRecoveryMessage('')
@@ -131,25 +126,18 @@ function DownloadNewGames() {
 
   useEffect(() => {
     if (!updateJob?.jobId) return undefined
+    // Updates are started in the player hero, but still prevent overlapping downloads.
     return watchGameJob({
       jobId: updateJob.jobId, fetchStatus: fetchGameJobStatus,
       onStatus: status => {
         setUpdateJobStatus(status)
-        if (status.status === 'not_found') {
-          setUpdateResult('The server no longer has this job’s status. Check the player’s games before starting another update.')
+        if (status.status === 'not_found' || isTerminalJobStatus(status)) {
           storeJob(UPDATE_JOB_STORAGE_KEY, null)
           setUpdateJob(null)
-        } else if (isTerminalJobStatus(status)) {
-          const failed = status.progress?.phase === 'failed' || status.result?.success === false
-          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
-          setUpdateResult(resultMessage || (failed ? 'Games update failed.' : 'Games update finished.'))
-          storeJob(UPDATE_JOB_STORAGE_KEY, null)
-          setUpdateJob(null)
-        } else {
-          setUpdateResult(status.progress?.detail || `Update for ${updateJob.playerName} is ${status.status}.`)
         }
       },
-      onUnavailable: () => setUpdateResult('Status connection interrupted. The update may still be running; reconnecting automatically…'),
+      // A disconnected status request must not unblock another ingestion.
+      onUnavailable: () => {},
     })
   }, [updateJob?.jobId])
 
@@ -178,34 +166,6 @@ function DownloadNewGames() {
       setDownloadResult(error instanceof Error ? error.message : 'Request failed.')
     } finally {
       setDownloadLoading(false)
-    }
-  }
-
-  const handleUpdate = async () => {
-    if (actionBusy) return
-    const player = updatePlayer.trim()
-    if (!player) {
-      setUpdateResult('Enter a player name first.')
-      return
-    }
-
-    setUpdateLoading(true)
-    setUpdateResult('')
-    setUpdateJobStatus(null)
-    try {
-      const payload = await updatePlayerGames(player)
-      if (payload.job_id) {
-        const job = { jobId: payload.job_id, playerName: payload.player_name || player }
-        storeJob(UPDATE_JOB_STORAGE_KEY, job)
-        setUpdateJob(job)
-        setUpdateResult(payload.message || 'Games update started.')
-      } else {
-        setUpdateResult(payload.message || 'Games update started.')
-      }
-    } catch (error) {
-      setUpdateResult(error instanceof Error ? error.message : 'Request failed.')
-    } finally {
-      setUpdateLoading(false)
     }
   }
 
@@ -238,29 +198,11 @@ function DownloadNewGames() {
               <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
                 {downloadLoading ? 'Queueing...' : downloadJobActive ? 'Downloading...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
-              {renderUpdateProgress(downloadJobStatus)}
+              {renderDownloadProgress(downloadJobStatus)}
               <p {...pageStyleTarget('text')} className="result-line">{downloadResult || '-'}</p>
             </article>
-
-            <article {...pageStyleTarget('card')} className="game-card">
-              <h2 {...pageStyleTarget('title')}>Update Games of a Player</h2>
-              <label {...pageStyleTarget('label')} htmlFor="update-player">Player name</label>
-              <input {...pageStyleTarget('field')}
-                id="update-player"
-                className="text-input"
-                type="text"
-                value={updatePlayer}
-                onChange={(event) => setUpdatePlayer(event.target.value)}
-                onKeyDown={(event) => event.key === 'Enter' && handleUpdate()}
-                placeholder="e.g. magnuscarlsen"
-              />
-              <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleUpdate} disabled={actionBusy}>
-                {updateLoading ? 'Queueing...' : updateJobActive ? 'Updating...' : actionBusy ? 'Busy...' : 'Update Games'}
-              </button>
-              {renderUpdateProgress(updateJobStatus)}
-              <p {...pageStyleTarget('text')} className="result-line">{updateResult || '-'}</p>
-            </article>
           </section>
+          <AutomaticIngestionPanel />
         </main>
         <Footer />
       </div>

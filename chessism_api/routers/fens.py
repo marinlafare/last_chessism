@@ -1,3 +1,5 @@
+from datetime import date
+
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -20,6 +22,11 @@ from chessism_api.database.ask_db import (
 )
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
+from chessism_api.operations.ingestion_pipeline.history import (
+    get_ingestion_history_run,
+    list_ingestion_history,
+    list_ingestion_history_days,
+)
 from chessism_api.operations.pending_repetitions import get_fen_appearances, get_pending_repetitions
 from chessism_api.operations.common_position_pages import get_common_position_page
 
@@ -104,6 +111,46 @@ async def api_get_latest_ingestion_timing() -> JSONResponse:
     return JSONResponse(content={
         "run": await get_latest_ingestion_timing(),
     })
+
+
+@router.get("/pipeline/timings/history")
+async def api_get_ingestion_history(
+    limit: int = Query(10, ge=1, le=50),
+    offset: int = Query(0, ge=0),
+    day: date | None = Query(None),
+    timezone: str = Query("UTC", min_length=1, max_length=100),
+) -> JSONResponse:
+    """List finished ingestions, newest first, without loading their stages."""
+    try:
+        return JSONResponse(content=await list_ingestion_history(
+            limit=limit, offset=offset, day=day, timezone_name=timezone,
+        ))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/pipeline/timings/history/days")
+async def api_get_ingestion_history_days(
+    limit: int = Query(20, ge=1, le=20),
+    offset: int = Query(0, ge=0),
+    timezone: str = Query("UTC", min_length=1, max_length=100),
+) -> JSONResponse:
+    """List only local dates with finished runs, in groups of up to 20."""
+    try:
+        return JSONResponse(content=await list_ingestion_history_days(
+            limit=limit, offset=offset, timezone_name=timezone,
+        ))
+    except ValueError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.get("/pipeline/timings/history/{run_id}")
+async def api_get_ingestion_history_run(run_id: str) -> JSONResponse:
+    """Read recorded durations and issues for one finished ingestion."""
+    run = await get_ingestion_history_run(run_id)
+    if run is None:
+        raise HTTPException(status_code=404, detail="Finished ingestion not found.")
+    return JSONResponse(content={"run": run})
 
 
 @router.get("/analysis_counts")
