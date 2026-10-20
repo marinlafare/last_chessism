@@ -326,6 +326,13 @@ function WeekdayStartChart({
                         </span>
                       </button>
                     </span>
+                    <span {...pageStyleTarget('value')}
+                      className="behavior-weekday-count"
+                      aria-label={`${weekday.label}: ${formatNumber(weekday.games)} games`}
+                      title={`${formatNumber(weekday.games)} games`}
+                    >
+                      {formatNumber(weekday.games)}
+                    </span>
                   </div>
                   <span className="behavior-weekday-note" id={noteId} role="tooltip">
                     {formatNumber(weekday.games)} games · {formatNumber(weekday.wins)}W, {formatNumber(weekday.draws)}D, {formatNumber(weekday.losses)}L · {(numeric(weekday.proportion) * 100).toFixed(1)}%
