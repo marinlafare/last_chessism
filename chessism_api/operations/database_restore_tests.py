@@ -538,6 +538,7 @@ async def _run_database_restore_test_job(
     ctx: dict[str, Any],
     *,
     backup_id: str,
+    retire_previous: bool = True,
     **_kwargs: Any,
 ) -> dict[str, Any]:
     """Restore one selected recovery point, validate it, and remove the copy."""
@@ -763,7 +764,7 @@ async def _run_database_restore_test_job(
             "elapsed_seconds": round(elapsed_seconds, 2),
             "validation": validation,
         }
-        if logical_snapshot:
+        if logical_snapshot and retire_previous:
             from .database_snapshot_retention import retire_after_restore
             await _write_progress(redis, job_id, phase="retiring_backups",
                                   detail="Restore passed; retiring superseded Chessism snapshots.")
@@ -774,6 +775,9 @@ async def _run_database_restore_test_job(
             except Exception as cleanup_error:
                 result["cleanup"] = {"state": "failed", "error": str(cleanup_error)}
                 detail += " Backup cleanup needs attention: " + str(cleanup_error)
+        elif logical_snapshot:
+            result["cleanup"] = {"state": "preserved", "removed_backup_ids": [],
+                                 "detail": "Previous recovery points retained for this restore test."}
         success_status = {
             **running_status,
             "status": "success",

@@ -24,6 +24,8 @@ from chessism_api.database.ask_db import (
 from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Fen
+from chessism_api.operations.ingestion_pipeline.steps import StepReporter
+from chessism_api.operations.tablebase_batches import CandidateSpool, save_compact_batch
 from chessism_api.operations.ingestion_pipeline import TABLEBASE_MARKING
 from chessism_api.operations.ingestion_pipeline.timing import (
     fail_running_ingestion_stages,
@@ -142,6 +144,7 @@ async def count_tablebase_candidates(game_links: Sequence[int] | None = None) ->
 async def _lease_tablebase_batch(
     game_links: Sequence[int] | None,
     limit: int,
+    candidate_ids: list[int] | None = None,
 ) -> tuple[AsyncSession | None, list[dict[str, Any]]]:
     clean_links = _clean_game_links(game_links)
     if game_links is not None and not clean_links:
@@ -150,7 +153,13 @@ async def _lease_tablebase_batch(
     session = AsyncDBSession()
     try:
         await session.begin()
-        if clean_links:
+        if candidate_ids is not None:
+            query = f"""SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
+                FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[]))
+                  AND {TABLEBASE_CANDIDATE_SQL}
+                ORDER BY f.fen FOR UPDATE OF f"""
+            params = {"ids": candidate_ids}
+        elif clean_links:
             query = f"""
                 WITH candidate_fens AS MATERIALIZED (
                     SELECT f.fen, MIN(gfa.n_move) AS first_move
@@ -287,6 +296,9 @@ async def _save_tablebase_batch(
 ) -> None:
     from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
     layout = compact_for(session)
+    if layout:
+        await save_compact_batch(session, solved, unavailable)
+        return
     target = compact_table(Fen, layout.core) if layout else Fen.__table__
     if solved:
         if layout:
@@ -344,9 +356,10 @@ async def _save_tablebase_batch(
         )
 
 
-async def analyze_tablebase_positions(
+async def _analyze_tablebase_positions(
     ctx: dict,
     *,
+    reporter,
     game_links: Sequence[int] | None = None,
     candidate_count: int | None = None,
     max_positions: int | None = None,
@@ -383,25 +396,41 @@ async def analyze_tablebase_positions(
         ingestion_run_id=ingestion_run_id,
     )
 
-    processed = solved_total = unavailable_total = 0
+    processed = solved_total = unavailable_total = skipped_total = 0
     safe_batch_size = max(1, min(int(batch_size), 5_000))
     tablebase = chess.syzygy.open_tablebase(TABLEBASE_PATH)
+    candidates = CandidateSpool()
     try:
-        while processed < target:
-            session, rows = await _lease_tablebase_batch(
-                game_links,
-                min(safe_batch_size, target - processed),
-            )
-            if not rows or session is None:
+        async with reporter.step("discover_endgames", None, "positions"):
+            await candidates.discover(game_links, target, TABLEBASE_CANDIDATE_SQL, reporter)
+        target = candidates.count
+        reporter.goal("claim_endgames", target)
+        reporter.goal("probe_endgames", target)
+        reporter.goal("save_endgames", target)
+        progress_total = target + (1 if refresh_projections else 0)
+        while identifiers := candidates.read(safe_batch_size):
+            async with reporter.step("claim_endgames", len(identifiers), "positions"):
+                session, rows = await _lease_tablebase_batch(
+                    game_links, len(identifiers), candidate_ids=identifiers,
+                )
+            skipped_total += len(identifiers) - len(rows)
+            if session is None:
+                processed += len(identifiers)
+                await _write_progress(redis, job_id, total=progress_total, processed=processed,
+                    failed=unavailable_total, phase="tablebase",
+                    detail=f"Solved {solved_total}; {skipped_total} already scored or reserved.",
+                    ingestion_run_id=ingestion_run_id)
+                continue
+            if not rows:
                 break
             try:
-                solved, unavailable_rows = await asyncio.to_thread(
-                    _probe_batch_sync,
-                    tablebase,
-                    rows,
-                )
-                await _save_tablebase_batch(session, solved, unavailable_rows)
-                await session.commit()
+                async with reporter.step("probe_endgames", len(rows), "positions"):
+                    solved, unavailable_rows = await asyncio.to_thread(
+                        _probe_batch_sync, tablebase, rows,
+                    )
+                async with reporter.step("save_endgames", len(rows), "positions"):
+                    await _save_tablebase_batch(session, solved, unavailable_rows)
+                    await session.commit()
             except Exception:
                 await session.rollback()
                 raise
@@ -410,16 +439,15 @@ async def analyze_tablebase_positions(
 
             if solved:
                 try:
-                    await increment_database_summary_fen_counts(
-                        analyzed_delta=len(solved),
-                        nonzero_scored_delta=sum(
-                            1
-                            for item in solved
-                            if float(item.get("score") or 0) != 0.0
-                        ),
-                    )
-                    await increment_scored_position_summary_for_scored_fens(solved)
-                    await increment_game_analysis_summary_for_scored_fens(solved)
+                    async with reporter.step("endgame_summaries", len(solved), "positions"):
+                        await increment_database_summary_fen_counts(
+                            analyzed_delta=len(solved),
+                            nonzero_scored_delta=sum(
+                                1 for item in solved if float(item.get("score") or 0) != 0.0
+                            ),
+                        )
+                        await increment_scored_position_summary_for_scored_fens(solved)
+                        await increment_game_analysis_summary_for_scored_fens(solved)
                 except Exception:
                     # FEN scores were committed immediately before these cached
                     # summaries. Reconcile them before surfacing the failure so a
@@ -431,7 +459,7 @@ async def analyze_tablebase_positions(
                     )
                     raise
 
-            processed += len(rows)
+            processed += len(identifiers)
             solved_total += len(solved)
             unavailable_total += len(unavailable_rows)
             await _write_progress(
@@ -441,11 +469,13 @@ async def analyze_tablebase_positions(
                 processed=processed,
                 failed=unavailable_total,
                 phase="tablebase",
-                detail=f"Solved {solved_total}; {unavailable_total} require Stockfish.",
+                detail=(f"Solved {solved_total}; {unavailable_total} require Stockfish; "
+                        f"{skipped_total} already scored or reserved."),
                 ingestion_run_id=ingestion_run_id,
             )
     finally:
         tablebase.close()
+        candidates.close()
 
     # A scoped automatic run follows freshly inserted game associations. Those
     # associations change rating projections even when every endgame probe is
@@ -461,7 +491,8 @@ async def analyze_tablebase_positions(
             detail="Refreshing rating statistics for the solved endgames.",
             ingestion_run_id=ingestion_run_id,
         )
-        await refresh_scored_rating_summary()
+        async with reporter.step("rating_projection", 1, "refreshes"):
+            await refresh_scored_rating_summary()
         await _write_progress(
             redis,
             job_id,
@@ -478,7 +509,13 @@ async def analyze_tablebase_positions(
         "solved": solved_total,
         "unavailable": unavailable_total,
         "target": target,
+        "skipped": skipped_total,
     }
+
+
+async def analyze_tablebase_positions(ctx, **kwargs):
+    async with StepReporter(ctx, kwargs.get("ingestion_run_id")) as reporter:
+        return await _analyze_tablebase_positions(ctx, reporter=reporter, **kwargs)
 
 
 async def _release_coordination(redis: ArqRedis, job_id: str) -> None:
@@ -600,7 +637,10 @@ async def run_tablebase_analysis_job(
             ingestion_run_id=ingestion_run_id,
         )
         try:
-            salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+            async with StepReporter(ctx, ingestion_run_id) as reporter:
+                async with reporter.step("queue_player_summaries", None, "jobs"):
+                    salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+                    await reporter.advance(len(salience_jobs or []))
             if salience_jobs:
                 print(
                     f"[TABLEBASE {job_id[:6]}] Queued {len(salience_jobs)} "

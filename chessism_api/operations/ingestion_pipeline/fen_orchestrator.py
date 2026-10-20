@@ -251,6 +251,14 @@ async def _run_fen_pipeline(
         return {"claimed_games": 0, "successful_games": 0, "failed_games": 0}
 
     games_to_process = min(max(1, total_games_to_process), games_remaining)
+    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.compact_storage import compact_for
+    async with AsyncDBSession() as selection:
+        compact = compact_for(selection)
+    if compact:
+        from .fen_batches import run_bounded_pipeline
+        return await run_bounded_pipeline(ctx, games_to_process, batch_size, num_workers,
+                                          ingestion_run_id=ingestion_run_id)
     worker_count = min(max(1, num_workers), games_to_process)
     await start_ingestion_stage(
         ingestion_run_id,
@@ -501,6 +509,8 @@ async def _finish_drained_chain(
     job_id: str,
     ingestion_run_id: str | None,
 ) -> None:
+    from .steps import StepReporter
+
     await increment_stage_progress(
         redis,
         job_id=job_id,
@@ -508,7 +518,9 @@ async def _finish_drained_chain(
         phase="discovering_tablebase",
         detail="Refreshing the rating projection for affected games.",
     )
-    await refresh_scored_rating_summary()
+    async with StepReporter({"redis": redis, "job_id": job_id}, ingestion_run_id) as reporter:
+        async with reporter.step("rating_projection", 1, "refreshes"):
+            await refresh_scored_rating_summary()
     await increment_stage_progress(
         redis,
         job_id=job_id,
@@ -518,7 +530,10 @@ async def _finish_drained_chain(
         detail="Tablebase and rating projections are current.",
     )
     try:
-        salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+        async with StepReporter({"redis": redis, "job_id": job_id}, ingestion_run_id) as reporter:
+            async with reporter.step("queue_player_summaries", None, "jobs"):
+                salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+                await reporter.advance(len(salience_jobs or []))
         if salience_jobs:
             print(f"Queued {len(salience_jobs)} player salience refreshes.", flush=True)
     except Exception as error:
@@ -585,11 +600,12 @@ async def run_fen_pipeline(
                 detail="Finding tablebase positions in newly extracted games.",
                 failed=failed_games,
             )
-            tablebase_job = await ensure_tablebase_analysis_enqueued(
-                redis,
-                game_links=successful_links,
-                ingestion_run_id=ingestion_run_id,
-            )
+            from .steps import StepReporter
+            async with StepReporter(ctx, ingestion_run_id) as reporter:
+                async with reporter.step("count_endgames", 1, "checks"):
+                    tablebase_job = await ensure_tablebase_analysis_enqueued(
+                        redis, game_links=successful_links, ingestion_run_id=ingestion_run_id,
+                    )
             await increment_stage_progress(
                 redis,
                 job_id=job_id,

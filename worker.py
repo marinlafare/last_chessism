@@ -21,6 +21,7 @@ from chessism_api.operations.common_position_pages import run_commonness_page_re
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
     run_fen_pipeline,
 )
+from chessism_api.operations.ingestion_pipeline.fen_batches import run_fen_batch_job
 from chessism_api.operations.ingestion_pipeline.fen_workers import (
     run_fen_generation_job,
     run_fen_insertion_job,
@@ -100,6 +101,7 @@ class WorkerSettings:
         run_analysis_loop_job,
         run_player_games_analysis_job,
         run_fen_generation_job,
+        run_fen_batch_job,
         run_fen_pipeline,
         run_fen_insertion_job,
         run_association_insertion_job,

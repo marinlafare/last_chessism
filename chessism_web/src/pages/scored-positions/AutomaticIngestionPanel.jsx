@@ -22,7 +22,7 @@ export default function AutomaticIngestionPanel() {
     return timing
   }, [])
   const jobs = usePoll(fetchJobs, 3000)
-  const timing = usePoll(fetchTiming, 15000)
+  const timing = usePoll(fetchTiming, 5000)
 
   return (
     <FenIngestionPanel

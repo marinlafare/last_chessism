@@ -1,249 +1,78 @@
+import { useEffect, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import { formatNumber } from './positionPageSupport'
+import { pipelineSteps, stepEstimate } from './pipelineProgress.js'
 import './fenIngestion.css'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  formatNumber,
-  getTrackedJobPhase,
-  isTrackedJobActive,
-} from './positionPageSupport'
 
-const FADE_TO_IDLE_MS = 10_000
-const STAGES = [
-  { key: 'gameParsing', label: 'Parsing games', source: 'gameParsing' },
-  { key: 'fenExtraction', label: 'FEN extraction', source: 'fen' },
-  { key: 'savingPositions', label: 'Saving positions', source: 'fen' },
-  { key: 'linkingGames', label: 'Linking positions', source: 'fen' },
-  { key: 'updatingSummaries', label: 'Updating summaries', source: 'fen' },
-  { key: 'tablebase', label: 'Tablebase marking', source: 'tablebase' },
-]
-
-const emptyStageProgress = () => Object.fromEntries(
-  STAGES.map(({ key }) => [key, { value: 0, total: 0 }])
-)
-
-function phaseOf(state) {
-  return String(getTrackedJobPhase(state) || '').toLowerCase()
+function duration(seconds) {
+  if (!Number.isFinite(seconds)) return '—'
+  const value = Math.max(0, Math.floor(seconds))
+  if (value < 60) return `${value}s`
+  if (value < 3600) return `${Math.floor(value / 60)}m ${value % 60}s`
+  return `${Math.floor(value / 3600)}h ${Math.floor((value % 3600) / 60)}m`
 }
 
-function stageIndexForJob(source, state) {
-  if (source === 'gameParsing') return 0
-  if (source === 'tablebase') return 5
-
-  switch (phaseOf(state)) {
-    case 'saving_fens':
-      return 2
-    case 'saving_games':
-      return 3
-    case 'refreshing_statistics':
-      return 4
-    case 'discovering_tablebase':
-      return 5
-    default:
-      return 1
-  }
-}
-
-function jobUpdatedAt(state) {
-  const progress = state?.status?.progress || state?.progress
-  return Number(progress?.updated_at || 0)
-}
-
-function readCurrentJobProgress(state) {
-  if (phaseOf(state) === 'discovering_tablebase') return null
-  const progress = state?.status?.progress || state?.progress
-  if (!progress) return null
-
-  const total = Number(progress.total ?? progress.target ?? 0)
-  const value = Number(
-    progress.processed ?? progress.extracted ?? progress.analyzed ?? 0
-  )
-
-  if (!Number.isFinite(total) || total <= 0 || !Number.isFinite(value)) return null
-
-  return {
-    total: Math.max(0, total),
-    value: Math.min(total, Math.max(0, value)),
-  }
-}
-
-function PipelineStage({
-  label,
-  value,
-  total,
-  state,
-  pipelineActive,
-  stageComplete,
-  stageFailed,
-  stageWorking,
-}) {
-  const safeTotal = Number.isFinite(total) ? Math.max(0, total) : 0
-  const recordedValue = Number.isFinite(value)
-    ? Math.min(safeTotal, Math.max(0, value))
-    : 0
-  const safeValue = stageComplete && safeTotal > 0 ? safeTotal : recordedValue
-  const percent = safeTotal > 0 ? Math.min(100, (safeValue / safeTotal) * 100) : 0
-  const phase = phaseOf(state).replaceAll('_', ' ')
-  const stageTracked = isTrackedJobActive(state)
-  const lifecycle = stageFailed
-    ? 'failed'
-    : stageWorking
-      ? 'working'
-      : stageComplete
-        ? 'complete'
-        : 'waiting'
-  const statusLabel = stageFailed
-    ? 'failed'
-    : stageWorking
-      ? phase
-      : stageComplete
-        ? 'complete'
-        : stageTracked
-          ? phase
-          : pipelineActive
-            ? 'waiting'
-            : 'up to date'
-
-  return (
-    <article {...pageStyleTarget('card')} className={`fen-pipeline-stage is-${lifecycle}`}>
-      <div className="fen-pipeline-stage-head">
-        <span>{label}</span>
-        <i
-          className="fen-pipeline-live-light"
-          role="status"
-          aria-label={`${label} is ${lifecycle}`}
-          title={`${label} is ${lifecycle}`}
-        />
-      </div>
-      <strong {...pageStyleTarget('value')}>{`${formatNumber(safeValue)} / ${formatNumber(safeTotal)}`}</strong>
-      <div
-        className="fen-pipeline-stage-track"
-        role="progressbar"
-        aria-label={label}
-        aria-valuemin="0"
-        aria-valuemax={safeTotal}
-        aria-valuenow={safeValue}
-      >
-        <div style={{ width: `${percent}%` }} />
-      </div>
-      <small {...pageStyleTarget('text')}>{statusLabel}</small>
-    </article>
-  )
-}
-
-export default function FenPipelineStages({ jobState }) {
-  const candidates = useMemo(() => (
-    ['gameParsing', 'fen', 'tablebase']
-      .map((source) => ({
-        source,
-        state: jobState[source],
-        stageIndex: stageIndexForJob(source, jobState[source]),
-      }))
-      .filter(({ state }) => state?.jobId)
-  ), [jobState.gameParsing, jobState.fen, jobState.tablebase])
-  const activeCandidates = candidates.filter(({ state }) => isTrackedJobActive(state))
-  const runningCandidates = activeCandidates.filter(({ state }) => {
-    const phase = phaseOf(state)
-    return !['queued', 'deferred', 'discovering_tablebase'].includes(phase)
-  })
-  const currentCandidate = runningCandidates.at(-1) || activeCandidates.at(-1) || null
-  const currentStageIndex = currentCandidate?.stageIndex ?? -1
-  const workingStageIndex = runningCandidates.at(-1)?.stageIndex ?? -1
-  const pipelineActive = activeCandidates.length > 0
-  const failedCandidate = candidates
-    .filter(({ state }) => ['failed', 'unavailable'].includes(phaseOf(state)))
-    .sort((left, right) => jobUpdatedAt(right.state) - jobUpdatedAt(left.state))[0] || null
-  const pipelineFailed = !pipelineActive && Boolean(failedCandidate)
-  const failedStageIndex = pipelineFailed ? failedCandidate.stageIndex : -1
-  const wasActiveRef = useRef(false)
-  const fadeTimerRef = useRef(null)
-  const [fadingToIdle, setFadingToIdle] = useState(false)
-  const [stageProgress, setStageProgress] = useState(emptyStageProgress)
-
+export default function FenPipelineStages({ jobState, ingestionTiming }) {
+  const [now, setNow] = useState(Date.now() / 1000)
   useEffect(() => {
-    if (pipelineActive) {
-      const continuesPreviousStage = Boolean(fadeTimerRef.current)
-      if (fadeTimerRef.current) window.clearTimeout(fadeTimerRef.current)
-      fadeTimerRef.current = null
-      setFadingToIdle(false)
-
-      if (!wasActiveRef.current && !continuesPreviousStage) {
-        setStageProgress(emptyStageProgress())
-      }
-    } else if (pipelineFailed) {
-      if (fadeTimerRef.current) window.clearTimeout(fadeTimerRef.current)
-      fadeTimerRef.current = null
-      setFadingToIdle(false)
-    } else if (wasActiveRef.current) {
-      setFadingToIdle(true)
-      fadeTimerRef.current = window.setTimeout(() => {
-        fadeTimerRef.current = null
-        setFadingToIdle(false)
-        setStageProgress(emptyStageProgress())
-      }, FADE_TO_IDLE_MS)
-    }
-
-    wasActiveRef.current = pipelineActive
-  }, [pipelineActive, pipelineFailed])
-
-  useEffect(() => {
-    const visibleCandidate = currentCandidate || failedCandidate
-    if (!visibleCandidate) return
-
-    const progress = readCurrentJobProgress(visibleCandidate.state)
-    if (!progress) return
-
-    setStageProgress((current) => {
-      const next = { ...current }
-      const { source, stageIndex } = visibleCandidate
-      const firstRelatedIndex = source === 'fen' ? 1 : stageIndex
-
-      for (let index = firstRelatedIndex; index < stageIndex; index += 1) {
-        const key = STAGES[index].key
-        if (Number(next[key]?.total || 0) <= 0) {
-          next[key] = { value: progress.total, total: progress.total }
-        }
-      }
-
-      const currentKey = STAGES[stageIndex].key
-      next[currentKey] = progress
-      return next
-    })
-  }, [currentCandidate, failedCandidate])
-
-  useEffect(() => () => {
-    if (fadeTimerRef.current) window.clearTimeout(fadeTimerRef.current)
+    const timer = window.setInterval(() => setNow(Date.now() / 1000), 1000)
+    return () => window.clearInterval(timer)
   }, [])
-
-  const lifecycleClass = pipelineActive
-    ? 'is-active'
-    : pipelineFailed
-      ? 'is-failed'
-      : fadingToIdle
-        ? 'is-fading-to-idle'
-        : 'is-idle'
-
+  const steps = pipelineSteps(ingestionTiming, jobState)
+  const groups = [...new Set(steps.map(step => step.group || 'Ingestion'))]
+  if (!steps.length) return <p className="fen-pipeline-empty">No ingestion run recorded.</p>
   return (
-    <div className={`fen-pipeline-stages ${lifecycleClass}`}>
-      {STAGES.map(({ key, label, source }, index) => {
-        const state = index === 5 && currentCandidate?.stageIndex === 5
-          ? currentCandidate.state
-          : index === failedStageIndex
-            ? failedCandidate?.state
-            : jobState[source]
-
-        return (
-          <PipelineStage
-            key={key}
-            label={label}
-            {...stageProgress[key]}
-            state={state}
-            pipelineActive={pipelineActive}
-            stageComplete={pipelineActive && index < currentStageIndex}
-            stageFailed={index === failedStageIndex}
-            stageWorking={pipelineActive && index === workingStageIndex}
-          />
-        )
-      })}
+    <div className="fen-pipeline-groups">
+      {groups.map(group => (
+        <div className="fen-pipeline-group" key={group}>
+          <h3 {...pageStyleTarget('title')}>{group}</h3>
+          {steps.filter(step => (step.group || 'Ingestion') === group).map(step => {
+            const working = ['working', 'running'].includes(step.status)
+            const status = working ? 'working' : step.status
+            const heartbeatAge = step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : null
+            const stale = working && heartbeatAge != null && heartbeatAge > 30
+            const percent = step.total > 0 ? Math.min(100, step.processed / step.total * 100) : null
+            const elapsed = step.elapsed_seconds + (
+              working && step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : 0
+            )
+            const estimate = stepEstimate(step)
+            return (
+              <article {...pageStyleTarget('card')} key={step.step}
+                className={`fen-pipeline-stage is-${status}`}>
+                <div className="fen-pipeline-stage-head">
+                  <span>{step.label}</span>
+                  <i className="fen-pipeline-live-light" title={status} aria-label={status} />
+                </div>
+                <strong {...pageStyleTarget('value')}>
+                  {formatNumber(step.processed)}
+                  {step.total != null ? ` / ${formatNumber(step.total)}` : ''}
+                  {' '}<span className="fen-pipeline-unit">{step.unit || 'items'}</span>
+                </strong>
+                {percent != null && (
+                  <div className="fen-pipeline-stage-track" role="progressbar"
+                    aria-label={step.label} aria-valuemin={0} aria-valuemax={step.total}
+                    aria-valuenow={step.processed}>
+                    <div style={{ width: `${percent}%` }} />
+                  </div>
+                )}
+                <div {...pageStyleTarget('text')} className="fen-pipeline-step-meta">
+                  <span>{status === 'waiting' ? 'Between batches' : status}</span>
+                  <span>{duration(elapsed)}</span>
+                  {step.rate > 0 && <span>{formatNumber(Math.round(step.rate))} {step.unit || 'items'}/s</span>}
+                  {estimate != null && <span>~{duration(estimate)} left</span>}
+                </div>
+                {working && (
+                  <small {...pageStyleTarget('text')} className={stale ? 'is-stale' : ''}>
+                    {stale ? 'Worker heartbeat delayed — checking status' : 'Worker active'}
+                    {step.updated_at ? ` · progress ${duration(now - step.updated_at)} ago` : ''}
+                  </small>
+                )}
+                {step.detail && <small {...pageStyleTarget('text')} title={step.detail}>{step.detail}</small>}
+              </article>
+            )
+          })}
+        </div>
+      ))}
     </div>
   )
 }

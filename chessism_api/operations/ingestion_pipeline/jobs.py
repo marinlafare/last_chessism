@@ -26,6 +26,7 @@ from chessism_api.operations.ingestion_pipeline.months import (
     update_archive_months,
 )
 from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
+from chessism_api.operations.ingestion_pipeline.steps import StepReporter, measured
 from chessism_api.operations.ingestion_pipeline.timing import (
     finish_ingestion_run,
     finish_ingestion_stage,
@@ -88,6 +89,7 @@ async def _download_format_and_insert(
     progress_callback: ProgressCallback | None,
     *,
     no_games_message: str,
+    reporter=None,
 ) -> str | None:
     """Download serially, parse, persist, and record every successful archive."""
     total_steps = max(1, len(months) + 2)
@@ -100,6 +102,8 @@ async def _download_format_and_insert(
         )
 
     async def on_month_downloaded(index: int, month: str) -> None:
+        if reporter:
+            await reporter.advance(1, f"Checked archive {month}.")
         if progress_callback:
             await progress_callback(
                 "downloading",
@@ -108,11 +112,10 @@ async def _download_format_and_insert(
                 f"Downloaded {month}.",
             )
 
-    archives = await download_months(
-        player_name,
-        list(months),
-        progress_callback=on_month_downloaded,
-    )
+    async with measured(reporter, "download_archives", len(months), "archive requests"):
+        archives = await download_months(
+            player_name, list(months), progress_callback=on_month_downloaded,
+        )
     fetched_months = _successful_archive_months(archives)
     downloaded_count = sum(
         len(month_games)
@@ -130,7 +133,7 @@ async def _download_format_and_insert(
             len(months),
             f"Parsing {downloaded_count} downloaded games.",
         )
-    formatted_games = await format_games(archives, player_name)
+    formatted_games = await format_games(archives, player_name, reporter=reporter)
     if isinstance(formatted_games, str):
         await sync_player_months(player_name, fetched_months)
         return formatted_games
@@ -142,10 +145,8 @@ async def _download_format_and_insert(
             len(months) + 1,
             "Saving games to the database.",
         )
-    result = await insert_games_months_moves_and_players(
-        formatted_games,
-        player_name,
-    )
+    async with measured(reporter, "save_games", len(formatted_games), "input games"):
+        result = await insert_games_months_moves_and_players(formatted_games, player_name)
     await sync_player_months(player_name, fetched_months)
     if progress_callback:
         await progress_callback(
@@ -170,6 +171,7 @@ async def create_games(
         months,
         progress_callback,
         no_games_message=f"No games found for {player_name}.",
+        reporter=data.get("_step_reporter"),
     )
     return result or f"DATA READY FOR {player_name}"
 
@@ -194,6 +196,7 @@ async def update_player_games(
         months,
         progress_callback,
         no_games_message=f"No new games found for {player_name}.",
+        reporter=data.get("_step_reporter"),
     )
     return result or f"DATA UPDATED FOR {player_name}"
 
@@ -254,7 +257,8 @@ async def _run_game_job(
         ingestion_run_id=ingestion_run_id,
     )
     try:
-        message = await operation(data, progress_callback)
+        async with StepReporter(ctx, ingestion_run_id) as reporter:
+            message = await operation({**data, "_step_reporter": reporter}, progress_callback)
         await finish_ingestion_stage(
             ingestion_run_id,
             PARSING_GAMES,

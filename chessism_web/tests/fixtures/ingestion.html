@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Isolated ingestion progress</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import FenIngestionPanel from '/src/pages/positions/FenIngestionPanel.jsx'
+import '/src/index.css'
+const root = createRoot(document.getElementById('root'))
+const state = window.ingestionTest = { errors: [], run: {
+  run_id: 'isolated', player_name: 'sample', status: 'running',
+  stages: [], steps: [
+    {step:'extract_positions',label:'Extract positions',group:'Positions',status:'complete',
+      processed:300,total:300,unit:'games',elapsed_seconds:4},
+    {step:'save_positions',label:'Save unique positions',group:'Positions',status:'working',
+      processed:1000,total:null,unit:'positions',elapsed_seconds:6,
+      heartbeat_at:Date.now()/1000,updated_at:Date.now()/1000},
+    {step:'probe_endgames',label:'Solve endgames and best moves',group:'Endgames',status:'pending',
+      processed:0,total:null,unit:'positions',elapsed_seconds:0},
+  ],
+} }
+window.addEventListener('error', e => state.errors.push(e.message))
+window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
+window.fetch = () => { throw new Error('This fixture must not make API requests') }
+state.render = () => root.render(React.createElement(FenIngestionPanel, {
+  ingestionTiming: structuredClone(state.run), jobState: {},
+}))
+state.render()
+</script></body></html>

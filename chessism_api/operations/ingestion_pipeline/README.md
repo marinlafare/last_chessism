@@ -10,10 +10,13 @@ jobs.py
        -> pgn.py              pure clock validation and PGN transformation
        -> game_repository.py  deduplication and atomic game persistence
   -> fen_orchestrator.py
-       -> fen_workers.py       process-parallel replay and bulk writes
+       -> fen_batches.py       compact-storage bounded replay + atomic bulk writes
+       -> fen_bulk.py          COPY staging, identity resolution, exact deltas
+       -> fen_workers.py       compatibility workers for older storage profiles
        -> fen_core.py          pure chess replay and aggregation
        -> fen_repository.py    claims, move reads, state, scoped recounts
   -> tablebase.py       Syzygy marking (outside this package; shared analysis)
+       -> tablebase_batches.py numeric-ID work spool and bulk result updates
   -> player_salience.py final derived projection (outside this package)
 ```
 
@@ -21,6 +24,10 @@ Supporting modules:
 
 - `months.py` selects full or update month ranges.
 - `stages.py` defines the UI/backend lifecycle vocabulary.
+- `steps.py` owns per-worker, per-run substeps, heartbeat and durable completion
+  timings. A heartbeat is not presented as newly processed work. Browser reloads
+  retain completed steps; missing totals remain unknown instead of borrowing
+  another stage's counts.
 - `progress.py` owns transient Redis counters and lifecycle snapshots, with a
   shared 24-hour expiry. Parallel counter updates remain atomic Lua operations.
 - `timing.py` owns durable run and stage timings.
@@ -35,8 +42,10 @@ Supporting modules:
   `fens_done` only after both the unique FEN rows and all game-position links
   have committed.
 - Failed or interrupted claims are released before a retry.
-- Position occurrence counts are recomputed only for affected FENs. Full
-  database summary scans are fallback repair paths, not the normal algorithm.
+- In compact storage, new associations and their exact occurrence/summary
+  deltas commit together. Retrying the same links adds zero to their counters.
+  An existing move pointing to a different FEN aborts the whole batch.
+  Full recounts remain compatibility/repair paths, not routine compact ingestion.
 - Tablebase discovery is scoped to the games completed by the current pass.
 - New game ownership rows are recorded in `player_salience_pending_game` in the
   same transaction as ingestion. The drained pipeline queues those players for
@@ -51,8 +60,22 @@ Supporting modules:
 Chessism runs multiple FEN worker processes. SAN replay through `python-chess`
 is Python CPU work, so each process handles its games sequentially; spawning
 hundreds of `to_thread` calls would add overhead without escaping the GIL.
-Database writes remain bulked into 5,000-row transactions and are distributed
-across the existing worker processes.
+Compact ingestion holds at most 300 games of position data per worker. Queue
+results contain counts and game IDs, never millions of position dictionaries.
+Transaction-local COPY staging disappears on commit/rollback; the durable
+game/FEN rows are the checkpoint. Games stay claimed until the coordinator
+publishes their coverage. Interrupted jobs can replay committed batches safely.
+
+Tablebase candidate IDs are discovered once, streamed to an automatically
+removed temporary spool, and consumed in 1,000-position batches. Every batch
+takes ordered FEN locks and rechecks cloud reservations with a fresh snapshot.
+Exact WDL, DTZ and best-move selection are unchanged. Compact writes use COPY
+and one UPDATE rather than one update execution per solved FEN. Coverage still
+uses the established retry-safe refresh after each committed batch.
+
+`INGESTION_CPU_LIMIT` defaults to one CPU for the coordinator/tablebase worker
+(previously half a CPU). It does not alter Stockfish nodes, threads, VM counts,
+or the independent cloud controller.
 
 Monthly Chess.com requests remain serialized with a delay. This is deliberate
 API politeness, not a missed parallelization opportunity.
@@ -71,3 +94,15 @@ When adding a stage, update `stages.py`, durable timing, Redis progress, and the
 positions-page stage mapping together. Keep every Python module below 1,000
 lines. New database work belongs in a repository/query module, not in pure PGN
 or FEN transformation functions.
+
+## Verification
+
+`tests/check_ingestion_bulk_postgres.py` runs only in a disposable, network-none
+PostgreSQL container with no live data mounted. It covers real COPY writes,
+duplicates, concurrent replay, rollback, conflicting associations, retained
+scores, cloud-reservation races, candidate spooling and the bounded SAN worker.
+The small fixture throughput is not a production-scale speed prediction.
+
+`tests/test_ingestion_steps.py` and the web `pipelineProgress.test.mjs` cover
+unknown totals, cumulative batch counts, failure, heartbeat and stale-run
+isolation. No core schema migration is needed for this implementation.

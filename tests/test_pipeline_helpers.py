@@ -977,8 +977,13 @@ class TablebaseAnalysisTests(unittest.TestCase):
 class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_scoped_handoff_refreshes_ratings_even_without_a_solved_fen(self):
         fake_tablebase = MagicMock()
+        candidates = MagicMock()
+        candidates.discover = AsyncMock()
+        candidates.count = 1
+        candidates.read.side_effect = [[1], []]
 
         with (
+            patch.object(tablebase, "CandidateSpool", return_value=candidates),
             patch.object(tablebase.os.path, "isdir", return_value=True),
             patch.object(
                 tablebase.chess.syzygy,
@@ -1125,6 +1130,9 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
     async def test_game_ingestion_automatically_starts_fen_extraction(self):
         operation = AsyncMock(return_value="DATA UPDATED FOR hikaru")
         redis = MagicMock()
+        redis.hget = AsyncMock(return_value=None)
+        redis.hset = AsyncMock()
+        redis.expire = AsyncMock()
 
         with (
             patch.object(games, "_write_game_job_progress", new_callable=AsyncMock),

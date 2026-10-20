@@ -25,15 +25,20 @@ from chessism_api.operations.ingestion_pipeline.pgn import (
     format_one_game_moves,
 )
 from chessism_api.operations.models import GameCreateData
+from .steps import measured
 
 
 async def format_games(
     games: GameArchive,
     player_name: str,
+    reporter=None,
 ) -> list[dict[str, Any]] | str:
     """Deduplicate an archive, create player shells, and parse valid PGNs."""
     started = time.monotonic()
-    games_to_process = await filter_new_games(games)
+    async with measured(reporter, "filter_games", None, "games"):
+        games_to_process = await filter_new_games(games)
+        if reporter:
+            await reporter.advance(sum(len(rows) for months in games.values() for rows in months.values()))
     if not games_to_process:
         return "All games already at DB"
 
@@ -57,15 +62,17 @@ async def format_games(
         ])
 
     parsed: list[dict[str, Any] | str | bool] = []
-    for game in raw_games:
-        try:
-            parsed.append(create_game_dict(game))
-        except Exception as error:
-            print(
-                f"Skipping malformed Chess.com game {game.get('url', 'N/A')}: "
-                f"{error}",
-                flush=True,
-            )
+    async with measured(reporter, "parse_games", len(raw_games), "games"):
+        for index, game in enumerate(raw_games, 1):
+            try:
+                parsed.append(create_game_dict(game))
+            except Exception as error:
+                print(
+                    f"Skipping malformed Chess.com game {game.get('url', 'N/A')}: "
+                    f"{error}", flush=True,
+                )
+            if reporter and index % 1000 == 0:
+                await reporter.advance(1000)
     valid = [game for game in parsed if isinstance(game, dict)]
     print(
         f"Parsed {len(valid)}/{len(raw_games)} new games for {player_name} "

@@ -532,9 +532,9 @@ services:
     image: chessism-api:latest
     container_name: pipeline-worker
     command: arq worker.WorkerSettings
-    # Direct tablebase probing is fast but CPU-bound. Keep thermal/system
-    # headroom while the four reproducible Stockfish engines are active.
-    cpus: "0.50"
+    # Keep ingestion bounded without forcing serial Syzygy work to half a core.
+    # This is independent of Stockfish nodes/threads and cloud VM settings.
+    cpus: "${INGESTION_CPU_LIMIT:-1.0}"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}

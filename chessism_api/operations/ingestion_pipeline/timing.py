@@ -234,6 +234,24 @@ async def get_latest_ingestion_timing() -> dict[str, Any] | None:
         item["passes"] += 1
         item["status"] = row.status
 
+    from .steps import STEP_LABELS, merge_steps, read_steps
+    from chessism_api.redis_client import get_redis_pool
+    live_steps = []
+    try:
+        live_steps = await read_steps(await get_redis_pool(), run.run_id)
+    except Exception:
+        pass  # Durable timings still work if Redis is temporarily unavailable.
+    completed_steps = merge_steps([
+        {"step": row.stage, "status": row.status, "processed": int(row.processed or 0),
+         "total": int(row.total) if row.total else None,
+         "elapsed_seconds": float(row.elapsed_ms or 0) / 1000,
+         "updated_at": (row.finished_at or row.started_at).timestamp(),
+         "detail": row.detail}
+        for row in stage_rows if row.stage in STEP_LABELS
+    ])
+    combined = {row["step"]: row for row in completed_steps}
+    combined.update({row["step"]: row for row in live_steps})
+
     return {
         "run_id": run.run_id,
         "player_name": run.player_name,
@@ -243,6 +261,9 @@ async def get_latest_ingestion_timing() -> dict[str, Any] | None:
         "finished_at": run.finished_at.isoformat() if run.finished_at else None,
         "elapsed_ms": float(run.elapsed_ms or 0.0) if run.elapsed_ms is not None else None,
         "last_error": run.last_error,
+        "steps": [combined[name] for name in STEP_LABELS if name in combined],
+        "step_catalog": [{"step": name, "label": label, "group": group}
+                         for name, (label, group) in STEP_LABELS.items()],
         "stages": [
             {"stage": stage, **grouped[stage]}
             for stage in STAGE_ORDER
