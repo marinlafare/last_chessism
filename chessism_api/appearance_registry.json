@@ -83,7 +83,22 @@
       "options": [
         "Inter",
         "IBM Plex Mono",
-        "system-ui"
+        "system-ui",
+        "Audiowide",
+        "Bitcount Grid Double",
+        "Black Ops One",
+        "JetBrains Mono",
+        "Lora",
+        "Monoton",
+        "Monsieur La Doulaise",
+        "Montserrat",
+        "Nunito Sans",
+        "Open Sans",
+        "Orbitron",
+        "Oswald",
+        "Playfair Display",
+        "Roboto",
+        "Source Serif 4"
       ],
       "css": "font-family"
     },

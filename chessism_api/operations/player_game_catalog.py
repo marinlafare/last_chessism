@@ -10,6 +10,7 @@ from sqlalchemy.exc import DBAPIError
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.relational_reads import player_rows_sql
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 
 CACHE_SECONDS = 60
@@ -19,6 +20,7 @@ LOG = logging.getLogger(__name__)
 # Use exactly this expression for both grouping and game-list membership.
 OPENING_KEY_SQL = r"""COALESCE(NULLIF(REGEXP_REPLACE(BTRIM(COALESCE(gp.eco, '')),
     '^https?://(www\.)?chess\.com/openings/', '', 'i'), 'no_eco'), '')"""
+RATING_MODES = ('bullet', 'blitz', 'rapid')
 
 
 class GameCatalogBusy(RuntimeError):
@@ -37,6 +39,66 @@ async def cached_page(redis, key):
     return None
 
 
+async def _latest_opponent_ratings(session, opponents, mode):
+    """Enrich only the visible page, in one read-only batch, not one HTTP call per row."""
+    if not opponents:
+        return {}
+    modes = list(RATING_MODES) if mode == 'all' else [mode]
+    layout = storage_for(session)
+    if layout is None:
+        query = text("""
+            SELECT p.player_name, m.mode, latest.rating
+            FROM player p CROSS JOIN unnest(CAST(:modes AS text[])) AS m(mode)
+            LEFT JOIN LATERAL (
+                SELECT gp.rating FROM game_player gp
+                WHERE gp.player_name=p.player_name AND gp.mode=m.mode
+                    AND gp.played_at IS NOT NULL
+                ORDER BY gp.played_at DESC NULLS LAST, gp.link DESC, gp.color ASC
+                LIMIT 1
+            ) latest ON TRUE
+            WHERE p.player_name=ANY(CAST(:opponents AS text[])) AND p.deleted_at IS NULL
+        """)
+    else:
+        # Each side can seek the existing (player_id, mode_id, played_at, link)
+        # game indexes. Compare at most two candidates per opponent/mode.
+        # Preserve recorded ownership, including both sides of self-play.
+        branches = []
+        for side, is_white in (('white', 'true'), ('black', 'false')):
+            branches.append(f"""(
+                SELECT g.{side}_elo AS rating, g.played_at, g.link, {is_white} AS is_white
+                FROM {layout.table('game')} g
+                WHERE g.{side}_player_id=p.id AND g.mode_id=m.id
+                    AND g.played_at IS NOT NULL
+                    AND EXISTS (
+                        SELECT 1 FROM {layout.table('game_player')} gp
+                        WHERE gp.game_link=g.link AND gp.player_id=p.id AND gp.is_white={is_white}
+                    )
+                ORDER BY g.played_at DESC NULLS LAST, g.link DESC LIMIT 1
+            )""")
+        query = text(f"""
+            WITH opponents AS MATERIALIZED (
+                SELECT id, player_name FROM {layout.table('player')}
+                WHERE player_name=ANY(CAST(:opponents AS text[])) AND deleted_at IS NULL
+            ), modes AS MATERIALIZED (
+                SELECT id, name FROM {layout.table('game_mode')}
+                WHERE name=ANY(CAST(:modes AS text[]))
+            )
+            SELECT p.player_name, m.name AS mode, latest.rating
+            FROM opponents p CROSS JOIN modes m
+            LEFT JOIN LATERAL (
+                SELECT candidates.rating FROM ({' UNION ALL '.join(branches)}) candidates
+                ORDER BY candidates.played_at DESC NULLS LAST, candidates.link DESC, candidates.is_white ASC
+                LIMIT 1
+            ) latest ON TRUE
+        """)
+    records = (await session.execute(query, {'opponents': opponents, 'modes': modes})).mappings().all()
+    ratings = {opponent: dict.fromkeys(modes) for opponent in opponents}
+    for record in records:
+        rating = record['rating']
+        ratings[record['player_name']][record['mode']] = int(rating) if rating is not None and rating > 0 else None
+    return ratings
+
+
 async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color='all', page=1, limit=10, search=''):
     if kind not in ('opponents', 'openings'):
         raise ValueError('Choose opponents or openings.')
@@ -52,7 +114,7 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
         await session.execute(text('SET TRANSACTION READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='8s'"))
         scope = await _analytics_scope(session, player_name, mode)
-    key = 'chessism:player-game-catalog:v2:' + hashlib.sha256(json.dumps(
+    key = 'chessism:player-game-catalog:v3:' + hashlib.sha256(json.dumps(
         [scope.player, kind, scope.mode, color, page, limit, search]).encode()).hexdigest()
     cached = await cached_page(redis, key)
     if cached is not None:
@@ -104,6 +166,9 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
                 'player': scope.player, 'mode': scope.mode, 'color': color,
                 'limit': limit, 'offset': (page - 1) * limit, 'search': search,
             })).mappings().all()
+            latest_ratings = await _latest_opponent_ratings(
+                session, [record['entry_key'] for record in records if record['entry_key']], scope.mode,
+            ) if kind == 'opponents' else {}
         rows = []
         for record in records:
             if record['entry_key'] is None:
@@ -111,6 +176,10 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
             row = {name: int(record[name]) for name in ('rank', 'games', 'wins', 'draws', 'losses')}
             row['key'] = record['entry_key']
             row['unknown'] = row['games'] - row['wins'] - row['draws'] - row['losses']
+            if kind == 'opponents':
+                row['latest_ratings'] = latest_ratings.get(row['key'], dict.fromkeys(
+                    RATING_MODES if scope.mode == 'all' else [scope.mode],
+                ))
             rows.append(row)
         groups = int(records[0]['groups'])
         payload = {

@@ -71,7 +71,7 @@ function GameUpdateProgress({ status, message }) {
   )
 }
 
-function PlayerWorkspace({ playerName, onSelectPlayer }) {
+function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const [activePlayer, setActivePlayer] = useState(playerName)
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
@@ -98,6 +98,10 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
   const [deleteMessage, setDeleteMessage] = useState('')
   const playerPickerRef = useRef(null)
   const profileRequest = useRef(null)
+
+  useEffect(() => {
+    if (profile) onProfileLoaded?.(profile)
+  }, [profile, onProfileLoaded])
 
   const loadPlayer = useCallback(async (requestedName) => {
     const name = String(requestedName || '').trim().toLowerCase()

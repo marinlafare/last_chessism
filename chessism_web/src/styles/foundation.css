@@ -286,6 +286,7 @@ code {
 .rail-brand {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   min-height: 44px;
   color: var(--text);

@@ -1,4 +1,5 @@
 /* Ordered imports preserve the original cascade while keeping each concern navigable. */
+@import './styles/fonts.css';
 @import './styles/foundation.css';
 @import './styles/dashboard-shared.css';
 @import './styles/responsive.css';

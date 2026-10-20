@@ -1,0 +1,187 @@
+{
+  "description": "Optional Chessism webfonts. Full fonts compressed with woff2_compress; no subsetting, renaming, or axis instancing. The original local font files are retained.",
+  "google_fonts_revision": "47d54ca1ebb14fd864695f1d39dc734f39017c33",
+  "license": "Each family is distributed under the accompanying SIL Open Font License 1.1 in its OFL.txt file.",
+  "fonts": [
+    {
+      "family": "Audiowide",
+      "file": "audiowide/font.woff2",
+      "license": "audiowide/OFL.txt",
+      "source": "../Audiowide/Audiowide-Regular.ttf",
+      "license_source": "../Audiowide/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        400
+      ]
+    },
+    {
+      "family": "Black Ops One",
+      "file": "blackopsone/font.woff2",
+      "license": "blackopsone/OFL.txt",
+      "source": "../Black_Ops_One/BlackOpsOne-Regular.ttf",
+      "license_source": "../Black_Ops_One/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        400
+      ]
+    },
+    {
+      "family": "Monoton",
+      "file": "monoton/font.woff2",
+      "license": "monoton/OFL.txt",
+      "source": "../Monoton/Monoton-Regular.ttf",
+      "license_source": "../Monoton/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        400
+      ]
+    },
+    {
+      "family": "Monsieur La Doulaise",
+      "file": "monsieurladoulaise/font.woff2",
+      "license": "monsieurladoulaise/OFL.txt",
+      "source": "../Monsieur_La_Doulaise/Monsieur_La_Doulaise/MonsieurLaDoulaise-Regular.ttf",
+      "license_source": "../Monsieur_La_Doulaise/Monsieur_La_Doulaise/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        400
+      ]
+    },
+    {
+      "family": "Bitcount Grid Double",
+      "file": "bitcountgriddouble/font.woff2",
+      "license": "bitcountgriddouble/OFL.txt",
+      "source": "../Monsieur_La_Doulaise/Bitcount_Grid_Double/BitcountGridDouble-VariableFont_CRSV,ELSH,ELXP,slnt,wght.ttf",
+      "license_source": "../Monsieur_La_Doulaise/Bitcount_Grid_Double/OFL.txt",
+      "style": "normal",
+      "weight": [
+        100,
+        900
+      ]
+    },
+    {
+      "family": "Roboto",
+      "file": "roboto/font.woff2",
+      "license": "roboto/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/roboto/Roboto%5Bwdth%2Cwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/roboto/OFL.txt",
+      "style": "normal",
+      "weight": [
+        100,
+        900
+      ]
+    },
+    {
+      "family": "Open Sans",
+      "file": "opensans/font.woff2",
+      "license": "opensans/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/opensans/OpenSans%5Bwdth%2Cwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/opensans/OFL.txt",
+      "style": "normal",
+      "weight": [
+        300,
+        800
+      ]
+    },
+    {
+      "family": "Montserrat",
+      "file": "montserrat/font.woff2",
+      "license": "montserrat/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/montserrat/Montserrat%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/montserrat/OFL.txt",
+      "style": "normal",
+      "weight": [
+        100,
+        900
+      ]
+    },
+    {
+      "family": "Nunito Sans",
+      "file": "nunitosans/font.woff2",
+      "license": "nunitosans/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/nunitosans/NunitoSans%5BYTLC%2Copsz%2Cwdth%2Cwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/nunitosans/OFL.txt",
+      "style": "normal",
+      "weight": [
+        200,
+        1000
+      ]
+    },
+    {
+      "family": "Source Serif 4",
+      "file": "sourceserif4/font.woff2",
+      "license": "sourceserif4/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/sourceserif4/SourceSerif4%5Bopsz%2Cwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/sourceserif4/OFL.txt",
+      "style": "normal",
+      "weight": [
+        200,
+        900
+      ]
+    },
+    {
+      "family": "Lora",
+      "file": "lora/font.woff2",
+      "license": "lora/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/lora/Lora%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/lora/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        700
+      ]
+    },
+    {
+      "family": "Playfair Display",
+      "file": "playfairdisplay/font.woff2",
+      "license": "playfairdisplay/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/playfairdisplay/PlayfairDisplay%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/playfairdisplay/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        900
+      ]
+    },
+    {
+      "family": "JetBrains Mono",
+      "file": "jetbrainsmono/font.woff2",
+      "license": "jetbrainsmono/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/jetbrainsmono/JetBrainsMono%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/jetbrainsmono/OFL.txt",
+      "style": "normal",
+      "weight": [
+        100,
+        800
+      ]
+    },
+    {
+      "family": "Oswald",
+      "file": "oswald/font.woff2",
+      "license": "oswald/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/oswald/Oswald%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/oswald/OFL.txt",
+      "style": "normal",
+      "weight": [
+        200,
+        700
+      ]
+    },
+    {
+      "family": "Orbitron",
+      "file": "orbitron/font.woff2",
+      "license": "orbitron/OFL.txt",
+      "source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/orbitron/Orbitron%5Bwght%5D.ttf",
+      "license_source": "https://raw.githubusercontent.com/google/fonts/47d54ca1ebb14fd864695f1d39dc734f39017c33/ofl/orbitron/OFL.txt",
+      "style": "normal",
+      "weight": [
+        400,
+        900
+      ]
+    }
+  ]
+}

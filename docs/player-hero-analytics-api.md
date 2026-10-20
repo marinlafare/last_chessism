@@ -30,6 +30,31 @@ the result is estimated or UTC-based.
 | `GET /players/{player}/analysis/behavioural/ratings` | Dense daily last-rating series, kept separate for Bullet, Blitz, and Rapid. Days without games contain `last_rating: null`. |
 | `GET /players/{player}/analysis/behavioural/days/{date}` | All rating observations and absolute W/D/L totals in 24 resolved-local-time hourly buckets for one local date. |
 
+### Opponents and opening repertoire
+
+`GET /players/{player}/analysis/behavioural/catalog` accepts
+`kind=opponents|openings`, `mode=all|bullet|blitz|rapid`,
+`color=all|white|black`, `page` (default 1), `limit` (default 10, maximum 50),
+and optional `search` (at most 128 characters). This endpoint does not accept
+date filters. Rows contain `rank`, `key`, `games`, `wins`, `draws`, `losses`,
+and `unknown`; the response also contains totals and pagination metadata.
+
+Opponent rows additionally contain `latest_ratings`, keyed by the selected
+mode, or all three modes when `mode=all`. Each value is the opponent's rating
+in their most recent dated game recorded in Chessism for that mode, across
+all opponents—not their average rating or only games against the viewed
+player. Ties use the descending game ID and then the Black perspective for
+self-play. A missing or nonpositive rating is returned as `null`; the UI
+shows a dash, not zero. These are recorded game ratings, not a live rating
+fetched from Chess.com.
+
+Ratings are enriched after pagination in one read-only batch for the visible
+opponents, using the existing per-side player/mode/date indexes on normalized
+storage. The result shares the catalog's 60-second cache, read semaphore,
+and statement/lock timeouts. Opening rows do not perform this lookup.
+The frontend also accepts older responses without `latest_ratings`, hiding
+the ratings until the matching backend release is deployed.
+
 ## Engine Measures
 
 Stockfish scores are stored from White's perspective. These endpoints invert

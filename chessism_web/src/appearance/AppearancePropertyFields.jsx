@@ -1,5 +1,5 @@
 import { useAppearance } from './AppearanceProvider'
-import { normalizeColor, replaceRgb, validValue } from './styleCore'
+import { fontFamilyCss, normalizeColor, replaceRgb, validValue } from './styleCore'
 import { restoreSavedStyle } from './editorTargets'
 
 export default function AppearancePropertyFields({ editable, related = false }) {
@@ -40,6 +40,11 @@ export default function AppearancePropertyFields({ editable, related = false }) 
         onClick={() => setDraft(rows => restoreSavedStyle(rows, saved.overrides, scope, id, property))}>
         <span aria-hidden="true">↶</span>
       </button>
+      {property === 'fontFamily' ? <div className="appearance-font-preview"
+        aria-label={`Font preview: ${value || 'system-ui'}`} style={{ fontFamily: fontFamilyCss(value) }}>
+        <span>Chessism · Aa Bb Cc Ññ</span>
+        <span>0123456789 · 1.5M · 100%</span>
+      </div> : null}
     </fieldset>
   })
 }

@@ -18,8 +18,8 @@ async def persist_positions(session, fens, associations, reporter=None):
     """Caller commits game state, links and exact counter deltas together.
 
     PostgreSQL owns the scratch tables; rollback/connection loss removes them.
-    Existing scores and cloud claims are never replaced. All writers take FEN
-    locks in textual order, matching cloud reservation/import lock order.
+    Existing scores and cloud claims are never replaced. New and existing FENs
+    acquire locks in one textual order, matching cloud reservation/import order.
     """
     layout = compact_for(session)
     if not layout:
@@ -42,13 +42,18 @@ async def persist_positions(session, fens, associations, reporter=None):
         await conn.copy_records_to_table("ingestion_fen_input",
             columns=["fen", "piece_count", "moves_counter"],
             records=[(r["fen"], r["piece_count"], r["moves_counter"]) for r in fens])
-        # First lock existing positions, even when their metadata is unchanged.
-        await conn.fetch(f"""SELECT f.fen_id FROM {fen} f
-            JOIN ingestion_fen_input i USING(fen) ORDER BY f.fen FOR UPDATE OF f""")
+        # Resolve new AND existing rows in a single ordered pass. A separate
+        # SELECT FOR UPDATE followed by INSERT misses concurrently created rows
+        # and conflicts with the KEY SHARE locks used by association FK checks.
+        # ON CONFLICT locks the row even when WHERE false skips its update.
+        # Targeting a non-key column takes NO KEY UPDATE; existing rows are not
+        # rewritten, and RETURNING counts only genuine inserts. Keep this lock
+        # through appearance deltas so a concurrent score import cannot race it.
         new_count = await conn.fetchval(f"""WITH inserted AS (
-            INSERT INTO {fen}(fen,piece_count,moves_counter,n_games)
+            INSERT INTO {fen} AS stored(fen,piece_count,moves_counter,n_games)
             SELECT fen,piece_count,moves_counter,0 FROM ingestion_fen_input ORDER BY fen
-            ON CONFLICT(fen) DO NOTHING RETURNING fen_id
+            ON CONFLICT(fen) DO UPDATE SET n_games=stored.n_games WHERE false
+            RETURNING fen_id
         ) SELECT COUNT(*) FROM inserted""")
         await conn.execute(f"""UPDATE {fen} f SET
             piece_count=COALESCE(f.piece_count,i.piece_count),

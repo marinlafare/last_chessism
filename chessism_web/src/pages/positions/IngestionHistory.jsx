@@ -84,9 +84,11 @@ function HistoryRun({ run, index }) {
   const startedAt = new Date(run.started_at)
   const timeLabel = startedAt.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
   const kind = run.trigger === 'player_create' ? 'creation'
-    : run.trigger === 'player_update' ? 'update' : 'automatic'
+    : run.trigger === 'player_update' ? 'update'
+      : run.trigger === 'fen_recovery' ? 'recovery' : 'automatic'
   const kindLabel = kind === 'creation' ? 'Player creation · first download'
-    : kind === 'update' ? 'Player update' : 'Automatic ingestion'
+    : kind === 'update' ? 'Player update'
+      : kind === 'recovery' ? 'fallback retry' : 'Automatic ingestion'
   return (
     <div {...pageStyleTarget('card')} className="fen-history-run"
       style={{ '--fen-history-delay': `${Math.min(index, 9) * 45}ms`, '--fen-history-direction': index % 2 ? -1 : 1 }}>

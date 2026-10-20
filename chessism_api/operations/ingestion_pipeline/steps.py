@@ -48,6 +48,25 @@ class StepReporter:
     def goal(self, name, total):
         self.goals[name] = max(0, int(total))
 
+    def checkpoint(self):
+        """Capture counters before a DB transaction, not its elapsed time."""
+        return {name: dict(row) for name, row in self.steps.items()}
+
+    async def rollback_attempt(self, checkpoint, *, retry_detail=None):
+        """Rolled-back work must not be counted again by the next attempt."""
+        now = time.time()
+        for name, row in self.steps.items():
+            before = checkpoint.get(name, {})
+            if row.get("updated_at") == before.get("updated_at"):
+                continue
+            row["processed"] = before.get("processed", 0)
+            row["total"] = before.get("total", self.goals.get(name, 0))
+            row["status"] = "waiting" if retry_detail else "failed"
+            row["detail"] = retry_detail or "Batch rolled back; its work was not committed."
+            row["updated_at"] = now
+        # Retain time spent on aborted attempts: it is real processing time.
+        await self.publish()
+
     async def publish(self):
         if self.redis is None or not self.run_id:
             return

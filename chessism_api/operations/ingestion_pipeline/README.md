@@ -66,6 +66,18 @@ Transaction-local COPY staging disappears on commit/rollback; the durable
 game/FEN rows are the checkpoint. Games stay claimed until the coordinator
 publishes their coverage. Interrupted jobs can replay committed batches safely.
 
+FEN identity insertion and locking use one textually ordered `INSERT ... ON
+CONFLICT DO UPDATE ... WHERE false` pass. Conflicts lock existing rows without
+rewriting them or changing scores/reservations; the non-key update lock is
+compatible with association foreign-key checks. This avoids a separate snapshot
+for existing-row locks followed by new-row insertion. See PostgreSQL's
+[INSERT locking/RETURNING contract](https://www.postgresql.org/docs/15/sql-insert.html).
+Deadlocks (`40P01`) and serialization failures (`40001`) retry the entire bounded
+transaction, including game claims, at most four attempts with short jittered
+backoff. Each attempt uses a fresh session after rollback. Returned counters only
+advance after commit; step counters rewind after rollback while keeping elapsed
+time. Other errors and exhausted retries remain visible failures.
+
 Tablebase candidate IDs are discovered once, streamed to an automatically
 removed temporary spool, and consumed in 1,000-position batches. Every batch
 takes ordered FEN locks and rechecks cloud reservations with a fresh snapshot.

@@ -14,6 +14,7 @@ import Positions from './pages/Positions'
 import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
 import AppearanceProvider, { AppearanceControls } from './appearance/AppearanceProvider'
+import { styleTarget } from './appearance/styleCore.js'
 import AnalyzeTimes from './pages/AnalyzeTimes'
 import Research from './pages/Research'
 import AccuracyCoefficient from './pages/AccuracyCoefficient'
@@ -247,6 +248,13 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
       </div>
       <div className="superadmin-account-controls">
         <AppearanceControls />
+        <a {...styleTarget('button', 'navigation')}
+          className={`rail-btn ${path === '/add_games' || path === '/download_new_games' ? 'active' : ''}`}
+          href="/add_games" title="Add Games" aria-label="Add Games"
+          aria-current={path === '/add_games' || path === '/download_new_games' ? 'page' : undefined}>
+          <span className="rail-btn-icon" aria-hidden="true">+</span>
+          <span>Add Games</span>
+        </a>
         <AdminOnlineStatus account={account} />
         <button className="superadmin-logout" type="button" onClick={onLogout}>
           Log out

@@ -2,16 +2,15 @@ import { styleTarget } from '../../appearance/styleCore.js'
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
-    { href: '/system_status', label: 'System Status', short: '●' },
-    { href: '/database', label: 'Database', short: 'D' },
-    { href: '/scored_positions', label: 'Scored Positions', short: 'S' },
-    { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
-    { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
-    { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
+    { href: '/scored_positions', label: 'Positions', short: 'P' },
+    { href: '/analize_positions', label: 'Analyze', short: 'A' },
     { href: '/research', label: 'Research', short: 'R' },
+    { href: '/database', label: 'Database', short: 'D' },
+    { href: '/live_analysis', label: 'Live', short: 'L' },
+    { href: '/analyze_times', label: 'Times', short: 'T' },
     { href: '/hegel', label: 'hegel', short: 'H' },
     { href: '/backups', label: 'Backups', short: 'B' },
-    { href: '/add_games', label: 'Add Games', short: '+' }
+    { href: '/system_status', label: 'System Status', short: '●' }
   ]
 
   return (

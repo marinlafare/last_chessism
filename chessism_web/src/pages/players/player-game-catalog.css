@@ -19,7 +19,7 @@
   gap: 10px;
 }
 .player-game-catalog-toolbar { justify-content: space-between; flex-wrap: wrap; }
-.player-game-catalog-toolbar > span { color: var(--muted); font-size: 12px; }
+.player-game-catalog-totals { color: var(--muted); font-size: 12px; }
 .player-game-catalog select, .player-game-catalog-search, .player-game-catalog-sides button, .player-game-catalog-pagination button,
 .player-game-catalog-message button {
   border: 1px solid var(--border-soft);
@@ -43,6 +43,7 @@
 .player-game-catalog .losses { background: var(--chart-color-3); }
 .player-game-catalog .unknown { background: var(--catalog-unknown); }
 .player-game-catalog-rows { display: grid; gap: 5px; }
+.player-game-catalog-identity, .player-game-catalog-statistics { display: contents; }
 .player-game-catalog-row {
   display: grid;
   grid-template-columns: minmax(3.5rem, max-content) minmax(0, 1fr) minmax(85px, 15%) minmax(5rem, max-content);
@@ -60,7 +61,7 @@
 }
 .player-game-catalog-row:hover:not(:disabled) { background: #192b33; }
 .player-game-catalog button:focus-visible, .player-game-catalog select:focus-visible,
-.player-game-catalog-search:focus-visible { outline: 2px solid #15c780; outline-offset: 2px; }
+.player-game-catalog-search:focus-visible, .player-game-catalog-rows:focus-visible { outline: 2px solid #15c780; outline-offset: 2px; }
 .player-game-catalog button:disabled { opacity: .55; cursor: default; }
 .player-game-catalog-rank, .player-game-catalog-games {
   padding: 6px 8px;
@@ -83,6 +84,79 @@
 .player-game-catalog-pagination { justify-content: center; margin-top: 12px; font-size: 12px; }
 .player-game-catalog-pagination button { padding: 3px 14px; font-size: 23px; cursor: pointer; }
 .player-game-catalog-message { padding: 24px 0; color: var(--muted); }
+.player-game-catalog.is-opponents .player-game-catalog-toolbar {
+  margin-bottom: 8px;
+}
+.player-game-catalog.is-opponents .player-game-catalog-filters {
+  display: grid;
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) 4rem;
+  width: 100%;
+}
+.player-game-catalog.is-opponents .player-game-catalog-search { width: 100%; box-sizing: border-box; }
+.player-game-catalog.is-opponents .player-game-catalog-filters select {
+  width: 4rem;
+  min-width: 4rem;
+  flex: 0 0 4rem;
+  margin-left: auto;
+  padding: 7px 4px;
+  font-size: 12px;
+}
+.player-game-catalog.is-opponents .player-game-catalog-rows {
+  width: min(100%, 48rem);
+  margin-inline: auto;
+  max-height: 24rem;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(21, 199, 128, .55) transparent;
+  padding: 3px;
+  box-sizing: border-box;
+}
+.player-game-catalog.is-opponents .player-game-catalog-rows:hover { scrollbar-color: #15c780 transparent; }
+.player-game-catalog-more { min-height: 1px; font-size: 12px; color: var(--muted); text-align: center; }
+.player-game-catalog-more .player-game-catalog-message { margin: 0; padding: 8px 0; }
+.player-game-catalog.is-opponents .player-game-catalog-row {
+  grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr);
+  align-items: stretch;
+  gap: 8px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.player-game-catalog.is-opponents .player-game-catalog-identity,
+.player-game-catalog.is-opponents .player-game-catalog-statistics {
+  display: grid;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 34px;
+  box-sizing: border-box;
+  padding: 4px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: #101a21;
+}
+.player-game-catalog.is-opponents .player-game-catalog-row:hover:not(:disabled) > span { background: #192b33; }
+.player-game-catalog.is-opponents .player-game-catalog-identity { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
+.player-game-catalog.is-opponents .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr) auto; }
+.player-game-catalog-ratings { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
+.player-game-catalog-rating { display: inline-flex; align-items: baseline; gap: 3px; white-space: nowrap; }
+.player-game-catalog-rating small { font-size: 9px; opacity: .65; }
+.player-game-catalog.is-opponents .player-game-catalog-statistics { grid-template-columns: minmax(0, 1fr) minmax(4rem, max-content); }
+.player-game-catalog.is-opponents .player-game-catalog-rank,
+.player-game-catalog.is-opponents .player-game-catalog-games { padding: 3px 6px; }
+.player-game-catalog.is-opponents .player-game-catalog-results {
+  width: 100%;
+  min-width: 0;
+  max-width: 12rem;
+  justify-self: end;
+  align-self: center;
+}
+.player-game-catalog.is-opponents .player-game-catalog-rank,
+.player-game-catalog.is-opponents .player-game-catalog-name,
+.player-game-catalog.is-opponents .player-game-catalog-results,
+.player-game-catalog.is-opponents .player-game-catalog-games { grid-column: auto; grid-row: auto; }
 @media (max-width: 650px) {
   .player-game-catalog-row { grid-template-columns: minmax(2.5rem, max-content) minmax(0, 1fr) minmax(4rem, max-content); gap: 7px; }
   .player-game-catalog-rank { grid-column: 1; grid-row: 1; }
@@ -90,4 +164,10 @@
   .player-game-catalog-games { grid-column: 3; grid-row: 1; }
   .player-game-catalog-results { grid-column: 2; grid-row: 2; width: 50%; min-width: min(85px, 100%); justify-self: center; }
   .player-game-catalog-filters { flex-wrap: wrap; }
+  .player-game-catalog.is-opponents .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
+  .player-game-catalog-ratings { grid-column: 2; justify-content: center; flex-wrap: wrap; gap: 4px 8px; }
+}
+@media (max-width: 420px) {
+  .player-game-catalog.is-opponents .player-game-catalog-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 4rem; gap: 6px; }
+  .player-game-catalog.is-opponents .player-game-catalog-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
 }

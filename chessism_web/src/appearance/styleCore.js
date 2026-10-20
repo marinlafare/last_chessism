@@ -35,6 +35,15 @@ export function validValue(spec, value) {
   return spec.options?.includes(value)
 }
 
+export function fontFamilyCss(family) {
+  // CSS generic families are keywords, not quoted names of installed fonts.
+  if (!family || family === 'system-ui') return 'system-ui, sans-serif'
+  const fallback = ['IBM Plex Mono', 'JetBrains Mono'].includes(family)
+    ? 'ui-monospace, monospace'
+    : ['Lora', 'Playfair Display', 'Source Serif 4'].includes(family) ? 'serif' : 'system-ui, sans-serif'
+  return `${JSON.stringify(family)}, ${fallback}`
+}
+
 export function appearanceCss(registry, rows) {
   if (!registry) return ''
   return rows.flatMap(row => {
@@ -43,7 +52,7 @@ export function appearanceCss(registry, rows) {
     if (!target?.properties.includes(row.property) || !spec || !validValue(spec,row.value)) return []
     // IDs, property names and suffixes come from the server-owned registry only.
     if (!/^[\w.-]+$/.test(row.target) || !/^[\w-]+$/.test(row.scope)) return []
-    const value = spec.kind === 'number' ? `${row.value}${spec.unit || ''}` : spec.kind === 'choice' && row.property === 'fontFamily' ? JSON.stringify(row.value) : row.value
+    const value = spec.kind === 'number' ? `${row.value}${spec.unit || ''}` : spec.kind === 'choice' && row.property === 'fontFamily' ? fontFamilyCss(row.value) : row.value
     const selector = `[data-style-scope="${row.scope}"][data-style-id="${row.target}"][data-style-id][data-style-id][data-style-id]`
     // Only opted-in toggles retain their hover colors while pressed. A
     // fixed attribute selector also keeps the rule independent of row order.
