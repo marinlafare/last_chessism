@@ -18,6 +18,8 @@ function selectionTitle(selection) {
   if (!selection) return 'Analyzed games'
   if (selection.scope === 'rating') return `Games rated ${selection.rating_from}–${selection.rating_from + 9}`
   if (selection.scope === 'result') return { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result]
+  if (selection.scope === 'opponent') return `Games against ${selection.opponent}`
+  if (selection.scope === 'opening') return `${selection.label || 'Unknown opening'} · ${selection.color || 'both colors'}`
   if (selection.scope === 'date') return `Games on ${selection.date}`
   if (selection.scope === 'hour') return `Games started at ${String(selection.hour).padStart(2, '0')}:00`
   if (selection.scope === 'weekday_hour') {
@@ -143,7 +145,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const summary = request.data?.summary
   const games = request.data?.games || []
   const analyzedOnly = selection.analyzed_only !== false
-  const chartSelection = selection.scope === 'rating' || selection.scope === 'result'
+  const chartSelection = ['rating', 'result', 'opponent', 'opening'].includes(selection.scope)
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('gameExplorer.panel')}
@@ -157,7 +159,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
           <div>
             <p {...pageStyleTarget('gameExplorer.text')} className="eyebrow">GAME EXPLORER</p>
             <h2 {...pageStyleTarget('gameExplorer.title')}>{selectionTitle(selection)}</h2>
-            <small {...pageStyleTarget('gameExplorer.text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all games in this bin'}</small>
+            <small {...pageStyleTarget('gameExplorer.text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all matching games'}</small>
           </div>
           <button {...pageStyleTarget('gameExplorer.close')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
         </header>

@@ -60,6 +60,7 @@ from chessism_api.operations.player_score_distribution import (
     get_distribution as get_player_score_distribution,
     get_positions as get_player_score_positions,
 )
+from chessism_api.operations.player_game_catalog import GameCatalogBusy, get_player_game_catalog
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -81,13 +82,16 @@ class RangeGamesScoreRequest(BaseModel):
 
 
 class ExploreGamesRequest(BaseModel):
-    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result)$")
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening)$")
     modes: list[str] = Field(..., min_length=1, max_length=3)
     date: str | None = Field(None, min_length=10, max_length=10)
     weekday: int | None = Field(None, ge=1, le=7)
     hour: int | None = Field(None, ge=0, le=23)
     rating_from: int | None = Field(None, ge=0, le=2_147_483_638)
     result: str | None = Field(None, pattern="^(win|draw|loss)$")
+    opponent: str | None = Field(None, min_length=1, max_length=128)
+    opening: str | None = Field(None, max_length=2048)
+    color: str | None = Field(None, pattern="^(white|black)$")
     analyzed_only: bool = True
     minimum_game_moves_exclusive: int | None = Field(None, ge=0, le=1_000)
     salience_min: float | None = Field(None, ge=0, le=1, allow_inf_nan=False)
@@ -398,6 +402,28 @@ async def api_get_player_daily_efficiency(
     )
 
 
+@router.get("/{player_name}/analysis/behavioural/catalog")
+async def api_get_player_game_catalog(
+    player_name: str,
+    kind: str = Query(..., pattern="^(opponents|openings)$"),
+    mode: str = Query("all", pattern="^(all|bullet|blitz|rapid)$"),
+    color: str = Query("all", pattern="^(all|white|black)$"),
+    page: int = Query(1, ge=1, le=100000),
+    limit: int = Query(10, ge=1, le=50),
+    search: str = Query("", max_length=128),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Frequency-ranked opponent/opening groups using recorded game metadata."""
+    try:
+        response = await _hero_analytics_response(
+            get_player_game_catalog, player_name, redis,
+            kind=kind, mode=mode, color=color, page=page, limit=limit, search=search)
+    except GameCatalogBusy as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @router.get("/{player_name}/analysis/measures/score-distribution")
 async def api_get_player_score_distribution(
     player_name: str,
@@ -521,6 +547,9 @@ async def api_explore_player_games(
         cursor=request.cursor,
         rating_from=request.rating_from,
         result=request.result,
+        opponent=request.opponent,
+        opening=request.opening,
+        color=request.color,
     )
 
 

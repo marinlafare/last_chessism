@@ -10,11 +10,31 @@ from sqlalchemy import text
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.relational_reads import player_rows_sql
 from chessism_api.operations.player_hero_analytics import _analytics_scope
+from chessism_api.operations.player_game_catalog import OPENING_KEY_SQL
 
 RESULTS = {'win': 1, 'draw': 0.5, 'loss': 0}
 
 
-def selection_filter(scope_kind, rating_from, result):
+def selection_filter(scope_kind, rating_from, result, *, opponent=None, opening=None, color=None):
+    if scope_kind in ('opponent', 'opening'):
+        if rating_from is not None or result is not None:
+            raise ValueError('Catalog selections cannot also specify a rating or result filter.')
+        if color not in (None, 'white', 'black'):
+            raise ValueError('Color must be white or black.')
+        if scope_kind == 'opponent':
+            if not isinstance(opponent, str) or not 1 <= len(opponent.strip()) <= 128 or opening is not None:
+                raise ValueError('Choose an opponent without an opening filter.')
+            clause, params, label = 'gp.opponent_name=:opponent', {'opponent': opponent.strip().lower()}, f'Games against {opponent.strip()}'
+        else:
+            if not isinstance(opening, str) or len(opening) > 2048 or opponent is not None:
+                raise ValueError('Choose an opening without an opponent filter.')
+            clause, params, label = f'{OPENING_KEY_SQL}=:opening', {'opening': opening}, opening or 'Unknown opening'
+        if color:
+            clause += ' AND gp.color=:color'
+            params['color'] = color
+        return clause, params, label
+    if opponent is not None or opening is not None or color is not None:
+        raise ValueError('Opponent, opening and color filters require a catalog scope.')
     if scope_kind == 'rating':
         if type(rating_from) is not int or not 0 <= rating_from <= 2_147_483_638 or rating_from % 10:
             raise ValueError('rating_from must be the lower edge of a 10-point rating bin.')
@@ -47,14 +67,23 @@ def decode_cursor(cursor, fingerprint):
 
 
 async def explore_chart_games(player_name, *, scope_kind, modes, rating_from, result,
-                              timezone_name, limit, cursor):
-    clause, selection_params, label = selection_filter(scope_kind, rating_from, result)
+                              timezone_name, limit, cursor, opponent=None, opening=None, color=None):
+    clause, selection_params, label = selection_filter(
+        scope_kind, rating_from, result, opponent=opponent, opening=opening, color=color)
     async with AsyncDBSession() as session:
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
-        fingerprint = hashlib.sha256(json.dumps([scope.player, scope_kind, sorted(modes), rating_from, result]).encode()).hexdigest()
+        identity = [scope.player, scope_kind, sorted(modes), rating_from, result]
+        if scope_kind in ('opponent', 'opening'):
+            identity.extend([opponent, opening, color])
+        fingerprint = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         cursor_time, cursor_id, cursor_color = decode_cursor(cursor, fingerprint)
+        fields = ('link', 'color', 'played_at', 'mode', 'rating', 'opponent_rating', 'result')
+        if scope_kind == 'opponent':
+            fields += ('opponent_name',)
+        elif scope_kind == 'opening':
+            fields += ('eco',)
         query = player_rows_sql(session, f'''
             WITH selected AS MATERIALIZED (
                 SELECT gp.link AS game_link, gp.color AS player_color, gp.played_at,
@@ -72,7 +101,7 @@ async def explore_chart_games(player_name, *, scope_kind, modes, rating_from, re
             SELECT selected.*, CASE WHEN selected.player_color='white' THEN g.black ELSE g.white END AS opponent_name
             FROM selected LEFT JOIN game g ON g.link=selected.game_link
             ORDER BY selected.cursor_time DESC, selected.game_link DESC, selected.player_color DESC
-        ''', ('link', 'color', 'played_at', 'mode', 'rating', 'opponent_rating', 'result'))
+        ''', fields)
         rows = (await session.execute(query, {
             'player': scope.player, 'modes': modes, **selection_params,
             'cursor_time': cursor_time, 'cursor_id': cursor_id, 'cursor_color': cursor_color,
@@ -100,7 +129,8 @@ async def explore_chart_games(player_name, *, scope_kind, modes, rating_from, re
     return {
         **scope.response_base(),
         'selection': {'scope': scope_kind, 'modes': modes, 'rating_from': rating_from,
-                      'result': result, 'label': label, 'analyzed_only': False},
+                      'result': result, 'label': label, 'analyzed_only': False,
+                      'opponent': opponent, 'opening': opening, 'color': color},
         'summary': None, 'games': games,
         'pagination': {'limit': limit, 'returned_games': len(games), 'has_more': has_more, 'next_cursor': next_cursor},
     }

@@ -12,8 +12,10 @@ import {
   loadStoredJob,
   storeJob
 } from '../services/gameJobService'
+import { recoverableGameJobs, watchGameJob } from '../services/gameJobPolling'
 import {
   downloadPlayerGames,
+  fetchActiveGameJobs,
   fetchGameJobStatus,
   updatePlayerGames,
 } from './download-new-games/downloadNewGamesApi'
@@ -52,76 +54,103 @@ function DownloadNewGames() {
   const [updateJob, setUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
   const [downloadJobStatus, setDownloadJobStatus] = useState(null)
   const [updateJobStatus, setUpdateJobStatus] = useState(null)
+  const [recoveringJobs, setRecoveringJobs] = useState(true)
+  const [recoveryMessage, setRecoveryMessage] = useState('')
   const downloadJobActive = downloadJob?.jobId && !isTerminalJobStatus(downloadJobStatus)
   const updateJobActive = updateJob?.jobId && !isTerminalJobStatus(updateJobStatus)
-  const actionBusy = downloadLoading || updateLoading || downloadJobActive || updateJobActive
+  const actionBusy = recoveringJobs || downloadLoading || updateLoading || downloadJobActive || updateJobActive
+
+  useEffect(() => {
+    let cancelled = false
+    let timer
+    let controller
+    const recover = async () => {
+      controller = new AbortController()
+      const timeout = window.setTimeout(() => controller.abort(), 10000)
+      try {
+        const payload = await fetchActiveGameJobs({ signal: controller.signal })
+        if (cancelled) return
+        const recovered = recoverableGameJobs(payload.jobs)
+        if (recovered.download) {
+          const { job, status } = recovered.download
+          setDownloadJob(job)
+          storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
+          setDownloadPlayer(current => current || job.playerName)
+          setDownloadJobStatus(status)
+          setDownloadResult(`Reconnected to the download for ${job.playerName}.`)
+        }
+        if (recovered.update) {
+          const { job, status } = recovered.update
+          setUpdateJob(job)
+          storeJob(UPDATE_JOB_STORAGE_KEY, job)
+          setUpdatePlayer(current => current || job.playerName)
+          setUpdateJobStatus(status)
+          setUpdateResult(`Reconnected to the update for ${job.playerName}.`)
+        }
+        setRecoveringJobs(false)
+        setRecoveryMessage('')
+      } catch {
+        if (cancelled) return
+        setRecoveryMessage('Unable to check active downloads right now. Retrying automatically…')
+        timer = window.setTimeout(recover, 5000)
+      } finally {
+        window.clearTimeout(timeout)
+      }
+    }
+    recover()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [])
 
   useEffect(() => {
     if (!downloadJob?.jobId) return undefined
-
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const status = await fetchGameJobStatus(downloadJob.jobId)
-        if (cancelled) return
+    return watchGameJob({
+      jobId: downloadJob.jobId, fetchStatus: fetchGameJobStatus,
+      onStatus: status => {
         setDownloadJobStatus(status)
-
-        if (isTerminalJobStatus(status)) {
-          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
-          setDownloadResult(resultMessage || (status.progress?.phase === 'failed' ? 'Games download failed.' : 'Games download finished.'))
+        if (status.status === 'not_found') {
+          setDownloadResult('The server no longer has this job’s status. Check the player’s games before starting another download.')
           storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
           setDownloadJob(null)
+        } else if (isTerminalJobStatus(status)) {
+          const failed = status.progress?.phase === 'failed' || status.result?.success === false
+          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
+          setDownloadResult(resultMessage || (failed ? 'Games download failed.' : 'Games download finished.'))
+          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
+          setDownloadJob(null)
+        } else {
+          setDownloadResult(status.progress?.detail || `Download for ${downloadJob.playerName} is ${status.status}.`)
         }
-      } catch (error) {
-        if (cancelled) return
-        setDownloadJobStatus({ status: 'not_found', progress: { phase: 'failed', detail: error instanceof Error ? error.message : 'Unable to read job status.' } })
-        setDownloadResult(error instanceof Error ? error.message : 'Unable to read job status.')
-        storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
-        setDownloadJob(null)
-      }
-    }
-
-    poll()
-    const interval = window.setInterval(poll, 1500)
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-    }
+      },
+      onUnavailable: () => setDownloadResult('Status connection interrupted. The download may still be running; reconnecting automatically…'),
+    })
   }, [downloadJob?.jobId])
 
   useEffect(() => {
     if (!updateJob?.jobId) return undefined
-
-    let cancelled = false
-
-    const poll = async () => {
-      try {
-        const status = await fetchGameJobStatus(updateJob.jobId)
-        if (cancelled) return
+    return watchGameJob({
+      jobId: updateJob.jobId, fetchStatus: fetchGameJobStatus,
+      onStatus: status => {
         setUpdateJobStatus(status)
-
-        if (isTerminalJobStatus(status)) {
-          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
-          setUpdateResult(resultMessage || (status.progress?.phase === 'failed' ? 'Games update failed.' : 'Games update finished.'))
+        if (status.status === 'not_found') {
+          setUpdateResult('The server no longer has this job’s status. Check the player’s games before starting another update.')
           storeJob(UPDATE_JOB_STORAGE_KEY, null)
           setUpdateJob(null)
+        } else if (isTerminalJobStatus(status)) {
+          const failed = status.progress?.phase === 'failed' || status.result?.success === false
+          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
+          setUpdateResult(resultMessage || (failed ? 'Games update failed.' : 'Games update finished.'))
+          storeJob(UPDATE_JOB_STORAGE_KEY, null)
+          setUpdateJob(null)
+        } else {
+          setUpdateResult(status.progress?.detail || `Update for ${updateJob.playerName} is ${status.status}.`)
         }
-      } catch (error) {
-        if (cancelled) return
-        setUpdateJobStatus({ status: 'not_found', progress: { phase: 'failed', detail: error instanceof Error ? error.message : 'Unable to read job status.' } })
-        setUpdateResult(error instanceof Error ? error.message : 'Unable to read job status.')
-        storeJob(UPDATE_JOB_STORAGE_KEY, null)
-        setUpdateJob(null)
-      }
-    }
-
-    poll()
-    const interval = window.setInterval(poll, 1500)
-    return () => {
-      cancelled = true
-      window.clearInterval(interval)
-    }
+      },
+      onUnavailable: () => setUpdateResult('Status connection interrupted. The update may still be running; reconnecting automatically…'),
+    })
   }, [updateJob?.jobId])
 
   const handleDownload = async () => {
@@ -134,6 +163,7 @@ function DownloadNewGames() {
 
     setDownloadLoading(true)
     setDownloadResult('')
+    setDownloadJobStatus(null)
     try {
       const payload = await downloadPlayerGames(player)
       if (payload.job_id) {
@@ -189,6 +219,9 @@ function DownloadNewGames() {
             <h1 {...pageStyleTarget('heading')}>Add Games</h1>
           </section>
 
+          {recoveringJobs ? <p {...pageStyleTarget('text')} className="result-line" role="status">
+            {recoveryMessage || 'Checking for active downloads…'}
+          </p> : null}
           <section {...pageStyleTarget('panel')} className="games-actions" aria-label="Games actions">
             <article {...pageStyleTarget('card')} className="game-card">
               <h2 {...pageStyleTarget('title')}>Download Games of a Player</h2>

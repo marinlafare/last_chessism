@@ -25,6 +25,8 @@ def player_rows_sql(session, query, fields):
         'result': 'CASE WHEN gp.is_white THEN g.white_result ELSE g.black_result END',
         'end_by': 'CASE WHEN gp.is_white THEN g.white_str_result ELSE g.black_str_result END',
         'mode': 'm.name',
+        'eco': 'g.eco',
+        'opponent_name': 'opponent.player_name',
     }
     selected = tuple(dict.fromkeys(('player_name', *fields)))
     if set(selected) - expressions.keys():
@@ -34,6 +36,9 @@ def player_rows_sql(session, query, fields):
         joins += f" JOIN {layout.table('game')} g ON g.link=gp.game_link"
     if 'mode' in selected:
         joins += f" LEFT JOIN {layout.table('game_mode')} m ON m.id=g.mode_id"
+    if 'opponent_name' in selected:
+        joins += f""" LEFT JOIN {layout.table('player')} opponent
+            ON opponent.id=CASE WHEN gp.is_white THEN g.black_player_id ELSE g.white_player_id END"""
     projection = ','.join(expressions[field] + ' AS ' + field for field in selected)
     prefix = f"""WITH game_player AS NOT MATERIALIZED (
         SELECT {projection} FROM {layout.table('game_player')} gp {joins}

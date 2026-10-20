@@ -6,6 +6,11 @@ const RESPONSE_CACHE_LIMIT = 32
 
 const playerPath = (playerName) => encodeURIComponent(playerName)
 
+export function fetchPlayerGameCatalog({ playerName, kind, mode = 'all', color = 'all', page = 1, search = '', signal }) {
+  const params = new URLSearchParams({ kind, mode, color, page: String(page), limit: '10', search })
+  return requestJson(`/players/${playerPath(playerName)}/analysis/behavioural/catalog?${params}`, { signal })
+}
+
 export function fetchPlayerRatingDistribution({ playerName, mode = 'all', signal }) {
   // Server-side counts expire after 60s; do not put them in the timeless
   // per-tab analytics cache, which would hide newly ingested games.

@@ -5,6 +5,7 @@ import './player-hero-analytics.css'
 import PlayerBehaviouralPanel from './PlayerBehaviouralPanel'
 import PlayerMeasuresWorkspace from './PlayerMeasuresWorkspace'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
+import PlayerGameCatalog from './PlayerGameCatalog'
 import {
   fetchBehaviouralActivity,
   fetchBehaviouralRatings,
@@ -64,6 +65,12 @@ function BehaviouralContent({ playerName, disabled }) {
           ratings={ratings}
         />
       ) : null}
+      <PlayerAnalysisDisclosure label="Opponents" buttonTarget="player.opponents.toggle">
+        <PlayerGameCatalog key={`${playerName}:opponents`} playerName={playerName} kind="opponents" />
+      </PlayerAnalysisDisclosure>
+      <PlayerAnalysisDisclosure label="Opening repertoire" buttonTarget="player.openings.toggle">
+        <PlayerGameCatalog key={`${playerName}:openings`} playerName={playerName} kind="openings" />
+      </PlayerAnalysisDisclosure>
     </div>
   )
 }

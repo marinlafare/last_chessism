@@ -1,6 +1,7 @@
 import { getJson, postJson } from '../../services/apiClient'
 
-export const fetchGameJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
+export const fetchGameJobStatus = (jobId, options) => getJson(`/jobs/${encodeURIComponent(jobId)}`, options)
+export const fetchActiveGameJobs = (options) => getJson('/jobs/active', options)
 
 export const downloadPlayerGames = (playerName) => (
   postJson('/games', { player_name: playerName })

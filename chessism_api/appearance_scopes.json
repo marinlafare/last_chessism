@@ -401,6 +401,89 @@
           "editorParent": "player.days.row",
           "properties": ["background","color","fontSize","fontFamily","borderColor","radius"]
         },
+        "player.opponents.toggle": {
+          "label": "Behavioral analysis · Opponents button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.opponents.panel": {
+          "label": "Opponents · panel and result colors",
+          "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1","chartColor2","chartColor3"],
+          "propertyLabels": {"chartColor1":"Wins","chartColor2":"Draws","chartColor3":"Losses"}
+        },
+        "player.opponents.row": {
+          "label": "Opponents · rows",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
+        },
+        "player.opponents.text": {
+          "label": "Opponents · totals and page numbers",
+          "properties": ["color","fontSize","fontFamily"]
+        },
+        "player.opponents.filter": {
+          "label": "Opponents · game mode selector",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius","padding"]
+        },
+        "player.opponents.search": {
+          "label": "Opponents · search input",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.opponents.rank": {
+          "label": "Opponents · rank badge",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.opponents.games": {
+          "label": "Opponents · game-count badge",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.opponents.paging": {
+          "label": "Opponents · pagination and retry",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius","hoverBackground","hoverColor"]
+        },
+        "player.openings.toggle": {
+          "label": "Behavioral analysis · Opening repertoire button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.openings.panel": {
+          "label": "Opening repertoire · panel and result colors",
+          "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1","chartColor2","chartColor3"],
+          "propertyLabels": {"chartColor1":"Wins","chartColor2":"Draws","chartColor3":"Losses"}
+        },
+        "player.openings.row": {
+          "label": "Opening repertoire · rows",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
+        },
+        "player.openings.text": {
+          "label": "Opening repertoire · totals and page numbers",
+          "properties": ["color","fontSize","fontFamily"]
+        },
+        "player.openings.filter": {
+          "label": "Opening repertoire · game mode selector",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius","padding"]
+        },
+        "player.openings.search": {
+          "label": "Opening repertoire · search input",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.openings.rank": {
+          "label": "Opening repertoire · rank badge",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.openings.games": {
+          "label": "Opening repertoire · game-count badge",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
+        },
+        "player.openings.side": {
+          "label": "Opening repertoire · white/black buttons",
+          "pressedUsesHoverBackground": true,
+          "pressedUsesHoverColor": true,
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius","padding","hoverBackground","hoverColor"],
+          "propertyLabels": {"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}
+        },
+        "player.openings.paging": {
+          "label": "Opening repertoire · pagination and retry",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius","hoverBackground","hoverColor"]
+        },
         "player.activityHours.toggle": {
           "label": "Behavioral analysis · Hours button",
           "initialStyleFrom": "button",
