@@ -2,6 +2,24 @@
   "version": 1,
   "scope": "scored_positions",
   "properties": {
+    "modeActiveBackground": {
+      "label": "Active background",
+      "kind": "color",
+      "css": "--mode-active-background",
+      "default": "#155b3c"
+    },
+    "modeInactiveBackground": {
+      "label": "Inactive background",
+      "kind": "color",
+      "css": "--mode-inactive-background",
+      "default": "#0b1117"
+    },
+    "weekdayRowBackground": {
+      "label": "Day row background",
+      "kind": "color",
+      "css": "--weekday-row-background",
+      "default": "#0b1117"
+    },
     "background": {
       "label": "Background",
       "kind": "color",

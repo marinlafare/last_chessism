@@ -42,11 +42,8 @@ export default function DailySalienceRange({ range, scale, onChange }) {
   }
 
   return (
-    <div className="daily-salience-control" role="group" aria-labelledby={`${id}-label`}
-      aria-describedby={`${id}-help`}>
-      <strong {...pageStyleTarget('value')} id={`${id}-label`}>Relative salience</strong>
-      <small {...pageStyleTarget('text')}>Average per game</small>
-      <output className="daily-salience-values" aria-label="Selected salience range">{bounds[0]}–{bounds[1]}</output>
+    <div className="daily-salience-control" role="group" aria-labelledby={`${id}-label`}>
+      <strong {...pageStyleTarget('value')} id={`${id}-label`}>salience</strong>
       <div className="daily-salience-track" ref={track} data-disabled={disabled}
         onPointerDown={pointerDown} onPointerMove={pointerMove}
         onPointerUp={(event) => {
@@ -73,11 +70,6 @@ export default function DailySalienceRange({ range, scale, onChange }) {
             onKeyDown={(event) => keyDown(event, index)}><span aria-hidden="true" /></button>
         ))}
       </div>
-      <button {...pageStyleTarget('button')} className="daily-salience-reset" type="button"
-        disabled={disabled || (bounds[0] === 0 && bounds[1] === 100)} onClick={() => onChange([0, 100])}>Reset</button>
-      <small {...pageStyleTarget('text')} id={`${id}-help`}>{scale.minimum === null ? 'Salience unavailable.'
-        : disabled ? 'All days have the same average game salience.'
-          : `0 = ${scale.minimum.toPrecision(4)}; 100 = ${scale.maximum.toPrecision(4)} average game salience. All years, selected game types.`}</small>
     </div>
   )
 }

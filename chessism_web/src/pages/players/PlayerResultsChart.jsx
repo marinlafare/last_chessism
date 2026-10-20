@@ -28,7 +28,7 @@ export default function PlayerResultsChart({ totals, mode = 'all', onModeChange,
   const unclassified = Math.max(0, count(totals.games) - knownResults)
 
   return (
-    <div {...pageStyleTarget('chart.outcomes')} className="behavior-results-summary">
+    <div {...pageStyleTarget('chart.results')} className="behavior-results-summary">
       <div className="rating-distribution-heading">
         <span {...pageStyleTarget('label')} id={titleId}>Results</span>
         <select {...pageStyleTarget('field')} aria-label="Results game mode" value={mode} onChange={event => onModeChange?.(event.target.value)}>

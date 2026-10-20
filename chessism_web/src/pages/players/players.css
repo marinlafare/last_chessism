@@ -119,7 +119,8 @@
 }
 
 .players-title-menu button {
-  display: flex;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr) 28px;
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -131,10 +132,14 @@
   font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: 11px;
   font-weight: 400;
-  text-align: left;
+  text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
   cursor: pointer;
+}
+
+.players-title-menu-name {
+  text-align: center;
 }
 
 .players-title-menu-avatar {
@@ -366,6 +371,9 @@
   --chart-color-2: #21b787;
   --chart-color-3: #28463d;
   --chart-color-4: #21b787;
+  --pie-outline-color: var(--text);
+  --pie-outline-width: 1px;
+  --coverage-percentage-color: var(--text);
 }
 
 .player-coverage-pie {
@@ -392,16 +400,16 @@
   margin: 0 auto 8px;
 }
 
-.player-coverage-slice { stroke: var(--text); stroke-width: 1; outline: none; }
+.player-coverage-slice { stroke: var(--pie-outline-color, var(--text)); stroke-width: var(--pie-outline-width, 1px); outline: none; }
 .player-coverage-slice.scored { fill: var(--coverage-scored); }
 .player-coverage-slice.unscored { fill: var(--coverage-unscored); }
 .player-coverage-slice:hover,
-.player-coverage-slice:focus-visible { filter: brightness(1.18); stroke-width: 3; }
-.player-coverage-empty { fill: var(--surface-2); stroke: var(--border); }
+.player-coverage-slice:focus-visible { filter: brightness(1.18); }
+.player-coverage-empty { fill: var(--surface-2); stroke: var(--pie-outline-color, var(--border)); stroke-width: var(--pie-outline-width, 1px); }
 .player-coverage-pie figcaption { color: var(--text); font-weight: 700; }
 .player-coverage-pie small { color: var(--muted); }
 .player-coverage-percent {
-  fill: var(--text);
+  fill: var(--coverage-percentage-color, var(--text));
   font-size: 25px;
   font-weight: 700;
   paint-order: stroke;
@@ -413,7 +421,7 @@
 .player-coverage-tooltip {
   position: fixed;
   z-index: 80;
-  width: 244px;
+  width: max-content;
   max-width: calc(100vw - 16px);
   padding: 8px 10px;
   border: 1px solid var(--border);
@@ -422,7 +430,7 @@
   color: var(--text);
   font-size: 12px;
   line-height: 1.5;
-  white-space: pre-line;
+  white-space: nowrap;
   pointer-events: none;
 }
 
@@ -535,6 +543,12 @@
   overflow: hidden;
   margin-top: 4px;
   text-overflow: ellipsis;
+}
+
+.players-profile-metadata .profile-item > [data-style-id="player.metadata.label"],
+.players-profile-metadata .profile-item > [data-style-id="player.metadata.value"] {
+  min-width: 0;
+  width: 100%;
 }
 
 .players-profile-dates {

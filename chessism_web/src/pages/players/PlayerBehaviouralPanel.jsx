@@ -1,5 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerModeToggles, {
   PLAYER_ANALYSIS_MODES,
@@ -250,6 +250,7 @@ function WeekdayStartChart({
         <PlayerModeToggles
           activeModes={visibleModes}
           availableModes={availableModes}
+          styleId="player.days.modes"
           label="Game types shown in Days"
           onToggle={onToggleMode}
         />
@@ -262,13 +263,15 @@ function WeekdayStartChart({
               const binsAreInteractive = interactiveWeekdays.has(weekday.weekday)
               const cells = cellsByWeekday.get(weekday.weekday) || []
               const cellMap = new Map(cells.map((cell) => [numeric(cell.hour), cell]))
+              const counts = Array.from({ length: 24 }, (_, hour) => numeric(cellMap.get(hour)?.games))
+              const leastGames = Math.min(...counts), mostGames = Math.max(...counts)
               const noteId = `weekday-usage-note-${weekday.weekday}`
               return (
-                <div className={`behavior-weekday-row ${isExpanded ? 'expanded' : ''}`} key={weekday.weekday}>
+                <div {...pageStyleTarget('player.days.row')} className={`behavior-weekday-row ${isExpanded ? 'expanded' : ''}`} key={weekday.weekday}>
                   <div
                     className="behavior-weekday-summary"
                   >
-                    <button {...pageStyleTarget('button')}
+                    <button {...pageStyleTarget('player.days.label')}
                       className="behavior-weekday-badge"
                       type="button"
                       aria-expanded={isExpanded}
@@ -286,8 +289,11 @@ function WeekdayStartChart({
                       <span className="behavior-weekday-hours" aria-hidden={!isExpanded}>
                         {Array.from({ length: 24 }, (_, hour) => {
                           const cell = cellMap.get(hour) || {}
+                          const alpha = mostGames > leastGames
+                            ? 0.1 + 0.9 * (counts[hour] - leastGames) / (mostGames - leastGames)
+                            : mostGames > 0 ? 1 : 0.1
                           return (
-                            <button {...pageStyleTarget('button')}
+                            <button
                               className="behavior-weekday-hour"
                               type="button"
                               disabled={!isExpanded || !binsAreInteractive || !selectedModes.length}
@@ -303,12 +309,12 @@ function WeekdayStartChart({
                                 analyzed_only: false,
                               })}
                             >
-                              <i style={{ backgroundColor: scoreColor(cell) }} />
+                              <i style={{ backgroundColor: scoreColor(cell), opacity: alpha }} />
                             </button>
                           )
                         })}
                       </span>
-                      <button {...pageStyleTarget('button')}
+                      <button
                         className="behavior-weekday-curtain"
                         type="button"
                         disabled={isExpanded || !selectedModes.length}
@@ -357,7 +363,6 @@ export default function PlayerBehaviouralPanel({
   const [hoveredRatingYear, setHoveredRatingYear] = useState(null)
   const [focusedRatingYear, setFocusedRatingYear] = useState(null)
   const allRatingYearsButton = useRef(null)
-  const ratingYearHintId = useId()
   const [explorerSelection, setExplorerSelection] = useState(null)
   const [reviewGameId, setReviewGameId] = useState(null)
   const hourActivity = useMemo(
@@ -491,7 +496,6 @@ export default function PlayerBehaviouralPanel({
                 viewBox={`0 0 ${WIDTH} ${RATING_SVG_HEIGHT}`}
                 role="group"
                 aria-label={`Daily last ratings for the selected game types — ${selectedRatingYear === 'all' ? 'all years' : selectedRatingYear}`}
-                aria-describedby={ratingYearHintId}
                 onPointerMove={hoverRatingYear}
                 onPointerLeave={() => setHoveredRatingYear(null)}
               >
@@ -536,9 +540,6 @@ export default function PlayerBehaviouralPanel({
                   x={(highlightedRatingBand.left + highlightedRatingBand.right) / 2}
                   y={RATING_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedRatingBand.year}</text> : null}
               </svg>
-              <p {...pageStyleTarget('text')} className="daily-year-hint" id={ratingYearHintId}>{selectedRatingYear === 'all'
-                ? 'Hover over a year and click to zoom in.'
-                : `Showing ${selectedRatingYear}. Choose All to restore the timeline.`}</p>
             </section>
           </div>
         </div>
@@ -559,6 +560,7 @@ export default function PlayerBehaviouralPanel({
                 <PlayerModeToggles
                   activeModes={visibleHourModes}
                   availableModes={availableActivityModes}
+                  styleId="player.hours.modes"
                   label="Game types shown in Hours"
                   onToggle={(mode) => toggleMode(setVisibleHourModes, mode)}
                 />

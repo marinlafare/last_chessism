@@ -4,7 +4,8 @@
 .appearance-account-controls button[aria-pressed="true"] { border-color:#15c780; }
 .appearance-account-error { color:#ffb3aa; font-size:12px; max-width:360px; }
 .appearance-editing-hint { flex-basis:100%; color:#b3c0cb; font:11px Inter,system-ui; }
-.appearance-editor { position:fixed; z-index:500; box-sizing:border-box; display:flex; flex-direction:column; color:#edf3f8; background:#121920; border:1px solid #728291; border-radius:8px; box-shadow:0 10px 40px #0009; font:13px Inter,system-ui; }
+/* Portaled tools must stay above game dialogs (1200) and loading overlays (1300). */
+.appearance-editor { position:fixed; z-index:2000; box-sizing:border-box; display:flex; flex-direction:column; color:#edf3f8; background:#121920; border:1px solid #728291; border-radius:8px; box-shadow:0 10px 40px #0009; font:13px Inter,system-ui; }
 .appearance-editor header { display:flex; flex-shrink:0; gap:4px; align-items:center; padding:8px; background:#23313c; border-radius:7px 7px 0 0; cursor:move; touch-action:none; }
 .appearance-editor header strong { flex:1; min-width:0; overflow-wrap:anywhere; }
 .appearance-editor button,.appearance-editor select,.appearance-editor input { font:inherit; color:#edf3f8; background:#080808; border:1px solid #61707d; border-radius:4px; padding:4px; max-width:100%; }
@@ -33,4 +34,4 @@
 .appearance-editor .appearance-restore-property { width:28px; height:28px; flex-shrink:0; padding:0; font-size:20px; line-height:1; }
 .appearance-property>label:first-child { width:100%; }
 .appearance-opacity { display:flex; flex-direction:column; flex:1; min-width:110px; font-size:11px; }
-.appearance-inspector-outline { position:fixed; z-index:490; pointer-events:none; outline:2px dashed #f1c644; outline-offset:2px; }
+.appearance-inspector-outline { position:fixed; z-index:1990; pointer-events:none; outline:2px dashed #f1c644; outline-offset:2px; }

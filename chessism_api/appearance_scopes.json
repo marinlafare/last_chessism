@@ -169,6 +169,16 @@
         "padding"
       ]
     },
+    "gameReview.fullscreen": {
+      "label": "Game viewer · fullscreen button",
+      "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","hoverBackground","hoverColor"],
+      "propertyLabels": {"color":"Icon color","fontSize":"Icon size","hoverColor":"Hover icon color"}
+    },
+    "gameReview.close": {
+      "label": "Game viewer · close button",
+      "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"],
+      "propertyLabels": {"color":"Icon color","fontSize":"Icon size","hoverColor":"Hover icon color"}
+    },
     "popup": {
       "label": "Dialogs on this page",
       "properties": [
@@ -243,6 +253,43 @@
           "initialStyleFrom": "value",
           "properties": ["color","fontSize","fontFamily","textAlign"]
         },
+        "gameExplorer.panel": {
+          "label": "Game list · popup",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "gameExplorer.header": {
+          "label": "Game list · header background",
+          "properties": ["background","borderColor","borderWidth","padding"]
+        },
+        "gameExplorer.title": {
+          "label": "Game list · title",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "gameExplorer.text": {
+          "label": "Game list · descriptions",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "gameExplorer.value": {
+          "label": "Game list · summary values",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "gameExplorer.row": {
+          "label": "Game list · game buttons and text",
+          "properties": ["color","fontSize","fontFamily","textAlign","hoverColor","background","hoverBackground","borderColor","borderWidth","radius","padding"]
+        },
+        "gameExplorer.dateBadge": {
+          "label": "Game list · date and time badges",
+          "editorParent": "gameExplorer.row",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "gameExplorer.close": {
+          "label": "Game list · close button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "gameExplorer.more": {
+          "label": "Game list · load more button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
         "summary.games.previous": {
           "label": "Games chart · previous arrow",
           "initialStyleFrom": "button",
@@ -300,6 +347,60 @@
           "initialStyleFrom": "button",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
         },
+        "player.rating.modes": {
+          "label": "Rating · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.hours.modes": {
+          "label": "Hours · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.days.modes": {
+          "label": "Days · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.accuracy.modes": {
+          "label": "Accuracy · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.scores.modes": {
+          "label": "Score distribution · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.scores.chart": {
+          "label": "Score distribution · chart",
+          "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1","chartColor2","chartColor3"],
+          "propertyLabels": {"chartColor1":"Positive scores","chartColor2":"Negative scores","chartColor3":"Balanced scores"}
+        },
+        "player.scores.action": {
+          "label": "Score distribution · retry button",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "scorePositions.panel": {
+          "label": "Score positions · popup",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "scorePositions.row": {
+          "label": "Score positions · rows",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "scorePositions.close": {
+          "label": "Score positions · close button",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "scorePositions.paging": {
+          "label": "Score positions · pagination buttons",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "player.days.row": {
+          "label": "Days · row background",
+          "properties": ["weekdayRowBackground","borderColor","borderWidth","radius"]
+        },
+        "player.days.label": {
+          "label": "Days · weekday labels",
+          "editorParent": "player.days.row",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","radius"]
+        },
         "player.activityHours.toggle": {
           "label": "Behavioral analysis · Hours button",
           "initialStyleFrom": "button",
@@ -312,6 +413,11 @@
         },
         "player.accuracy.toggle": {
           "label": "Stockfish analysis · Accuracy button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.scores.toggle": {
+          "label": "Stockfish analysis · Score distribution button",
           "initialStyleFrom": "button",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
         },
@@ -344,6 +450,57 @@
             "radius",
             "padding"
           ]
+        },
+        "player.metadata.text": {
+          "label": "Hero · profile cards text (shared)",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.label": {
+          "label": "Hero · profile card titles (shared)",
+          "initialStyleFrom": "player.metadata.text",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.value": {
+          "label": "Hero · profile card data (shared)",
+          "initialStyleFrom": "player.metadata.text",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.followers.text": {
+          "label": "Hero · followers text",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.followers.label": {
+          "label": "Hero · FOLLOWERS label",
+          "initialStyleFrom": "player.followers.text",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.followers.value": {
+          "label": "Hero · followers number",
+          "initialStyleFrom": "player.followers.text",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "chart.coverage": {
+          "label": "Player coverage colors and rim",
+          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "coveragePercentageColor", "stroke", "strokeWidth"],
+          "propertyLabels": {
+            "chartColor1": "Games",
+            "chartColor2": "Scored games",
+            "chartColor3": "Positions",
+            "chartColor4": "Scored positions",
+            "stroke": "Rim color",
+            "strokeWidth": "Rim width"
+          }
+        },
+        "chart.results": {
+          "label": "Results chart",
+          "initialStyleFrom": "chart.outcomes",
+          "properties": ["background", "chartColor1", "chartColor2", "chartColor3"],
+          "propertyLabels": {"chartColor1": "Wins", "chartColor2": "Draws", "chartColor3": "Losses"}
+        },
+        "chart.bars": {
+          "label": "Rating distribution chart",
+          "properties": ["background", "chartColor1"],
+          "propertyLabels": {"chartColor1": "Bars"}
         },
         "player.behavior": {
           "label": "Behavioral map",

@@ -1,4 +1,5 @@
 import { postJson, requestJson } from '../../services/apiClient'
+import { pollScoreDistribution } from './scoreDistributionRequest.js'
 
 const responseCache = new Map()
 const RESPONSE_CACHE_LIMIT = 32
@@ -9,6 +10,16 @@ export function fetchPlayerRatingDistribution({ playerName, mode = 'all', signal
   // Server-side counts expire after 60s; do not put them in the timeless
   // per-tab analytics cache, which would hide newly ingested games.
   return requestJson(`/players/${playerPath(playerName)}/ppd?${new URLSearchParams({ mode })}`, { signal })
+}
+
+export function fetchPlayerScoreDistribution({ playerName, signal, refresh = false, onProgress }) {
+  return pollScoreDistribution(
+    () => requestJson(`/players/${playerPath(playerName)}/analysis/measures/score-distribution${refresh ? '?refresh=true' : ''}`, { signal }),
+    { signal, onProgress })
+}
+
+export function fetchPlayerScorePositions({ playerName, selection, signal }) {
+  return postJson(`/players/${playerPath(playerName)}/analysis/measures/score-distribution/positions`, selection, { signal })
 }
 
 function analyticsSearch({ mode = 'all', dateFrom, dateTo, timezone, cursor, limitGames } = {}) {

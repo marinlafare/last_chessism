@@ -4,7 +4,8 @@
 [data-style-id="chart.pending"],[data-style-id="chart.appearances"] { --chart-color-1:var(--accent, #15c780); }
 [data-style-id="chart.coverage"] { --chart-color-1:var(--info, #5cb1ff); --chart-color-2:#9270c7; --chart-color-3:var(--accent-2, #d3b66d); --chart-color-4:var(--accent, #15c780); }
 [data-style-id="chart.accuracy"] { --chart-color-1:#15c780; --chart-color-2:#4ea3c7; --chart-color-3:#c9a84c; --chart-color-4:#d55c5c; }
-[data-style-id="chart.outcomes"] { --chart-color-1:#15c780; --chart-color-2:#8d6bb4; --chart-color-3:#d55c5c; }
+[data-style-id="chart.outcomes"],
+[data-style-id="chart.results"] { --chart-color-1:#15c780; --chart-color-2:#8d6bb4; --chart-color-3:#d55c5c; }
 [data-style-id="chart.measures"] { --chart-color-1:#15c780; --chart-color-2:#d55c5c; }
 [data-style-id="chart.coefficients"] { --chart-color-1:var(--info, #5cb1ff); --chart-color-2:var(--accent, #15c780); --chart-color-3:var(--accent-2, #d3b66d); }
 [data-style-id="chart.research"] { --chart-color-1:#59b6e5; }
@@ -24,9 +25,12 @@
 [data-style-id="chart.accuracy"] .measure-daily-efficiency-point.strong { fill:var(--chart-color-2); }
 [data-style-id="chart.accuracy"] .measure-daily-efficiency-point.mixed { fill:var(--chart-color-3); }
 [data-style-id="chart.accuracy"] .measure-daily-efficiency-point.poor { fill:var(--chart-color-4); }
-[data-style-id="chart.outcomes"] .behavior-bar-win { fill:var(--chart-color-1); }
-[data-style-id="chart.outcomes"] .behavior-bar-draw { fill:var(--chart-color-2); }
-[data-style-id="chart.outcomes"] .behavior-bar-loss { fill:var(--chart-color-3); }
+[data-style-id="chart.outcomes"] .behavior-bar-win,
+[data-style-id="chart.results"] .behavior-bar-win { fill:var(--chart-color-1); }
+[data-style-id="chart.outcomes"] .behavior-bar-draw,
+[data-style-id="chart.results"] .behavior-bar-draw { fill:var(--chart-color-2); }
+[data-style-id="chart.outcomes"] .behavior-bar-loss,
+[data-style-id="chart.results"] .behavior-bar-loss { fill:var(--chart-color-3); }
 [data-style-id="chart.outcomes"] .wins { background:var(--chart-color-1); }
 [data-style-id="chart.outcomes"] .draws { background:var(--chart-color-2); }
 [data-style-id="chart.outcomes"] .losses { background:var(--chart-color-3); }

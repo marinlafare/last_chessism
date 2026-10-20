@@ -1,6 +1,7 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import PlayerMeasuresPanel from './PlayerMeasuresPanel'
+import PlayerScoreDistribution from './PlayerScoreDistribution'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import { fetchQualityCalendar } from './playerAnalysisApi'
 import './player-measures.css'
@@ -48,6 +49,7 @@ function MeasuresContent({ playerName, disabled }) {
 
   return (
     <div className="player-analysis-chart-list">
+      <PlayerScoreDistribution key={playerName} playerName={playerName} />
       {qualityError ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{qualityError}</p> : null}
       {qualityLoading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating engine measures…</div> : null}
       {!qualityLoading && !qualityError && quality ? (

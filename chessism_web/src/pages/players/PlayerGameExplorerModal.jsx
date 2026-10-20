@@ -1,10 +1,11 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { formatNumber } from '../../utils/formatters'
 import { explorePlayerGames } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 
 const emptyRequest = { data: null, error: '', loading: false }
+const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function resultLabel(value) {
   if (value === 'win') return 'W'
@@ -25,16 +26,28 @@ function selectionTitle(selection) {
   return `${selection.label} games`
 }
 
-function localDateTime(value) {
-  if (!value) return 'Unknown date'
-  return String(value).replace('T', ' ').slice(0, 16)
+function GameListDate({ value }) {
+  // Keep the API's local clock; parsing as a Date would apply another timezone.
+  const parts = String(value || '').match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}:\d{2})/)
+  const month = parts && monthNames[Number(parts[2]) - 1]
+  if (!month) return <span className="game-list-date"><span {...pageStyleTarget('gameExplorer.dateBadge')} className="game-list-date-badge">Unknown date</span></span>
+  return <time className="game-list-date" dateTime={value}>
+    <span {...pageStyleTarget('gameExplorer.dateBadge')} className="game-list-date-badge game-list-date-year">{parts[1]}</span>{' '}
+    <span {...pageStyleTarget('gameExplorer.dateBadge')} className="game-list-date-badge game-list-date-month">{month} {parts[3]}</span>{' '}
+    <span {...pageStyleTarget('gameExplorer.dateBadge')} className="game-list-date-badge game-list-date-time">{parts[4]}</span>
+  </time>
 }
 
 export default function PlayerGameExplorerModal({ playerName, selection, onClose, onOpenGame }) {
   const [request, setRequest] = useState(emptyRequest)
   const paginationController = useRef(null)
+  const dataSource = useRef(null)
+  const listRef = useRef(null)
+  const paginationSentinel = useRef(null)
+  const pagination = request.data?.pagination
 
   useEffect(() => {
+    dataSource.current = null
     if (!selection || !playerName) return undefined
     const controller = new AbortController()
     setRequest({ data: null, error: '', loading: true })
@@ -44,7 +57,10 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
       signal: controller.signal,
     })
       .then((data) => {
-        if (!controller.signal.aborted) setRequest({ data, error: '', loading: false })
+        if (!controller.signal.aborted) {
+          dataSource.current = { playerName, selection }
+          setRequest({ data, error: '', loading: false })
+        }
       })
       .catch((error) => {
         if (!controller.signal.aborted && error.name !== 'AbortError') {
@@ -54,6 +70,8 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     return () => {
       controller.abort()
       paginationController.current?.abort()
+      paginationController.current = null
+      dataSource.current = null
     }
   }, [playerName, selection])
 
@@ -62,6 +80,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const closeWithEscape = (event) => {
+      if (event.target?.closest?.('[data-appearance-tools]')) return
       if (event.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', closeWithEscape)
@@ -71,11 +90,12 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     }
   }, [onClose, selection])
 
-  if (!selection) return null
-
-  const loadMore = async () => {
-    const cursor = request.data?.pagination?.next_cursor
-    if (!cursor || request.loading) return
+  const loadMore = useCallback(async () => {
+    const cursor = pagination?.next_cursor
+    // The ref locks immediately, before React renders the loading state.
+    // Never reuse the previous player's/filter's cursor during a fresh request.
+    if (!cursor || !pagination.has_more || request.loading || paginationController.current
+      || dataSource.current?.playerName !== playerName || dataSource.current?.selection !== selection) return
     const controller = new AbortController()
     paginationController.current = controller
     setRequest((current) => ({ ...current, error: '', loading: true }))
@@ -96,10 +116,29 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
       }))
     } catch (error) {
       if (!controller.signal.aborted && error.name !== 'AbortError') {
-        setRequest((current) => ({ ...current, error: error.message, loading: false }))
+        setRequest((current) => ({ ...current, error: error.message || 'Unable to load more games.', loading: false }))
       }
+    } finally {
+      if (paginationController.current === controller) paginationController.current = null
     }
-  }
+  }, [pagination, playerName, request.loading, selection])
+
+  useEffect(() => {
+    const list = listRef.current
+    const sentinel = paginationSentinel.current
+    if (!list || !sentinel || !pagination?.has_more || request.loading || request.error) return undefined
+    let active = true
+    const observer = new IntersectionObserver((entries) => {
+      if (active && entries.some((entry) => entry.isIntersecting)) loadMore()
+    }, { root: list, rootMargin: '0px 0px 120px 0px' })
+    observer.observe(sentinel)
+    return () => {
+      active = false
+      observer.disconnect()
+    }
+  }, [loadMore, pagination?.has_more, request.error, request.loading])
+
+  if (!selection) return null
 
   const summary = request.data?.summary
   const games = request.data?.games || []
@@ -107,59 +146,63 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const chartSelection = selection.scope === 'rating' || selection.scope === 'result'
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
-      <section {...pageStyleTarget('panel')}
+      <section {...pageStyleTarget('gameExplorer.panel')}
         className="game-explorer-modal"
         role="dialog"
         aria-modal="true"
         aria-label={selectionTitle(selection)}
         onMouseDown={(event) => event.stopPropagation()}
       >
-        <header className="game-modal-header">
+        <header {...pageStyleTarget('gameExplorer.header')} className="game-modal-header">
           <div>
-            <p {...pageStyleTarget('text')} className="eyebrow">GAME EXPLORER</p>
-            <h2 {...pageStyleTarget('title')}>{selectionTitle(selection)}</h2>
-            <small {...pageStyleTarget('text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all games in this bin'}</small>
+            <p {...pageStyleTarget('gameExplorer.text')} className="eyebrow">GAME EXPLORER</p>
+            <h2 {...pageStyleTarget('gameExplorer.title')}>{selectionTitle(selection)}</h2>
+            <small {...pageStyleTarget('gameExplorer.text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all games in this bin'}</small>
           </div>
-          <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
+          <button {...pageStyleTarget('gameExplorer.close')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
         </header>
 
         {summary ? (
           <div className="game-explorer-summary">
-            <div><span>Games</span><strong {...pageStyleTarget('value')}>{formatNumber(summary.games)}</strong></div>
-            <div><span>Analyzed</span><strong {...pageStyleTarget('value')}>{formatNumber(summary.analyzed_games)}</strong></div>
-            <div><span>Accuracy</span><strong {...pageStyleTarget('value')}>{summary.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
-            <div><span>Results</span><strong {...pageStyleTarget('value')}>{summary.wins}W · {summary.draws}D · {summary.losses}L</strong></div>
+            <div><span {...pageStyleTarget('gameExplorer.text')}>Games</span><strong {...pageStyleTarget('gameExplorer.value')}>{formatNumber(summary.games)}</strong></div>
+            <div><span {...pageStyleTarget('gameExplorer.text')}>Analyzed</span><strong {...pageStyleTarget('gameExplorer.value')}>{formatNumber(summary.analyzed_games)}</strong></div>
+            <div><span {...pageStyleTarget('gameExplorer.text')}>Accuracy</span><strong {...pageStyleTarget('gameExplorer.value')}>{summary.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
+            <div><span {...pageStyleTarget('gameExplorer.text')}>Results</span><strong {...pageStyleTarget('gameExplorer.value')}>{summary.wins}W · {summary.draws}D · {summary.losses}L</strong></div>
           </div>
         ) : null}
 
-        {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
-        {!games.length && request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading games…</p> : null}
-        {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('text')} className="game-modal-message">{analyzedOnly ? 'No analyzed games are in this bin.' : 'No games are in this bin.'}</p> : null}
+        {request.error && !games.length ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {!games.length && request.loading ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message">Loading games…</p> : null}
+        {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message">{analyzedOnly ? 'No analyzed games are in this bin.' : 'No games are in this bin.'}</p> : null}
 
         {games.length ? (
-          <div className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}>
+          <div ref={listRef} className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}>
             {games.map((game) => (
-              <button {...pageStyleTarget('button')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}>
+              <button {...pageStyleTarget('gameExplorer.row')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}>
                 <span className={`game-result-mark ${game.result}`}>{resultLabel(game.result)}</span>
+                <GameListDate value={game.played_at_local || game.played_at_utc} />
                 <span className="game-list-opponent">
-                  <strong {...pageStyleTarget('value')}>vs {game.opponent_name}</strong>
-                  <small {...pageStyleTarget('text')}>{localDateTime(game.played_at_local || game.played_at_utc)} · {game.mode} · {game.player_color}</small>
+                  <strong>{game.opponent_name}</strong>
                 </span>
                 {!chartSelection ? <>
-                  <span><small {...pageStyleTarget('text')}>Accuracy</small><strong {...pageStyleTarget('value')}>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
-                  <span><small {...pageStyleTarget('text')}>Blunders</small><strong {...pageStyleTarget('value')}>{game.blunder_count ?? 'N/A'}</strong></span>
+                  <span className="game-list-stat"><small>Accuracy</small><strong>{game.accuracy?.toFixed(2) ?? 'N/A'}</strong></span>
+                  <span className="game-list-stat"><small>Blunders</small><strong>{game.blunder_count ?? 'N/A'}</strong></span>
                 </> : null}
-                <span><small {...pageStyleTarget('text')}>Rating</small><strong {...pageStyleTarget('value')}>{game.player_rating ?? 'N/A'}</strong></span>
-                <span className="game-list-open">open →</span>
+                <span className="game-list-rating" aria-label={`Rating: ${game.player_rating ?? 'unknown'}`}><strong>{game.player_rating ?? 'N/A'}</strong></span>
+                <span className={`game-list-color ${game.player_color}`} role="img"
+                  aria-label={`Player color: ${game.player_color || 'unknown'}`}
+                  title={`Player color: ${game.player_color || 'unknown'}`} />
               </button>
             ))}
+            <div ref={paginationSentinel} className="game-explorer-pagination">
+              {request.error ? <>
+                <p {...pageStyleTarget('gameExplorer.text')} role="alert">{request.error}</p>
+                <button {...pageStyleTarget('gameExplorer.more')} className="game-explorer-retry" type="button" onClick={loadMore}>Retry</button>
+              </> : <span {...pageStyleTarget('gameExplorer.text')} role="status">
+                {request.loading ? 'Loading more games…' : !pagination?.has_more ? 'All matching games loaded.' : ''}
+              </span>}
+            </div>
           </div>
-        ) : null}
-
-        {request.data?.pagination?.has_more ? (
-          <button {...pageStyleTarget('button')} className="game-explorer-more" type="button" disabled={request.loading} onClick={loadMore}>
-            {request.loading ? 'Loading…' : 'Load more'}
-          </button>
         ) : null}
       </section>
     </div>,

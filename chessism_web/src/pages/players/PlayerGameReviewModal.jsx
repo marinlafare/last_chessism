@@ -1,9 +1,31 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Chessboard } from 'react-chessboard'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
+
+const endingLabels = {
+  checkmated: 'checkmate',
+  resigned: 'resignation',
+  abandoned: 'abandonment',
+  agreed: 'agreement',
+  insufficient: 'insufficient material',
+  timevsinsufficient: 'timeout vs insufficient material',
+  '50move': 'fifty move rule',
+}
+
+function recordedOutcome(game, playerColor) {
+  const recorded = game?.result
+  const value = recorded?.[playerColor]
+  const result = value === 1 ? 'win' : value === 0.5 ? 'draw' : value === 0 ? 'loss' : null
+  // A winner's own reason is only "win"; the losing side records how it ended.
+  const reasonColor = value === 1 ? (playerColor === 'white' ? 'black' : 'white') : playerColor
+  const reason = String(recorded?.[`${reasonColor}_reason`] ?? '').trim().toLowerCase()
+  const endBy = ['', 'none', 'null', 'unknown', 'win'].includes(reason)
+    ? null : endingLabels[reason] || reason.replaceAll('_', ' ')
+  return { result, endBy }
+}
 
 function formatClock(seconds) {
   if (seconds === null || seconds === undefined || !Number.isFinite(Number(seconds))) return '—'
@@ -19,25 +41,25 @@ function evaluationLabel(evaluation, orientation = 'white') {
   return `${score >= 0 ? '+' : ''}${(score / 100).toFixed(2)}`
 }
 
-function useBoardWidth(containerRef, maximized) {
-  const [width, setWidth] = useState(420)
-  useEffect(() => {
+function useBoardWidth(containerRef, active, maximized) {
+  const [width, setWidth] = useState(0)
+  useLayoutEffect(() => {
     const element = containerRef.current
-    if (!element) return undefined
+    if (!active || !element) return undefined
     const update = () => {
-      const modalHeight = maximized ? window.innerHeight : window.innerHeight * 0.94
-      const availableHeight = modalHeight - 190
-      setWidth(Math.max(280, Math.min(680, Math.floor(element.clientWidth), availableHeight)))
+      const style = getComputedStyle(element)
+      const evaluationWidth = parseFloat(style.getPropertyValue('--game-review-eval-width')) || 24
+      const gap = parseFloat(style.columnGap) || 0
+      // Measure the reserved board area, not the window or the board itself.
+      // The player labels are outside this area and must never be covered.
+      const availableWidth = element.clientWidth - evaluationWidth - gap
+      setWidth(Math.max(0, Math.floor(Math.min(680, availableWidth, element.clientHeight))))
     }
     update()
     const observer = new ResizeObserver(update)
     observer.observe(element)
-    window.addEventListener('resize', update)
-    return () => {
-      observer.disconnect()
-      window.removeEventListener('resize', update)
-    }
-  }, [containerRef, maximized])
+    return () => observer.disconnect()
+  }, [containerRef, active, maximized])
   return width
 }
 
@@ -45,8 +67,14 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const [request, setRequest] = useState({ data: null, error: '', loading: false })
   const [positionIndex, setPositionIndex] = useState(0)
   const [maximized, setMaximized] = useState(false)
-  const boardRef = useRef(null)
-  const boardWidth = useBoardWidth(boardRef, maximized)
+  const boardStageRef = useRef(null)
+  const boardVisible = Boolean(gameId && request.data?.game && !request.loading)
+  const boardWidth = useBoardWidth(boardStageRef, boardVisible, maximized)
+  const closeViewer = onBack || onClose
+
+  useLayoutEffect(() => {
+    setMaximized(false)
+  }, [gameId])
 
   useEffect(() => {
     if (!gameId) return undefined
@@ -76,8 +104,8 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
       (summary) => summary.player_name.toLowerCase() === String(playerName).toLowerCase()
     )
   ), [playerName, request.data])
-  const orientation = playerSummary?.player_color
-    || (game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white')
+  const orientation = game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white'
+  const outcome = recordedOutcome(game, orientation)
   const currentMove = positionIndex > 0 ? moves[positionIndex - 1] : null
   const currentFen = currentMove?.fen_after || game?.initial_fen
   const evaluation = currentMove?.evaluation_after || {
@@ -90,7 +118,8 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
     const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     const handleKey = (event) => {
-      if (event.key === 'Escape') onClose()
+      if (event.target?.closest?.('[data-appearance-tools]')) return
+      if (event.key === 'Escape') closeViewer()
       if (event.key === 'ArrowLeft') setPositionIndex((value) => Math.max(0, value - 1))
       if (event.key === 'ArrowRight') setPositionIndex((value) => Math.min(moves.length, value + 1))
     }
@@ -99,22 +128,27 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', handleKey)
     }
-  }, [gameId, moves.length, onClose])
+  }, [gameId, moves.length, closeViewer])
 
   if (!gameId) return null
 
   return createPortal(
-    <div className="game-review-backdrop" role="presentation">
+    <div className={`game-review-backdrop${maximized ? ' maximized' : ''}`} role="presentation">
       <section {...pageStyleTarget('panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
         <header className="game-modal-header game-review-header">
-          <button {...pageStyleTarget('button')} className="game-review-back" type="button" onClick={onBack}>← games</button>
-          <div>
+          <div className="game-review-heading">
             <p {...pageStyleTarget('text')} className="eyebrow">GAME REVIEW</p>
             <h2 {...pageStyleTarget('title')}>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
           </div>
           <div className="game-review-window-actions">
-            <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label={maximized ? 'Restore viewer' : 'Maximize viewer'} onClick={() => setMaximized((value) => !value)}>{maximized ? '↙' : '↗'}</button>
-            <button {...pageStyleTarget('button')} className="game-modal-icon" type="button" aria-label="Close game viewer" onClick={onClose}>×</button>
+            <button {...pageStyleTarget('gameReview.fullscreen')} className="game-modal-icon" type="button"
+              aria-label={maximized ? 'Exit fullscreen' : 'Fullscreen'} title={maximized ? 'Exit fullscreen' : 'Fullscreen'}
+              aria-pressed={maximized} onClick={() => setMaximized((value) => !value)}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d={maximized ? 'M3 8h5V3m8 0v5h5M8 21v-5H3m13 5v-5h5' : 'M8 3H3v5m13-5h5v5M3 16v5h5m13-5v5h-5'} />
+              </svg>
+            </button>
+            <button {...pageStyleTarget('gameReview.close')} className="game-modal-icon" type="button" aria-label="Close game viewer" title="Close game viewer" onClick={closeViewer}>×</button>
           </div>
         </header>
 
@@ -124,44 +158,38 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
         {game && !request.loading ? (
           <div className="game-review-body">
             <div className="game-review-board-column">
-              <div className="game-review-names">
-                <span>{orientation === 'white' ? game.black.name : game.white.name}</span>
+              <div className="game-review-names game-review-opponent-rating">
                 <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.black.rating : game.white.rating}</strong>
               </div>
-              <div className="game-review-stage">
+              <div className="game-review-stage" ref={boardStageRef} style={{ '--game-review-board-size': `${boardWidth}px` }}>
                 <div className={`game-review-eval ${orientation === 'black' ? 'flipped' : ''}`} style={{ '--white-eval': `${whitePercent}%` }}>
                   <div className="game-review-eval-black" />
                   <div className="game-review-eval-white" />
                   <strong {...pageStyleTarget('value')}>{evaluationLabel(evaluation, orientation)}</strong>
                 </div>
-                <div className="game-review-board" ref={boardRef}>
-                  <Chessboard
+                <div className="game-review-board">
+                  {boardWidth > 0 ? <Chessboard
                     id={`review-board-${gameId}`}
                     position={currentFen}
                     boardOrientation={orientation}
                     boardWidth={boardWidth}
                     animationDuration={180}
                     arePiecesDraggable={false}
-                  />
+                  /> : null}
                 </div>
               </div>
               <div className="game-review-names">
                 <span>{orientation === 'white' ? game.white.name : game.black.name}</span>
                 <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.white.rating : game.black.rating}</strong>
               </div>
-              <div className="game-review-navigation">
-                <button {...pageStyleTarget('button')} type="button" aria-label="Previous move" disabled={positionIndex === 0} onClick={() => setPositionIndex((value) => Math.max(0, value - 1))}>←</button>
-                <span>{positionIndex === 0 ? 'Starting position' : `${currentMove.move_number}${currentMove.move_color === 'white' ? '.' : '…'} ${currentMove.san}`}</span>
-                <button {...pageStyleTarget('button')} type="button" aria-label="Next move" disabled={positionIndex >= moves.length} onClick={() => setPositionIndex((value) => Math.min(moves.length, value + 1))}>→</button>
-              </div>
             </div>
 
             <aside className="game-review-analysis">
               <div className="game-review-summary">
                 <div><span>Accuracy</span><strong {...pageStyleTarget('value')}>{playerSummary?.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
-                <div><span>Result</span><strong {...pageStyleTarget('value')}>{playerSummary?.result || '—'}</strong></div>
+                <div><span>Result</span><strong {...pageStyleTarget('value')}>{outcome.result ?? '—'}</strong></div>
                 <div><span>Blunders</span><strong {...pageStyleTarget('value')}>{playerSummary?.blunder_count ?? '—'}</strong></div>
-                <div><span>Ended by</span><strong {...pageStyleTarget('value')}>{playerSummary?.end_by?.replaceAll('_', ' ') || '—'}</strong></div>
+                <div><span>Ended by</span><strong {...pageStyleTarget('value')}>{outcome.endBy ?? '—'}</strong></div>
               </div>
               <div className="game-review-current">
                 <strong {...pageStyleTarget('value')}>{currentMove?.classification || 'position'}</strong>

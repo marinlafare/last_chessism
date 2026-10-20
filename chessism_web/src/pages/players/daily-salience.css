@@ -21,10 +21,6 @@
   font: 600 10px "IBM Plex Mono", monospace;
 }
 
-.daily-salience-values { color: #d9fff1; font-size: 13px; }
-.daily-salience-control small { color: var(--subtle); font-size: 9px; line-height: 1.5; text-align: center; }
-.daily-salience-count { margin: 8px 0; color: var(--subtle); font: 600 10px "IBM Plex Mono", monospace; text-align: center; }
-.daily-salience-explanation { margin: 6px 16px; color: var(--subtle); font-size: 10px; line-height: 1.5; text-align: center; }
 
 .daily-salience-track {
   position: relative;
@@ -73,16 +69,3 @@
 .daily-salience-handle:focus-visible { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; }
 .daily-salience-track[data-disabled="true"] { opacity: 0.4; cursor: default; }
 .daily-salience-handle:disabled { cursor: default; }
-
-.daily-salience-reset {
-  padding: 4px 10px;
-  border: 1px solid var(--border-soft);
-  border-radius: 4px;
-  background: transparent;
-  color: var(--text);
-  font: inherit;
-  cursor: pointer;
-}
-
-.daily-salience-reset:disabled { opacity: 0.4; cursor: default; }
-.daily-salience-reset:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }

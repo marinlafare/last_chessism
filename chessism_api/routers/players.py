@@ -54,6 +54,12 @@ from chessism_api.operations.player_rating_distribution import (
     DistributionBusy,
     get_player_rating_distribution,
 )
+from chessism_api.operations.player_score_distribution import (
+    ScoreDistributionBusy,
+    ScoreDistributionChanged,
+    get_distribution as get_player_score_distribution,
+    get_positions as get_player_score_positions,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -88,6 +94,13 @@ class ExploreGamesRequest(BaseModel):
     salience_max: float | None = Field(None, ge=0, le=1, allow_inf_nan=False)
     timezone: str | None = Field(None, min_length=1, max_length=64)
     limit: int = Field(30, ge=1, le=100)
+    cursor: str | None = Field(None, max_length=512)
+
+
+class ScorePositionsRequest(BaseModel):
+    bin_id: int = Field(..., ge=0, le=12, strict=True)
+    modes: list[str] = Field(..., min_length=1, max_length=3)
+    snapshot: str | None = Field(..., max_length=64)
     cursor: str | None = Field(None, max_length=512)
 
 
@@ -383,6 +396,52 @@ async def api_get_player_daily_efficiency(
         date_to,
         timezone,
     )
+
+
+@router.get("/{player_name}/analysis/measures/score-distribution")
+async def api_get_player_score_distribution(
+    player_name: str,
+    redis: ArqRedis = Depends(get_redis_pool),
+    refresh: bool = Query(False),
+) -> JSONResponse:
+    """13 player-perspective CP bins per mode; repeated positions count again.
+
+    Zero and ±50 belong to the center. Mates, tablebases and missing scores
+    are excluded from numerical bars. Endings count actual recorded games.
+    """
+    try:
+        response = await _hero_analytics_response(
+            get_player_score_distribution, player_name, redis, refresh=refresh)
+    except ScoreDistributionBusy as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
+    if json.loads(response.body).get('status') == 'calculating':
+        response.status_code = 202
+        response.headers['Retry-After'] = '1'
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@router.post("/{player_name}/analysis/measures/score-distribution/positions")
+async def api_get_player_score_positions(
+    player_name: str,
+    selection: ScorePositionsRequest,
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Ten distinct FENs, by selected-bin appearances DESC then numeric ID ASC.
+
+    The first page uses current data and returns its snapshot for subsequent
+    requests. Cached pages retain that ranking. Only an uncached continuation
+    whose source changed returns 409; callers can restart the list in place.
+    """
+    try:
+        response = await _hero_analytics_response(
+            get_player_score_positions, player_name, redis, **selection.model_dump())
+    except ScoreDistributionChanged as error:
+        raise HTTPException(status_code=409, detail=str(error)) from error
+    except ScoreDistributionBusy as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
 
 
 @router.get("/{player_name}/analysis/measures/daily-salience-accuracy")

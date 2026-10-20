@@ -2,6 +2,7 @@
 import math
 from sqlalchemy import text
 from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
 
@@ -37,8 +38,7 @@ def range_sql(column):
                      AND CAST(:salience_max AS double precision) + 1e-12)"""
 
 
-DAILY_SQL = f"""
-WITH eligible AS MATERIALIZED (
+LEGACY_ELIGIBLE_SQL = f"""
     SELECT ({player_local_timestamp_sql('gp')})::date AS day,
            engine.game_efficiency AS accuracy, salience.salience
     FROM game_player gp
@@ -50,7 +50,10 @@ WITH eligible AS MATERIALIZED (
       AND gp.played_at IS NOT NULL
       AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
       AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-), bounds AS (
+"""
+
+DAILY_AGGREGATES_SQL = f"""
+bounds AS (
     SELECT MIN(salience) AS minimum, MAX(salience) AS maximum FROM eligible
 ), marked AS (
     SELECT *, {range_sql('salience')} AS included FROM eligible
@@ -68,6 +71,37 @@ WITH eligible AS MATERIALIZED (
 SELECT bounds.*, days.* FROM bounds LEFT JOIN days ON TRUE ORDER BY day
 """
 
+DAILY_SQL = f"WITH eligible AS MATERIALIZED ({LEGACY_ELIGIBLE_SQL}), {DAILY_AGGREGATES_SQL}"
+
+
+def daily_sql(session):
+    layout = storage_for(session)
+    if layout is None:
+        return text(DAILY_SQL)
+    # All three records identify the same player perspective by game_player_id.
+    # Joining the compatibility views by names and decoded colors expands the
+    # same ownership joins repeatedly and hides these indexed relationships.
+    return text(f"""
+        WITH eligible AS MATERIALIZED (
+            SELECT ({player_local_timestamp_sql('g')})::date AS day,
+                   engine.game_efficiency AS accuracy, salience.salience
+            FROM {layout.table('game_player')} gp
+            JOIN {layout.table('game')} g ON g.link = gp.game_link
+            JOIN {layout.table('game_player_engine_summary')} engine ON engine.game_player_id = gp.id
+            JOIN {layout.table('game_player_salience')} salience ON salience.game_player_id = gp.id
+            WHERE gp.player_id = (SELECT id FROM {layout.table('player')} WHERE player_name = :player)
+              AND engine.analyzed_player_moves > 10
+              AND engine.game_efficiency IS NOT NULL
+              AND EXISTS (SELECT 1 FROM {layout.table('player_salience_summary')} summary
+                          WHERE summary.player_id = gp.player_id AND summary.status = 'ready')
+              AND g.mode_id = ANY(ARRAY(SELECT id FROM {layout.table('game_mode')}
+                                        WHERE name = ANY(CAST(:selected_modes AS text[]))))
+              AND g.played_at IS NOT NULL
+              AND (CAST(:date_from_utc AS timestamptz) IS NULL OR g.played_at >= CAST(:date_from_utc AS timestamptz))
+              AND (CAST(:date_to_utc AS timestamptz) IS NULL OR g.played_at < CAST(:date_to_utc AS timestamptz))
+        ), {DAILY_AGGREGATES_SQL}
+    """)
+
 
 async def daily_chart(player, modes, date_from=None, date_to=None, timezone_name=None,
                       salience_min=None, salience_max=None):
@@ -83,7 +117,7 @@ async def daily_chart(player, modes, date_from=None, date_to=None, timezone_name
         status = str(summary['status']) if summary else 'missing'
         if filtered and status != 'ready':
             raise ValueError('Game salience is not ready; refresh the chart before filtering.')
-        rows = (await session.execute(text(DAILY_SQL), {
+        rows = (await session.execute(daily_sql(session), {
             **scope.params(), 'selected_modes': list(modes),
             'salience_min': salience_min, 'salience_max': salience_max,
         })).mappings().all()

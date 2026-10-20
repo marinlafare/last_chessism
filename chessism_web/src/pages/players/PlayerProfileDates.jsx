@@ -35,11 +35,11 @@ export default function PlayerProfileDates({ profile }) {
   return (
     <div className="profile-item players-profile-dates" aria-label="Joined and last played dates">
       <div className="players-profile-date">
-        <span>Joined</span><strong {...pageStyleTarget('value')} title={joined}>{joined}</strong>
+        <span {...pageStyleTarget('player.metadata.label')}>Joined</span><strong {...pageStyleTarget('player.metadata.value')} title={joined}>{joined}</strong>
       </div>
       <div className="players-profile-date">
-        <span>Last play</span>
-        <strong {...pageStyleTarget('value')} title={latest?.name === name && latest.error
+        <span {...pageStyleTarget('player.metadata.label')}>Last play</span>
+        <strong {...pageStyleTarget('player.metadata.value')} title={latest?.name === name && latest.error
           ? `Last stored game unavailable: ${latest.error}` : `Latest game in the database: ${lastPlay}`}>{lastPlay}</strong>
       </div>
     </div>

@@ -12,6 +12,7 @@ export default function PlayerModeToggles({
   activeModes,
   availableModes,
   colored = false,
+  styleId = 'player.rating.modes',
   label,
   onToggle,
 }) {
@@ -21,7 +22,7 @@ export default function PlayerModeToggles({
         const available = availableModes.has(mode)
         const active = available && activeModes.has(mode)
         return (
-          <button {...pageStyleTarget('button')}
+          <button {...pageStyleTarget(styleId)}
             type="button"
             className={active ? 'active' : ''}
             aria-pressed={active}

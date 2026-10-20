@@ -461,7 +461,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                               onClick={() => navigateToPlayer(name)}
                             >
                               <PlayerMenuAvatar name={name} src={avatar} />
-                              <span>{name}</span>
+                              <span className="players-title-menu-name">{name}</span>
                             </button>
                           )) : null}
                         {!playerMenuLoading && !playerMenuError && !playerMenuPlayers.length ? (
@@ -526,14 +526,14 @@ function PlayerWorkspace({ playerName, onSelectPlayer }) {
                           ['Name', profile.name || 'N/A'],
                         ].map(([label, value]) => (
                           <div className="profile-item" key={label}>
-                            <span>{label}</span>
-                            <strong {...pageStyleTarget('value')}>{String(value)}</strong>
+                            <span {...pageStyleTarget('player.metadata.label')}>{label}</span>
+                            <strong {...pageStyleTarget('player.metadata.value')}>{String(value)}</strong>
                           </div>
                         ))}
                         <PlayerProfileDates profile={profile} />
                         <div {...pageStyleTarget('panel')} className="players-followers-card">
-                          <span>Followers</span>
-                          <strong {...pageStyleTarget('value')}>{followersDisplay}</strong>
+                          <span {...pageStyleTarget('player.followers.label')}>Followers</span>
+                          <strong {...pageStyleTarget('player.followers.value')}>{followersDisplay}</strong>
                         </div>
                         <div className="players-mode-activity-row">
                           {modeActivity.map(({ mode, games, hours }) => (
