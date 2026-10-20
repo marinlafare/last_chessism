@@ -19,3 +19,13 @@ export const queueDatabaseRestoreTest = () => (
 export const fetchBackupJob = (jobId, { signal } = {}) => (
   getJson(`/jobs/${encodeURIComponent(jobId)}`, { signal })
 )
+
+export const fetchFenAnalysisBackups = ({ signal } = {}) => (
+  getJson('/analysis/backups', { signal })
+)
+
+export const queueFenAnalysisBackup = () => requestJson('/analysis/backups', { method: 'POST' })
+
+export const queueFenAnalysisRestore = (filename) => (
+  requestJson(`/analysis/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST' })
+)

@@ -4,6 +4,7 @@ import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import BackupVolume from './backups/BackupVolume.jsx'
+import FenBackupPanel from './backups/FenBackupPanel.jsx'
 import {
   fetchBackupJob,
   fetchDatabaseBackups,
@@ -493,6 +494,7 @@ export default function DatabaseBackups() {
               Backup database creates one standalone compressed snapshot. Test backup restores it privately and, only after validation passes, removes older snapshots. The last tested backup stays protected until its replacement passes. No archived change history is required. Separate FEN exports and research files are retained.
             </p>
           </section>
+          <FenBackupPanel />
         </main>
         <Footer />
       </div>

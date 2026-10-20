@@ -1,4 +1,4 @@
-import { getJson, requestJson } from '../../services/apiClient'
+import { getJson } from '../../services/apiClient'
 
 export const fetchAutomaticIngestionJobs = ({ signal } = {}) => getJson('/jobs/active', { signal })
 export const fetchIngestionJobStatus = (jobId, { signal } = {}) => getJson(`/jobs/${encodeURIComponent(jobId)}`, { signal })
@@ -10,6 +10,11 @@ export const fetchScoredOverview = ({ signal } = {}) => (
 
 export const fetchScoredGamesOverview = ({ signal } = {}) => (
   getJson('/fens/scored/games/overview', { signal })
+)
+
+// Use the same database totals as the Analyze page, including games without FENs.
+export const fetchScoredCoverage = ({ signal } = {}) => (
+  getJson('/games/generalities', { signal })
 )
 
 export const fetchAdvantageByRating = ({ signal } = {}) => (
@@ -30,18 +35,4 @@ export const fetchFenAppearances = ({ signal } = {}) => (
 
 export const fetchCommonPositionPage = (cursor, { signal, retry = false } = {}) => (
   getJson(`/fens/common_positions/page?${new URLSearchParams({ cursor, ...(retry ? { retry: 'true' } : {}) })}`, { signal })
-)
-
-export const fetchFenAnalysisBackups = ({ signal } = {}) => (
-  getJson('/analysis/backups', { signal })
-)
-
-export const fetchBackupJobStatus = (jobId, { signal } = {}) => (
-  getJson(`/jobs/${encodeURIComponent(jobId)}`, { signal })
-)
-
-export const queueFenAnalysisBackup = () => requestJson('/analysis/backups', { method: 'POST' })
-
-export const queueFenAnalysisRestore = (filename) => (
-  requestJson(`/analysis/backups/${encodeURIComponent(filename)}/restore`, { method: 'POST' })
 )
