@@ -1,9 +1,12 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Chessboard } from 'react-chessboard'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
+import useBoardSounds from '../../components/chess/useBoardSounds'
+import { useBoardSoundPreferences } from '../../components/chess/BoardSoundPreferences'
+import { BOARD_SOUND_SETS } from '../../components/chess/boardSoundSets'
 
 const endingLabels = {
   checkmated: 'checkmate',
@@ -33,12 +36,67 @@ function formatClock(seconds) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
+function clockHistory(moves, timeControl) {
+  const control = /^(\d+)(?:\+(\d+))?$/.exec(String(timeControl ?? ''))
+  const initial = control ? Number(control[1]) : null
+  const increment = control ? Number(control[2] || 0) : null
+  const frames = [{
+    white: { remaining: initial, spent: null },
+    black: { remaining: initial, spent: null },
+  }]
+  for (const move of moves) {
+    const previous = frames[frames.length - 1]
+    const color = move.move_color
+    if (color !== 'white' && color !== 'black') {
+      frames.push(previous)
+      continue
+    }
+    const raw = move.clock?.[`${color}_time_left`]
+    const remaining = raw != null && Number.isFinite(Number(raw)) ? Number(raw) : null
+    const spent = previous[color].remaining != null && remaining != null && increment != null
+      ? previous[color].remaining + increment - remaining : null
+    // Each API row contains a full move's clocks. Only advance the mover's
+    // clock, so White's move never reveals Black's next clock prematurely.
+    frames.push({ ...previous, [color]: { remaining, spent: spent >= 0 ? spent : null } })
+  }
+  return frames
+}
+
+function BoardClock({ color, clock }) {
+  const remaining = formatClock(clock?.remaining)
+  return (
+    <span className={`game-review-clock ${color}`} title={`${color} clock`}>
+      {clock?.spent != null ? (
+        <small className="game-review-move-time" title="Time spent on the last move by this player">
+          {clock.spent.toFixed(1)}s
+        </small>
+      ) : null}
+      <strong {...pageStyleTarget('value')} aria-label={`${color} time remaining: ${remaining}`}>{remaining}</strong>
+    </span>
+  )
+}
+
 function evaluationLabel(evaluation, orientation = 'white') {
-  if (!evaluation) return 'N/A'
+  if (!Number.isFinite(evaluation?.white_cp)) return 'N/A'
   const score = evaluation.white_cp * (orientation === 'black' ? -1 : 1)
   if (evaluation.kind === 'mate') return score > 0 ? 'MATE +' : 'MATE −'
   if (evaluation.kind === 'tablebase') return score > 0 ? 'TB WIN' : score < 0 ? 'TB LOSS' : 'TB DRAW'
   return `${score >= 0 ? '+' : ''}${(score / 100).toFixed(2)}`
+}
+
+function usePieceAnimationDuration() {
+  const [reducedMotion, setReducedMotion] = useState(() => (
+    typeof window !== 'undefined' && Boolean(window.matchMedia?.('(prefers-reduced-motion: reduce)').matches)
+  ))
+  useEffect(() => {
+    const preference = window.matchMedia?.('(prefers-reduced-motion: reduce)')
+    if (!preference) return undefined
+    const update = () => setReducedMotion(preference.matches)
+    update()
+    preference.addEventListener('change', update)
+    return () => preference.removeEventListener('change', update)
+  }, [])
+  return reducedMotion ? 0 : 320
 }
 
 function useBoardWidth(containerRef, active, maximized) {
@@ -67,6 +125,9 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const [request, setRequest] = useState({ data: null, error: '', loading: false })
   const [positionIndex, setPositionIndex] = useState(0)
   const [maximized, setMaximized] = useState(false)
+  const pieceAnimationDuration = usePieceAnimationDuration()
+  const { muted, toggleMuted, playMove } = useBoardSounds(gameId)
+  const { soundSet, updatePreferences, saveError } = useBoardSoundPreferences()
   const boardStageRef = useRef(null)
   const boardVisible = Boolean(gameId && request.data?.game && !request.loading)
   const boardWidth = useBoardWidth(boardStageRef, boardVisible, maximized)
@@ -105,13 +166,24 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
     )
   ), [playerName, request.data])
   const orientation = game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white'
+  const opponentColor = orientation === 'white' ? 'black' : 'white'
+  const clocks = useMemo(() => clockHistory(moves, game?.time_control), [moves, game?.time_control])
+  const currentClocks = clocks[positionIndex] || clocks[0]
   const outcome = recordedOutcome(game, orientation)
   const currentMove = positionIndex > 0 ? moves[positionIndex - 1] : null
   const currentFen = currentMove?.fen_after || game?.initial_fen
-  const evaluation = currentMove?.evaluation_after || {
-    kind: 'cp', white_cp: 15, white_win_percent: 51.38, source: 'initial',
-  }
+  const evaluation = currentMove?.evaluation_after ?? null
+  const hasEvaluation = Number.isFinite(evaluation?.white_cp)
+  const noScoreMessage = 'No Stockfish score is available for this FEN.'
   const whitePercent = Math.max(2, Math.min(98, Number(evaluation?.white_win_percent ?? 50)))
+
+  const navigateTo = useCallback((index) => {
+    if (!boardVisible) return
+    const next = Math.max(0, Math.min(moves.length, index))
+    if (next === positionIndex) return
+    setPositionIndex(next)
+    playMove(moves[next - 1], next < positionIndex)
+  }, [boardVisible, moves, positionIndex, playMove])
 
   useEffect(() => {
     if (!gameId) return undefined
@@ -120,15 +192,19 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
     const handleKey = (event) => {
       if (event.target?.closest?.('[data-appearance-tools]')) return
       if (event.key === 'Escape') closeViewer()
-      if (event.key === 'ArrowLeft') setPositionIndex((value) => Math.max(0, value - 1))
-      if (event.key === 'ArrowRight') setPositionIndex((value) => Math.min(moves.length, value + 1))
+      if (event.defaultPrevented || event.altKey || event.ctrlKey || event.metaKey) return
+      if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        event.preventDefault()
+        navigateTo(positionIndex + (event.key === 'ArrowLeft' ? -1 : 1))
+      }
     }
     window.addEventListener('keydown', handleKey)
     return () => {
       document.body.style.overflow = previousOverflow
       window.removeEventListener('keydown', handleKey)
     }
-  }, [gameId, moves.length, closeViewer])
+  }, [gameId, positionIndex, navigateTo, closeViewer])
 
   if (!gameId) return null
 
@@ -154,18 +230,45 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
 
         {request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading move-by-move analysis…</p> : null}
         {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {saveError ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{saveError}</p> : null}
         {request.missingPosition ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
         {game && !request.loading ? (
           <div className="game-review-body">
-            <div className="game-review-board-column">
-              <div className="game-review-names game-review-opponent-rating">
-                <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.black.rating : game.white.rating}</strong>
+            <div className="game-review-board-column" style={{ '--game-review-board-size': `${boardWidth}px` }}>
+              <div className="game-review-names game-review-board-header">
+                <div className="game-review-board-tools">
+                  <select {...pageStyleTarget('gameReview.soundSet')} className="game-review-sound-set"
+                    aria-label="Board sound set" title="Board sound set" value={soundSet}
+                    onChange={event => updatePreferences({ soundSet: event.target.value })}
+                    onKeyDown={event => event.stopPropagation()}>
+                    {BOARD_SOUND_SETS.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
+                  </select>
+                  <button type="button" className="game-review-sound-toggle"
+                    aria-label="Board sounds" aria-pressed={!muted}
+                    title={muted ? 'Unmute board sounds' : 'Mute board sounds'} onClick={toggleMuted}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M11 5 6 9H3v6h3l5 4Z" />
+                      {muted ? <path d="m16 9 6 6m0-6-6 6" /> : <>
+                        <path d="M15 8a6 6 0 0 1 0 8" />
+                        <path d="M18 5a10 10 0 0 1 0 14" />
+                      </>}
+                    </svg>
+                  </button>
+                  <span {...pageStyleTarget('text')} className="game-review-mode" title={`Time control: ${game.time_control}`}>{game.mode}</span>
+                </div>
+                <div className="game-review-player-clock">
+                  <strong {...pageStyleTarget('value')}>{game[opponentColor].rating}</strong>
+                  <BoardClock color={opponentColor} clock={currentClocks[opponentColor]} />
+                </div>
               </div>
-              <div className="game-review-stage" ref={boardStageRef} style={{ '--game-review-board-size': `${boardWidth}px` }}>
-                <div className={`game-review-eval ${orientation === 'black' ? 'flipped' : ''}`} style={{ '--white-eval': `${whitePercent}%` }}>
-                  <div className="game-review-eval-black" />
-                  <div className="game-review-eval-white" />
-                  <strong {...pageStyleTarget('value')}>{evaluationLabel(evaluation, orientation)}</strong>
+              <div className="game-review-stage" ref={boardStageRef}>
+                <div className={`game-review-eval${orientation === 'black' ? ' flipped' : ''}${hasEvaluation ? '' : ' is-unscored'}`}
+                  style={{ '--white-eval': `${whitePercent}%` }} role="img" aria-disabled={!hasEvaluation}
+                  aria-label={hasEvaluation ? `Position evaluation: ${evaluationLabel(evaluation, orientation)}` : noScoreMessage}
+                  title={hasEvaluation ? undefined : noScoreMessage}>
+                  <div className="game-review-eval-black" aria-hidden="true" />
+                  <div className="game-review-eval-white" aria-hidden="true" />
+                  {hasEvaluation ? <strong {...pageStyleTarget('value')} aria-hidden="true">{evaluationLabel(evaluation, orientation)}</strong> : null}
                 </div>
                 <div className="game-review-board">
                   {boardWidth > 0 ? <Chessboard
@@ -173,14 +276,17 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     position={currentFen}
                     boardOrientation={orientation}
                     boardWidth={boardWidth}
-                    animationDuration={180}
+                    animationDuration={pieceAnimationDuration}
                     arePiecesDraggable={false}
                   /> : null}
                 </div>
               </div>
               <div className="game-review-names">
-                <span>{orientation === 'white' ? game.white.name : game.black.name}</span>
-                <strong {...pageStyleTarget('value')}>{orientation === 'white' ? game.white.rating : game.black.rating}</strong>
+                <span>{game[orientation].name}</span>
+                <div className="game-review-player-clock">
+                  <strong {...pageStyleTarget('value')}>{game[orientation].rating}</strong>
+                  <BoardClock color={orientation} clock={currentClocks[orientation]} />
+                </div>
               </div>
             </div>
 
@@ -193,9 +299,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
               </div>
               <div className="game-review-current">
                 <strong {...pageStyleTarget('value')}>{currentMove?.classification || 'position'}</strong>
-                <span>Evaluation {evaluationLabel(evaluation, 'white')} for White</span>
-                <span>White clock {formatClock(currentMove?.clock?.white_time_left)}</span>
-                <span>Black clock {formatClock(currentMove?.clock?.black_time_left)}</span>
+                <span>{hasEvaluation ? `Evaluation ${evaluationLabel(evaluation, 'white')} for White` : noScoreMessage}</span>
                 {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
                 {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('text')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
               </div>
@@ -204,7 +308,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                   <button {...pageStyleTarget('button')}
                     type="button"
                     className={`${positionIndex === index + 1 ? 'active' : ''} ${move.classification || ''}`}
-                    onClick={() => setPositionIndex(index + 1)}
+                    onClick={() => navigateTo(index + 1)}
                     key={move.ply}
                   >
                     <span>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>

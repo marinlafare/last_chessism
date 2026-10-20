@@ -13,14 +13,14 @@
   border: 1px solid var(--border-soft);
 }
 .player-game-catalog-toolbar, .player-game-catalog-filters,
-.player-game-catalog-sides, .player-game-catalog-pagination {
+.player-game-catalog-sides {
   display: flex;
   align-items: center;
   gap: 10px;
 }
 .player-game-catalog-toolbar { justify-content: space-between; flex-wrap: wrap; }
 .player-game-catalog-totals { color: var(--muted); font-size: 12px; }
-.player-game-catalog select, .player-game-catalog-search, .player-game-catalog-sides button, .player-game-catalog-pagination button,
+.player-game-catalog select, .player-game-catalog-search, .player-game-catalog-sides button,
 .player-game-catalog-message button {
   border: 1px solid var(--border-soft);
   border-radius: 4px;
@@ -35,9 +35,6 @@
 .player-game-catalog-color { width: 10px; height: 10px; border: 1px solid #929da4; border-radius: 2px; }
 .player-game-catalog-color.white { background: #fff; }
 .player-game-catalog-color.black { background: #000; }
-.player-game-catalog-legend { display: flex; gap: 15px; justify-content: flex-end; margin: 12px 0; color: var(--muted); font-size: 11px; }
-.player-game-catalog-legend > span { display: inline-flex; align-items: center; gap: 5px; }
-.player-game-catalog-legend i { width: 7px; height: 7px; border-radius: 50%; }
 .player-game-catalog .wins { background: var(--chart-color-1); }
 .player-game-catalog .draws { background: var(--chart-color-2); }
 .player-game-catalog .losses { background: var(--chart-color-3); }
@@ -81,19 +78,20 @@
 .player-game-catalog-result-bar i { display: block; height: 100%; }
 .player-game-catalog-result-counts { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 2px 5px; font-size: .77em; font-variant-numeric: tabular-nums; }
 .player-game-catalog-result-counts > span { white-space: nowrap; }
-.player-game-catalog-pagination { justify-content: center; margin-top: 12px; font-size: 12px; }
-.player-game-catalog-pagination button { padding: 3px 14px; font-size: 23px; cursor: pointer; }
 .player-game-catalog-message { padding: 24px 0; color: var(--muted); }
-.player-game-catalog.is-opponents .player-game-catalog-toolbar {
+.player-game-catalog.is-compact .player-game-catalog-toolbar {
   margin-bottom: 8px;
 }
-.player-game-catalog.is-opponents .player-game-catalog-filters {
+.player-game-catalog.is-compact .player-game-catalog-filters {
   display: grid;
   grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) 4rem;
   width: 100%;
 }
-.player-game-catalog.is-opponents .player-game-catalog-search { width: 100%; box-sizing: border-box; }
-.player-game-catalog.is-opponents .player-game-catalog-filters select {
+.player-game-catalog.is-openings .player-game-catalog-filters {
+  grid-template-columns: minmax(0, 15rem) minmax(0, 1fr) auto 4rem;
+}
+.player-game-catalog.is-compact .player-game-catalog-search { width: 100%; box-sizing: border-box; }
+.player-game-catalog.is-compact .player-game-catalog-filters select {
   width: 4rem;
   min-width: 4rem;
   flex: 0 0 4rem;
@@ -101,7 +99,7 @@
   padding: 7px 4px;
   font-size: 12px;
 }
-.player-game-catalog.is-opponents .player-game-catalog-rows {
+.player-game-catalog.is-compact .player-game-catalog-rows {
   width: min(100%, 48rem);
   margin-inline: auto;
   max-height: 24rem;
@@ -113,10 +111,10 @@
   padding: 3px;
   box-sizing: border-box;
 }
-.player-game-catalog.is-opponents .player-game-catalog-rows:hover { scrollbar-color: #15c780 transparent; }
+.player-game-catalog.is-compact .player-game-catalog-rows:hover { scrollbar-color: #15c780 transparent; }
 .player-game-catalog-more { min-height: 1px; font-size: 12px; color: var(--muted); text-align: center; }
 .player-game-catalog-more .player-game-catalog-message { margin: 0; padding: 8px 0; }
-.player-game-catalog.is-opponents .player-game-catalog-row {
+.player-game-catalog.is-compact .player-game-catalog-row {
   grid-template-columns: minmax(0, 1.8fr) minmax(0, 1.2fr);
   align-items: stretch;
   gap: 8px;
@@ -124,8 +122,8 @@
   border: 0;
   background: transparent;
 }
-.player-game-catalog.is-opponents .player-game-catalog-identity,
-.player-game-catalog.is-opponents .player-game-catalog-statistics {
+.player-game-catalog.is-compact .player-game-catalog-identity,
+.player-game-catalog.is-compact .player-game-catalog-statistics {
   display: grid;
   align-items: center;
   gap: 8px;
@@ -137,26 +135,26 @@
   border-radius: 4px;
   background: #101a21;
 }
-.player-game-catalog.is-opponents .player-game-catalog-row:hover:not(:disabled) > span { background: #192b33; }
-.player-game-catalog.is-opponents .player-game-catalog-identity { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
-.player-game-catalog.is-opponents .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr) auto; }
+.player-game-catalog.is-compact .player-game-catalog-row:hover:not(:disabled) > span { background: #192b33; }
+.player-game-catalog.is-compact .player-game-catalog-identity { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
+.player-game-catalog.is-compact .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr) auto; }
 .player-game-catalog-ratings { display: flex; align-items: center; justify-content: flex-end; gap: 8px; font-size: 11px; font-variant-numeric: tabular-nums; }
 .player-game-catalog-rating { display: inline-flex; align-items: baseline; gap: 3px; white-space: nowrap; }
 .player-game-catalog-rating small { font-size: 9px; opacity: .65; }
-.player-game-catalog.is-opponents .player-game-catalog-statistics { grid-template-columns: minmax(0, 1fr) minmax(4rem, max-content); }
-.player-game-catalog.is-opponents .player-game-catalog-rank,
-.player-game-catalog.is-opponents .player-game-catalog-games { padding: 3px 6px; }
-.player-game-catalog.is-opponents .player-game-catalog-results {
+.player-game-catalog.is-compact .player-game-catalog-statistics { grid-template-columns: minmax(0, 1fr) minmax(4rem, max-content); }
+.player-game-catalog.is-compact .player-game-catalog-rank,
+.player-game-catalog.is-compact .player-game-catalog-games { padding: 3px 6px; }
+.player-game-catalog.is-compact .player-game-catalog-results {
   width: 100%;
   min-width: 0;
   max-width: 12rem;
   justify-self: end;
   align-self: center;
 }
-.player-game-catalog.is-opponents .player-game-catalog-rank,
-.player-game-catalog.is-opponents .player-game-catalog-name,
-.player-game-catalog.is-opponents .player-game-catalog-results,
-.player-game-catalog.is-opponents .player-game-catalog-games { grid-column: auto; grid-row: auto; }
+.player-game-catalog.is-compact .player-game-catalog-rank,
+.player-game-catalog.is-compact .player-game-catalog-name,
+.player-game-catalog.is-compact .player-game-catalog-results,
+.player-game-catalog.is-compact .player-game-catalog-games { grid-column: auto; grid-row: auto; }
 @media (max-width: 650px) {
   .player-game-catalog-row { grid-template-columns: minmax(2.5rem, max-content) minmax(0, 1fr) minmax(4rem, max-content); gap: 7px; }
   .player-game-catalog-rank { grid-column: 1; grid-row: 1; }
@@ -164,10 +162,17 @@
   .player-game-catalog-games { grid-column: 3; grid-row: 1; }
   .player-game-catalog-results { grid-column: 2; grid-row: 2; width: 50%; min-width: min(85px, 100%); justify-self: center; }
   .player-game-catalog-filters { flex-wrap: wrap; }
-  .player-game-catalog.is-opponents .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
+  .player-game-catalog.is-compact .player-game-catalog-identity.has-ratings { grid-template-columns: minmax(2.75rem, max-content) minmax(0, 1fr); }
   .player-game-catalog-ratings { grid-column: 2; justify-content: center; flex-wrap: wrap; gap: 4px 8px; }
 }
 @media (max-width: 420px) {
-  .player-game-catalog.is-opponents .player-game-catalog-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 4rem; gap: 6px; }
-  .player-game-catalog.is-opponents .player-game-catalog-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .player-game-catalog.is-compact .player-game-catalog-filters { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 4rem; gap: 6px; }
+  .player-game-catalog.is-compact .player-game-catalog-row { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+}
+@media (max-width: 650px) {
+  .player-game-catalog.is-openings .player-game-catalog-filters { grid-template-columns: minmax(0, 1fr) auto 4rem; }
+  .player-game-catalog.is-openings .player-game-catalog-search { grid-column: 1 / 3; }
+  .player-game-catalog.is-openings .player-game-catalog-totals { grid-column: 1; grid-row: 2; }
+  .player-game-catalog.is-openings .player-game-catalog-sides { grid-column: 2 / 4; grid-row: 2; justify-self: end; }
+  .player-game-catalog.is-openings .player-game-catalog-filters select { grid-column: 3; grid-row: 1; }
 }

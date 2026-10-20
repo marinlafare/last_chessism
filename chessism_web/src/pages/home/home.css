@@ -43,14 +43,16 @@
 .home-summary-pie svg { display: block; width: 100%; max-width: 200px; height: auto; margin: 0 auto 8px; }
 .home-summary-charts figcaption { color: var(--text); font-weight: 700; }
 .home-summary-positions { --titled-fill: #21b787; --other-fill: #d9685b; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
-.home-summary-games { margin: 0; min-width: 0; text-align: center; --chart-color-1: #21b787; --bar-hover-color: #2adca2; --bar-hover-border: #ffffff; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
+.home-summary-games { margin: 0; min-width: 0; text-align: center; --chart-color-1: #21b787; --chart-color-2: #4ea3c7; --bar-hover-color: #2adca2; --bar-hover-border: #ffffff; --pie-outline-color: #dbe5e8; --pie-outline-width: 1px; stroke: var(--pie-outline-color); stroke-width: var(--pie-outline-width); }
 .home-games-navigation { display: grid; grid-template-columns: 12.6px minmax(0, 1fr) 12.6px; gap: 3px; align-items: stretch; }
 .home-games-chart { display: block; width: 100%; height: auto; }
 .home-games-chart text { fill: var(--muted); stroke: none; font-size: 14px; }
 .home-games-tick line { stroke: var(--border-soft); stroke-width: 1; }
 .home-games-player { cursor: pointer; outline: none; }
 .home-games-bar { fill: var(--chart-color-1); }
+.home-games-scored-bar { fill: var(--chart-color-2); }
 .home-games-player:hover .home-games-bar, .home-games-player:focus-visible .home-games-bar { fill: var(--bar-hover-color); stroke: var(--bar-hover-border); }
+.home-games-scored-bar:hover, .home-games-player:focus-visible .home-games-scored-bar { filter: brightness(1.18); stroke: var(--bar-hover-border); }
 .home-games-player .home-games-count { fill: var(--text); }
 .home-games-avatar-background { fill: var(--surface-2); stroke: none; }
 .home-games-avatar-fallback { fill: var(--muted); }

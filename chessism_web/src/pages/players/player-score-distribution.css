@@ -1,15 +1,16 @@
 .player-score-distribution { --chart-color-1: #15c780; --chart-color-2: #d55c5c; --chart-color-3: #8d6bb4; padding: 12px; min-width: 0; background: #0b1117; border-radius: 6px; }
 .score-distribution-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .score-distribution-heading .behavior-mode-controls { justify-content: flex-start; }
+.score-distribution-controls { display: grid; gap: 10px; }
 .score-distribution-refresh { color: var(--muted); font-size: 11px; }
 .score-distribution-endings { display: grid; gap: 5px; margin-left: auto; min-width: 210px; }
 .score-distribution-endings > div { display: flex; justify-content: space-between; align-items: baseline; gap: 22px; text-align: left; }
 .score-distribution-endings span { font-size: 10px; color: var(--muted); }
 .score-distribution-endings strong { font-size: 13px; color: var(--text); text-align: right; font-variant-numeric: tabular-nums; }
-.score-distribution-scroll { overflow-x: auto; }
-.score-distribution-canvas { min-width: 780px; }
+.score-distribution-scroll { overflow-x: auto; margin-top: auto; }
+.score-distribution-canvas { min-width: 0; }
 .score-distribution-canvas svg { width: 100%; height: auto; display: block; }
-.score-distribution-canvas text { fill: var(--muted); font-size: 12px; }
+.score-distribution-canvas text { fill: var(--muted); font-size: 10px; }
 .score-distribution-grid line { stroke: var(--border-soft); }
 .score-distribution-column { outline: none; }
 .score-distribution-column[aria-disabled="false"] { cursor: pointer; }

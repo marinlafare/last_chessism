@@ -9,7 +9,7 @@ import useSummaryChartWidth from './useSummaryChartWidth'
 import { combineScoreModes, scoreInterval, SCORE_ENDINGS } from './scoreDistribution'
 import './player-score-distribution.css'
 
-const LEFT = 84, TOP = 12, BOTTOM = 78, HEIGHT = 118
+const LEFT = 64, TOP = 12, BOTTOM = 104, HEIGHT = 144
 
 export default function PlayerScoreDistribution({ playerName }) {
   const visible = useAnalysisVisible()
@@ -85,8 +85,11 @@ export default function PlayerScoreDistribution({ playerName }) {
 
   return <section {...pageStyleTarget('player.scores.chart')} className="player-score-distribution" aria-label="Score distribution" aria-busy={request.loading}>
     <div className="score-distribution-heading">
-      <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
-        label="Score distribution game modes" styleId="player.scores.modes" onToggle={toggleMode} />
+      <div className="score-distribution-controls">
+        <span {...pageStyleTarget('label')} className="stockfish-summary-title">Score distribution</span>
+        <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
+          label="Score distribution game modes" styleId="player.scores.modes" onToggle={toggleMode} />
+      </div>
       {request.loading && request.data ? <small className="score-distribution-refresh" role="status">Updating… {progressText}</small> : null}
       {request.data ? <div className="score-distribution-endings" title={endingDescription}>
         {SCORE_ENDINGS.map(([key, label]) => <div key={key}>

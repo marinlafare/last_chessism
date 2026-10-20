@@ -27,6 +27,10 @@ export function fetchPlayerScorePositions({ playerName, selection, signal }) {
   return postJson(`/players/${playerPath(playerName)}/analysis/measures/score-distribution/positions`, selection, { signal })
 }
 
+export function fetchPlayerBlunderDistribution({ playerName, signal }) {
+  return requestJson(`/players/${playerPath(playerName)}/analysis/measures/blunder-distribution`, { signal })
+}
+
 function analyticsSearch({ mode = 'all', dateFrom, dateTo, timezone, cursor, limitGames } = {}) {
   const search = new URLSearchParams({ mode })
   if (dateFrom) search.set('date_from', dateFrom)

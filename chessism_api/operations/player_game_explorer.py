@@ -159,12 +159,28 @@ async def explore_player_games(
     opponent: str | None = None,
     opening: str | None = None,
     color: str | None = None,
+    accuracy_bin: int | None = None,
+    blunder_bin: int | None = None,
 ) -> dict[str, Any]:
     """Return compact analyzed games belonging to one visual chart bin."""
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100.")
     salience_filtered = validate_range(salience_min, salience_max)
     selected_modes = _normalize_modes(modes)
+    if scope_kind in {'accuracy', 'blunders'}:
+        if (not analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None
+                or any(value is not None for value in (target_date, weekday, hour, rating_from, result, opponent, opening, color))):
+            raise ValueError('Saved-summary bins require analyzed_only=true without other chart filters.')
+        if (scope_kind == 'blunders' and accuracy_bin is not None) or (scope_kind == 'accuracy' and blunder_bin is not None):
+            raise ValueError('Use only the bin matching the selected chart scope.')
+        from chessism_api.operations.player_accuracy_distribution import explore_summary_games
+        return await explore_summary_games(player_name, metric=scope_kind, modes=selected_modes,
+            bin_id=blunder_bin if scope_kind == 'blunders' else accuracy_bin,
+            timezone_name=timezone_name, limit=limit, cursor=cursor)
+    if accuracy_bin is not None:
+        raise ValueError('accuracy_bin requires the accuracy chart scope.')
+    if blunder_bin is not None:
+        raise ValueError('blunder_bin requires the blunders chart scope.')
     if scope_kind in {'rating', 'result', 'opponent', 'opening'}:
         if analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None:
             raise ValueError('Game metadata selections include all games; use analyzed_only=false without analysis filters.')

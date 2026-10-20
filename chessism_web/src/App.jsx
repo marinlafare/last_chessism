@@ -22,6 +22,7 @@ import MatricesConstructor from './pages/MatricesConstructor'
 import Algorithms from './pages/Algorithms'
 import SalienceResearch from './pages/SalienceResearch'
 import DatabaseBackups from './pages/DatabaseBackups'
+import BoardSoundPreferences from './components/chess/BoardSoundPreferences'
 import {
   fetchAdmins,
   fetchCurrentAccount,
@@ -32,6 +33,7 @@ import {
 } from './services/authApi'
 
 const Hegel = lazy(() => import('./pages/Hegel'))
+const Settings = lazy(() => import('./pages/Settings'))
 
 const APP_PATHS = new Set([
   '/',
@@ -40,6 +42,7 @@ const APP_PATHS = new Set([
   '/system_status',
   '/database',
   '/hegel',
+  '/settings',
   '/add_games',
   '/download_new_games',
   '/main_characters',
@@ -191,18 +194,20 @@ function AdminsPage({ onAuthenticated, onGateExpired }) {
   )
 }
 
-function AdminOnlineStatus({ account }) {
+function AdminOnlineStatus({ account, active, onOpenSettings }) {
   const displayName = account?.name || account?.email || 'Admin'
 
   return (
-    <div className="admin-online-status" aria-label={`${displayName} online`}>
+    <button className="admin-online-status" type="button" onClick={onOpenSettings}
+      title="Settings" aria-label={`${displayName} online — open settings`}
+      aria-current={active ? 'page' : undefined}>
       <span className="admin-online-dot" aria-hidden="true" />
       <span>{displayName}</span>
-    </div>
+    </button>
   )
 }
 
-function SuperadminSystem({ account, locationKey, path, onLogout }) {
+function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings }) {
   let page = <Home locationKey={locationKey} />
 
   if (path === '/games' || path.startsWith('/games/')) {
@@ -213,6 +218,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
     page = <Database account={account} />
   } else if (path === '/hegel') {
     page = <Suspense fallback={<p role="status">Loading Hegel…</p>}><Hegel /></Suspense>
+  } else if (path === '/settings') {
+    page = <Suspense fallback={<p role="status">Loading settings…</p>}><Settings /></Suspense>
   } else if (path === '/add_games' || path === '/download_new_games') {
     page = <DownloadNewGames />
   } else if (path === '/main_characters') {
@@ -255,7 +262,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout }) {
           <span className="rail-btn-icon" aria-hidden="true">+</span>
           <span>Add Games</span>
         </a>
-        <AdminOnlineStatus account={account} />
+        <AdminOnlineStatus account={account} active={path === '/settings'} onOpenSettings={onOpenSettings} />
         <button className="superadmin-logout" type="button" onClick={onLogout}>
           Log out
         </button>
@@ -353,6 +360,12 @@ function App() {
     setLocationKey('/')
   }
 
+  const openSettings = () => {
+    if (path !== '/settings') window.history.pushState(null, '', '/settings')
+    setLocationKey('/settings')
+    window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+  }
+
   if (!checkedAuth) {
     return <SuperadminGate onUnlock={openAdmins} />
   }
@@ -364,7 +377,14 @@ function App() {
     return <SuperadminGate onUnlock={openAdmins} />
   }
 
-  return <AppearanceProvider account={account} pageKey={path}><SuperadminSystem account={account} locationKey={locationKey} path={path} onLogout={handleLogout} /></AppearanceProvider>
+  return (
+    <BoardSoundPreferences key={account.id} accountId={account.id}>
+      <AppearanceProvider account={account} pageKey={path}>
+        <SuperadminSystem account={account} locationKey={locationKey} path={path}
+          onLogout={handleLogout} onOpenSettings={openSettings} />
+      </AppearanceProvider>
+    </BoardSoundPreferences>
+  )
 }
 
 export default App

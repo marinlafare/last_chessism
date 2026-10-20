@@ -228,6 +228,19 @@ code {
   font-weight: 800;
   line-height: 1;
   box-shadow: var(--shadow);
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.admin-online-status:hover,
+.admin-online-status[aria-current="page"] {
+  background: #123a2a;
+  border-color: #3fd089;
+}
+
+.admin-online-status:focus-visible {
+  outline: 2px solid #3fd089;
+  outline-offset: 3px;
 }
 
 .admin-online-status span:last-child {

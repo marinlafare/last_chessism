@@ -5,6 +5,7 @@ import './players.css'
 import PlayerAnalysisWorkspace from './PlayerAnalysisWorkspace'
 import PlayerCoveragePie from './PlayerCoveragePie'
 import PlayerProfileDates from './PlayerProfileDates'
+import PlayerAvatar from '../../components/players/PlayerAvatar'
 import { formatNumber } from '../../utils/formatters'
 import { formatPlayerCount } from './playerSummary.js'
 import { playerHomeHref } from '../../services/navigation'
@@ -30,13 +31,9 @@ import {
 } from './playerApi'
 
 function PlayerMenuAvatar({ name, src }) {
-  const [failedUrl, setFailedUrl] = useState(null)
   return (
     <span className="players-title-menu-avatar" aria-hidden="true">
-      {src && failedUrl !== src ? (
-        <img src={src} alt="" width="28" height="28" loading="lazy" decoding="async"
-          onError={() => setFailedUrl(src)} />
-      ) : name.charAt(0).toUpperCase()}
+      <PlayerAvatar src={src} name={name} width="28" height="28" loading="lazy" decoding="async" />
     </span>
   )
 }
@@ -403,7 +400,6 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
 
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
   const profileAvatar = String(profile?.avatar || '').trim()
-  const profileInitial = String(profile?.player_name || '?').trim().charAt(0).toUpperCase() || '?'
   const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'
   const followersDisplay = profile?.followers === null || profile?.followers === undefined
     ? 'N/A'
@@ -514,11 +510,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
               <div className="players-profile-layout">
                 <div className="players-profile-avatar-box">
-                  {profileAvatar ? (
-                    <img className="players-profile-avatar" src={profileAvatar} alt={`${profileTitle} avatar`} />
-                  ) : (
-                    <span className="players-profile-avatar-fallback">{profileInitial}</span>
-                  )}
+                  <PlayerAvatar className="players-profile-avatar" src={profileAvatar} name={profileTitle} />
                 </div>
                 {profile ? (
                   <>

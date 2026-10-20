@@ -179,6 +179,10 @@
       "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"],
       "propertyLabels": {"color":"Icon color","fontSize":"Icon size","hoverColor":"Hover icon color"}
     },
+    "gameReview.soundSet": {
+      "label": "Game viewer · sound set dropdown",
+      "properties": ["background","color","borderColor","borderWidth","radius","fontSize","fontFamily"]
+    },
     "popup": {
       "label": "Dialogs on this page",
       "properties": [
@@ -234,8 +238,8 @@
         "summary.games": {
           "label": "Games chart colors and border",
           "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth", "barHoverColor", "barHoverBorder"],
-          "hiddenProperties": ["chartColor2", "chartColor3", "chartColor4"],
-          "propertyLabels": {"chartColor1": "All bars", "stroke": "Bar border", "barHoverColor": "Bar hover color", "barHoverBorder": "Bar hover border"}
+          "hiddenProperties": ["chartColor3", "chartColor4"],
+          "propertyLabels": {"chartColor1": "Total games", "chartColor2": "Scored games", "stroke": "Bar border", "barHoverColor": "Bar hover color", "barHoverBorder": "Bar hover border"}
         },
         "characters.panel": {
           "label": "Player rankings",
@@ -374,6 +378,19 @@
         },
         "player.scores.action": {
           "label": "Score distribution · retry button",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "player.accuracyDistribution.chart": {
+          "label": "Blunders per game · chart",
+          "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1"],
+          "propertyLabels": {"chartColor1":"Blunder bars"}
+        },
+        "player.accuracyDistribution.modes": {
+          "label": "Blunders per game · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.accuracyDistribution.action": {
+          "label": "Blunders per game · retry button",
           "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
         },
         "scorePositions.panel": {
@@ -1248,6 +1265,29 @@
         "relationships.panel": {
           "label": "Database relationship details",
           "properties": ["background", "borderColor", "borderWidth", "radius", "padding"]
+        }
+      }
+    },
+    "settings": {
+      "label": "Settings",
+      "routes": ["/settings"],
+      "targets": {
+        "sounds.name": {
+          "label": "Sound set names",
+          "properties": ["color", "fontSize", "fontFamily"]
+        },
+        "sounds.preview": {
+          "label": "Sound trial board reset icon",
+          "properties": ["background", "color", "borderColor", "borderWidth", "radius", "fontSize", "fontFamily", "hoverBackground", "hoverColor"]
+        },
+        "sounds.apply": {
+          "label": "Set current board sounds button",
+          "properties": ["background", "color", "borderColor", "borderWidth", "radius", "fontSize", "fontFamily", "hoverBackground", "hoverColor"]
+        },
+        "sounds.mute": {
+          "label": "Board sound toggle",
+          "pressedUsesHoverBackground": true,
+          "properties": ["background", "color", "borderColor", "borderWidth", "radius", "fontSize", "fontFamily", "hoverBackground", "hoverColor"]
         }
       }
     },

@@ -4,6 +4,7 @@ import './main-characters/mainCharacters.css'
 import Header from '../components/layout/Header'
 import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
+import PlayerAvatar from '../components/players/PlayerAvatar'
 import { formatNumber } from '../utils/formatters'
 import {
   createPlayerGames,
@@ -132,17 +133,7 @@ function MainCharacterCard({ player, rank, totalPlayers, onUpdate, updating, upd
       onKeyDown={handleCardKeyDown}
     >
       <div className="main-character-avatar-link">
-        {player.avatar ? (
-          <img
-            className="main-character-avatar"
-            src={player.avatar}
-            alt={`${primaryName} avatar`}
-          />
-        ) : (
-          <span className="main-character-avatar-fallback">
-            {primaryName.charAt(0).toUpperCase()}
-          </span>
-        )}
+        <PlayerAvatar className="main-character-avatar" src={player.avatar} name={primaryName} />
       </div>
       <div className="main-character-card-body">
         <div className="main-character-card-head">

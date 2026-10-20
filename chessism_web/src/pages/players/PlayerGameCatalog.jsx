@@ -88,7 +88,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
   }, [playerName, kind, filters, requestKey, retry, visible, searchPending])
 
   const loadMore = useCallback(async () => {
-    if (openings || !visible || loading || !pagination?.has_more || request.loadingMore
+    if (!visible || loading || !pagination?.has_more || request.loadingMore
       || paginationController.current || dataSource.current !== requestKey || selection || reviewGameId) return
     const page = pagination.page + 1
     const nextKey = JSON.stringify([playerName, kind, { ...filters, page }])
@@ -100,7 +100,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
       controller.abort()
       if (paginationController.current === controller) {
         paginationController.current = null
-        setRequest(current => ({ ...current, loadingMore: false, moreError: 'Loading more opponents took too long. Please retry.' }))
+        setRequest(current => ({ ...current, loadingMore: false, moreError: `Loading more ${kind} took too long. Please retry.` }))
       }
     }, 20000)
     try {
@@ -121,18 +121,18 @@ export default function PlayerGameCatalog({ playerName, kind }) {
       }))
     } catch (failure) {
       if (!controller.signal.aborted) setRequest(current => ({
-        ...current, loadingMore: false, moreError: failure.message || 'Unable to load more opponents.',
+        ...current, loadingMore: false, moreError: failure.message || `Unable to load more ${kind}.`,
       }))
     } finally {
       window.clearTimeout(timeout)
       if (paginationController.current === controller) paginationController.current = null
     }
-  }, [openings, visible, loading, pagination, request.loadingMore, requestKey, playerName, kind, filters, selection, reviewGameId])
+  }, [visible, loading, pagination, request.loadingMore, requestKey, playerName, kind, filters, selection, reviewGameId])
 
   useEffect(() => {
     const list = listRef.current
     const sentinel = paginationSentinel.current
-    if (openings || !visible || !list || !sentinel || !pagination?.has_more || loading
+    if (!visible || !list || !sentinel || !pagination?.has_more || loading
       || request.loadingMore || request.moreError || error || selection || reviewGameId) return undefined
     let active = true
     const observer = new IntersectionObserver(entries => {
@@ -140,7 +140,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
     }, { root: list, rootMargin: '0px 0px 48px 0px' })
     observer.observe(sentinel)
     return () => { active = false; observer.disconnect() }
-  }, [loadMore, openings, visible, pagination?.has_more, loading, request.loadingMore, request.moreError, error, selection, reviewGameId])
+  }, [loadMore, visible, pagination?.has_more, loading, request.loadingMore, request.moreError, error, selection, reviewGameId])
 
   useEffect(() => {
     if (!visible) { setSelection(null); setReviewGameId(null) }
@@ -165,16 +165,15 @@ export default function PlayerGameCatalog({ playerName, kind }) {
     {data ? `${formatNumber(pagination.total_groups)} ${openings ? 'openings' : 'opponents'} · ${formatNumber(data.total_games)} games` : ''}
   </span>
 
-  return <section {...pageStyleTarget(`${target}.panel`)} className={`player-game-catalog${openings ? '' : ' is-opponents'}`} aria-busy={loading}>
+  return <section {...pageStyleTarget(`${target}.panel`)} className={`player-game-catalog is-compact ${openings ? 'is-openings' : 'is-opponents'}`} aria-busy={loading}>
     <div className="player-game-catalog-toolbar">
-      {openings ? totals : null}
       <div className="player-game-catalog-filters">
         <input {...pageStyleTarget(`${target}.search`)} className="player-game-catalog-search"
           type="search" maxLength={128} value={searchText}
           aria-label={openings ? 'Search openings' : 'Search opponents'}
           placeholder={openings ? 'Search openings…' : 'Search opponents…'}
           onChange={event => setSearchText(event.target.value)} />
-        {!openings ? totals : null}
+        {totals}
         {openings ? <div className="player-game-catalog-sides" aria-label="Player color">
           {['white', 'black'].map(color => <button {...pageStyleTarget(`${target}.side`)}
             type="button" key={color} aria-pressed={filters.color === color}
@@ -185,31 +184,28 @@ export default function PlayerGameCatalog({ playerName, kind }) {
         </div> : null}
         <select {...pageStyleTarget(`${target}.filter`)} aria-label={`${openings ? 'Opening' : 'Opponent'} game mode`}
           value={filters.mode} onChange={event => changeFilter({ mode: event.target.value })}>
-          <option value="all">{openings ? 'All modes' : 'All'}</option>
+          <option value="all">All</option>
           {modes.map(mode => <option key={mode} value={mode}>{mode.charAt(0).toUpperCase() + mode.slice(1)}</option>)}
         </select>
       </div>
     </div>
-    {openings ? <div className="player-game-catalog-legend" aria-label="Recorded game results from this player's perspective">
-      {results.slice(0, 3).map(([key, label]) => <span key={key}><i className={key} />{label}</span>)}
-    </div> : null}
     {error ? <p role="alert" className="player-game-catalog-message">{error}{' '}
       <button {...pageStyleTarget(`${target}.paging`)} type="button" onClick={refresh}>Retry</button>
     </p> : null}
     {loading && !data ? <p className="player-game-catalog-message" role="status">Loading {openings ? 'openings' : 'opponents'}…</p> : null}
     {data && !data.rows.length ? <p className="player-game-catalog-message">No {openings ? 'openings' : 'opponents'} {filters.search ? 'match this search.' : 'in this selection.'}</p> : null}
     {data ? <div key={requestKey} ref={listRef} className="player-game-catalog-rows"
-      tabIndex={openings ? undefined : 0} role={openings ? undefined : 'region'}
-      aria-label={openings ? undefined : 'Opponents — scroll to load more'}>
+      tabIndex={0} role="region"
+      aria-label={`${openings ? 'Openings' : 'Opponents'} — scroll to load more`}>
       {data.rows.map(row => {
         const label = openings ? openingLabel(row.key) : row.key || 'Unknown opponent'
         const description = `${label}: ${formatNumber(row.games)} games; ${results.map(([key, name]) => `${formatNumber(row[key])} ${name.toLowerCase()}`).join(', ')}`
         // Older API instances omit this field until the prepared backend is deployed.
         const showRatings = !openings && row.latest_ratings != null
-        return <button {...(openings ? pageStyleTarget(`${target}.row`) : {})} type="button" key={row.key}
+        return <button type="button" key={row.key}
           className="player-game-catalog-row" disabled={loading || (!openings && !row.key)}
           onClick={() => openGames(row)} aria-label={`${description}. Browse games.`}>
-          <span {...(!openings ? pageStyleTarget(`${target}.row`) : {})} className={`player-game-catalog-identity${showRatings ? ' has-ratings' : ''}`}>
+          <span {...pageStyleTarget(`${target}.row`)} className={`player-game-catalog-identity${showRatings ? ' has-ratings' : ''}`}>
             <span {...pageStyleTarget(`${target}.rank`)} className="player-game-catalog-rank"
               title="Rank by games in the selected mode and color">#{formatNumber(row.rank)}</span>
             <span className="player-game-catalog-name" title={label}>{label}</span>
@@ -225,7 +221,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
               })}
             </span> : null}
           </span>
-          <span {...(!openings ? pageStyleTarget(`${target}.row`) : {})} className="player-game-catalog-statistics">
+          <span {...pageStyleTarget(`${target}.row`)} className="player-game-catalog-statistics">
             <span className="player-game-catalog-results" title={description} aria-hidden="true">
               <span className="player-game-catalog-result-bar">
                 {results.map(([key, name]) => row[key] > 0 ? <i key={key} className={key}
@@ -242,20 +238,13 @@ export default function PlayerGameCatalog({ playerName, kind }) {
           </span>
         </button>
       })}
-      {!openings ? <div ref={paginationSentinel} className="player-game-catalog-more">
+      <div ref={paginationSentinel} className="player-game-catalog-more">
         {request.moreError ? <p className="player-game-catalog-message" role="alert">
           {request.moreError}{' '}
           <button {...pageStyleTarget(`${target}.paging`)} type="button" onClick={loadMore} disabled={loading}>Retry</button>
-        </p> : <span role="status">{request.loadingMore ? 'Loading more opponents…' : ''}</span>}
-      </div> : null}
+        </p> : <span role="status">{request.loadingMore ? `Loading more ${kind}…` : ''}</span>}
+      </div>
     </div> : null}
-    {openings && (pagination?.total_pages > 1 || filters.page > 1) ? <nav className="player-game-catalog-pagination" aria-label={`${kind} pages`}>
-      <button {...pageStyleTarget(`${target}.paging`)} type="button" aria-label="Previous ten"
-        disabled={loading || filters.page <= 1} onClick={() => setFilters(current => ({ ...current, page: current.page - 1 }))}>‹</button>
-      <span {...pageStyleTarget(`${target}.text`)}>{filters.page} / {pagination ? Math.max(1, pagination.total_pages) : '…'}</span>
-      <button {...pageStyleTarget(`${target}.paging`)} type="button" aria-label="Next ten"
-        disabled={loading || !pagination?.has_more} onClick={() => setFilters(current => ({ ...current, page: current.page + 1 }))}>›</button>
-    </nav> : null}
     {!reviewGameId && selection ? <PlayerGameExplorerModal playerName={playerName} selection={selection}
       onClose={() => setSelection(null)} onOpenGame={setReviewGameId} /> : null}
     <PlayerGameReviewModal gameId={reviewGameId} playerName={playerName}

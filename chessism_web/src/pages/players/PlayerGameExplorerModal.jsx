@@ -17,6 +17,8 @@ function resultLabel(value) {
 function selectionTitle(selection) {
   if (!selection) return 'Analyzed games'
   if (selection.scope === 'rating') return `Games rated ${selection.rating_from}–${selection.rating_from + 9}`
+  if (selection.scope === 'accuracy') return `Accuracy ${selection.accuracy_bin * 5}–${(selection.accuracy_bin + 1) * 5}`
+  if (selection.scope === 'blunders') return `Games with ${selection.blunder_bin === 6 ? '6+' : selection.blunder_bin} blunder${selection.blunder_bin === 1 ? '' : 's'}`
   if (selection.scope === 'result') return { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result]
   if (selection.scope === 'opponent') return `Games against ${selection.opponent}`
   if (selection.scope === 'opening') return `${selection.label || 'Unknown opening'} · ${selection.color || 'both colors'}`
@@ -145,7 +147,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const summary = request.data?.summary
   const games = request.data?.games || []
   const analyzedOnly = selection.analyzed_only !== false
-  const chartSelection = ['rating', 'result', 'opponent', 'opening'].includes(selection.scope)
+  const chartSelection = ['rating', 'result', 'opponent', 'opening', 'accuracy', 'blunders'].includes(selection.scope)
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('gameExplorer.panel')}
@@ -180,7 +182,9 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         {games.length ? (
           <div ref={listRef} className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}>
             {games.map((game) => (
-              <button {...pageStyleTarget('gameExplorer.row')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}>
+              <button {...pageStyleTarget('gameExplorer.row')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}
+                title={selection.scope === 'blunders' && game.blunder_count != null ? `Blunders: ${game.blunder_count}`
+                  : selection.scope === 'accuracy' && game.accuracy != null ? `Accuracy: ${game.accuracy.toFixed(2)}` : undefined}>
                 <span className={`game-result-mark ${game.result}`}>{resultLabel(game.result)}</span>
                 <GameListDate value={game.played_at_local || game.played_at_utc} />
                 <span className="game-list-opponent">

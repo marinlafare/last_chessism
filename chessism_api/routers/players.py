@@ -61,6 +61,9 @@ from chessism_api.operations.player_score_distribution import (
     get_positions as get_player_score_positions,
 )
 from chessism_api.operations.player_game_catalog import GameCatalogBusy, get_player_game_catalog
+from chessism_api.operations.player_accuracy_distribution import (
+    AccuracyDistributionBusy, get_accuracy_distribution, get_blunder_distribution,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -82,12 +85,14 @@ class RangeGamesScoreRequest(BaseModel):
 
 
 class ExploreGamesRequest(BaseModel):
-    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening)$")
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening|accuracy|blunders)$")
     modes: list[str] = Field(..., min_length=1, max_length=3)
     date: str | None = Field(None, min_length=10, max_length=10)
     weekday: int | None = Field(None, ge=1, le=7)
     hour: int | None = Field(None, ge=0, le=23)
     rating_from: int | None = Field(None, ge=0, le=2_147_483_638)
+    accuracy_bin: int | None = Field(None, ge=0, le=19, strict=True)
+    blunder_bin: int | None = Field(None, ge=0, le=6, strict=True)
     result: str | None = Field(None, pattern="^(win|draw|loss)$")
     opponent: str | None = Field(None, min_length=1, max_length=128)
     opening: str | None = Field(None, max_length=2048)
@@ -163,6 +168,8 @@ async def _hero_analytics_response(operation, *args, **kwargs) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
+    except AccuracyDistributionBusy as error:
+        raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
     return JSONResponse(content=payload)
 
 
@@ -424,6 +431,36 @@ async def api_get_player_game_catalog(
     return response
 
 
+@router.get("/{player_name}/analysis/measures/accuracy-distribution")
+async def api_get_player_accuracy_distribution(
+    player_name: str,
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Five-point bins of saved accuracy in complete games, all three modes.
+
+    Intervals are [lower, upper), except [95, 100]. Missing/invalid accuracy
+    is excluded. Reads do not calculate scores or refresh engine summaries.
+    """
+    response = await _hero_analytics_response(get_accuracy_distribution, player_name, redis)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
+@router.get("/{player_name}/analysis/measures/blunder-distribution")
+async def api_get_player_blunder_distribution(
+    player_name: str,
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Saved blunders per game: 0, 1, 2, 3, 4, 5, 6+ for each mode.
+
+    Only fully analyzed games with a saved summary and measured player moves.
+    Missing summaries are excluded, not zero. This never runs Stockfish.
+    """
+    response = await _hero_analytics_response(get_blunder_distribution, player_name, redis)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @router.get("/{player_name}/analysis/measures/score-distribution")
 async def api_get_player_score_distribution(
     player_name: str,
@@ -529,7 +566,7 @@ async def api_explore_player_games(
     player_name: str,
     request: ExploreGamesRequest,
 ) -> JSONResponse:
-    """Return a paginated game list for a time, rating or recorded-result bin."""
+    """Return a paginated game list for a time, metadata or saved-summary bin."""
     return await _hero_analytics_response(
         explore_player_games,
         player_name,
@@ -546,6 +583,8 @@ async def api_explore_player_games(
         limit=request.limit,
         cursor=request.cursor,
         rating_from=request.rating_from,
+        accuracy_bin=request.accuracy_bin,
+        blunder_bin=request.blunder_bin,
         result=request.result,
         opponent=request.opponent,
         opening=request.opening,
