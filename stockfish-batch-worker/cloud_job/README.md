@@ -90,7 +90,7 @@ verifies its small completion proofs, then advances without waiting for local
 imports. There is a 60-second interval between cycles for Batch's asynchronous
 compute teardown; quota/capacity scheduling remains Google's responsibility.
 
-Keep the PC on until the UI explicitly says **Safe to turn off your PC**. This
+Keep the PC on until the status API reports `sequence.safe_to_power_off: true`. This
 requires a validated durable owner/state acknowledgement from Google, not just
 a successful submit HTTP response. Once acknowledged, Google advances later
 tasks and runs preemption recovery while the PC is offline. Batch tears down
@@ -98,12 +98,15 @@ compute as tasks finish. Inputs, results and the image remain stored (billable)
 until Docker returns, catches up, verifies every receipt and performs one shared
 cleanup. Normal online imports continue while subsequent cloud tasks run.
 
-**Stop after current task** must reach Google before the next task starts; the
-UI distinguishes requested from acknowledged. **Cancel** cancels active Batch
-tasks too. Failed/stopped sequences retain claims and checkpoints for explicit
-retry; successful tasks are not recomputed. Confirmed preemptions still do not
-consume the two-application-attempt allowance. Unexpected workflow failure pauses
-local orchestration rather than blindly starting another sequence.
+**Stop and clean up** records durable stop intent, signals the supervisor and
+active compute independently of lengthy local imports, then waits for quiescence.
+It imports valid completed batches, verifies receipts, cleans up owned resources,
+refreshes summaries and finally releases this job's remaining reservations.
+Cancelled jobs cannot restart; partial work is never marked successful. A cleanup
+failure pauses safely for **Resume cleanup**. Ordinary failed jobs still retain
+checkpoints for explicit recovery. The obsolete stop-after-cycle endpoint returns
+HTTP 410. Confirmed preemptions do not consume the application-attempt allowance.
+Unexpected workflow failure pauses orchestration rather than starting a new sequence.
 
 `batch_sequence_v2` reuses `cloud_batch_sequence` / `cloud_batch_cycle` and adds
 one small native-column `cloud_sequence_control` row per request plus an upload
@@ -130,10 +133,10 @@ there is no total-runtime or monetary cap.
 
 ### Combined player-game drafts
 
-In the Batch Spot card, **Build combined player-game job** opens a shared draft.
-Start a draft, preview a player's games with the existing selection filters, and
-**Add selection**. Repeat for other players or date ranges. Entries can be edited
-(requiring a new individual preview) or removed. **Preview combined selection**
+In the Batch Spot card, **Combined** opens a shared draft. Choose the process-wide
+VM count, select a player's games, click **Calculate**, then **Add**. Repeat for
+other players or date ranges. Numbered steps can be edited (requiring a new
+calculation) or removed. **Group data** recalculates after each saved change and
 counts the union of unique game IDs and unique missing, unreserved FEN keys; it
 does not add the individual preview counts. The union is counted in PostgreSQL,
 not by loading all FENs into API memory.
@@ -162,7 +165,7 @@ Activation: run `python -m chessism_api.operations.cloud_analysis.migrate_game_d
 with the normal database environment, then deploy the API and frontend. The
 migration creates only the three draft tables and is safe during an existing
 cloud run. No controller restart, worker image upload, Google deployment or IAM
-change is needed. Keep the PC on until **Safe to turn off your PC** appears for
+change is needed. Keep the PC on until `sequence.safe_to_power_off` is true for
 each newly submitted job, just as before.
 
 Tests: `test_cloud_game_drafts.py`, `test_cloud_game_drafts_database.py` (only the
@@ -583,7 +586,7 @@ These do not replace the next user-launched, paid 500,000-FEN integration test.
 - Closing the browser has no effect on the host controller. Stopping the controller
   does **not** cancel a running cloud task. Restart it to resume imports/cleanup.
   The Workflows supervisor continues retry decisions while the PC is off.
-  `Stop cloud job and recovery` forwards durable cancellation to the supervisor;
+  `Stop and clean up` forwards durable cancellation to the supervisor and compute;
   do not delete a live job or cancel only the workflow to stop analysis.
 - API/download/validation/cleanup errors pause the job and block further cloud
   launches. `Resume saved job` retries the saved phase, without silently changing
@@ -648,7 +651,7 @@ Existing unfinished Batch jobs and their recovery controls remain visible.
 The Cloud Run card offers one FEN-selection dropdown for all positions, player
 positions, player games (with a frozen preview), or grouped selections. Only
 missing, unreserved FENs are selected. Changing the selection invalidates its
-preview; changing CPU concurrency preserves it. Choose `n_cpus` (1–64, default 4)
+preview; changing CPU concurrency preserves it. Choose `n_cpus` (1–100, default 4)
 for the maximum simultaneous **one-vCPU, 1-GiB tasks**. Small selections
 can use fewer CPUs. The input limit remains 200,000 FENs per UI request. The
 controller verifies regional CPU/memory quota before uploading; quotas are shared
@@ -657,10 +660,29 @@ with other Cloud Run workloads and do not guarantee capacity or immediate start.
 The UI shows each workflow step from reservation through uploads, analysis/import,
 verification, cleanup and the final database-summary refresh. A successful Google
 execution or 100% imported FENs alone does not mean the job is done. Once the
-controller confirms completion, the display stays for ten seconds, then fades
-out. Historical completed/cancelled entries are hidden on page load. This is
-display-only: DB results, job records and performance reports are not deleted.
+controller confirms completion, progress remains until **Reviewed — dismiss
+progress** is clicked. Acknowledgements are saved in this browser; previously
+unseen old terminal jobs are not resurrected on first load. Ingestion results
+use the same explicit-review behavior. This is display-only: DB results, job
+records and performance reports are not deleted.
 Failed, paused and waiting jobs stay visible for recovery, including cleanup errors.
+
+The status API uses one read-only, repeatable-read snapshot and batches
+display-only reads across jobs and runs, excluding saved
+game-link arrays and unrelated task/identity payloads. These projections are not
+recovery documents: controller reads still validate complete checksums. The UI
+has one current status request, cancels superseded reads, pauses periodic fetches
+in hidden tabs, and backs off on errors while retaining the last visible progress.
+
+Cleanup verification (October 2026): with the existing 34-job history, local
+read-only status checks fell from 455 to 19 SQL statements. Three consecutive
+calls measured 0.580/0.447/0.405 seconds before and 0.167/0.086/0.058 afterward;
+the canonical job-response SHA-256 was identical. This measures status reporting,
+not cloud analysis throughput. Regression coverage includes offline cloud/import
+tests, isolated PostgreSQL lifecycle tests, frontend unit tests, and mocked
+browser checks for combined selections, stop/review, and ingestion review.
+No billable jobs were launched during this cleanup; the live Cloud Run stop
+exercise remains a separate operator test.
 
 Both production backends and local bulk database analysis use the shared
 `stockfish_core` profile: the pinned Stockfish 16.1 AVX2 binary and embedded NNUE,
@@ -685,19 +707,60 @@ validates checksums and original FEN identities, commits normal DB values and
 receipts atomically, and then releases those FEN claims. On restart it catches up.
 Final cleanup requires every task manifest, all committed receipts, and saved
 per-task performance reports. Local DB summaries refresh after cloud cleanup.
+
+### Bounded completion I/O and timing comparisons
+
+Cloud Run verifies up to four task manifest/performance pairs concurrently, with
+one Storage/HTTP client per reader. Legacy multi-VM Batch uses the same verifier
+while retaining its per-shard proofs. Modern Batch work units download the
+manifest and performance report together using two independent clients; units
+and their database commits remain serialized and bounded to 50,000 FENs.
+All existing manifest/receipt, fingerprint, performance and cleanup gates remain.
+An I/O error drains the bounded in-flight work and withholds completion.
+
+Both import paths skip contract downloads for fully committed tasks on later
+polls, without skipping their final manifest checks. Both cleanup paths list up
+to four exact run-owned prefixes concurrently and delete at most eight pinned
+object generations concurrently. Fresh ownership/UID checks still precede
+deletion, and image/log cleanup still follows successful data/compute cleanup.
+No VM sizing, engine profile, retry policy or cleanup scope changes are involved.
+
+Cloud Run now uses the saved-input set-based affected-game lookup already used
+by Batch. Absolute game/player summary refreshes remain retry-safe; full global
+summaries still run at the existing lifecycle boundary. No schema migration is
+needed. Only the local cloud-controller needs rebuilding/restarting for these
+completion optimizations; remote workers and workflows are unchanged.
+
+Detailed durations are buffered into existing `cloud_phase_timing` rows:
+`verify_task_artifacts`, `verify_unit_artifacts`, `verify_unit_commit`,
+`cleanup_preconditions`, `cleanup_run_job` / `cleanup_batch_compute`,
+`cleanup_objects`, `cleanup_image`, `cleanup_logs` (Cloud Run),
+`summary_affected_games`, `summary_game_coverage_and_players`, and
+`summary_compaction` (non-unit runs). These are substeps inside the existing
+lifecycle phases, not additional elapsed time: do not sum parents and children.
+Repeated cleanup attempts retain separate timing rows. Provider deletion waits
+and polling gaps remain part of the parent phase's wall time.
+
+For comparisons, keep FEN count and requested CPU/VM count constant and compare
+import completion, verification, cleanup and local-summary times separately.
+Different FENs and Google scheduling can change analysis duration independently
+of local improvements. Offline checks do not establish live speedups.
+
 Cleanup deletes only the known
 terminal Cloud Run job, exact object generations and the job-owned image. Shared
 logs, other jobs/services/revisions, and audit/billing records are protected.
 Google can retain deleted-resource tombstones and delayed log entries; cleanup
-does not promise to erase provider history. Failed/cancelled work retains results
-for an explicit billable retry (maximum three executions per logical run).
+does not promise to erase provider history. Failed work retains results for an
+explicit billable retry (maximum three executions per logical run); explicit
+stop-and-cleanup instead salvages completed results and retires the request.
 
 `jobs:run` has no request-id/idempotency field. Before posting, the controller
 commits a durable submission fence. If the response is lost, it discovers the
 execution instead of submitting again. If no execution can be found, the job
 pauses safely for inspection; **do not reset its phase or create another job
 blindly**. Resume only repeats discovery. Cancellation is a durable UI request
-forwarded to the known execution, retaining checkpoints.
+forwarded to the known execution. Checkpoints are removed only after compute
+stops and all valid completed batches have been imported and verified.
 
 ### Activation and first test
 

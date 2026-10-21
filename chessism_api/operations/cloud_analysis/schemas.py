@@ -30,7 +30,7 @@ class CloudJobRequest(BaseModel):
 
     mode: Literal["all", "player", "loop", "games"] = "all"
     backend: Literal["batch_spot", "cloud_run"] = "batch_spot"
-    n_cpus: int = Field(4, ge=1, le=64, strict=True)
+    n_cpus: int = Field(4, ge=1, le=100, strict=True)
     n_vms: int = Field(1, ge=1, le=10, strict=True)
     # Stored in the native sequence table, not the legacy selection document.
     repeat_count: int = Field(1, ge=1, le=MAX_BATCH_REPEATS, strict=True, exclude=True)

@@ -17,12 +17,13 @@ from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
 from .artifacts import read_manifest, read_performance
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit
+from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit, CloudJobCancellation
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from .importer import import_batch, refresh_projections, refresh_global_projections, validate_manifest
 from .preflight import verify_clean_workspace
 from .log_cleanup import plan_logs, remove_logs
 from . import history
+from .preparation import StageTimings
 
 
 async def save_run(run_id, **changes):
@@ -50,6 +51,12 @@ async def save_run(run_id, **changes):
 async def save_job(job_id, **changes):
     async with AsyncDBSession() as session, session.begin():
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
+        if changes.get('status') in {'complete', 'limit_reached', 'failed', 'waiting'}:
+            stop = await session.get(CloudJobCancellation, job_id)
+            if stop is not None and stop.finished_at is None:
+                # A stop request can arrive during a cloud API call. Never let
+                # that older tick make the durable cleanup intent unpollable.
+                changes = {**changes, 'status': 'running'}
         for key, value in changes.items():
             setattr(job, key, value)
         job.updated_at = datetime.now(timezone.utc)
@@ -97,6 +104,8 @@ async def reserve(job, limit):
 class Controller:
     def __init__(self, cloud, local_image):
         self.cloud, self.local_image = cloud, local_image
+        # Stop signaling may run beside imports, but never beside cleanup.
+        self.stop_signal_lock = asyncio.Lock()
 
     async def tick(self):
         self.continue_immediately = False
@@ -111,12 +120,18 @@ class Controller:
                 # Do not start another billable VM until this job is resumed.
                 return False
             sequence_mode = job.selection.get('execution_mode') in {'batch_sequence_v1', 'batch_sequence_v2'}
+            cancellation = await session.get(CloudJobCancellation, job.id)
             runs = [] if sequence_mode else (await session.scalars(select(CloudAnalysisRun).where(
                 CloudAnalysisRun.job_id == job.id,
                 ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at))).all()
         run = next((item for item in runs if item.status != "complete"), None)
         try:
             await save_job(job.id, status="running", error=None)
+            if cancellation is not None:
+                from .cancellation import tick
+                async with self.stop_signal_lock:
+                    await tick(self, job, cancellation)
+                return True
             if sequence_mode:
                 if job.selection['execution_mode'] == 'batch_sequence_v2':
                     from .auto_sequence import tick
@@ -158,8 +173,13 @@ class Controller:
             from .work_units_controller import advance
             return await advance(self, job, run)
         if run.status == 'refreshing':
-            await refresh_projections(run.positions)
-            await history.compact_run(run.id)
+            timings = StageTimings()
+            try:
+                await refresh_projections(run_id=run.id, timings=timings)
+                with timings.measure('summary_compaction'):
+                    await history.compact_run(run.id)
+            finally:
+                await timings.save(run.job_id, run.id)
             return
         if run.launch.get("multi_vm") or (job and job.selection.get("execution_mode") == "batch_multi_vm_v1"):
             from .batch_spot_controller import advance

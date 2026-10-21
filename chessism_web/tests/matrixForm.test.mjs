@@ -1,29 +1,25 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { createMatrixForm, formFromDefinition, matrixFormPayload, mergeDefinitions, toggleFormColumn, toggleFormMode } from '../src/pages/research/matrices/matrixForm.js'
+import { createMatrixForm, formFromDefinition, matrixFormPayload, mergeDefinitions, moveScoreColumns, toggleFormColumn } from '../src/pages/research/matrices/matrixForm.js'
 
 test('form defaults and copies do not share mutable collections', () => {
   const first = createMatrixForm()
-  first.filters.modes.pop()
-  assert.equal(createMatrixForm().filters.modes.length, 3)
+  first.features.push('rating')
+  assert.deepEqual(createMatrixForm().features, [])
   const config = matrixFormPayload({ ...createMatrixForm(), features: ['moves'], labels: ['result'] })
   const copy = formFromDefinition({ name: 'test', config })
   copy.features.push('rating')
-  copy.filters.modes.pop()
   assert.deepEqual(config.feature_columns, ['moves'])
-  assert.equal(config.filters.modes.length, 3)
+  assert.equal(Object.hasOwn(config, 'filters'), false)
   assert.equal(copy.name, 'test copy')
 })
 
-test('payload conversion handles dates and preserves invalid zero for API validation', () => {
+test('saved formulas specify columns; player, date and row scope belong to execution', () => {
   const form = createMatrixForm()
-  form.filters.players = ' lafareto , , hikaru '
-  form.filters.max_rows = 0
-  assert.deepEqual(matrixFormPayload(form).filters.players, ['lafareto', 'hikaru'])
-  assert.equal(matrixFormPayload(form).filters.max_rows, 0)
-  assert.equal(matrixFormPayload(form).filters.date_from, null)
-  form.filters.max_rows = ''
-  assert.equal(matrixFormPayload(form).filters.max_rows, 100000)
+  assert.deepEqual(matrixFormPayload(form), { name: 'Custom game matrix', definition_kind: 'template',
+    row_type: 'game', feature_columns: [], label_columns: [] })
+  const scores = matrixFormPayload({ ...form, rowTypeKey: 'move_scores' })
+  assert.deepEqual(scores.move_scores, { all_moves: true, first_move: 1, last_move: null, score_perspective: 'player' })
 })
 
 test('columns cannot remain both a feature and a label', () => {
@@ -36,11 +32,11 @@ test('columns cannot remain both a feature and a label', () => {
   assert.deepEqual(form.labels, ['result'])
 })
 
-test('mode selection does not mutate the previous form', () => {
-  const previous = createMatrixForm()
-  const next = toggleFormMode(previous, 'rapid')
-  assert.deepEqual(previous.filters.modes, ['bullet', 'blitz', 'rapid'])
-  assert.deepEqual(next.filters.modes, ['bullet', 'blitz'])
+test('move score columns retain identity and validate explicit move ranges', () => {
+  assert.deepEqual(moveScoreColumns({ all_moves: true }), ['player', 'game', 'result'])
+  assert.deepEqual(moveScoreColumns({ first_move: 2, last_move: 3 }), ['player', 'game', 'result', 'move_score_2', 'move_score_3'])
+  assert.deepEqual(moveScoreColumns({ first_move: 3, last_move: 2 }), [])
+  assert.deepEqual(moveScoreColumns({ first_move: 1, last_move: 501 }), [])
 })
 
 test('definition pages preserve ordering without duplicate cards', () => {

@@ -361,6 +361,8 @@ export default function PlayerBehaviouralPanel({
   activity,
   playerName,
   ratings,
+  pending = false,
+  error = '',
 }) {
   const [resultMode, setResultMode] = useState('all')
   const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
@@ -463,16 +465,19 @@ export default function PlayerBehaviouralPanel({
     <>
       <div className="behavior-dashboard">
       <div className="behavior-summary" aria-label="Behavioral selection summary">
-        <PlayerResultsChart totals={totals} mode={resultMode} onModeChange={setResultMode}
+        {!activity ? <div {...pageStyleTarget('chart.results')} className="behavior-results-summary" aria-busy={!error}>
+          <span {...pageStyleTarget('label')}>Results</span>
+          <p {...pageStyleTarget('text')} role="status">{error ? 'Results could not be loaded.' : 'Loading results…'}</p>
+        </div> : <PlayerResultsChart totals={totals} mode={resultMode} onModeChange={setResultMode}
           onExplore={result => setExplorerSelection({
             scope: 'result', result, analyzed_only: false,
             modes: resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode],
-          })} />
+          })} />}
         <PlayerRatingDistribution key={playerName} playerName={playerName} onExplore={setExplorerSelection} />
       </div>
 
       <div className="player-analysis-chart-list">
-        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle">
+        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle" disabled={pending}>
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">
@@ -551,7 +556,7 @@ export default function PlayerBehaviouralPanel({
           </div>
         </div>
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Hours" buttonTarget="player.activityHours.toggle">
+        <PlayerAnalysisDisclosure label="Hours" buttonTarget="player.activityHours.toggle" disabled={pending}>
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.outcomes')} className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
@@ -671,7 +676,7 @@ export default function PlayerBehaviouralPanel({
           </div>
         </div>
         </PlayerAnalysisDisclosure>
-        <PlayerAnalysisDisclosure label="Days" buttonTarget="player.activityDays.toggle">
+        <PlayerAnalysisDisclosure label="Days" buttonTarget="player.activityDays.toggle" disabled={pending}>
         <WeekdayStartChart
           availableModes={availableActivityModes}
           onExplore={setExplorerSelection}

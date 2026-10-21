@@ -161,12 +161,27 @@ async def explore_player_games(
     color: str | None = None,
     accuracy_bin: int | None = None,
     blunder_bin: int | None = None,
+    ending: str | None = None,
+    score_band: str | None = None,
+    threshold_cp: int | None = None,
 ) -> dict[str, Any]:
     """Return compact analyzed games belonging to one visual chart bin."""
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100.")
     salience_filtered = validate_range(salience_min, salience_max)
     selected_modes = _normalize_modes(modes)
+    if scope_kind == 'unexpected_endings':
+        if (analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None
+                or any(value is not None for value in (
+                    target_date, weekday, hour, rating_from, result, opponent, opening, color, accuracy_bin, blunder_bin))):
+            raise ValueError('Unexpected endings requires analyzed_only=false without other chart filters.')
+        from chessism_api.operations.player_unexpected_endings import explore_unexpected_endings
+        return await explore_unexpected_endings(player_name, modes=selected_modes, ending=ending,
+            score_band=score_band,
+            threshold_cp=200 if threshold_cp is None else threshold_cp,
+            timezone_name=timezone_name, limit=limit, cursor=cursor)
+    if ending is not None or score_band is not None or threshold_cp is not None:
+        raise ValueError('ending, score_band and threshold_cp require the unexpected_endings scope.')
     if scope_kind in {'accuracy', 'blunders'}:
         if (not analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None
                 or any(value is not None for value in (target_date, weekday, hour, rating_from, result, opponent, opening, color))):

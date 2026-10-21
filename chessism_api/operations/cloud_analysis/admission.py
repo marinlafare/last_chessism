@@ -9,10 +9,12 @@ ADMISSION_LOCK = 731946220
 
 
 async def blocking_job(session, excluding=None):
-    query = select(CloudAnalysisJob).where(CloudAnalysisJob.status.in_(OPEN_STATES))
+    # Admission needs identity/status only, never the potentially huge saved
+    # game selection loaded by the ORM document hook.
+    query = select(CloudAnalysisJob.id, CloudAnalysisJob.status).where(CloudAnalysisJob.status.in_(OPEN_STATES))
     if excluding is not None:
         query = query.where(CloudAnalysisJob.id != excluding)
-    return (await session.scalars(query.order_by(CloudAnalysisJob.created_at, CloudAnalysisJob.id).limit(1))).first()
+    return (await session.execute(query.order_by(CloudAnalysisJob.created_at, CloudAnalysisJob.id).limit(1))).first()
 
 
 async def require_available(session, own_job_id=None):

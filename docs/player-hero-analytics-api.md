@@ -6,7 +6,7 @@ the player hero page. Their backend implementation lives in the
 the page-owned API client lives in
 `chessism_web/src/pages/players/playerAnalysisApi.js`.
 
-All aggregate endpoints accept `mode=all|bullet|blitz|rapid` and optional
+Unless stated otherwise, aggregate endpoints accept `mode=all|bullet|blitz|rapid` and optional
 `date_from` and `date_to`. Behavioral endpoints automatically resolve the
 player's local time. Engine-measure endpoints may additionally accept an
 explicit IANA `timezone`. Without an explicit timezone, the backend resolves
@@ -23,6 +23,87 @@ contains `time_context`, which states the selected zones, source, and whether
 the result is estimated or UTC-based.
 
 ## Playing Patterns
+
+The hero mounts Results and Rating distribution first, before the Rating,
+Hours, Days, Opponents and Opening repertoire disclosures. Loading behavioral
+data keeps that layout stable; the rating distribution loads independently.
+
+## Unexpected endings
+
+`GET /players/{player}/analysis/measures/unexpected-endings`
+uses the existing authenticated player API. It returns all three modes in
+`by_mode` (`bullet`, `blitz`, `rapid`) so mode toggles need no additional request.
+The boundary is fixed at 200 cp; 100 cp is one pawn. The optional legacy
+`threshold_cp` parameter accepts only 200. There is no date filter.
+Version 2 returns these four ending keys in each mode:
+
+- `lost_on_time`: recorded loss on time.
+- `won_on_time`: recorded win on time.
+- `lost_by_resignation`: recorded loss by resignation.
+- `won_by_resignation`: recorded win by resignation.
+
+Each entry has `eligible_games` (games with this result and ending),
+`assessable_games` (those with a final centipawn evaluation),
+`ahead_games`, `balanced_games`, `behind_games`,
+`missing_final_position`, `missing_final_score`, `mate_games` and `tablebase_games`.
+`score_bands` describes the disjoint ranges: **Ahead > +200**, **Balanced
+−200 through +200 inclusive**, **Behind < −200**. Zero and both boundary values
+belong to Balanced. Band counts sum to `assessable_games`.
+
+The UI shows two 100% horizontal stacked-bar charts: Time endings and
+Resignations, each with a Lost and a Won bar. Each segment's percentage is
+`100 * band_games / assessable_games`. The assessed count is shown to the right;
+the recorded total and exclusions are available by hovering that count, without
+coverage paragraphs below the charts.
+When the denominator is zero, show an empty bar, not a 100% balanced bar.
+For combined modes sum counts before dividing. Missing, mate and tablebase
+counts are mutually exclusive exclusions, not balanced scores or ordinary
+centipawn values. Both charts share the mode controls and one cached request.
+
+The losing side's recorded reason determines the ending. Abandonment, unknown
+results and timeout draws do not qualify. Winning/losing describes the engine
+evaluation, not a guaranteed outcome or a claim that a player knew the score.
+
+The query checks the **last recorded ply**, requiring the last move number to
+match `game.n_moves` and an unambiguous association for that move and mover.
+It then reads that FEN's stored evaluation, converting White's score into the
+selected player's perspective. It never substitutes an earlier scored move,
+and does not require the rest of the game to be scored. Games without a
+verifiable final position are reported as missing coverage.
+
+The UI loads this only when Unexpected endings is opened. Responses have a
+60-second Redis cache, `generated_at`, `max_age_seconds` and `cache_hit`.
+Database reads are read-only with a 15-second statement timeout, 2-second lock
+timeout, and at most two concurrent reads per API process. No new tables,
+engine calculations, ingestion changes or cloud tasks are involved.
+
+Click-through reuses `POST /players/{player}/analysis/measures/explore-games`:
+
+```json
+{
+  "scope": "unexpected_endings",
+  "ending": "lost_by_resignation",
+  "score_band": "balanced",
+  "modes": ["bullet", "blitz", "rapid"],
+  "analyzed_only": false,
+  "limit": 30,
+  "cursor": null
+}
+```
+
+The same classification applies to both counts and game lists. `analyzed_only`
+must be false because full-game coverage is not required. Other chart filters
+cannot be combined with this scope. Games are ordered by start date descending,
+then game ID and player side, with unknown dates last. `final_player_cp` is
+included on each game; cursor identity includes the version, threshold, modes,
+player, ending and score band. Version-1 cursors are rejected, and clients must
+reload the list. The four original selection names remain accepted as aliases
+for their corresponding ending and Ahead/Behind band at the new fixed boundary.
+Live scores may change between cached counts and subsequent pages.
+Invalid filters return 422, missing players 404, and busy/timed-out reads 503
+with `Retry-After: 3`. A timeout never returns partial counts as complete.
+
+## Playing-pattern endpoints
 
 | Endpoint | Purpose |
 | --- | --- |
@@ -56,6 +137,31 @@ The frontend also accepts older responses without `latest_ratings`, hiding
 the ratings until the matching backend release is deployed.
 
 ## Engine Measures
+
+### Score-distribution position browsing
+
+`POST /players/{player}/analysis/measures/score-distribution/positions` accepts
+`bin_id` (0–12), `modes`, the histogram `snapshot`, and an optional opaque
+`cursor`. It returns up to ten distinct FENs in `rows`, `next_cursor`, and the
+list's `snapshot`. Subsequent requests must use that returned snapshot.
+Rows are sorted by appearances descending, then numeric FEN ID ascending,
+within the selected player's games, modes and player-perspective score bin.
+The ±50 cp central interval is inclusive. Unscored, mate and tablebase
+evaluations are excluded. The UI appends pages near the bottom of the list;
+existing rows remain available while the next page loads or fails.
+
+The query counts narrow FEN/side identities first, reads candidate scores in
+bounded batches, and loads full FEN strings only for the returned ten rows.
+It does not join every occurrence to its score, count a separate total of
+matching FENs, or calculate another histogram. Exact frequency ordering still
+requires an occurrence aggregation on an uncached page. Page caching and a
+separate single-reader slot prevent repeat clicks from duplicating work or
+waiting behind a histogram refresh. Reads remain repeatable-read/read-only,
+with statement, lock and overall deadlines. A changed source on an uncached
+continuation returns HTTP 409 rather than mixing rankings; retained pages can
+still be read. Old cursor versions also return 409 with a restart instruction.
+
+### Score semantics
 
 Stockfish scores are stored from White's perspective. These endpoints invert
 the sign when the selected player was Black. For consecutive centipawn scores:

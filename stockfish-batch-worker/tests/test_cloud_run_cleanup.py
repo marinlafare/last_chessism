@@ -1,4 +1,6 @@
 from copy import deepcopy
+import threading
+import time
 import unittest
 
 from test_cleaning_job import FakeCloud, obj
@@ -47,6 +49,67 @@ class RunCloud(FakeCloud):
 
 
 class CleanupTests(unittest.TestCase):
+    def test_parallel_objects_keep_exact_generations_and_resume_after_failure(self):
+        cloud = RunCloud()
+        cloud.object_data = [obj(f'results/ui-{RUN}/batches/{i:06d}.json', str(i + 10)) for i in range(20)]
+        plan = cleanup.prepare(cloud, cloud.launch, RUN)
+        self.assertFalse(cleanup.apply(cloud, plan)['complete'])
+        unrelated = obj('results/someone-else/keep.json')
+        cloud.object_data.append(unrelated)
+        remove, lock = cloud.delete_object, threading.Lock()
+        active, peak, fail = 0, 0, True
+
+        def delete(value):
+            nonlocal active, peak, fail
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                time.sleep(.02)
+                with lock:
+                    if fail and value['generation'] == '13':
+                        fail = False
+                        raise CleanupError('temporary deletion failure')
+                    remove(value)
+            finally:
+                with lock:
+                    active -= 1
+
+        cloud.delete_object = delete
+        with self.assertRaisesRegex(CleanupError, 'temporary deletion'):
+            cleanup.apply(cloud, plan)
+        self.assertEqual(active, 0)
+        self.assertGreater(peak, 1)
+        self.assertLessEqual(peak, 8)
+        self.assertFalse(any(w[0] in {'image', 'log'} for w in cloud.writes))
+        self.assertTrue(cleanup.apply(cloud, plan)['complete'])
+        removed = [(w[1], w[2]) for w in cloud.writes if w[0] == 'object']
+        self.assertCountEqual(removed, [(o['name'], o['generation']) for o in plan['objects']])
+        self.assertEqual(cloud.object_data, [unrelated])
+
+    def test_failed_parallel_precondition_blocks_every_delete(self):
+        cloud = RunCloud()
+        plan = cleanup.prepare(cloud, cloud.launch, RUN)
+        barrier, completed = threading.Barrier(4, timeout=5), []
+
+        def read(name, fail=False):
+            def call(*args):
+                barrier.wait()
+                self.assertFalse(cloud.writes)
+                completed.append(name)
+                if fail:
+                    raise CleanupError('bucket changed')
+            return call
+
+        with patch.object(cleanup, 'other_references', side_effect=read('references')), \
+             patch.object(cleanup, 'check_bucket', side_effect=read('bucket', True)), \
+             patch.object(cleanup, 'check_inventory', side_effect=read('objects')), \
+             patch.object(cleanup.images, 'remaining', side_effect=read('images')):
+            with self.assertRaisesRegex(CleanupError, 'bucket changed'):
+                cleanup.apply(cloud, plan)
+        self.assertEqual(len(completed), 4)
+        self.assertEqual(cloud.writes, [])
+
     def test_cleanup_exact_scope_and_restart_after_job_deletion(self):
         cloud = RunCloud()
         plan = cleanup.prepare(cloud, cloud.launch, RUN)

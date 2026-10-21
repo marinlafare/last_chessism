@@ -14,11 +14,14 @@ function duration(seconds) {
 
 export default function FenPipelineStages({ jobState, ingestionTiming }) {
   const [now, setNow] = useState(Date.now() / 1000)
+  const steps = pipelineSteps(ingestionTiming, jobState)
+  const running = ingestionTiming ? ingestionTiming.status === 'running'
+    : steps.some(step => ['working', 'running'].includes(step.status))
   useEffect(() => {
+    if (!running) return undefined
     const timer = window.setInterval(() => setNow(Date.now() / 1000), 1000)
     return () => window.clearInterval(timer)
-  }, [])
-  const steps = pipelineSteps(ingestionTiming, jobState)
+  }, [running])
   const groups = [...new Set(steps.map(step => step.group || 'Ingestion'))]
   if (!steps.length) return <p className="fen-pipeline-empty">No ingestion run recorded.</p>
   return (
@@ -27,8 +30,9 @@ export default function FenPipelineStages({ jobState, ingestionTiming }) {
         <div className="fen-pipeline-group" key={group}>
           <h3 {...pageStyleTarget('title')}>{group}</h3>
           {steps.filter(step => (step.group || 'Ingestion') === group).map(step => {
-            const working = ['working', 'running'].includes(step.status)
-            const status = working ? 'working' : step.status
+            const working = running && ['working', 'running'].includes(step.status)
+            const status = working ? 'working'
+              : ['working', 'running'].includes(step.status) ? 'stopped' : step.status
             const heartbeatAge = step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : null
             const stale = working && heartbeatAge != null && heartbeatAge > 30
             const percent = step.total > 0 ? Math.min(100, step.processed / step.total * 100) : null

@@ -10,6 +10,7 @@ import useSummaryChartWidth from './useSummaryChartWidth'
 import './player-blunder-distribution.css'
 
 const LEFT = 58, TOP = 12, BOTTOM = 104, HEIGHT = 144
+const tickFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 const interval = bin => `${bin.label} blunder${bin.id === 1 ? '' : 's'}`
 // Retain the existing style keys so saved appearance overrides survive replacement.
 const STYLE = 'player.accuracyDistribution'
@@ -94,7 +95,7 @@ export default function PlayerBlunderDistribution({ playerName }) {
         <desc>Only fully analyzed games with saved blunder counts and measured player moves. Missing summaries are excluded, not zero. Zero means no detected blunders, not perfect play. Select a bar to browse games, newest first.</desc>
         {ticks.map(tick => <g className="blunder-distribution-grid" key={tick} aria-hidden="true">
           <line x1={LEFT} x2={right} y1={y(tick)} y2={y(tick)} />
-          <text x={LEFT - 8} y={y(tick) + 4} textAnchor="end">{formatNumber(tick)}</text>
+          <text x={LEFT - 8} y={y(tick) + 4} textAnchor="end">{tickFormat.format(tick)}</text>
         </g>)}
         <text x="13" y={(TOP + BOTTOM) / 2} textAnchor="middle" transform={`rotate(-90 13 ${(TOP + BOTTOM) / 2})`}>Games</text>
         {request.data.bins.map((bin, index) => {

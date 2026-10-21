@@ -8,8 +8,9 @@ router = APIRouter()
 
 @router.get('')
 async def explore(scope: str = Query(...,max_length=10), token: str | None = Query(None,max_length=32),
-                  page: int = Query(0,ge=0,le=9), account=Depends(require_admin), redis=Depends(get_redis_pool)):
-    try: return await explore_positions(redis,account.id,scope,token,page)
+                  page: int = Query(0,ge=0,le=9), include_details: bool = Query(True),
+                  account=Depends(require_admin), redis=Depends(get_redis_pool)):
+    try: return await explore_positions(redis,account.id,scope,token,page,include_details=include_details)
     except LookupError as error: raise HTTPException(410,str(error)) from error
     except ValueError as error: raise HTTPException(422,str(error)) from error
 

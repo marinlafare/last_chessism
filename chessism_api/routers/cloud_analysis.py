@@ -1,21 +1,23 @@
 """Authenticated UI requests only; no Docker, Google credentials or cloud calls."""
 from datetime import datetime, timezone
+from collections import defaultdict
 import json
 from uuid import uuid4
 
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import case, func, literal_column, select
+from sqlalchemy import case, func, literal_column, select, text
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudControllerHeartbeat,
     CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudBatchUnit,
-    CloudBatchSequence, CloudBatchCycle, CloudSequenceControl, CloudGameDraft, CloudGameDraftEntry)
+    CloudBatchSequence, CloudBatchCycle, CloudSequenceControl, CloudGameDraft, CloudGameDraftEntry, CloudJobCancellation)
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, CloudVmCountRequest, MAX_CLOUD_FENS, MAX_CLOUD_RUN_FENS, MAX_BATCH_TOTAL_FENS, batch_cycle_count
 from chessism_api.operations.cloud_analysis.admission import blocking_job, require_available
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from chessism_api.redis_client import get_redis_pool
-from chessism_api.database.cloud_codec import read_projection
+from chessism_api.database.cloud_codec import read_projections
+from chessism_api.database.cloud_columns import SCHEMAS
 from .cloud_game_drafts import router as game_drafts_router
 from .cloud_billing import router as billing_router
 
@@ -32,8 +34,14 @@ async def controller_online(session):
 @router.get("")
 async def cloud_jobs():
     async with AsyncDBSession() as session:
+        # References and their immutable documents must come from one snapshot
+        # while the controller advances phases or compacts completed runs.
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
         blocker = await blocking_job(session)
-        jobs = (await session.scalars(select(CloudAnalysisJob)
+        jobs = (await session.execute(select(
+                CloudAnalysisJob.id, CloudAnalysisJob.status, CloudAnalysisJob.target,
+                CloudAnalysisJob.imported, CloudAnalysisJob.created_at, CloudAnalysisJob.error,
+                CloudAnalysisJob._selection_ref.label('selection_ref'))
                 .order_by(case(
                     (CloudAnalysisJob.status.in_(["running", "paused"]), 0),
                     (CloudAnalysisJob.status.in_(["queued", "failed", "waiting"]), 1),
@@ -56,38 +64,51 @@ async def cloud_jobs():
         combined = {}
         if jobs:
             sources = (await session.execute(select(CloudGameDraft.submitted_job_id,
-                CloudGameDraft.id, CloudGameDraftEntry.player_name)
+                CloudGameDraft.id, CloudGameDraftEntry.player_name, CloudGameDraftEntry.preview_fens)
                 .join(CloudGameDraftEntry, CloudGameDraftEntry.draft_id == CloudGameDraft.id)
                 .where(CloudGameDraft.submitted_job_id.in_([job.id for job in jobs]))
                 .order_by(CloudGameDraftEntry.ordinal))).all()
-            for job_id, draft_id, player in sources:
-                entry = combined.setdefault(job_id, {'draft_id': draft_id, 'players': [], 'selections': 0})
+            for job_id, draft_id, player, preview_fens in sources:
+                entry = combined.setdefault(job_id, {'draft_id': draft_id, 'players': [], 'selections': 0,
+                    'player_fen_previews': {}, 'fen_count_basis': 'saved_selection_previews'})
                 entry['selections'] += 1
+                # These saved preview counts can overlap across selections.
+                # The job target remains the deduplicated, reserved total.
+                entry['player_fen_previews'][player] = entry['player_fen_previews'].get(player, 0) + preview_fens
                 if player not in entry['players']:
                     entry['players'].append(player)
         finalized = set((await session.scalars(select(CloudPhaseTiming.run_id).where(
             CloudPhaseTiming.job_id.in_(sequences), CloudPhaseTiming.phase == 'global_summaries',
             CloudPhaseTiming.outcome == 'complete', CloudPhaseTiming.finished_at.is_not(None)))).all()) if sequences else set()
         connection = await session.connection()
-        views = {}
-        for run in runs:
-            views[run.id] = await connection.run_sync(read_projection, run.launch_ref, {
+        cancellations = {row.job_id: row for row in (await session.execute(select(
+            CloudJobCancellation.job_id, CloudJobCancellation.phase, CloudJobCancellation.requested_at,
+            CloudJobCancellation.finished_at).where(CloudJobCancellation.job_id.in_([job.id for job in jobs])))).all()}
+        selections = await connection.run_sync(read_projections, [job.selection_ref for job in jobs],
+                                               set(SCHEMAS['selection']) - {'game_links'})
+        projections = await connection.run_sync(read_projections, [run.launch_ref for run in runs], {
                 'jobs', 'performance', 'recovery_session', 'recovery_summary', 'log_cleanup_report',
                 'run_job', 'run_execution', 'run_executions', 'vm_statuses'})
+        views = {run.id: projections[run.launch_ref] for run in runs}
+        runs_by_job = defaultdict(list)
+        for run in runs:
+            runs_by_job[run.job_id].append(run)
         return {"controller_online": await controller_online(session),
                 "cloud_busy": blocker is not None, "blocking_job_id": blocker.id if blocker else None,
                 "jobs": [{
-            "id": job.id, "status": job.status, "selection": {
-                key: value for key, value in job.selection.items() if key != "game_links"
-            }, "target": job.target, "imported": job.imported,
+            "id": job.id, "status": job.status, "selection": selections[job.selection_ref],
+            "target": job.target, "imported": job.imported,
             "combined_selection": combined.get(job.id),
             "created_at": job.created_at, "error": job.error,
+            "stop_cleanup": ({'phase': cancellations[job.id].phase,
+                'requested_at': cancellations[job.id].requested_at, 'finished_at': cancellations[job.id].finished_at}
+                if job.id in cancellations else None),
             "sequence": ({'times': sequences[job.id].repeat_count,
                 'requested': sequences[job.id].requested_count,
                 'reserved': sequences[job.id].reserved_count,
                 'frozen': sequences[job.id].frozen_at is not None,
                 'stop_requested': sequences[job.id].stop_requested,
-                'automatic': job.selection.get('execution_mode') == 'batch_sequence_v2',
+                'automatic': selections[job.selection_ref].get('execution_mode') == 'batch_sequence_v2',
                 'phase': controls[job.id].phase if job.id in controls else 'selecting',
                 'cloud_status': controls[job.id].remote_status if job.id in controls else None,
                 'cloud_completed': controls[job.id].completed_cycles if job.id in controls else 0,
@@ -96,7 +117,7 @@ async def cloud_jobs():
                 'safe_to_power_off': bool(job.id in controls and controls[job.id].accepted_at
                     and controls[job.id].remote_status in {'RUNNING', 'SUCCEEDED'})} if job.id in sequences else None),
             "runs": [{"id": run.id, "status": ('refreshing' if run.job_id in sequences
-                      and job.selection.get('execution_mode') != 'batch_sequence_v2'
+                      and selections[job.selection_ref].get('execution_mode') != 'batch_sequence_v2'
                       and run.status == 'complete' and run.positions and run.id not in finalized else run.status),
                       "cloud_state": run.cloud_state,
                       "positions": run.positions, "imported": run.imported,
@@ -107,7 +128,7 @@ async def cloud_jobs():
                       "run_execution_count": len(views[run.id].get('run_executions', [])),
                       "vm_statuses": views[run.id].get('vm_statuses', []),
                       "batch_jobs": views[run.id].get('jobs', [])}
-                     for run in runs if run.job_id == job.id],
+                     for run in runs_by_job[job.id]],
         } for job in jobs]}
 
 
@@ -202,16 +223,7 @@ async def resume_cloud_job(job_id: str):
 
 @router.post('/{job_id}/stop-repeating', status_code=202)
 async def stop_repeating(job_id: str):
-    """Finish any started loop; authorize no subsequent loops."""
-    async with AsyncDBSession() as session, session.begin():
-        sequence = await session.get(CloudBatchSequence, job_id, with_for_update=True)
-        job = await session.get(CloudAnalysisJob, job_id)
-        if not sequence or not job or job.status not in {'queued', 'running', 'paused', 'waiting', 'failed'}:
-            raise HTTPException(409, 'No active Batch sequence')
-        sequence.stop_requested = True
-        if job.selection.get('execution_mode') == 'batch_sequence_v2' and job.status == 'paused':
-            job.status = 'queued'  # Forward the durable signal even after a local transfer error.
-    return {'id': job_id, 'status': 'stop_after_current_loop'}
+    raise HTTPException(410, 'Stop-after-cycle has been removed. Use stop-and-cleanup.')
 
 
 @router.post("/{job_id}/vms", status_code=202)
@@ -223,6 +235,8 @@ async def revise_batch_vms(job_id: str, data: CloudVmCountRequest):
     """
     async with AsyncDBSession() as session:
         await require_available(session, own_job_id=job_id)
+        if await session.get(CloudJobCancellation, job_id) is not None:
+            raise HTTPException(409, 'This job is stopping. Resume cleanup instead of changing its VM count.')
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
         if not job or job.status != "paused" or job.selection.get("execution_mode") not in {'batch_multi_vm_v1', 'batch_work_units_v1'}:
             raise HTTPException(409, "VM count can change only on a paused Batch preflight")
@@ -241,6 +255,8 @@ async def retry_cloud_job(job_id: str):
     """Explicit user action authorizes another bounded, billable submission."""
     async with AsyncDBSession() as session:
         await require_available(session, own_job_id=job_id)
+        if await session.get(CloudJobCancellation, job_id) is not None:
+            raise HTTPException(409, 'Cancelled work cannot restart. Resume cleanup if it is paused.')
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
         if not job or job.status != "failed":
             raise HTTPException(409, "Only a failed cloud job can be retried")
@@ -299,22 +315,22 @@ async def retry_cloud_job(job_id: str):
 
 @router.post("/{job_id}/cancel", status_code=202)
 async def cancel_cloud_job(job_id: str):
-    """Durable intent; the host forwards it to the cloud supervisor, not a VM kill."""
+    raise HTTPException(410, 'Cancellation without cleanup has been removed. Use stop-and-cleanup.')
+
+
+@router.post('/{job_id}/stop-and-cleanup', status_code=202)
+async def stop_and_cleanup(job_id: str):
+    """Durable, idempotent intent; Google calls belong to the singleton controller."""
     async with AsyncDBSession() as session:
+        await require_available(session, own_job_id=job_id)
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
-        if not job or job.status not in {"running", "paused"}:
-            raise HTTPException(409, "Only active supervised cloud jobs can be cancelled")
-        if job.selection.get('execution_mode') == 'batch_sequence_v2':
-            job.selection = {**job.selection, 'cancel_requested': True}
-            job.status = 'running'
-            await session.commit()
-            return {'id': job_id, 'status': 'cancellation_requested'}
-        run = (await session.scalars(select(CloudAnalysisRun).where(
-            CloudAnalysisRun.job_id == job.id, CloudAnalysisRun.status.in_(["running", "run_discover", "submitting"])
-        ))).one_or_none()
-        if run is None or not (run.launch.get("recovery_session") or run.launch.get("backend") == "cloud_run"):
-            raise HTTPException(409, "Wait until the recovery controller is running before cancelling")
-        job.selection = {**job.selection, "cancel_requested": True}
-        job.status = "running"
+        cancellation = await session.get(CloudJobCancellation, job_id)
+        if cancellation is not None:
+            return {'id': job_id, 'status': 'cancelled' if cancellation.finished_at else 'stop_cleanup_requested', 'phase': cancellation.phase}
+        if not job or job.status not in {'queued', 'running', 'paused', 'waiting', 'failed'}:
+            raise HTTPException(409, 'Only unfinished cloud jobs can be stopped and cleaned')
+        session.add(CloudJobCancellation(job_id=job_id))
+        job.selection = {**job.selection, 'cancel_requested': True}
+        job.status, job.error = 'queued', None
         await session.commit()
-    return {"id": job_id, "status": "cancellation_requested"}
+    return {'id': job_id, 'status': 'stop_cleanup_requested', 'phase': 'stopping'}

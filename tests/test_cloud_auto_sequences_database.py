@@ -13,7 +13,8 @@ from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, Cl
     CloudBatchSequence, CloudControllerHeartbeat, CloudFenClaim, Fen)
 from chessism_api.operations.cloud_analysis import controller, sequence, auto_sequence as auto, auto_sequence_cleanup as cleanup, importer
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
-from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs, retry_cloud_job, stop_repeating, cancel_cloud_job, resume_cloud_job
+from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs, retry_cloud_job, resume_cloud_job
+from test_cloud_sequences_database import persisted_legacy_stop
 from chessism_api.operations.cloud_analysis.migrate_auto_sequences import upgrade
 from cloud_job.recovery import WORKFLOW, RecoveryClient
 from stockfish_batch.checkpoints import digest, encode
@@ -67,7 +68,7 @@ class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         stack.enter_context(patch.object(auto.batch_spot,'check_quota',return_value={}))
         stack.enter_context(patch.object(auto,'inspect_worker',return_value=('sha256:'+'a'*64,{})))
         self.plan=stack.enter_context(patch.object(cleanup,'prepare',return_value={'jobs':[]}))
-        self.clean=stack.enter_context(patch.object(cleanup,'cleaning_job',return_value={'complete':True}))
+        self.clean=stack.enter_context(patch.object(cleanup.batch_cleanup,'apply',new_callable=AsyncMock,return_value={'complete':True}))
         stack.enter_context(patch.object(cleanup,'plan_logs',return_value={}))
         stack.enter_context(patch.object(cleanup,'remove_logs',return_value={'complete':True}))
         stack.enter_context(patch.object(importer,'refresh_global_projections',new_callable=AsyncMock))
@@ -148,7 +149,7 @@ class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(row['sequence']['safe_to_power_off'])
         self.cloud.start_sequence.assert_called_once()
 
-    async def test_cancel_before_publication_releases_claims_without_cloud_writes(self):
+    async def test_legacy_cancel_before_publication_releases_claims_without_cloud_writes(self):
         await self.start()
         with self.stubs():
             for _ in range(30):
@@ -156,7 +157,9 @@ class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 async with AsyncDBSession() as s:c=await s.get(CloudSequenceControl,self.job.id)
                 if c:break
             self.assertEqual(c.phase,'preparing')
-            await cancel_cloud_job(self.job.id)
+            async with AsyncDBSession() as session, session.begin():
+                saved = await session.get(CloudAnalysisJob, self.job.id)
+                saved.selection = {**saved.selection, 'cancel_requested': True}
             self.assertEqual((await self.tick()).status,'cancelled')
         self.assertFalse(self.cloud.mock_calls)
         async with AsyncDBSession() as s:
@@ -328,12 +331,12 @@ class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
             for _ in range(4):await self.tick()
             self.clean.assert_not_called()
 
-    async def test_stop_preserves_checkpoints_and_explicit_retry_keeps_successful_tasks(self):
+    async def test_legacy_stop_preserves_checkpoints_and_explicit_retry_keeps_successful_tasks(self):
         await self.start()
         with self.stubs():
             await self.launch()
             await self.cloud_finishes(cycles=1)
-            await stop_repeating(self.job.id)
+            await persisted_legacy_stop(self.job.id)
             self.remote='STOPPED'
             for _ in range(4):
                 job=await self.tick()

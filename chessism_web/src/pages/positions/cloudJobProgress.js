@@ -24,7 +24,7 @@ const phaseSteps = {
   running: 5, failed: 5, finalizing: 6,
   cloud_queued: 5, replanning: 3, selecting: 0,
   cleanup_planning: 7, cleaning: 7, log_planning: 7, log_cleaning: 7,
-  refreshing: 8,
+  refreshing: 8, complete: 8,
 }
 
 const liveCloudStates = new Set(['RUNNING', 'QUEUED', 'SCHEDULED', 'RETRYING', 'RECOVERING'])
@@ -68,10 +68,25 @@ export function cloudTaskLabel(job, run) {
 }
 
 export function cloudJobProgress(job) {
+  if (job.stop_cleanup) {
+    const phases = ['stopping', 'importing', 'planning', 'cleaning', 'logs', 'refreshing', 'finishing', 'complete']
+    const names = ['Stop cloud workers and recovery', 'Save completed results', 'Prepare cleanup',
+      'Clean up cloud resources', 'Clean up eligible logs', 'Refresh database totals', 'Release unfinished FENs', 'Cancelled — cleaned']
+    const current = Math.max(0, phases.indexOf(job.stop_cleanup.phase))
+    const finished = job.status === 'cancelled' && job.stop_cleanup.phase === 'complete'
+    return { done: false, label: `${job.status === 'paused' ? 'Paused — ' : ''}${names[current]}`,
+      steps: names.map((title, index) => ({ title, state: finished || index < current ? 'complete'
+        : index === current ? job.status === 'paused' ? 'attention' : 'current' : 'pending' })) }
+  }
   const done = cloudJobDone(job)
   const runs = job.runs || []
   const active = runs.find((run) => run.status !== 'complete')
-  const phase = job.sequence?.automatic ? job.sequence.phase : active?.status
+  let phase = job.sequence?.automatic ? job.sequence.phase : active?.status
+  // The sequence remains "running" while its final run is being verified.
+  // Use explicit run states, never infer completion from a 100% import bar.
+  const selectedRuns = runs.filter(run => run.positions > 0)
+  if (job.sequence?.automatic && phase === 'running' && selectedRuns.length
+    && selectedRuns.every(run => ['finalizing', 'complete'].includes(run.status))) phase = 'finalizing'
   const step = done ? 9 : phase ? (phaseSteps[phase] ?? 0) : runs.length ? 8 : 0
   const interrupted = ['paused', 'failed', 'waiting', 'cancelled'].includes(job.status)
   const attention = { paused: 'Paused', failed: 'Failed', waiting: 'Waiting', cancelled: 'Cancelled' }[job.status]
@@ -89,6 +104,7 @@ export function cloudJobProgress(job) {
 
 export function cloudJobIndicator(job) {
   const { done, label } = cloudJobProgress(job)
+  if (job.status === 'cancelled') return { state: 'idle', label: job.stop_cleanup?.phase === 'complete' ? 'Cancelled — cleaned; saved results retained' : 'Cancelled' }
   if (done) return {
     state: 'success',
     label: job.status === 'limit_reached'
@@ -101,32 +117,4 @@ export function cloudJobIndicator(job) {
   if (['paused', 'waiting'].includes(job.status)) return { state: 'attention', label }
   if (['queued', 'running'].includes(job.status)) return { state: 'running', label: `In progress — ${label}` }
   return { state: 'idle', label: job.status === 'cancelled' ? 'Cancelled' : 'Completion not confirmed' }
-}
-
-export const CLOUD_DONE_VISIBLE_MS = 10000
-export const CLOUD_DONE_FADE_MS = 400
-
-const displayTerminal = (job) => cloudJobDone(job) || job.status === 'cancelled'
-
-// Initial history is hidden immediately. A job seen active on this page gets a
-// ten-second completion message. Polling must not restart that countdown.
-export function reconcileCloudJobDisplay(previous, jobs, now) {
-  return Object.fromEntries(jobs.map((job) => {
-    const old = previous[job.id]
-    const terminal = displayTerminal(job)
-    return [job.id, {
-      terminal,
-      endedAt: terminal ? old?.terminal ? old.endedAt : old ? now : -Infinity : null,
-    }]
-  }))
-}
-
-export function cloudJobDisplayState(job, entry, now) {
-  if (!displayTerminal(job)) return 'visible'
-  if (!entry) return 'hidden'
-  // The hook will record this newly observed completion after this render.
-  if (!entry.terminal) return 'visible'
-  const elapsed = now - entry.endedAt
-  if (elapsed >= CLOUD_DONE_VISIBLE_MS + CLOUD_DONE_FADE_MS) return 'hidden'
-  return elapsed >= CLOUD_DONE_VISIBLE_MS ? 'fading' : 'visible'
 }

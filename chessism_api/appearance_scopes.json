@@ -516,6 +516,40 @@
           "initialStyleFrom": "button",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
         },
+        "player.endings.toggle": {
+          "label": "Stockfish analysis · Unexpected endings button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "player.endings.panel": {
+          "label": "Unexpected endings · background",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "player.endings.card": {
+          "label": "Unexpected endings · charts",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","chartColor1","chartColor2","chartColor3"],
+          "propertyLabels": {"chartColor1":"Ahead","chartColor2":"Balanced","chartColor3":"Behind"}
+        },
+        "player.endings.metric": {
+          "label": "Unexpected endings · game-list buttons",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
+        },
+        "player.endings.text": {
+          "label": "Unexpected endings · notes and coverage",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.endings.modes": {
+          "label": "Unexpected endings · game mode buttons",
+          "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
+        },
+        "player.endings.threshold": {
+          "label": "Unexpected endings · threshold input",
+          "properties": ["background","color","borderColor","borderWidth","radius","fontSize","fontFamily"]
+        },
+        "player.endings.action": {
+          "label": "Unexpected endings · retry",
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
         "player.scores.toggle": {
           "label": "Stockfish analysis · Score distribution button",
           "initialStyleFrom": "button",
@@ -851,6 +885,120 @@
         "/positions"
       ],
       "targets": {
+        "local.toggle": {
+          "label": "Local button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.toggle": {
+          "label": "GCloud button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.run.toggle": {
+          "label": "Cloud Run button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.batch.toggle": {
+          "label": "Batch Spot button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.single.toggle": {
+          "label": "One process button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.combined.toggle": {
+          "label": "Combined button",
+          "initialStyleFrom": "button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.job.summary": {
+          "label": "Cloud progress · general data container",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.job.progress": {
+          "label": "Cloud progress · bars and process container",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.job.vms": {
+          "label": "Cloud progress · VM container",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.job.controls": {
+          "label": "Cloud progress · stop and recovery container",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.job.stop": {
+          "label": "Cloud progress · stop and clean up button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.job.dismiss": {
+          "label": "Cloud progress · dismiss finished progress button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.job.stopping": {
+          "label": "Cloud progress · stopping process background",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.job.stop-indicator": {
+          "label": "Cloud progress · stop indicator",
+          "properties": ["background","borderColor","borderWidth","radius"]
+        },
+        "cloud.job.backend": {
+          "label": "Cloud progress · backend badge",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.job.mode": {
+          "label": "Cloud progress · selection badge",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.job.player": {
+          "label": "Cloud progress · player badges",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.job.count": {
+          "label": "Cloud progress · player FEN count badges",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.job.total": {
+          "label": "Cloud progress · total FEN count badge",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.number": {
+          "label": "Cloud progress · process number badges",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.name": {
+          "label": "Cloud progress · process name badges",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.vm.toggle": {
+          "label": "Cloud progress · VM buttons",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]
+        },
+        "cloud.vm.details": {
+          "label": "Cloud progress · VM details",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.vm.close": {
+          "label": "Cloud progress · close VM details",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","hoverBackground","hoverColor"]
+        },
+        "cloud.performance.toggle": {
+          "label": "Cloud progress · performance report button",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.performance.panel": {
+          "label": "Cloud progress · performance report popup",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.performance.close": {
+          "label": "Cloud progress · close performance report",
+          "properties": ["background","borderColor","borderWidth","radius","color","fontSize","hoverBackground","hoverColor"]
+        },
         "coverage.panel": {
           "label": "Position coverage",
           "properties": [

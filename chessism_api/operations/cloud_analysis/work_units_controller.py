@@ -10,7 +10,7 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim
 from cloud_job import batch_spot, work_units
 from cloud_job.launch import inspect_worker, expected_contract
-from cleaning_job import cleaning_job
+from . import batch_cleanup
 from cleaning_job.cleanup import prepare, check_bucket
 from stockfish_batch.checkpoints import encode, parse_input
 from stockfish_batch import __version__
@@ -18,7 +18,7 @@ from stockfish_batch.storage import MAX_INPUT_BYTES
 from stockfish_core import ENGINE_SHA256, PROFILE_ID
 from . import history, runtime, work_units_results as results
 from .preflight import verify_clean_workspace, parallel_checks
-from .preparation import PreparationTimings, refresh_claim_statistics
+from .preparation import PreparationTimings, StageTimings, refresh_claim_statistics
 from .log_cleanup import plan_logs, remove_logs
 from .importer import refresh_unit_projections
 
@@ -176,8 +176,7 @@ async def advance(controller, job, run):
             await save_run(run.id, cleanup_plan=plan, status='cleaning', error=None)
         elif run.status == 'cleaning':
             await stopped(cloud, launch)
-            report = await asyncio.to_thread(cleaning_job, plan=run.cleanup_plan, execute=True,
-                cloud=cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT)
+            report = await batch_cleanup.apply(cloud, run.cleanup_plan, job_id=run.job_id, run_id=run.id)
             launch['cleanup_report'] = report
             await save_run(run.id, launch=launch, status='log_planning' if report['complete'] else 'cleaning', error=None)
         elif run.status == 'log_planning':
@@ -191,7 +190,11 @@ async def advance(controller, job, run):
             await save_run(run.id, launch=launch, status='refreshing' if report['complete'] else 'log_cleaning', error=None)
     elif run.status == 'refreshing':
         if not all(unit.get('refreshed') for unit in launch['units']):
-            await refresh_unit_projections([unit['run_id'] for unit in launch['units']])
+            timings = StageTimings()
+            try:
+                await refresh_unit_projections([unit['run_id'] for unit in launch['units']], timings=timings)
+            finally:
+                await timings.save(run.job_id, run.id)
             launch['units'] = [{**unit, 'refreshed': True} for unit in launch['units']]
             await save_run(run.id, launch=launch, error=None)
             controller.continue_immediately = True

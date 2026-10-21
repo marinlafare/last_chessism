@@ -29,10 +29,6 @@ export const moveScoreColumns = (options, maximum = 500) => {
 const toggle = (items, value) => items.includes(value)
   ? items.filter((item) => item !== value) : [...items, value]
 
-export const toggleFormMode = (form, mode) => ({
-  ...form, filters: { ...form.filters, modes: toggle(form.filters.modes, mode) },
-})
-
 export const toggleFormColumn = (form, key, role) => {
   const selected = role === 'feature' ? 'features' : 'labels'
   const other = role === 'feature' ? 'labels' : 'features'

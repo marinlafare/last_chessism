@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import PlayerMeasuresPanel from './PlayerMeasuresPanel'
 import PlayerScoreDistribution from './PlayerScoreDistribution'
 import PlayerBlunderDistribution from './PlayerBlunderDistribution'
+import PlayerUnexpectedEndings from './PlayerUnexpectedEndings'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import { fetchQualityCalendar } from './playerAnalysisApi'
 import './player-measures.css'
@@ -11,7 +12,7 @@ import './player-game-explorer.css'
 export default function PlayerMeasuresWorkspace({ playerName, disabled = false }) {
   return <PlayerAnalysisDisclosure label="Stockfish analysis" target="player.measures"
     buttonTarget="player.measures.toggle" level={2} disabled={disabled}>
-    <MeasuresContent playerName={playerName} disabled={disabled} />
+    <MeasuresContent key={playerName} playerName={playerName} disabled={disabled} />
   </PlayerAnalysisDisclosure>
 }
 
@@ -55,13 +56,10 @@ function MeasuresContent({ playerName, disabled }) {
         <PlayerBlunderDistribution key={`blunders:${playerName}`} playerName={playerName} />
       </div>
       {qualityError ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{qualityError}</p> : null}
-      {qualityLoading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating engine measures…</div> : null}
-      {!qualityLoading && !qualityError && quality ? (
-        <PlayerMeasuresPanel
-          playerName={playerName}
-          quality={quality}
-        />
-      ) : null}
+      <PlayerMeasuresPanel playerName={playerName} quality={quality}
+        loading={!disabled && (qualityLoading || (!quality && !qualityError))}
+        disabled={disabled || Boolean(qualityError)} />
+      <PlayerUnexpectedEndings playerName={playerName} />
     </div>
   )
 }

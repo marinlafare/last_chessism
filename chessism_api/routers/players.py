@@ -64,6 +64,9 @@ from chessism_api.operations.player_game_catalog import GameCatalogBusy, get_pla
 from chessism_api.operations.player_accuracy_distribution import (
     AccuracyDistributionBusy, get_accuracy_distribution, get_blunder_distribution,
 )
+from chessism_api.operations.player_unexpected_endings import (
+    UnexpectedEndingsBusy, get_unexpected_endings,
+)
 
 router = APIRouter()
 PLAYER_DELETION_QUEUE = "games_queue"
@@ -85,7 +88,7 @@ class RangeGamesScoreRequest(BaseModel):
 
 
 class ExploreGamesRequest(BaseModel):
-    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening|accuracy|blunders)$")
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening|accuracy|blunders|unexpected_endings)$")
     modes: list[str] = Field(..., min_length=1, max_length=3)
     date: str | None = Field(None, min_length=10, max_length=10)
     weekday: int | None = Field(None, ge=1, le=7)
@@ -93,6 +96,9 @@ class ExploreGamesRequest(BaseModel):
     rating_from: int | None = Field(None, ge=0, le=2_147_483_638)
     accuracy_bin: int | None = Field(None, ge=0, le=19, strict=True)
     blunder_bin: int | None = Field(None, ge=0, le=6, strict=True)
+    ending: str | None = Field(None, pattern="^(lost_on_time|won_on_time|lost_by_resignation|won_by_resignation|resigned_while_winning|timed_out_while_winning|won_on_time_while_losing|won_by_resignation_while_losing)$")
+    score_band: str | None = Field(None, pattern="^(ahead|balanced|behind)$")
+    threshold_cp: int | None = Field(None, ge=200, le=200, strict=True)
     result: str | None = Field(None, pattern="^(win|draw|loss)$")
     opponent: str | None = Field(None, min_length=1, max_length=128)
     opening: str | None = Field(None, max_length=2048)
@@ -168,7 +174,7 @@ async def _hero_analytics_response(operation, *args, **kwargs) -> JSONResponse:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
-    except AccuracyDistributionBusy as error:
+    except (AccuracyDistributionBusy, UnexpectedEndingsBusy) as error:
         raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
     return JSONResponse(content=payload)
 
@@ -461,6 +467,19 @@ async def api_get_player_blunder_distribution(
     return response
 
 
+@router.get("/{player_name}/analysis/measures/unexpected-endings")
+async def api_get_player_unexpected_endings(
+    player_name: str,
+    threshold_cp: int = Query(200, ge=200, le=200),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Resignation/timeout outcomes versus exact final centipawn evaluations."""
+    response = await _hero_analytics_response(
+        get_unexpected_endings, player_name, redis, threshold_cp=threshold_cp)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @router.get("/{player_name}/analysis/measures/score-distribution")
 async def api_get_player_score_distribution(
     player_name: str,
@@ -495,6 +514,8 @@ async def api_get_player_score_positions(
     The first page uses current data and returns its snapshot for subsequent
     requests. Cached pages retain that ranking. Only an uncached continuation
     whose source changed returns 409; callers can restart the list in place.
+    Narrow occurrence identities are ranked before batched score lookups;
+    only the ten returned positions have their board text fetched.
     """
     try:
         response = await _hero_analytics_response(
@@ -585,6 +606,9 @@ async def api_explore_player_games(
         rating_from=request.rating_from,
         accuracy_bin=request.accuracy_bin,
         blunder_bin=request.blunder_bin,
+        ending=request.ending,
+        score_band=request.score_band,
+        threshold_cp=request.threshold_cp,
         result=request.result,
         opponent=request.opponent,
         opening=request.opening,

@@ -10,6 +10,7 @@ import { combineScoreModes, scoreInterval, SCORE_ENDINGS } from './scoreDistribu
 import './player-score-distribution.css'
 
 const LEFT = 64, TOP = 12, BOTTOM = 104, HEIGHT = 144
+const tickFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
 export default function PlayerScoreDistribution({ playerName }) {
   const visible = useAnalysisVisible()
@@ -104,7 +105,7 @@ export default function PlayerScoreDistribution({ playerName }) {
         <desc>Each repeated position counts again. Positive favors {playerName}. {formatNumber(totals.cp)} centipawn occurrences plotted; {formatNumber(totals.unscored)} unscored, {formatNumber(totals.mates)} mate evaluations and {formatNumber(totals.tablebases)} tablebase evaluations excluded. Select a bar to browse positions.</desc>
         {ticks.map(tick => <g key={tick} className="score-distribution-grid" aria-hidden="true">
           <line x1={LEFT} x2={right} y1={y(tick)} y2={y(tick)} />
-          <text x={LEFT - 9} y={y(tick) + 4} textAnchor="end">{formatNumber(tick)}</text>
+          <text x={LEFT - 9} y={y(tick) + 4} textAnchor="end">{tickFormat.format(tick)}</text>
         </g>)}
         <text className="score-distribution-axis" x="16" y={(TOP + BOTTOM) / 2} textAnchor="middle" transform={`rotate(-90 16 ${(TOP + BOTTOM) / 2})`}>Positions</text>
         {request.data.bins.map((bin, index) => {

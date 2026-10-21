@@ -56,15 +56,14 @@ function BehaviouralContent({ playerName, disabled }) {
 
   return (
     <div className="player-analysis-chart-list">
+      <PlayerBehaviouralPanel
+        activity={activity}
+        playerName={playerName}
+        ratings={ratings}
+        pending={loading || !activity || !ratings}
+        error={error}
+      />
       {error ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{error}</p> : null}
-      {loading ? <div className="player-analysis-loading" aria-live="polite"><span />Calculating playing patterns…</div> : null}
-      {!loading && !error && activity && ratings ? (
-        <PlayerBehaviouralPanel
-          activity={activity}
-          playerName={playerName}
-          ratings={ratings}
-        />
-      ) : null}
       <PlayerAnalysisDisclosure label="Opponents" buttonTarget="player.opponents.toggle">
         <PlayerGameCatalog key={`${playerName}:opponents`} playerName={playerName} kind="opponents" />
       </PlayerAnalysisDisclosure>

@@ -162,7 +162,7 @@ recover_batch:
             next: cancelled
           - condition: '${(cancellation != null or sequence_cancellation != null) and response.body.status.state == "FAILED"}'
             next: cancelled
-          - condition: '${(cancellation != null or sequence_cancellation != null) and response.body.status.state != "CANCELLING"}'
+          - condition: '${(cancellation != null or sequence_cancellation != null) and not(response.body.status.state in ["CANCELLATION_IN_PROGRESS", "CANCELLING"])}'
             next: cancel_job
           - condition: '${response.body.status.state == "FAILED"}'
             next: task_failure
@@ -171,8 +171,24 @@ recover_batch:
         args: {seconds: 60}
         next: cancel_poll
     - cancel_job:
-        call: request
-        args: {method: "POST", url: '${job_url + ":cancel"}', body: {}}
+        try:
+          call: request
+          args: {method: "POST", url: '${job_url + ":cancel"}', body: {}}
+        except:
+          as: cancel_error
+          steps:
+            # The local priority dispatcher may have cancelled this exact job
+            # after read_job. Only accept that race after rechecking its UID.
+            - read_cancel_race:
+                call: request
+                args: {method: "GET", url: '${job_url}'}
+                result: cancel_response
+            - accept_cancel_race:
+                switch:
+                  - condition: '${cancel_response.body.uid == state.uids[job_id] and cancel_response.body.status.state in ["CANCELLATION_IN_PROGRESS", "CANCELLING", "CANCELLED", "SUCCEEDED", "FAILED"]}'
+                    next: wait
+            - cancel_failed:
+                raise: '${cancel_error}'
         next: wait
     - task_failure:
         call: read_task_code

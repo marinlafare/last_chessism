@@ -35,9 +35,9 @@ def fixture():
 class PlanningTests(unittest.TestCase):
     def test_backend_and_cpu_validation(self):
         self.assertEqual(CloudJobRequest().backend, "batch_spot")
-        for cpus in (1, 4, 64):
+        for cpus in (1, 4, 64, 65, 100):
             self.assertEqual(CloudJobRequest(backend="cloud_run", n_cpus=cpus).n_cpus, cpus)
-        for value in (0, 65, 2.5, "4", True):
+        for value in (0, 101, 2.5, "4", True):
             with self.assertRaises(ValueError):
                 CloudJobRequest(backend="cloud_run", n_cpus=value)
         with self.assertRaises(ValueError):
@@ -45,12 +45,12 @@ class PlanningTests(unittest.TestCase):
 
     def test_shards_cover_selection_once_with_bounded_memory(self):
         for count in (1, 20, 499, 500, 501, 2082, 25000, 200000):
-            for cpus in (1, 4, 16, 64):
+            for cpus in (1, 4, 16, 64, 100):
                 parts = api.partitions(count, cpus)
                 self.assertLessEqual(len(parts), 400)
                 self.assertEqual([i for start, size in parts for i in range(start, start + size)], list(range(count)))
                 self.assertTrue(all(start % 500 == 0 and 1 <= size <= 5000 for start, size in parts))
-        for args in ((0, 1), (200001, 1), (1, 0), (1, 65)):
+        for args in ((0, 1), (200001, 1), (1, 0), (1, 101)):
             with self.assertRaises(ValueError): api.partitions(*args)
 
     def test_fixed_single_core_profile_and_task_paths(self):
@@ -75,7 +75,7 @@ class PlanningTests(unittest.TestCase):
             return {"metric": "run.googleapis.com/" + name, "consumerQuotaLimits": [
                 {"quotaBuckets": [{"dimensions": {"region": region}, "effectiveLimit": str(limit)}]}]}
         cloud.pages.return_value = [{"metrics": [metric("cpu_allocation", 200000), metric("mem_allocation", 400 * 1024**3)]}]
-        self.assertEqual(api.check_quota(cloud, 64)["cpu"], 200000)
+        self.assertEqual(api.check_quota(cloud, 100)["cpu"], 200000)
         for metrics in ([metric("cpu_allocation", 200000)],
                         [metric("cpu_allocation", 1000), metric("mem_allocation", 400 * 1024**3)],
                         [metric("cpu_allocation", 200000), metric("mem_allocation", 1024**3)],

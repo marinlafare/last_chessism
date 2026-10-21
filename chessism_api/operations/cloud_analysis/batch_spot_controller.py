@@ -5,12 +5,12 @@ from dataclasses import asdict
 
 from . import runtime
 from .preflight import verify_clean_workspace
-from .importer import refresh_projections
+from .preparation import StageTimings
 from . import batch_spot_results as results
 from .log_cleanup import plan_logs, remove_logs
 from cloud_job import batch_spot as api
 from cloud_job.launch import inspect_worker, expected_contract
-from cleaning_job import cleaning_job
+from . import batch_cleanup
 from cleaning_job.cleanup import prepare, check_bucket
 from stockfish_batch.checkpoints import encode
 from stockfish_batch.config import Config
@@ -94,8 +94,7 @@ async def advance(controller, job, run):
     elif run.status == "cleaning":
         results.validate_saved(run, launch)
         await require_stopped(cloud, launch)
-        report = await asyncio.to_thread(cleaning_job, plan=run.cleanup_plan, execute=True,
-            cloud=cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT)
+        report = await batch_cleanup.apply(cloud, run.cleanup_plan, job_id=run.job_id, run_id=run.id)
         launch["cleanup_report"] = report
         await save_run(run.id, launch=launch, status="log_planning" if report["complete"] else "cleaning", error=None)
     elif run.status == "log_planning":
@@ -158,5 +157,10 @@ async def poll(controller, job, run, launch):
     elif state == "SUCCEEDED":
         async with AsyncDBSession() as session:
             current = await session.get(CloudAnalysisRun, run.id)
-        launch = await results.collect(storage, current, launch)
+        timings = StageTimings()
+        try:
+            with timings.measure('verify_task_artifacts'):
+                launch = await results.collect(storage, current, launch, storage_factory=cloud.storage)
+        finally:
+            await timings.save(run.job_id, run.id)
         await save_run(run.id, launch=launch, status="finalizing", error=None)

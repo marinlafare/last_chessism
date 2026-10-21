@@ -1,5 +1,12 @@
 .fen-ingestion-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .fen-ingestion-panel > h2 { margin: 0; }
+.fen-ingestion-result { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.fen-ingestion-result-heading { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.fen-ingestion-result-heading > strong { overflow-wrap: anywhere; min-width: 0; }
+.fen-ingestion-result-heading > span { text-transform: capitalize; color: var(--muted); }
+.fen-ingestion-dismiss { width: 100%; padding: .85rem; border: 1px solid #357454; border-radius: 8px; background: #183f31; color: inherit; font: inherit; cursor: pointer; }
+.fen-ingestion-dismiss:hover { background: #24563f; }
+.fen-ingestion-dismiss:focus-visible { outline: 2px solid #b194c4; outline-offset: 2px; }
 .fen-pipeline-groups { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
 .fen-pipeline-group { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .fen-pipeline-group > h3 { margin: 0; font-size: 12px; text-transform: uppercase; color: var(--muted); }

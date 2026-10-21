@@ -29,7 +29,7 @@ class ColumnDatabaseTests(unittest.IsolatedAsyncioTestCase):
         worker = controller.Controller(Mock(spec=[]), 'unused-image')
         with patch.object(fleet.results, 'validate_saved'), \
              patch.object(fleet, 'require_stopped', new_callable=AsyncMock), \
-             patch.object(fleet, 'cleaning_job', side_effect=[pending, {'complete': True, 'remaining_compute': []}]):
+             patch.object(fleet.batch_cleanup, 'apply', new_callable=AsyncMock, side_effect=[pending, {'complete': True, 'remaining_compute': []}]):
             async with AsyncDBSession() as session:
                 current = await session.get(CloudAnalysisRun, run.id)
             await fleet.advance(worker, self.job, current)

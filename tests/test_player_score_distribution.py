@@ -25,14 +25,14 @@ class QueryTests(unittest.TestCase):
         self.assertIn("f.analysis_source='tablebase'", query)
         self.assertIn('WHEN o.is_white THEN f.score ELSE -f.score', query)
 
-    def test_bins_and_cursor_contract_are_unchanged(self):
+    def test_bins_and_page_cursor_contract(self):
         bins = scores.bins()
         self.assertEqual(len(bins), 13)
         self.assertEqual((bins[6]['lower'], bins[6]['upper']), (-50, 50))
         self.assertTrue(bins[6]['lower_inclusive'])
         self.assertTrue(bins[6]['upper_inclusive'])
-        cursor = scores.encode_cursor('selection', 120, 54321, 10)
-        self.assertEqual(scores.decode_cursor(cursor, 'selection'), (120, 54321, 10))
+        cursor = scores.encode_cursor('selection', 120, 54321, 0)
+        self.assertEqual(scores.decode_cursor(cursor, 'selection'), (120, 54321, 0))
         with self.assertRaises(ValueError):
             scores.decode_cursor(cursor, 'other-selection')
 
@@ -302,8 +302,8 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(scores.histogram_is_fresh(self.payload, 'different'))
 
     async def test_first_page_rebases_an_old_chart_without_rejection(self):
-        chunk = {'version': 1, 'snapshot': 'new', 'has_more': False, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(20)
+        chunk = {'version': 1, 'snapshot': 'new', 'has_more': True, 'rows': [
+            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10)
         ]}
         with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
                 patch.object(scores, 'prepare', AsyncMock()), \
@@ -315,22 +315,22 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(data['source_changed'])
         self.assertEqual(len(data['rows']), 10)
         scope = scores.key_for('selection', 'player', ('bullet',), 6, 'new')
-        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (None, None, 10))
-        self.assertEqual(cache.call_args.args[1], scores.key_for('chunk', scope, None, None))
+        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (11, 10, 0))
+        self.assertEqual(cache.call_args.args[1], scores.key_for('page', scope, None, None))
 
     async def test_cached_next_page_survives_source_changes(self):
         chunk = {'version': 1, 'snapshot': 'old', 'has_more': False, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(20)
+            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10, 20)
         ]}
         scope = scores.key_for('selection', 'player', ('bullet',), 6, 'old')
-        cursor = scores.encode_cursor(scope, None, None, 10)
+        cursor = scores.encode_cursor(scope, 11, 10, 0)
         with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
                 patch.object(scores, 'prepare', AsyncMock()), \
                 patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
                 patch.object(scores, 'read_cache', AsyncMock(return_value=chunk)):
             data = await scores.get_positions('player', AsyncMock(), bin_id=6,
                 modes=['bullet'], snapshot='old', cursor=cursor)
-        self.assertEqual(data['rows'], chunk['rows'][10:])
+        self.assertEqual(data['rows'], chunk['rows'])
         self.assertEqual(data['snapshot'], 'old')
 
     async def test_uncached_continuation_does_not_mix_changed_rankings(self):
@@ -345,8 +345,8 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
                     modes=['bullet'], snapshot='old', cursor=cursor)
 
     async def test_first_page_uses_snapshot_that_was_calculated_after_queuing(self):
-        chunk = {'version': 1, 'snapshot': 'newer', 'has_more': False, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(20)
+        chunk = {'version': 1, 'snapshot': 'newer', 'has_more': True, 'rows': [
+            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10)
         ]}
         with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
                 patch.object(scores, 'prepare', AsyncMock()), \
@@ -357,7 +357,7 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
                 modes=['bullet'], snapshot='old')
         self.assertEqual(data['snapshot'], 'newer')
         scope = scores.key_for('selection', 'player', ('bullet',), 6, 'newer')
-        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (None, None, 10))
+        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (11, 10, 0))
 
 
 if __name__ == '__main__':

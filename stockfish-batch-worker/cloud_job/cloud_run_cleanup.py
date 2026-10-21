@@ -1,9 +1,12 @@
 """Receipt-gated Cloud Run cleanup. Exact job UID, object generations, image upload."""
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 from urllib.parse import quote
 
 from cleaning_job.cloud import BUCKET, PROJECT, REGION
 from cleaning_job.cleanup import require, digest, check_bucket, inventory, check_inventory
 from cleaning_job import images
+from cleaning_job.parallel import read_parallel
 from .cloud_run import PARENT, job_name, executions, terminal, matches
 
 STREAMS = {"run.googleapis.com/stdout", "run.googleapis.com/stderr", "run.googleapis.com/varlog/system"}
@@ -19,7 +22,7 @@ def validate(plan):
     for item in plan["images"]:
         images.validate_uri(item["uri"])
         require(item["uri"].split("/")[-1].startswith("ui-" + plan["run_id"] + "@"), "Image is not job-owned")
-    require(bool(plan["executions"]), "Missing completed execution identities")
+    require(bool(plan["executions"]) or plan.get('version') == 3, "Missing completed execution identities")
 
 
 def current_job(cloud, plan):
@@ -63,11 +66,13 @@ def other_references(cloud, plan):
                             or prefix.startswith(reference + "/")), "Another cloud resource references job files")
 
 
-def prepare(cloud, launch, run_id):
+def prepare(cloud, launch, run_id, *, cancelled=False):
     plan = {"backend": "cloud_run", "project": PROJECT, "run_id": run_id,
             "job": launch["run_job"], "uid": launch["run_uid"], "spec": launch["spec"],
             "executions": launch["run_executions"], "prefixes": [f"inputs/ui-{run_id}/", f"results/ui-{run_id}/"],
             "images": images.inventory(cloud, [launch["image"]])}
+    if cancelled:
+        plan['version'] = 3  # Explicit cancellation also covers a never-executed job.
     current_job(cloud, plan)
     other_references(cloud, plan)
     check_bucket(cloud)
@@ -97,10 +102,11 @@ def clean_logs(cloud, plan):
             shared.append(stream)
             continue
         query = f'logName="projects/{PROJECT}/logs/{quote(stream, safe="")}"'
-        entries = list(cloud.log_entries(query, default_bucket=True))
-        if not entries:
+        entries = iter(cloud.log_entries(query, default_bucket=True))
+        first = next(entries, None)
+        if first is None:
             continue
-        if not all(owned(entry) for entry in entries):
+        if not owned(first) or not all(owned(entry) for entry in entries):
             shared.append(stream)
             continue
         other_references(cloud, plan)
@@ -114,26 +120,36 @@ def clean_logs(cloud, plan):
             "note": "Audit/billing records, shared logs and other log buckets remain."}
 
 
-def apply(cloud, plan):
+def apply(cloud, plan, *, timings=None):
+    measure = timings.measure if timings is not None else lambda phase: nullcontext()
     validate(plan)
-    other_references(cloud, plan)
-    check_bucket(cloud)
-    check_inventory(cloud, plan)
-    images.remaining(cloud, plan)
-    remote = current_job(cloud, plan)
-    if remote:
-        if not remote.get("deleteTime"):
-            cloud.operation(cloud.request("run", plan["job"], method="DELETE", params={"etag": remote["etag"]}))
-        return {"complete": False, "phase": "deleting_cloud_run_job"}
-    other_references(cloud, plan)
-    for obj in check_inventory(cloud, plan):
-        cloud.delete_object(obj)
-    if inventory(cloud, plan["prefixes"]):
-        return {"complete": False, "phase": "deleting_objects"}
-    for uri in images.remaining(cloud, plan):
+    with measure('cleanup_preconditions'):
+        # Finish every safety read before any deletion. Nested inventory readers
+        # share Cloud's eight HTTP slots, just as Batch Spot cleanup does.
+        read_parallel(lambda: other_references(cloud, plan), lambda: check_bucket(cloud),
+                      lambda: check_inventory(cloud, plan), lambda: images.remaining(cloud, plan))
+    with measure('cleanup_run_job'):
+        remote = current_job(cloud, plan)
+        if remote:
+            if not remote.get("deleteTime"):
+                cloud.operation(cloud.request("run", plan["job"], method="DELETE", params={"etag": remote["etag"]}))
+            return {"complete": False, "phase": "deleting_cloud_run_job"}
+    with measure('cleanup_objects'):
         other_references(cloud, plan)
-        cloud.delete_image(uri)
-    if images.remaining(cloud, plan):
-        return {"complete": False, "phase": "deleting_image"}
-    logs = clean_logs(cloud, plan)
+        objects = check_inventory(cloud, plan)
+        # No prefix/bucket delete: every request pins an approved generation.
+        # Drain the current bounded batch on failure; retries use the same plan.
+        with ThreadPoolExecutor(max_workers=8, thread_name_prefix='cloud-cleanup') as pool:
+            for offset in range(0, len(objects), 8):
+                list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
+        if inventory(cloud, plan["prefixes"]):
+            return {"complete": False, "phase": "deleting_objects"}
+    with measure('cleanup_image'):
+        for uri in images.remaining(cloud, plan):
+            other_references(cloud, plan)
+            cloud.delete_image(uri)
+        if images.remaining(cloud, plan):
+            return {"complete": False, "phase": "deleting_image"}
+    with measure('cleanup_logs'):
+        logs = clean_logs(cloud, plan)
     return {"complete": not logs["pending"], "logs": logs}

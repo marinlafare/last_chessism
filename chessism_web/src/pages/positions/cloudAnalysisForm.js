@@ -13,6 +13,7 @@ export const MAX_BATCH_FENS_PER_VM = 1000000
 export const batchCycleCapacity = nVms => MAX_BATCH_FENS_PER_VM * Number(nVms)
 export const cloudLimit = (backend) => backend === 'cloud_run' ? 200000 : MAX_CLOUD_FENS * MAX_BATCH_REPEATS
 export const MAX_CLOUD_RUNS = MAX_CLOUD_FENS * 20 / 1000
+export const MAX_CLOUD_RUN_CPUS = 100
 export const MAX_BATCH_VMS = 10
 export const MAX_BATCH_REPEATS = 20
 // Display-only mirror of the server policy; never included in job requests.
@@ -34,8 +35,8 @@ export function cloudGameSelectionError(preview, backend = 'batch_spot') {
 export function cloudPayload(mode, form, preview) {
   const backend = form.backend || 'batch_spot'
   if (!['batch_spot', 'cloud_run'].includes(backend)) throw new Error('Select a valid cloud backend.')
-  if (backend === 'cloud_run' && (!Number.isInteger(Number(form.n_cpus)) || Number(form.n_cpus) < 1 || Number(form.n_cpus) > 64)) {
-    throw new Error('Cloud Run requires 1–64 simultaneous CPUs, subject to Google quota.')
+  if (backend === 'cloud_run' && (!Number.isInteger(Number(form.n_cpus)) || Number(form.n_cpus) < 1 || Number(form.n_cpus) > MAX_CLOUD_RUN_CPUS)) {
+    throw new Error(`Cloud Run requires 1–${MAX_CLOUD_RUN_CPUS} simultaneous CPUs, subject to Google quota.`)
   }
   if (backend === 'batch_spot' && (!Number.isInteger(Number(form.n_vms)) || Number(form.n_vms) < 1 || Number(form.n_vms) > MAX_BATCH_VMS)) {
     throw new Error(`Batch Spot requires 1–${MAX_BATCH_VMS} VMs, subject to Google quota.`)
@@ -82,5 +83,5 @@ export function cloudBound(mode, form, preview) {
   if (!Number.isInteger(Number(form.n_vms)) || Number(form.n_vms) < 1 || Number(form.n_vms) > MAX_BATCH_VMS) return 'Choose a valid Spot VM count.'
   const tasks = Math.ceil(total / capacity)
   const last = total % capacity || capacity
-  return `One fixed set of up to ${total.toLocaleString('en-US')} unscored FENs → ${tasks} automatic task(s), at most ${capacity.toLocaleString('en-US')} FENs each (1,000,000 per VM)${tasks > 1 ? `; final task: ${last.toLocaleString('en-US')} FENs` : ''}. Tasks run sequentially in Google, each using up to ${form.n_vms} Spot VMs (${Number(form.n_vms) * 16} vCPUs concurrently, subject to quota). All inputs and the shared image are uploaded first. Keep your PC on until “Safe to turn off your PC” appears. Google then advances tasks even while you are offline; importing catches up when Docker returns. Compute stops after each task; results remain until the entire sequence is imported and verified, then cleanup runs. Each VM: 16 vCPUs / 16 GiB, single-thread FENs, 100,000 nodes, 256 MiB hash. Uploads every 500 results; ${CLOUD_STALL_TIMEOUT_SECONDS}s without a completed FEN stops the attempt. Confirmed preemptions retry; two application attempts per task. No total-runtime or monetary cap. Compute, storage and workflow charges apply.`
+  return `One fixed set of up to ${total.toLocaleString('en-US')} unscored FENs → ${tasks} automatic task(s), at most ${capacity.toLocaleString('en-US')} FENs each (1,000,000 per VM)${tasks > 1 ? `; final task: ${last.toLocaleString('en-US')} FENs` : ''}. Tasks run sequentially in Google, each using up to ${form.n_vms} Spot VMs (${Number(form.n_vms) * 16} vCPUs concurrently, subject to quota). All inputs and the shared image are uploaded first. Keep your PC on for uploads, result imports and cleanup. After Google acknowledges the complete sequence, it advances tasks even while you are offline; importing catches up when Docker returns. Compute stops after each task; results remain until the entire sequence is imported and verified, then cleanup runs. Each VM: 16 vCPUs / 16 GiB, single-thread FENs, 100,000 nodes, 256 MiB hash. Uploads every 500 results; ${CLOUD_STALL_TIMEOUT_SECONDS}s without a completed FEN stops the attempt. Confirmed preemptions retry; two application attempts per task. No total-runtime or monetary cap. Compute, storage and workflow charges apply.`
 }

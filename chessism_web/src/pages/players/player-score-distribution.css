@@ -1,7 +1,7 @@
 .player-score-distribution { --chart-color-1: #15c780; --chart-color-2: #d55c5c; --chart-color-3: #8d6bb4; padding: 12px; min-width: 0; background: #0b1117; border-radius: 6px; }
 .score-distribution-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .score-distribution-heading .behavior-mode-controls { justify-content: flex-start; }
-.score-distribution-controls { display: grid; gap: 10px; }
+.score-distribution-controls { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .score-distribution-refresh { color: var(--muted); font-size: 11px; }
 .score-distribution-endings { display: grid; gap: 5px; margin-left: auto; min-width: 210px; }
 .score-distribution-endings > div { display: flex; justify-content: space-between; align-items: baseline; gap: 22px; text-align: left; }
@@ -29,7 +29,9 @@
 .score-positions-modal button { border: 1px solid var(--border-soft); border-radius: 5px; background: #0b1117; color: var(--text); cursor: pointer; padding: 5px 10px; }
 .score-positions-modal button:disabled { opacity: .4; cursor: default; }
 .score-positions-body { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 16px; min-height: 0; overflow: auto; }
-.score-positions-list-pane { min-width: 0; }
+.score-positions-list-pane { min-width: 0; max-height: min(410px, 65dvh); overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; scrollbar-color: #23865e transparent; }
+.score-positions-list-pane:hover { scrollbar-color: #34b67e transparent; }
+.score-positions-sentinel { height: 1px; }
 .score-positions-labels { display: flex; justify-content: space-between; gap: 10px; padding: 0 8px 8px; font-size: 11px; color: var(--muted); }
 .score-positions-list { display: grid; gap: 4px; padding: 0; margin: 0; list-style: none; }
 .score-positions-list li { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 8px; background: #0b1117; color: var(--text); border: 1px solid transparent; border-radius: 5px; font-size: 12px; cursor: default; }
@@ -41,12 +43,11 @@
 .score-positions-preview { align-self: start; position: sticky; top: 0; display: grid; justify-items: center; align-content: start; gap: 10px; min-height: 310px; color: var(--muted); font-size: 12px; }
 .score-positions-preview > span { align-self: center; margin-top: 120px; }
 .score-positions-preview small { text-align: center; }
-.score-positions-modal footer { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 12px; flex-shrink: 0; }
 .score-positions-body { scrollbar-width: thin; scrollbar-color: #23865e transparent; }
 .score-positions-body:hover { scrollbar-color: #34b67e transparent; }
 @media (max-width: 680px) {
   .score-positions-body { grid-template-columns: minmax(0, 1fr); }
-  .score-positions-list { max-height: 32dvh; overflow-y: auto; scrollbar-width: thin; }
+  .score-positions-list-pane { max-height: 32dvh; }
   .score-positions-preview { min-height: 80px; position: static; }
   .score-positions-preview > span { margin-top: 20px; }
 }

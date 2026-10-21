@@ -19,6 +19,7 @@ function selectionTitle(selection) {
   if (selection.scope === 'rating') return `Games rated ${selection.rating_from}–${selection.rating_from + 9}`
   if (selection.scope === 'accuracy') return `Accuracy ${selection.accuracy_bin * 5}–${(selection.accuracy_bin + 1) * 5}`
   if (selection.scope === 'blunders') return `Games with ${selection.blunder_bin === 6 ? '6+' : selection.blunder_bin} blunder${selection.blunder_bin === 1 ? '' : 's'}`
+  if (selection.scope === 'unexpected_endings') return selection.label || 'Unexpected endings'
   if (selection.scope === 'result') return { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result]
   if (selection.scope === 'opponent') return `Games against ${selection.opponent}`
   if (selection.scope === 'opening') return `${selection.label || 'Unknown opening'} · ${selection.color || 'both colors'}`
@@ -147,7 +148,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const summary = request.data?.summary
   const games = request.data?.games || []
   const analyzedOnly = selection.analyzed_only !== false
-  const chartSelection = ['rating', 'result', 'opponent', 'opening', 'accuracy', 'blunders'].includes(selection.scope)
+  const chartSelection = ['rating', 'result', 'opponent', 'opening', 'accuracy', 'blunders', 'unexpected_endings'].includes(selection.scope)
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('gameExplorer.panel')}
@@ -161,7 +162,9 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
           <div>
             <p {...pageStyleTarget('gameExplorer.text')} className="eyebrow">GAME EXPLORER</p>
             <h2 {...pageStyleTarget('gameExplorer.title')}>{selectionTitle(selection)}</h2>
-            <small {...pageStyleTarget('gameExplorer.text')}>{selection.modes.join(' · ')} · {analyzedOnly ? 'analyzed games only' : 'all matching games'}</small>
+            <small {...pageStyleTarget('gameExplorer.text')}>{selection.modes.join(' · ')} · {selection.scope === 'unexpected_endings'
+              ? `final position · ${selection.score_band || 'advantage'} · 200 cp boundary`
+              : analyzedOnly ? 'analyzed games only' : 'all matching games'}</small>
           </div>
           <button {...pageStyleTarget('gameExplorer.close')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
         </header>
@@ -184,6 +187,8 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
             {games.map((game) => (
               <button {...pageStyleTarget('gameExplorer.row')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}
                 title={selection.scope === 'blunders' && game.blunder_count != null ? `Blunders: ${game.blunder_count}`
+                  : selection.scope === 'unexpected_endings' && game.final_player_cp != null
+                    ? `Final position: ${game.final_player_cp > 0 ? '+' : ''}${game.final_player_cp} cp (${playerName}'s perspective)`
                   : selection.scope === 'accuracy' && game.accuracy != null ? `Accuracy: ${game.accuracy.toFixed(2)}` : undefined}>
                 <span className={`game-result-mark ${game.result}`}>{resultLabel(game.result)}</span>
                 <GameListDate value={game.played_at_local || game.played_at_utc} />

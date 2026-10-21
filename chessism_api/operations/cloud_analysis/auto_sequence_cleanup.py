@@ -4,7 +4,8 @@ from datetime import datetime, timezone
 from sqlalchemy import select
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisRun, CloudPhaseTiming
-from cleaning_job.cleanup import prepare, cleaning_job
+from cleaning_job.cleanup import prepare
+from . import batch_cleanup
 from . import history, runtime, work_units_results as results
 from .log_cleanup import plan_logs, remove_logs
 
@@ -41,8 +42,7 @@ async def finish(controller, job, control, roots, sequence):
         await save_run(first.id, cleanup_plan=plan, status='cleaning')
         await save_control(job.id, phase='cleaning')
     elif control.phase == 'cleaning':
-        report = await asyncio.to_thread(cleaning_job, plan=first.cleanup_plan, execute=True,
-            cloud=cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT)
+        report = await batch_cleanup.apply(cloud, first.cleanup_plan, job_id=job.id, run_id=first.id)
         launch['cleanup_report'] = report
         phase = 'log_planning' if report['complete'] else 'cleaning'
         await save_run(first.id, launch=launch, status=phase)

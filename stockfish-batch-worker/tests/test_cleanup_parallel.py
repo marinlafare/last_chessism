@@ -7,10 +7,51 @@ from unittest.mock import patch
 from cleaning_job.cloud import Cloud, CleanupError, REGION
 from cleaning_job import cleanup
 from cleaning_job.parallel import read_parallel
-from test_cleaning_job import FakeCloud
+from test_cleaning_job import FakeCloud, obj
 
 
 class ParallelCleanupTests(unittest.TestCase):
+    def test_prefix_inventories_are_bounded_sorted_and_exact(self):
+        cloud = FakeCloud()
+        scopes = [f'results/unit-{i}/' for i in range(8)]
+        barrier, lock = threading.Barrier(4, timeout=5), threading.Lock()
+        active, peak = 0, 0
+
+        def objects(scope):
+            nonlocal active, peak
+            with lock:
+                active += 1
+                peak = max(peak, active)
+            try:
+                barrier.wait()
+                return [obj(scope + 'second.json', '22'), obj(scope + 'first.json', '11')]
+            finally:
+                with lock:
+                    active -= 1
+
+        with patch.object(cloud, 'objects', side_effect=objects):
+            inventory = cleanup.inventory(cloud, scopes)
+        expected = [obj(scope + name, generation) for scope in scopes
+                    for name, generation in [('first.json', '11'), ('second.json', '22')]]
+        self.assertEqual(inventory, expected)
+        self.assertEqual((active, peak), (0, 4))
+        self.assertFalse(cloud.writes)
+
+    def test_parallel_inventory_failure_preserves_deletion_barrier(self):
+        cloud = FakeCloud()
+        plan = cleanup.prepare(cloud, ['batch-one'])
+        original = cloud.objects
+
+        def objects(scope):
+            if scope.startswith('results/'):
+                raise CleanupError('inventory unavailable')
+            return original(scope)
+
+        with patch.object(cloud, 'objects', side_effect=objects):
+            with self.assertRaisesRegex(CleanupError, 'inventory unavailable'):
+                cleanup.apply(cloud, plan, wait_seconds=0)
+        self.assertFalse(cloud.writes)
+
     def test_nested_readers_share_eight_http_slots_and_release_after_failure(self):
         cloud = Cloud('never-called')
         barrier, lock = threading.Barrier(8, timeout=5), threading.Lock()

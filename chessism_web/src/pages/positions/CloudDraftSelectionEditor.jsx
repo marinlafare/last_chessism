@@ -4,13 +4,15 @@ import { cloudDefaults, cloudGamePreview } from './cloudAnalysisForm'
 import { draftEntryForm } from './cloudGameDraft'
 import { previewPlayerGameAnalysis } from './positionsApi'
 
-export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onCancel }) {
+export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onCancel, onRemove, onPendingChange }) {
   const [form, setForm] = useState(() => entry ? draftEntryForm(entry) : { ...cloudDefaults })
   const [preview, setPreview] = useState(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [dirty, setDirty] = useState(false)
   const change = (key, value) => {
     setForm(old => ({ ...old, [key]: value })); setPreview(null); setError('')
+    setDirty(true); onPendingChange(true)
   }
   const inspect = async () => {
     setLoading(true); setError(''); setPreview(null)
@@ -19,7 +21,6 @@ export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onC
     finally { setLoading(false) }
   }
   return <fieldset className="cloud-draft-editor" disabled={disabled || loading} aria-label="Player-game draft selection">
-    <legend>{entry ? 'Edit saved selection' : 'Add player games'}</legend>
     <label {...pageStyleTarget('label')}>Player
       <input {...pageStyleTarget('field')} className="text-input" aria-label="Draft player" maxLength={200} value={form.player}
         onChange={e => change('player', e.target.value)} placeholder="chess.com nickname" />
@@ -44,20 +45,18 @@ export default function CloudDraftSelectionEditor({ entry, disabled, onSave, onC
       <input {...pageStyleTarget('field')} className="text-input" aria-label="Draft games" type="number" min="1" max="50000" step="1"
         value={form.games} onChange={e => change('games', e.target.value)} />
     </label>}
-    <div className="cloud-draft-actions">
+    <div className="cloud-draft-actions cloud-draft-calculate">
       <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={!form.player.trim()} onClick={inspect}>
-        {loading ? 'Previewing games…' : 'Preview selection'}
+        {loading ? 'Calculating…' : 'Calculate'}
       </button>
     </div>
-    {preview && <p {...pageStyleTarget('text')} role="status">{preview.selected_games.toLocaleString('en-US')} selected games;
-      {' '}{preview.fens_to_analyze.toLocaleString('en-US')} missing FENs before combined deduplication and reservation checks.</p>}
+    {preview && <p {...pageStyleTarget('text')} role="status">{preview.fens_to_analyze.toLocaleString('en-US')} FENs</p>}
     {error && <p {...pageStyleTarget('text')} role="alert">{error}</p>}
     <div className="cloud-draft-actions">
-      <button {...pageStyleTarget('button')} className="btn" type="button" disabled={!preview?.plan_id}
-        onClick={() => onSave(preview.plan_id, entry?.id)}>{entry ? 'Save edited selection' : 'Add FENs'}</button>
-      {entry && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={onCancel}>Cancel edit</button>}
+      {preview?.plan_id && <button {...pageStyleTarget('button')} className="btn" type="button"
+        onClick={() => onSave(preview.plan_id, entry?.id)}>{entry ? 'Save step' : 'Add'}</button>}
+      {(entry || dirty) && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={onCancel}>{entry ? 'Cancel edit' : 'Clear step'}</button>}
+      {entry && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={onRemove}>Remove step</button>}
     </div>
-    <small {...pageStyleTarget('text')}>{preview?.plan_id ? `${entry ? 'Save this selection in' : 'Add these games’ missing FENs to'} the saved set. This does not start a cloud job.`
-      : 'Preview the games to enable saving their missing FENs to the set.'}</small>
   </fieldset>
 }

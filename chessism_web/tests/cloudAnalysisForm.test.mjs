@@ -18,13 +18,13 @@ test('Batch VM count and Cloud Run CPU count are independent and bounded', () =>
   for (const n_vms of [0, 11, 1.5, '', 'no']) {
     assert.throws(() => cloudPayload('all', { ...cloudDefaults, n_vms }))
   }
-  for (const cpus of [1, 4, 64]) {
+  for (const cpus of [1, 4, 64, 65, 100]) {
     const form = { ...cloudDefaults, backend: 'cloud_run', n_cpus: String(cpus) }
     assert.equal(cloudPayload('all', form).n_cpus, cpus)
     assert.equal(Object.hasOwn(cloudPayload('all', form), 'n_vms'), false)
     assert.match(cloudBound('all', form), /Cloud Run/)
   }
-  for (const n_cpus of [0, 65, 1.5, 'no', '']) {
+  for (const n_cpus of [0, 101, 1.5, 'no', '']) {
     assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'cloud_run', n_cpus }))
   }
   assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'unknown' }))
@@ -146,7 +146,7 @@ test('automatic tasks split the total; stale Times fields never multiply a reque
   assert.equal(Object.hasOwn(payload, 'repeat_count'), false)
   assert.match(cloudBound('player', form), /2,000,000.*2 automatic task\(s\).*1,000,000 FENs/)
   assert.match(cloudBound('player', { ...form, n_vms: 2 }), /2,000,000.*1 automatic task\(s\).*2,000,000 FENs/)
-  assert.match(cloudBound('player', form), /Google then advances tasks even while you are offline/)
+  assert.match(cloudBound('player', form), /After Google acknowledges the complete sequence, it advances tasks even while you are offline/)
   assert.match(cloudBound('player', form), /entire sequence is imported and verified, then cleanup/)
   assert.equal(Object.hasOwn(cloudPayload('all', cloudDefaults), 'repeat_count'), false)
   assert.equal(Object.hasOwn(cloudPayload('all', { ...cloudRunDefaults, times: 4 }), 'repeat_count'), false)

@@ -7,11 +7,13 @@ import useCircleRotation from '../../hooks/useCircleRotation'
 import { circlePercentage } from '../../utils/circleRotation'
 import AppearanceCircleTooltip from './AppearanceCircleTooltip'
 import LessCommonBars from './LessCommonBars'
-const FenPositionExplorer=lazy(()=>import('./FenPositionExplorer'))
+const loadPositionExplorer = () => import('./FenPositionExplorer')
+const FenPositionExplorer = lazy(loadPositionExplorer)
 
 export default function AppearanceCircles({ data, error, view, active }) {
   const [selected, setSelected] = useState(null)
   const [explorer,setExplorer]=useState(null)
+  const [showLessCommon, setShowLessCommon] = useState(false)
   const { highlightValue, nonUniqueValue, items } = useMemo(() => circleDistribution(view.bars), [view])
   const uniqueSegments = useMemo(() => pieSegments([
     { key: 'unique', value: highlightValue }, { key: 'non-unique', value: nonUniqueValue },
@@ -38,6 +40,10 @@ export default function AppearanceCircles({ data, error, view, active }) {
   }, [uniqueRotation.angle, coverageRotation.angle])
   const interactions = (label, fraction, scope) => {
     const percentage = circlePercentage(fraction)
+    const preload = () => {
+      // Fetch the popup code on intent, without querying positions until clicked.
+      if (scope && scope !== 'repeated') void loadPositionExplorer().catch(() => {})
+    }
     const show = (event, pointer = true) => {
       const rect = event.currentTarget.getBoundingClientRect()
       setSelected({ label, percentage, pointer, x: pointer ? event.clientX : rect.left + rect.width / 2,
@@ -47,14 +53,20 @@ export default function AppearanceCircles({ data, error, view, active }) {
       if (!scope) return
       const rect=event.currentTarget.getBoundingClientRect()
       setSelected(null)
+      if (scope === 'repeated') {
+        setExplorer(null)
+        setShowLessCommon(true)
+        return
+      }
       setExplorer({scope,key:performance.now(),x:event.detail?event.clientX+12:rect.right+12,y:event.detail?event.clientY+12:rect.top})
     }
     return {
       tabIndex: 0, role: scope ? 'button' : 'img', 'aria-label': `${label} · ${percentage}`,
+      'aria-expanded': scope === 'repeated' ? showLessCommon : undefined,
       'data-circle-slice': '', 'data-tooltip-label': label,
       'aria-describedby': selected?.label === label ? 'appearance-circle-tooltip' : undefined,
-      onMouseEnter: event => show(event), onMouseMove: event => show(event), onMouseLeave: () => setSelected(null),
-      onFocus: event => show(event, false), onBlur: () => setSelected(null),
+      onMouseEnter: event => { preload(); show(event) }, onMouseMove: event => show(event), onMouseLeave: () => setSelected(null),
+      onFocus: event => { preload(); show(event, false) }, onBlur: () => setSelected(null),
       onClick: open, onKeyDown: event => {
         if (event.key === 'Escape') setSelected(null)
         if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(event) }
@@ -65,22 +77,22 @@ export default function AppearanceCircles({ data, error, view, active }) {
     <div className="pending-repetition-heading">
       <AppearanceChartDetails>
         <p>The left pie compares distinct FENs appearing exactly once (green) with all FENs appearing more than once (red), including those appearing more than ten times. FENs without recorded appearances are excluded.</p>
-        <p>The almos unique chart counts distinct FENs with 2–10 appearances, not their combined appearances. Its bars show appearances from 2 to 10 on X and distinct FEN counts on Y, on a linear scale.</p>
+        <p>Click the red non-unique slice to reveal the Almost unique chart in the middle. It counts distinct FENs with 2–10 appearances, not their combined appearances. Its bars show appearances from 2 to 10 on X and distinct FEN counts on Y, on a linear scale.</p>
         <p>The Positions pie compares scored and unscored FENs across the entire database, including FENs without recorded appearances, using the same cached snapshot.</p>
         <p>Equal circle sizes do not compare totals. Hover or focus for percentages and exact counts; each percentage is relative to its own pie.</p>
         <p>Scroll over either circle to rotate it, without zooming. Double-click to reset. Keyboard: arrow keys to rotate, 0 to reset.</p>
-        <p>Click a slice or bar for ten sampled positions at a time. Select a position to explore the games containing it.</p>
+        <p>Click the unique slice, a bar, or either Positions slice for ten sampled thumbnails at a time. Hover or focus a thumbnail to enlarge the board; thumbnails do not open games.</p>
         {data?.refreshed_at && <p>Snapshot: <time dateTime={data.refreshed_at}>{new Date(data.refreshed_at).toLocaleString()}</time>
           {data.stale ? ' · Changes pending; summary refreshes in the background.' : ''}</p>}
       </AppearanceChartDetails>
     </div>
     <AppearanceCircleTooltip selection={selected} />
-    {explorer&&<Suspense fallback={<p role="status">Opening positions…</p>}><FenPositionExplorer key={explorer.key} scope={explorer.scope} anchor={explorer} onClose={()=>setExplorer(null)}/></Suspense>}
+    {explorer&&<Suspense fallback={null}><FenPositionExplorer key={explorer.key} scope={explorer.scope} anchor={explorer} onClose={()=>setExplorer(null)}/></Suspense>}
     {(error || data?.refresh_error) && <div className="status-banner warn" role="alert">{error || data.refresh_error}</div>}
     {!data?.refreshed_at ? <p role="status">{error || data?.refresh_error ? 'Summary unavailable.'
       : data ? 'Preparing appearance summary in the background…' : 'Loading appearance summary…'}</p>
-      : <div className="appearance-circles">
-        <figure>
+      : <div className={`appearance-circles${showLessCommon ? ' has-less-common' : ''}`}>
+        <figure className="appearance-unique-figure">
           <div className="appearance-circle-frame">
             <svg {...styleTarget('unique.outline')} className="appearance-circle appearance-uniqueness" {...uniqueRotation.svg} role="group" aria-label="Unique and non-unique FENs">
               {!uniqueSegments.length && <><circle className="appearance-empty" cx="100" cy="100" r="94" />
@@ -102,15 +114,17 @@ export default function AppearanceCircles({ data, error, view, active }) {
           </div>
           <figcaption {...styleTarget('circle.caption')}>Unique</figcaption>
         </figure>
-        <LessCommonBars items={items} interactions={interactions} />
-        <figure>
+        <div className="appearance-less-common-slot" aria-hidden={!showLessCommon}>
+          {showLessCommon && <LessCommonBars items={items} interactions={interactions} />}
+        </div>
+        <figure className="appearance-coverage-figure">
           <div className="appearance-circle-frame">
             <svg {...styleTarget('coverage.outline')} className="appearance-circle appearance-coverage" {...coverageRotation.svg} role="group" aria-label="Scored and unscored FENs">
               {!coverageSegments.length && <><circle className="appearance-empty" cx="100" cy="100" r="94" />
                 <text x="100" y="105" textAnchor="middle">No FENs</text></>}
               <g transform={`rotate(${coverageRotation.angle} 100 100)`}>
                 {coverageSegments.map(segment => <g key={segment.key}
-                  {...interactions(`${segment.key}: ${formatNumber(segment.value)}`, segment.fraction)}
+                  {...interactions(`${segment.key}: ${formatNumber(segment.value)}`, segment.fraction, segment.key)}
                   {...styleTarget(segment.key === 'scored' ? 'coverage.scored' : 'coverage.unscored')}
                   data-coverage-part={segment.key} data-value={segment.value} data-fraction={segment.fraction}
                   fill={segment.key === 'scored' ? '#17bc91' : '#e76e65'}>

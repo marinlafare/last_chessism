@@ -4,6 +4,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import FenIngestionPanel from '/src/pages/positions/FenIngestionPanel.jsx'
+import useIngestionReview from '/src/pages/positions/useIngestionReview.js'
 import '/src/index.css'
 const root = createRoot(document.getElementById('root'))
 const state = window.ingestionTest = { errors: [], run: {
@@ -18,11 +19,20 @@ const state = window.ingestionTest = { errors: [], run: {
       processed:0,total:null,unit:'positions',elapsed_seconds:0},
   ],
 } }
+const saved = sessionStorage.getItem('ingestion-fixture-run')
+if (saved) state.run = JSON.parse(saved)
 window.addEventListener('error', e => state.errors.push(e.message))
 window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
 window.fetch = () => { throw new Error('This fixture must not make API requests') }
-state.render = () => root.render(React.createElement(FenIngestionPanel, {
-  ingestionTiming: structuredClone(state.run), jobState: {},
-}))
+function Panel({ run }) {
+  const { completedRuns, dismiss } = useIngestionReview(run)
+  return React.createElement(FenIngestionPanel, {
+    ingestionTiming: run, jobState: {}, completedRuns, onDismiss: dismiss,
+  })
+}
+state.render = () => {
+  sessionStorage.setItem('ingestion-fixture-run', JSON.stringify(state.run))
+  root.render(React.createElement(Panel, { run: structuredClone(state.run) }))
+}
 state.render()
 </script></body></html>

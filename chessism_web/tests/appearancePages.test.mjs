@@ -9,14 +9,17 @@ const extra=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_sc
 const charts=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_charts.json',import.meta.url)))
 const registry={...legacy,properties:{...legacy.properties,...charts.properties},scopes:Object.fromEntries(Object.entries(extra.scopes).map(([id,spec])=>[id,{...spec,targets:{...extra.common_targets,...charts.targets,...spec.targets,...(id===legacy.scope?legacy.targets:{})}}]))}
 
-test('every app route and alias has an explicit, server-validated scope',()=>{
+test('every editable app route and alias has an explicit, server-validated scope',()=>{
   const routes=Object.fromEntries(Object.entries(extra.scopes).flatMap(([scope,spec])=>spec.routes.map(route=>[route,scope])))
   assert.deepEqual(PAGE_SCOPES,routes)
   assert.equal(scopeForPath('/positions/'),'positions')
   assert.equal(scopeForPath('/games/123?tab=moves'),'games')
   const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
   const pathBlock=app.slice(app.indexOf('const APP_PATHS'),app.indexOf('const getLocationKey'))
-  for(const [,route] of pathBlock.matchAll(/'([^']+)'/g))assert.ok(routes[route],route)
+  // Hegel is a static Markdown document with no editable page-style targets.
+  const staticDocument=fs.readFileSync(new URL('../src/pages/Hegel.jsx',import.meta.url),'utf8')
+  assert.ok(!staticDocument.includes('pageStyleTarget'))
+  for(const [,route] of pathBlock.matchAll(/'([^']+)'/g))if(route!=='/hegel')assert.ok(routes[route],route)
 })
 
 test('styles remain page-local and legacy presets still work',()=>{
@@ -83,8 +86,8 @@ test('homepage charts expose colors and borders without changing other charts',(
   assert.equal(registryTarget(registry,'home','characters.panel').editorParent,'overview.layout')
   assert.ok(appearanceCss(registry,[{scope:'home',target:'overview.layout',property:'homeTopMargin',value:3.5}]).includes('--home-top-gap:3.5rem'))
   const games=registryTarget(registry,'home','summary.games')
-  assert.deepEqual(games.hiddenProperties,['chartColor2','chartColor3','chartColor4'])
-  // Legacy presets remain valid, but only one fill is offered in the editor.
+  assert.deepEqual(games.hiddenProperties,['chartColor3','chartColor4'])
+  // Total and scored-game fills are editable; legacy extra colors stay valid.
   for(const property of games.hiddenProperties)assert.ok(appearanceCss(registry,[{scope:'home',target:'summary.games',property,value:'#112233'}]))
 })
 
@@ -95,7 +98,7 @@ test('individual home controls seed saved shared styles once, without relinking 
   const copy=structuredClone(old), seeded=seedIndependentStyles(registry,old)
   assert.deepEqual(old,copy)
   const targets=Object.entries(registry.scopes.home.targets).filter(([,spec])=>spec.initialStyleFrom==='button').map(([id])=>id)
-  assert.equal(targets.length,16)
+  assert.equal(targets.length,20)
   for(const target of targets){
     assert.equal(seeded.find(row=>row.scope==='home' && row.target===target).value,target==='player.name'?'#ffffff':'#123456')
     assert.ok(appearanceCss(registry,[{...legacy,target}]).includes(`data-style-id="${target}"`))

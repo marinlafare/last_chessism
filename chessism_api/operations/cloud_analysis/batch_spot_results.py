@@ -1,11 +1,12 @@
 """Incremental, shard-aware imports and the fleet's final receipt gate."""
-from .artifacts import read_manifest, read_performance
+import asyncio
 from .importer import validate_manifest
 from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
 from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
 from .ingestion import ingest_ready
 from .result_receipts import task_receipts, completion_manifest
+from .task_results import verify_task_artifacts
 
 
 async def import_ready(storage, run, tasks, *, storage_factory=None):
@@ -14,22 +15,13 @@ async def import_ready(storage, run, tasks, *, storage_factory=None):
     return await ingest_ready(storage, run, items, storage_factory=storage_factory)
 
 
-async def collect(storage, run, launch):
-    reports = []
-    manifests = []
-    for task in launch["tasks"]:
-        cfg = Config(**task["config"]).validate()
-        receipts = task_receipts(run.receipts, task['index'])
-        manifest = await read_manifest(storage, cfg.output)
-        if manifest is None:
-            raise ValueError("Successful Batch VM has no completion manifest; cleanup withheld")
-        subset = run.positions[task["start"]:task["start"] + task["count"]]
-        validate_manifest(manifest, subset, task["contract"], receipts)
-        report = await read_performance(storage, cfg.output)
-        if report is None:
-            raise ValueError("Successful Batch VM has no performance report; cleanup withheld")
-        reports.append(validate_performance(report, task["contract"], CPUS))
-        manifests.append(manifest)
+async def collect(storage, run, launch, *, storage_factory=None):
+    tasks = [{**task, 'output': Config(**task['config']).validate().output} for task in launch['tasks']]
+    # Existing callers without a client factory remain sequential: never share
+    # a single Storage/HTTP session between concurrently running readers.
+    manifests, reports = await asyncio.to_thread(verify_task_artifacts, storage_factory or (lambda: storage),
+        tasks, run.positions, run.receipts, engine_workers=CPUS, retain_manifests=True,
+        concurrency=4 if storage_factory is not None else 1)
     launch = {**launch, "task_performance": reports, "task_manifests": manifests,
               "manifest": completion_manifest(run.contract, len(run.positions), run.receipts)}
     launch["performance"] = {

@@ -31,6 +31,10 @@ export function fetchPlayerBlunderDistribution({ playerName, signal }) {
   return requestJson(`/players/${playerPath(playerName)}/analysis/measures/blunder-distribution`, { signal })
 }
 
+export function fetchPlayerUnexpectedEndings({ playerName, signal }) {
+  return requestJson(`/players/${playerPath(playerName)}/analysis/measures/unexpected-endings`, { signal })
+}
+
 function analyticsSearch({ mode = 'all', dateFrom, dateTo, timezone, cursor, limitGames } = {}) {
   const search = new URLSearchParams({ mode })
   if (dateFrom) search.set('date_from', dateFrom)

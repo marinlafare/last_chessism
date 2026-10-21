@@ -7,7 +7,7 @@ import threading
 import time
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 from chessism_api.database.models import Base, CloudAnalysisJob, CloudAnalysisRun
@@ -83,6 +83,29 @@ class CodecTests(unittest.TestCase):
 
 
 class PipelineTests(unittest.IsolatedAsyncioTestCase):
+    async def test_fully_committed_tasks_do_not_download_contracts_again(self):
+        storage, writer = Mock(), AsyncMock()
+        run = SimpleNamespace(id='r', receipts={
+            'tasks/000000/batches/000000.json': {},
+            'tasks/000000/batches/000001.json': {},
+        })
+        self.assertEqual(await ingest_ready(storage, run, [
+            {'index': 0, 'output': 'done', 'count': 1000, 'contract': {}}
+        ], writer=writer), 0)
+        storage.read.assert_not_called()
+        writer.assert_not_awaited()
+
+    async def test_partial_task_still_checks_contract_before_missing_batch(self):
+        storage, writer = Mock(), AsyncMock()
+        storage.read.return_value = b'{"wrong":true}'
+        run = SimpleNamespace(id='r', receipts={'tasks/000000/batches/000000.json': {}})
+        with self.assertRaisesRegex(ValueError, 'contract differs'):
+            await ingest_ready(storage, run, [
+                {'index': 0, 'output': 'partial', 'count': 1000, 'contract': {}}
+            ], writer=writer)
+        storage.read.assert_called_once_with('partial/contract.json', 2 * 1024 * 1024)
+        writer.assert_not_awaited()
+
     async def test_downloads_overlap_single_writer_with_bounded_prefetch(self):
         read_batches, writes = [], []
         lock = threading.Lock()

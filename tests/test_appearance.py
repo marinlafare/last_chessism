@@ -67,9 +67,9 @@ class AppearanceTests(unittest.TestCase):
     def test_independent_home_buttons_support_legacy_seed_and_scoped_writes(self):
         targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()
                    if spec.get('initialStyleFrom') == 'button']
-        self.assertEqual(len(targets), 16)
+        self.assertEqual(len(targets), 20)
         rows = [override(scope='home', target=target, property='background', value='#123456') for target in targets]
-        self.assertEqual(len(validate_overrides(rows)), 16)
+        self.assertEqual(len(validate_overrides(rows)), len(targets))
         with self.assertRaises(ValueError): validate_overrides([{**rows[0], 'scope':'games'}])
 
     def test_database_scope_and_medal_pressed_color(self):

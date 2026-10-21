@@ -1,5 +1,9 @@
 .cloud-analysis { grid-column: 1 / -1; padding: 1.25rem; border: 1px solid #35525a; border-radius: 12px; }
-.cloud-analysis-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.cloud-analysis-grid, .cloud-process-choices { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+.cloud-analysis-grid .analysis-disclosure-toggle { min-height: 48px; padding: 12px 16px; }
+.cloud-analysis-grid .analysis-disclosure-toggle { font-size: 16px; }
+.cloud-analysis-grid .analysis-disclosure-chevron { margin-left: auto; }
+.cloud-analysis-grid .analysis-disclosure-panel { padding: 12px; }
 .cloud-selection, .cloud-job { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; background: #142322; border-radius: 8px; }
 .cloud-selection label { display: flex; flex-direction: column; gap: .4rem; }
 .cloud-selection fieldset { display: flex; flex-direction: column; flex: 1; gap: .75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -22,32 +26,111 @@
   50% { box-shadow: 0 0 14px 4px #ff922b99; }
 }
 @media (prefers-reduced-motion: reduce) { .cloud-job-indicator--running { animation: none; } }
-.cloud-fen-progress progress { appearance: none; width: 100%; height: 16px; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: #9c7ab4; }
+.cloud-fen-progress { --cloud-progress-color: #9c7ab4; }
+.cloud-fen-progress--cycle { --cloud-progress-color: #5e9bce; padding-left: .75rem; border-left: 2px solid #5e9bce; }
+.cloud-fen-progress progress { appearance: none; width: 100%; height: 16px; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: var(--cloud-progress-color); }
 .cloud-fen-progress progress::-webkit-progress-bar { background: #283a3c; }
-.cloud-fen-progress progress::-webkit-progress-value { background: #9c7ab4; }
-.cloud-fen-progress progress::-moz-progress-bar { background: #9c7ab4; }
+.cloud-fen-progress progress::-webkit-progress-value { background: var(--cloud-progress-color); }
+.cloud-fen-progress progress::-moz-progress-bar { background: var(--cloud-progress-color); }
 .cloud-selection .btn { margin-top: auto; }
 .cloud-job { margin-top: 1rem; }
 .cloud-job progress { width: 100%; }
 .cloud-job small { overflow-wrap: anywhere; }
-.cloud-job-steps { display: grid; gap: .4rem; margin: .5rem 0; padding-left: 1.5rem; }
-.cloud-step { padding: .25rem .5rem; border-radius: 4px; }
-.cloud-step small { margin-left: .75rem; }
-.cloud-step--current { background: #314144; border-left: 3px solid #b194c4; }
-.cloud-step--attention { background: #453626; border-left: 3px solid #ddb676; }
+.cloud-job-part { min-width: 0; padding: 1rem; border: 1px solid #2c4348; border-radius: 8px; background: #10191f; }
+.cloud-job-heading { display: flex; flex-direction: column; gap: .75rem; overflow-wrap: anywhere; }
+.cloud-job-kind { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; }
+.cloud-job-badge { display: flex; align-items: center; justify-content: center; min-width: 0; padding: .45rem .75rem; border: 1px solid #35525a; border-radius: 6px; background: #1b2c2b; text-align: center; font-variant-numeric: tabular-nums; }
+.cloud-job-players { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
+.cloud-job-players li, .cloud-job-total { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, auto); align-items: center; gap: .65rem; }
+.cloud-job-total { padding-top: .75rem; border-top: 1px solid #2c4348; text-align: center; }
+.cloud-job-progress { display: flex; flex-direction: column; gap: 1.25rem; }
+.cloud-job-controls { display: flex; flex-direction: column; gap: .75rem; }
+.cloud-job-stop, .cloud-job-dismiss { width: 100%; padding: .85rem; border: 1px solid #824a45; border-radius: 8px; background: #442824; color: inherit; font: inherit; cursor: pointer; }
+.cloud-job-stop:hover { background: #61352e; }
+.cloud-job-stop:disabled { opacity: .5; cursor: not-allowed; }
+.cloud-job-dismiss { background: #183f31; border-color: #357454; }
+.cloud-job-dismiss:hover { background: #24563f; }
+.cloud-job-stop:focus-visible, .cloud-job-dismiss:focus-visible { outline: 2px solid #b194c4; outline-offset: 2px; }
+.cloud-job-stop-status { margin: 0; text-align: center; }
+.cloud-job-stopping { background: #301a20; }
+.cloud-job-stop-footer { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: .75rem; margin-top: auto; }
+.cloud-stop-indicator { display: inline-block; width: 16px; height: 16px; border-radius: 50%; background: #ef4444; box-shadow: 0 0 0 0 #ef444470; animation: cloud-stop-pulse 1.6s ease-in-out infinite; }
+.cloud-stop-indicator.is-paused { animation: none; }
+@keyframes cloud-stop-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 0 0 #ef444470; }
+  50% { opacity: .55; transform: scale(.82); box-shadow: 0 0 0 6px #ef444400; }
+}
+@media (prefers-reduced-motion: reduce) { .cloud-stop-indicator { animation: none; } }
+.cloud-vms { display: flex; flex-direction: column; gap: .75rem; min-width: 0; }
+.cloud-vm-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: .65rem; }
+.cloud-vm-tile { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .4rem; width: 100%; min-width: 0; min-height: 64px; padding: .65rem .4rem; box-sizing: border-box; border: 1px solid #35525a; border-radius: 8px; background: #0e151c; color: inherit; font: inherit; cursor: pointer; }
+.cloud-vm-tile strong { white-space: nowrap; }
+.cloud-vm-tile:hover { background: #243638; }
+.cloud-vm-tile[aria-expanded="true"] { outline: 2px solid #b194c4; outline-offset: 2px; }
+.cloud-vm-tile:focus-visible { outline: 2px solid #d6c3e3; outline-offset: 3px; }
+.cloud-vm-tile small { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; }
+.cloud-vm-state { display: flex; align-items: center; justify-content: center; gap: .35rem; min-width: 0; max-width: 100%; }
+.cloud-vm-state-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }
+.cloud-vm-tile[data-state="running"] .cloud-vm-state-dot { background: #ff922b; }
+.cloud-vm-tile[data-state="complete"] .cloud-vm-state-dot { background: #4ade80; }
+.cloud-vm-tile[data-state="error"] .cloud-vm-state-dot { background: #f87171; }
+.cloud-vm-details { padding: 1rem; border: 1px solid #35525a; border-radius: 8px; background: #0e151c; }
+.cloud-vm-details header { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.cloud-vm-details header button { border: 0; border-radius: 4px; background: #243638; color: inherit; width: 28px; height: 28px; font-size: 20px; cursor: pointer; }
+.cloud-vm-details dl { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: .75rem; margin: 1rem 0 0; }
+.cloud-vm-details dt { color: #a9b9bd; font-size: 12px; }
+.cloud-vm-details dd { margin: .25rem 0 0; font-weight: 700; overflow-wrap: anywhere; }
+.cloud-performance-button { width: 100%; padding: .85rem 1rem; border: 1px solid #35525a; border-radius: 8px; background: #0e151c; color: inherit; font: inherit; text-align: center; cursor: pointer; }
+.cloud-performance-button:hover { background: #243638; }
+.cloud-performance-button:focus-visible { outline: 2px solid #b194c4; outline-offset: 2px; }
+.cloud-job-steps { display: grid; gap: .4rem; width: 100%; max-width: 760px; box-sizing: border-box; margin: 0 auto; padding: 0; list-style: none; }
+.cloud-step { display: grid; grid-template-columns: 2.5rem minmax(0, 1fr) 7rem; align-items: center; gap: .5rem; padding: .35rem .5rem; border-left: 3px solid transparent; border-radius: 6px; }
+.cloud-step-number { padding: .45rem .2rem; }
+.cloud-step-name { min-height: 2.5rem; box-sizing: border-box; overflow-wrap: anywhere; }
+.cloud-step .cloud-step-status { text-align: center; color: inherit; }
+.cloud-step--current { background: #314144; border-left-color: #b194c4; }
+.cloud-step--attention { background: #453626; border-left-color: #ddb676; }
 .cloud-step--complete { color: #9bd5b6; }
 .cloud-step--pending { color: #a9b9bd; }
-.cloud-job-fading { animation: cloud-job-fade .4s ease-out forwards; pointer-events: none; }
-@keyframes cloud-job-fade { to { opacity: 0; } }
-@media (prefers-reduced-motion: reduce) { .cloud-job-fading { animation: none; opacity: 0; } }
 .cloud-analysis small { color: #a9b9bd; }
 .cloud-game-draft { display: flex; flex-direction: column; gap: .75rem; }
-.cloud-draft-entries { display: grid; gap: .8rem; padding-left: 1.4rem; }
-.cloud-draft-entries li > span { display: block; margin: .3rem 0; }
+.cloud-draft-entries { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 0; list-style: none; }
+.cloud-draft-step, .cloud-draft-step-number { display: grid; place-items: center; width: 2.5rem; height: 2.5rem; border: 1px solid #35525a; border-radius: 5px; background: #1b2c2b; color: inherit; font: inherit; font-weight: 700; }
+.cloud-draft-step { cursor: pointer; }
+.cloud-draft-step[aria-pressed="true"] { border-color: #b194c4; background: #314144; }
+.cloud-draft-step:focus-visible, .cloud-draft-refresh:focus-visible { outline: 2px solid #b194c4; outline-offset: 2px; }
+.cloud-draft-step:disabled { cursor: default; opacity: .6; }
+.cloud-draft-step-number { position: absolute; top: .6rem; right: .6rem; }
 .cloud-draft-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
-.cloud-selection .cloud-draft-editor { border: 1px solid #35525a; border-radius: 6px; padding: .8rem; }
-.cloud-draft-preview { border-left: 3px solid #9c7ab4; padding: .75rem; background: #1b2c2b; }
+.cloud-draft-calculate { justify-content: flex-end; }
+.cloud-draft-builder { position: relative; display: flex; flex-direction: column; gap: 1rem; min-width: 0; border: 1px solid #35525a; border-radius: 8px; padding: 1rem; background: #142322; }
+.cloud-draft-builder-heading { min-height: 2.5rem; }
+.cloud-draft-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; min-width: 0; margin: 0; border: 0; padding: 0; }
+.cloud-draft-editor label, .cloud-draft-vms { display: flex; flex-direction: column; gap: .4rem; min-width: 0; text-align: center; }
+.cloud-draft-editor .text-input, .cloud-draft-vms .text-input { width: 100%; min-width: 0; box-sizing: border-box; text-align: center; }
+.cloud-draft-editor select { text-align-last: center; }
+.cloud-draft-editor > p, .cloud-draft-editor > .cloud-draft-actions { grid-column: 1 / -1; margin: 0; }
+.cloud-draft-editor:disabled { opacity: .65; }
+.cloud-draft-preview { min-width: 0; border: 1px solid #35525a; border-radius: 8px; padding: 1rem; background: #1b2c2b; }
+.cloud-draft-group-heading { display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
+.cloud-draft-group-heading h5 { font-size: 16px; margin: 0; }
+.cloud-draft-refresh { border: 0; border-radius: 5px; background: #142322; color: inherit; cursor: pointer; width: 2rem; height: 2rem; font-size: 20px; }
+.cloud-draft-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
+.cloud-draft-totals dt { font-size: 12px; color: #a9b9bd; }
+.cloud-draft-totals dd { font-size: 20px; font-weight: 700; margin: .25rem 0 0; overflow-wrap: anywhere; }
+.cloud-draft-process-settings { display: flex; justify-content: flex-start; }
+.cloud-draft-vms { width: 112px; max-width: 100%; }
+.cloud-draft-run { width: 100%; }
 .cloud-draft-vm-plan { width: 100%; border-collapse: collapse; margin: .75rem 0; }
 .cloud-draft-vm-plan th, .cloud-draft-vm-plan td { text-align: left; vertical-align: top; padding: .4rem; border-bottom: 1px solid #35525a; overflow-wrap: anywhere; }
 .cloud-draft-vm-plan td > span { display: block; }
-@media (max-width: 800px) { .cloud-analysis-grid { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .cloud-analysis-grid .analysis-disclosure-panel { padding: 8px; }
+  .cloud-job-part { padding: .65rem; }
+  .cloud-vm-grid { gap: .3rem; }
+  .cloud-vm-tile { padding: .5rem .2rem; font-size: 12px; }
+  .cloud-step { grid-template-columns: 2rem minmax(0, 1fr) 4.5rem; gap: .35rem; padding: .25rem; }
+  .cloud-step-name { padding: .4rem; }
+  .cloud-draft-editor, .cloud-draft-totals { grid-template-columns: minmax(0, 1fr); }
+  .cloud-draft-vm-plan { font-size: 12px; }
+}

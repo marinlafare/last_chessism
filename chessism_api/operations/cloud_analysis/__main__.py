@@ -37,6 +37,7 @@ async def serve(args):
     if not url.startswith("postgresql+asyncpg://"):
         raise ValueError("Set DATABASE_URL to the local PostgreSQL asyncpg connection URL")
     from .controller import Controller
+    from .stop_dispatcher import serve as dispatch_stops
     engine = await bind_runtime_engine(url, connect_args=getattr(args, "database_connect_args", {}))
     try:
         controller = Controller(Client(gcloud=args.gcloud), args.local_image)
@@ -50,18 +51,22 @@ async def serve(args):
                     await controller.tick()
                     await asyncio.sleep(0 if controller.continue_immediately else args.poll_seconds)
             work_task = asyncio.create_task(work())
+            stop_task = asyncio.create_task(dispatch_stops(controller, Client(gcloud=args.gcloud)))
             print("Cloud controller ready; queued UI jobs authorize billable launches. Ctrl+C stops polling, not running cloud jobs.", flush=True)
             try:
-                done, _ = await asyncio.wait([pulse, work_task], return_when=asyncio.FIRST_COMPLETED)
+                done, _ = await asyncio.wait([pulse, work_task, stop_task], return_when=asyncio.FIRST_COMPLETED)
                 for task in done:
                     task.result()
             finally:
                 pulse.cancel()
                 work_task.cancel()
+                stop_task.cancel()
                 with suppress(asyncio.CancelledError):
                     await pulse
                 with suppress(asyncio.CancelledError):
                     await work_task
+                with suppress(asyncio.CancelledError):
+                    await stop_task
                 # A pooled DB connection must not retain a session advisory lock.
                 await connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": CONTROLLER_LOCK})
     finally:

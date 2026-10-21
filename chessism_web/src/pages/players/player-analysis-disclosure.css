@@ -12,6 +12,11 @@
 .player-analysis-disclosure-toggle > span { flex: 1; min-width: 0; text-align: inherit; }
 .player-analysis-disclosure-toggle svg { width: 18px; height: 18px; flex: 0 0 auto; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .player-analysis-disclosure-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.player-analysis-disclosure-spinner { width: 18px; height: 18px; flex: 0 0 auto; box-sizing: border-box; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: player-disclosure-spin .8s linear infinite; }
+@keyframes player-disclosure-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .player-analysis-disclosure-spinner { animation-duration: 2s; }
+}
 .player-analysis-disclosure-content { min-width: 0; padding: 12px; border-top: 1px solid var(--border-soft); }
 .player-analysis-disclosure-content[hidden] { display: none; }
 .player-analysis-chart-list { display: grid; gap: 10px; min-width: 0; }

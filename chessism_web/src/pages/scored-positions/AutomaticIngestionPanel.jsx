@@ -1,6 +1,7 @@
 import { useCallback, useRef } from 'react'
 import { usePoll } from '../../hooks/usePoll'
 import FenIngestionPanel from '../positions/FenIngestionPanel'
+import useIngestionReview from '../positions/useIngestionReview'
 import { readAutomaticIngestion } from './automaticIngestion'
 import { fetchAutomaticIngestionJobs, fetchIngestionJobStatus, fetchLatestIngestionTiming } from './scoredPositionsApi'
 
@@ -23,6 +24,7 @@ export default function AutomaticIngestionPanel() {
   }, [])
   const jobs = usePoll(fetchJobs, 3000)
   const timing = usePoll(fetchTiming, 5000)
+  const { completedRuns, dismiss } = useIngestionReview(timing.data?.run)
 
   return (
     <FenIngestionPanel
@@ -32,6 +34,8 @@ export default function AutomaticIngestionPanel() {
       loading={jobs.loading}
       error={jobs.error?.message || ''}
       timingError={timing.error ? `Latest ingestion timing unavailable: ${timing.error.message}` : ''}
+      completedRuns={completedRuns}
+      onDismiss={dismiss}
     />
   )
 }

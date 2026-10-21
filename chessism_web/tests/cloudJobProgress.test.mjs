@@ -1,10 +1,10 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  cloudJobDone, cloudJobProgress, cloudJobIndicator, cloudJobDisplayState, reconcileCloudJobDisplay,
+  cloudJobDone, cloudJobProgress, cloudJobIndicator,
   cloudActiveRun, cloudTaskLabel,
-  CLOUD_DONE_VISIBLE_MS, CLOUD_DONE_FADE_MS,
 } from '../src/pages/positions/cloudJobProgress.js'
+import { trackProgress, showProgress, dismissProgress } from '../src/pages/positions/cloudProgressReview.js'
 
 const jobAt = (phase, status = 'running') => ({
   id: 'job', status, imported: 1000, target: 1000,
@@ -167,41 +167,25 @@ test('partial completion is explicit and failed or paused work is not marked don
   }
 })
 
-test('old completed and cancelled displays are hidden, without hiding failed jobs', () => {
-  const now = 100000
-  for (const status of ['complete', 'limit_reached', 'cancelled', 'failed', 'paused', 'waiting', 'running']) {
-    const job = jobAt('complete', status)
-    const entries = reconcileCloudJobDisplay({}, [job], now)
-    assert.equal(cloudJobDisplayState(job, entries.job, now),
-      ['complete', 'limit_reached', 'cancelled'].includes(status) ? 'hidden' : 'visible', status)
-  }
-  assert.equal(cloudJobDisplayState(jobAt('cleaning', 'complete'), undefined, now), 'visible')
-})
-
-test('completion stays visible for ten seconds, fades, and cannot be revived by polls', () => {
+test('finished progress stays visible until explicitly reviewed, including after reload', () => {
   let job = jobAt('cleaning')
-  let entries = reconcileCloudJobDisplay({}, [job], 1000)
+  let review = trackProgress({ since: 1000, initialized: false, tracked: [], dismissed: [] }, [job])
+  assert.equal(dismissProgress(review, [job], job.id), review)
   job = jobAt('complete', 'complete')
-  assert.equal(cloudJobDisplayState(job, entries.job, 2000), 'visible')
-  entries = reconcileCloudJobDisplay(entries, [job], 2000)
-  entries = reconcileCloudJobDisplay(entries, [job], 5000)
-  assert.equal(entries.job.endedAt, 2000)
-  assert.equal(cloudJobDisplayState(job, entries.job, 2000 + CLOUD_DONE_VISIBLE_MS - 1), 'visible')
-  assert.equal(cloudJobDisplayState(job, entries.job, 2000 + CLOUD_DONE_VISIBLE_MS), 'fading')
-  assert.equal(cloudJobDisplayState(job, entries.job, 2000 + CLOUD_DONE_VISIBLE_MS + CLOUD_DONE_FADE_MS), 'hidden')
-  entries = reconcileCloudJobDisplay(entries, [job], 20000)
-  assert.equal(cloudJobDisplayState(job, entries.job, 20000), 'hidden')
-  assert.equal(cloudJobDisplayState(job, reconcileCloudJobDisplay({}, [job], 20000).job, 20000), 'hidden')
+  review = trackProgress(review, [job])
+  assert.equal(showProgress(job, review), true)
+  assert.equal(showProgress(job, JSON.parse(JSON.stringify(review))), true)
+  review = dismissProgress(review, [job], job.id)
+  assert.equal(showProgress(job, trackProgress(review, [job])), false)
+  assert.equal(showProgress(jobAt('cleaning', 'paused'), review), true)
 })
 
-test('a reopened job becomes visible and a later completion receives a new countdown', () => {
-  let job = jobAt('complete', 'complete')
-  let entries = reconcileCloudJobDisplay({}, [job], 1000)
-  job = jobAt('cleaning', 'paused')
-  assert.equal(cloudJobDisplayState(job, entries.job, 2000), 'visible')
-  entries = reconcileCloudJobDisplay(entries, [job], 2000)
-  assert.equal(entries.job.endedAt, null)
-  job = jobAt('complete', 'complete')
-  entries = reconcileCloudJobDisplay(entries, [job], 3000)
-  assert.equal(entries.job.endedAt, 3000)
+test('cancellation has its own stages and is never analysis success', () => {
+  let job = { ...jobAt('running'), stop_cleanup: { phase: 'importing' } }
+  assert.equal(cloudJobProgress(job).label, 'Save completed results')
+  assert.equal(cloudJobProgress(job).steps[1].state, 'current')
+  job = { ...job, status: 'cancelled', stop_cleanup: { phase: 'complete' } }
+  assert.equal(cloudJobDone(job), false)
+  assert.equal(cloudJobProgress(job).label, 'Cancelled — cleaned')
+  assert.equal(cloudJobIndicator(job).state, 'idle')
 })

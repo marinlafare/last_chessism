@@ -12,8 +12,8 @@ TASK_SECONDS = 604800  # Platform ceiling, NOT a per-FEN search budget.
 
 
 def partitions(count, cpus):
-    if type(cpus) is not int or not 1 <= cpus <= 64 or not 1 <= count <= 200000:
-        raise ValueError("Cloud Run requires 1–64 CPUs and 1–200,000 FENs")
+    if type(cpus) is not int or not 1 <= cpus <= 100 or not 1 <= count <= 200000:
+        raise ValueError("Cloud Run requires 1–100 CPUs and 1–200,000 FENs")
     size = min(5000, max(500, math.ceil(count / (cpus * 4 * 500)) * 500))
     return [(start, min(size, count - start)) for start in range(0, count, size)]
 

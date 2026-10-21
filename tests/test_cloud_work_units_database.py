@@ -254,7 +254,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(root.status, 'cleanup_planning')
         # All destructive cloud operations are mocked; gates run against PostgreSQL.
         with patch.object(fleet, 'prepare', return_value={}), \
-             patch.object(fleet, 'cleaning_job', return_value={'complete': True}), \
+             patch.object(fleet.batch_cleanup, 'apply', new_callable=AsyncMock, return_value={'complete': True}), \
              patch.object(fleet, 'plan_logs', return_value={}), \
              patch.object(fleet, 'remove_logs', return_value={'complete': True}):
             for expected in ('cleaning', 'log_planning', 'log_cleaning', 'refreshing'):

@@ -5,11 +5,11 @@ import PlayerGameExplorerModal from './PlayerGameExplorerModal'
 import PlayerGameReviewModal from './PlayerGameReviewModal'
 import { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 
-export default function PlayerMeasuresPanel({ playerName, quality }) {
+export default function PlayerMeasuresPanel({ playerName, quality, loading = false, disabled = false }) {
   const [explorerSelection, setExplorerSelection] = useState(null)
   const [reviewGameId, setReviewGameId] = useState(null)
   const availableModes = useMemo(() => new Set(PLAYER_ANALYSIS_MODES.filter((mode) => (
-    !quality.by_mode || Number(quality.by_mode[mode]?.coverage?.eligible_games || 0) > 0
+    quality && (!quality.by_mode || Number(quality.by_mode[mode]?.coverage?.eligible_games || 0) > 0)
   ))), [quality])
 
   useEffect(() => {
@@ -20,7 +20,8 @@ export default function PlayerMeasuresPanel({ playerName, quality }) {
   return (
     <>
       <div className="player-analysis-chart-list">
-        <PlayerAnalysisDisclosure label="Accuracy" buttonTarget="player.accuracy.toggle">
+        <PlayerAnalysisDisclosure label="Accuracy" buttonTarget="player.accuracy.toggle"
+          loading={loading} disabled={disabled || !quality}>
           <PlayerDailyEfficiencyChart
             availableModes={availableModes}
             playerName={playerName}

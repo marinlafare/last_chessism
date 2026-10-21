@@ -1,4 +1,4 @@
-"""Short preparation steps and buffered, native-column performance records."""
+"""Buffered, native-column timings for preparation and completion substeps."""
 from contextlib import contextmanager
 from datetime import datetime, timezone
 import logging
@@ -20,12 +20,13 @@ async def refresh_claim_statistics():
         await session.execute(text('ANALYZE cloud_fen_claim'))
 
 
-class PreparationTimings:
+class StageTimings:
     """Buffer a handful of rows per unit, never write from inside its locks.
 
     Persist after releasing reservation locks: a second connection inserting a
     timing FK while the first holds a run FOR UPDATE could otherwise deadlock.
-    Metrics must never invalidate an already committed, durable reservation.
+    Metrics must never invalidate committed work. Substep durations overlap the
+    parent lifecycle phase; they are a breakdown, not extra elapsed job time.
     """
     def __init__(self):
         self.rows = []
@@ -46,10 +47,13 @@ class PreparationTimings:
 
     async def save(self, job_id, run_id):
         for row in self.rows:
-            logger.info('Cloud preparation job=%s run=%s phase=%s seconds=%.3f outcome=%s',
+            logger.info('Cloud stage job=%s run=%s phase=%s seconds=%.3f outcome=%s',
                         job_id, run_id, row['phase'], row['duration_seconds'], row['outcome'])
         try:
             async with AsyncDBSession() as session, session.begin():
                 session.add_all([CloudPhaseTiming(job_id=job_id, run_id=run_id, **row) for row in self.rows])
         except Exception:
-            logger.exception('Preparation timing persistence failed; reservation state is unchanged')
+            logger.exception('Cloud timing persistence failed; durable work is unchanged')
+
+
+PreparationTimings = StageTimings

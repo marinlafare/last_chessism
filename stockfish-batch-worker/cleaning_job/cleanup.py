@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 import hashlib
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import nullcontext
 import json
 import os
 from pathlib import Path
@@ -138,14 +139,24 @@ def check_bucket(cloud):
 
 
 def inventory(cloud, scopes):
-    result = {}
-    for scope in scopes:
+    def read_scope(scope):
+        found = []
         for obj in cloud.objects(scope):
             name, generation = obj.get("name", ""), str(obj.get("generation", ""))
             require(name.startswith(scope) and generation.isdigit(), "Unexpected object in inventory")
             require(not obj.get("temporaryHold") and not obj.get("eventBasedHold") and not obj.get("retention"),
                     f"Object is protected by retention/hold: {name}")
-            result[(name, generation)] = {"name": name, "generation": generation, "size": str(obj.get("size", "0"))}
+            found.append({"name": name, "generation": generation, "size": str(obj.get("size", "0"))})
+        return found
+
+    # Large Spot jobs have two prefixes per work unit. List four at a time;
+    # keep exact generation/hold checks and stable plan ordering unchanged.
+    result, scopes = {}, list(scopes)
+    for offset in range(0, len(scopes), 4):
+        groups = read_parallel(*(lambda scope=scope: read_scope(scope) for scope in scopes[offset:offset + 4]))
+        for group in groups:
+            for obj in group:
+                result[(obj['name'], obj['generation'])] = obj
     return sorted(result.values(), key=lambda item: (item["name"], item["generation"]))
 
 
@@ -278,57 +289,62 @@ def verify(cloud, plan):
             "image_cleanup_included": plan["version"] == 2, "note": notice(plan)}
 
 
-def apply(cloud, plan, *, wait_seconds=60):
+def apply(cloud, plan, *, wait_seconds=60, timings=None):
     """No prompts. Caller must have saved results or deliberately abandoned retries."""
+    measure = timings.measure if timings is not None else lambda phase: nullcontext()
     validate_plan(plan)
     require(0 <= wait_seconds <= 300, "wait_seconds must be between 0 and 300")
-    read_parallel(lambda: check_other_jobs(cloud, plan),
-        lambda: check_bucket(cloud) if plan['prefixes'] else None,
-        lambda: check_inventory(cloud, plan), lambda: image_cleanup.remaining(cloud, plan))
-    # Fresh UID/state/path check immediately before job deletion, not a cached
-    # result from the preceding independent inventory reads.
-    for target, state in current_jobs(cloud, plan):
-        if state != "DELETION_IN_PROGRESS":
-            cloud.delete_job(target["id"], target["region"], target["uid"])
-    deadline = time.monotonic() + wait_seconds
-    while True:
-        jobs, resources = read_parallel(lambda: current_jobs(cloud, plan), lambda: owned_resources(cloud, plan))
-        if not jobs and not resources:
-            break
-        if time.monotonic() >= deadline:
-            return {"complete": False, "remaining_jobs": [j["id"] for j, _ in jobs],
-                    "remaining_compute": resources, "data_deletion_deferred": True,
-                    "image_deletion_deferred": bool(plan.get("images")),
-                    "note": "Batch cleanup still pending. Resume the same saved plan later; no forced VM/disk deletion."}
-        time.sleep(min(5, max(0, deadline - time.monotonic())))
-    # A retry may have been submitted during cleanup. Check again before files.
-    _, _, objects = read_parallel(lambda: check_other_jobs(cloud, plan),
-        lambda: check_bucket(cloud) if plan['prefixes'] else None, lambda: check_inventory(cloud, plan))
-    # Exact, generation-pinned targets only. At most eight requests/futures;
-    # drain in-flight deletes on error before preserving the resumable plan.
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for offset in range(0, len(objects), 8):
-            list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
-    # Images come last, after all temporary data and job compute are gone.
-    report = verify(cloud, plan)
-    if report["remaining_jobs"] or report["remaining_compute"] or report["remaining_object_versions"]:
-        return report
-    operations = []
-    for uri in report["remaining_images"]:
-        # Refresh immediately before each image deletion. The controller must
-        # still serialize pushes/submissions with cleanup (the API has no CAS).
-        if uri not in image_cleanup.remaining(cloud, plan):
-            continue
-        if image_cleanup.blockers(cloud, plan, [uri]):
-            continue
-        operation = cloud.delete_image(uri)
-        if operation and operation.get("name"):
-            operations.append(operation["name"])
-    return {**verify(cloud, plan), "image_delete_operations": operations}
+    with measure('cleanup_preconditions'):
+        read_parallel(lambda: check_other_jobs(cloud, plan),
+            lambda: check_bucket(cloud) if plan['prefixes'] else None,
+            lambda: check_inventory(cloud, plan), lambda: image_cleanup.remaining(cloud, plan))
+    with measure('cleanup_batch_compute'):
+        # Fresh UID/state/path check immediately before job deletion, not a cached
+        # result from the preceding independent inventory reads.
+        for target, state in current_jobs(cloud, plan):
+            if state != "DELETION_IN_PROGRESS":
+                cloud.delete_job(target["id"], target["region"], target["uid"])
+        deadline = time.monotonic() + wait_seconds
+        while True:
+            jobs, resources = read_parallel(lambda: current_jobs(cloud, plan), lambda: owned_resources(cloud, plan))
+            if not jobs and not resources:
+                break
+            if time.monotonic() >= deadline:
+                return {"complete": False, "remaining_jobs": [j["id"] for j, _ in jobs],
+                        "remaining_compute": resources, "data_deletion_deferred": True,
+                        "image_deletion_deferred": bool(plan.get("images")),
+                        "note": "Batch cleanup still pending. Resume the same saved plan later; no forced VM/disk deletion."}
+            time.sleep(min(5, max(0, deadline - time.monotonic())))
+    with measure('cleanup_objects'):
+        # A retry may have been submitted during cleanup. Check again before files.
+        _, _, objects = read_parallel(lambda: check_other_jobs(cloud, plan),
+            lambda: check_bucket(cloud) if plan['prefixes'] else None, lambda: check_inventory(cloud, plan))
+        # Exact, generation-pinned targets only. At most eight requests/futures;
+        # drain in-flight deletes on error before preserving the resumable plan.
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            for offset in range(0, len(objects), 8):
+                list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
+    with measure('cleanup_image'):
+        # Images come last, after all temporary data and job compute are gone.
+        report = verify(cloud, plan)
+        if report["remaining_jobs"] or report["remaining_compute"] or report["remaining_object_versions"]:
+            return report
+        operations = []
+        for uri in report["remaining_images"]:
+            # Refresh immediately before each image deletion. The controller must
+            # still serialize pushes/submissions with cleanup (the API has no CAS).
+            if uri not in image_cleanup.remaining(cloud, plan):
+                continue
+            if image_cleanup.blockers(cloud, plan, [uri]):
+                continue
+            operation = cloud.delete_image(uri)
+            if operation and operation.get("name"):
+                operations.append(operation["name"])
+        return {**verify(cloud, plan), "image_delete_operations": operations}
 
 
 def cleaning_job(jobs=None, *, execute=False, plan=None, region=REGION, include_failed=False,
-                 plan_directory=OUT, wait_seconds=60, cloud=None):
+                 plan_directory=OUT, wait_seconds=60, cloud=None, timings=None):
     """Reusable entry point. --execute is consent once, never a per-file prompt.
 
     Integrators: call only AFTER downloading/validating/durably saving results.
@@ -344,7 +360,7 @@ def cleaning_job(jobs=None, *, execute=False, plan=None, region=REGION, include_
     path = save_plan(plan, plan_directory)
     if execute:
         try:
-            result = apply(cloud, plan, wait_seconds=wait_seconds)
+            result = apply(cloud, plan, wait_seconds=wait_seconds, timings=timings)
         except CleanupError as exc:
             raise CleanupError(f"{exc}. Saved cleanup plan: {path}") from exc
     else:

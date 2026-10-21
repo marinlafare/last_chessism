@@ -1,6 +1,7 @@
 """Verified incremental imports; results, receipts, counts and leases commit together."""
 import json
 import time
+from contextlib import nullcontext
 from datetime import datetime, timezone
 
 from sqlalchemy import delete, select, text, update
@@ -145,8 +146,14 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
     return len(formatted)
 
 
-async def refresh_projections(positions):
+async def refresh_projections(positions=None, *, run_id=None, timings=None):
     """Absolute, retry-safe derived views; never replay incremental counters."""
+    if run_id is not None:
+        # Use the persisted input set directly, including on controller restart.
+        # This avoids one FEN-text lookup per 1,000 positions and Python unions.
+        return await refresh_unit_projections([run_id], timings=timings)
+    if positions is None:
+        raise ValueError('Summary refresh requires positions or a saved run')
     from chessism_api.database.models import GameFenAssociation
     from chessism_api.database.ask_db import (
         refresh_game_analysis_summary,
@@ -169,21 +176,24 @@ async def refresh_global_projections():
     await refresh_scored_rating_summary()
 
 
-async def refresh_unit_projections(run_ids):
+async def refresh_unit_projections(run_ids, *, timings=None):
     """Deduplicate affected games in SQL; never materialize the parent FEN set."""
     from chessism_api.database.ask_db import refresh_game_analysis_summary
-    async with AsyncDBSession() as session:
-        refs = (await session.scalars(select(CloudAnalysisRun._positions_ref).where(
-            CloudAnalysisRun.id.in_(run_ids)))).all()
-        if len(refs) != len(set(run_ids)) or not all(refs):
-            raise ValueError('Missing work-unit input references')
-        links = (await session.scalars(text('''
-            SELECT DISTINCT gfa.game_link
-            FROM cloud_control_position p
-            CROSS JOIN LATERAL unnest(p.fen) selected(fen)
-            JOIN fen f ON f.fen = selected.fen
-            JOIN game_fen_association gfa ON gfa.fen_id = f.fen_id
-            WHERE p.document_id = ANY(CAST(:refs AS text[]))
-        '''), {'refs': refs})).all()
+    measure = timings.measure if timings is not None else lambda phase: nullcontext()
+    with measure('summary_affected_games'):
+        async with AsyncDBSession() as session:
+            refs = (await session.scalars(select(CloudAnalysisRun._positions_ref).where(
+                CloudAnalysisRun.id.in_(run_ids)))).all()
+            if len(refs) != len(set(run_ids)) or not all(refs):
+                raise ValueError('Missing work-unit input references')
+            links = (await session.scalars(text('''
+                SELECT DISTINCT gfa.game_link
+                FROM cloud_control_position p
+                CROSS JOIN LATERAL unnest(p.fen) selected(fen)
+                JOIN fen f ON f.fen = selected.fen
+                JOIN game_fen_association gfa ON gfa.fen_id = f.fen_id
+                WHERE p.document_id = ANY(CAST(:refs AS text[]))
+            '''), {'refs': refs})).all()
     if links:
-        await refresh_game_analysis_summary(links, strict=True)
+        with measure('summary_game_coverage_and_players'):
+            await refresh_game_analysis_summary(links, strict=True)

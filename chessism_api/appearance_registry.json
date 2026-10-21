@@ -20,6 +20,21 @@
       "css": "--weekday-row-background",
       "default": "#0b1117"
     },
+    "summaryBarHeight": {
+      "label": "Bar height",
+      "kind": "number",
+      "min": 8,
+      "max": 40,
+      "unit": "px",
+      "css": "--summary-bar-height",
+      "default": 16
+    },
+    "repeatMarkColor": {
+      "label": "Repeat symbol color",
+      "kind": "color",
+      "css": "--repeat-mark-color",
+      "default": "#020303"
+    },
     "background": {
       "label": "Background",
       "kind": "color",
@@ -191,7 +206,7 @@
       ]
     },
     "position.button": {
-      "label": "Position buttons",
+      "label": "Position thumbnails",
       "properties": [
         "background",
         "borderColor",
@@ -312,8 +327,12 @@
       ]
     },
     "metric.scored_positions": {
-      "label": "Metric: scored positions",
+      "label": "Scored positions bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
       "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "summaryBarHeight",
         "background",
         "borderColor",
         "borderWidth",
@@ -322,8 +341,13 @@
       ]
     },
     "metric.unscored_positions": {
-      "label": "Metric: unscored positions",
+      "label": "Total positions bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
       "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "repeatMarkColor",
+        "summaryBarHeight",
         "background",
         "borderColor",
         "borderWidth",
@@ -332,8 +356,13 @@
       ]
     },
     "metric.games": {
-      "label": "Metric: games",
+      "label": "Total games bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
       "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "repeatMarkColor",
+        "summaryBarHeight",
         "background",
         "borderColor",
         "borderWidth",
@@ -342,8 +371,12 @@
       ]
     },
     "metric.unscored_games": {
-      "label": "Metric: unscored games",
+      "label": "Scored games bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
       "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "summaryBarHeight",
         "background",
         "borderColor",
         "borderWidth",
@@ -415,7 +448,7 @@
       ]
     },
     "metric.title": {
-      "label": "metric title",
+      "label": "Summary chart labels",
       "properties": [
         "color",
         "fontSize",
@@ -424,7 +457,7 @@
       ]
     },
     "metric.value": {
-      "label": "metric value",
+      "label": "Summary chart numbers",
       "properties": [
         "color",
         "fontSize",

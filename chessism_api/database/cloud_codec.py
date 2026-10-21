@@ -5,7 +5,7 @@ import json
 import math
 from urllib.parse import quote
 
-from sqlalchemy import delete, insert, select, event, inspect
+from sqlalchemy import delete, insert, select, event, inspect, or_
 from sqlalchemy.orm import Session, object_session
 from sqlalchemy.orm.attributes import flag_dirty
 
@@ -195,28 +195,61 @@ def read_documents(connection, identifiers):
 
 
 def read_projection(connection, ident, names):
-    """Reporting only: do not fetch FEN identities or unrelated control payloads.
+    return read_projections(connection, [ident], names)[ident]
 
-    A projection is NOT a verified recovery/cleanup document.
+
+def read_projections(connection, identifiers, names):
+    """Batch reporting reads, never authoritative recovery/cleanup documents.
+
+    Select only requested scalar columns and their child collections. The query
+    count depends on the schema, not the number of jobs shown by a polling UI.
+    Full recovery reads must continue to use checksum-verified read_documents.
     """
-    root = connection.execute(select(columns.ROOTS).where(columns.ROOTS.c.id == ident)).mappings().one()
-    kind = root['schema_name']
-    table = columns.TABLES[kind]
-    row = dict(connection.execute(select(table).where(table.c.document_id == ident, table.c.path == '$')).mappings().one())
-    row['present_fields'] = [p for p in row['present_fields'] if p.split('.')[0] in names]
-    needed = set()
-    def visit(spec):
-        for typ in spec.values():
-            if isinstance(typ, dict): visit(typ)
-            elif isinstance(typ, columns.Children):
-                needed.add(typ.schema)
-                visit(columns.SCHEMAS[typ.schema])
-    visit({k: v for k, v in columns.SCHEMAS[kind].items() if k in names})
-    rows = {kind: [row]}
-    for child in needed:
-        t = columns.TABLES[child]
-        rows[child] = connection.execute(select(t).where(t.c.document_id == ident)).mappings().all()
-    return decode_document(root, rows, verify=False)
+    identifiers = set(identifiers)
+    if not identifiers:
+        return {}
+    roots = connection.execute(select(columns.ROOTS).where(columns.ROOTS.c.id.in_(identifiers))).mappings().all()
+    if len(roots) != len(identifiers):
+        raise ValueError('Missing durable cloud control record')
+    grouped = defaultdict(lambda: defaultdict(list))
+    by_kind = defaultdict(list)
+    for root in roots:
+        if not root['is_null']:
+            by_kind[root['schema_name']].append(root['id'])
+    for kind, refs in by_kind.items():
+        spec = {key: value for key, value in columns.SCHEMAS[kind].items() if key in names}
+        table = columns.TABLES[kind]
+        fields = ['document_id', 'path', 'parent_path', 'collection', 'item_key',
+                  'ordinal', 'present_fields', 'null_fields', 'integer_fields']
+        fields += [columns.column_name(path) for path, _ in columns.leaves(spec)]
+        for row in connection.execute(select(*(table.c[field] for field in fields)).where(
+                table.c.document_id.in_(refs), table.c.path == '$')).mappings():
+            row = dict(row)
+            row['present_fields'] = [p for p in row['present_fields'] if p.split('.')[0] in names]
+            grouped[row['document_id']][kind].append(row)
+        needed = defaultdict(set)
+
+        def visit(fields, root_field):
+            for typ in fields.values():
+                if isinstance(typ, dict):
+                    visit(typ, root_field)
+                elif isinstance(typ, columns.Children):
+                    if root_field not in needed[typ.schema]:
+                        needed[typ.schema].add(root_field)
+                        visit(columns.SCHEMAS[typ.schema], root_field)
+
+        for field, typ in spec.items():
+            visit({field: typ}, field)
+        for child, parents in needed.items():
+            child_table = columns.TABLES[child]
+            # A performance worker table can also contain per-task workers.
+            # Do not load those unrelated descendants just because types match.
+            paths = [child_table.c.path.startswith('$/' + parent + separator, autoescape=True)
+                     for parent in parents for separator in ('.', '/')]
+            for row in connection.execute(select(child_table).where(
+                    child_table.c.document_id.in_(refs), or_(*paths))).mappings():
+                grouped[row['document_id']][child].append(row)
+    return {root['id']: decode_document(root, grouped[root['id']], verify=False) for root in roots}
 
 
 class Document:

@@ -5,6 +5,7 @@ import re
 import uuid
 import chess
 from sqlalchemy import text
+from chessism_api.database.compact_storage import compact_for
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.operations.common_positions import move_label, verified_example_line
 
@@ -15,8 +16,11 @@ SAMPLE_LIMIT = 100
 def scope_filter(scope):
     if scope == 'unique': return 'n_games = 1', {}
     if scope == 'repeated': return 'n_games > 1', {}
+    # Match the scored/unscored predicate used by the appearance histogram.
+    if scope == 'scored': return 'score IS NOT NULL', {}
+    if scope == 'unscored': return 'score IS NULL', {}
     if scope in {str(i) for i in range(2, 11)}: return 'n_games = :appearances', {'appearances': int(scope)}
-    raise ValueError('Choose unique, repeated, or 2–10 appearances.')
+    raise ValueError('Choose unique, repeated, scored, unscored, or 2–10 appearances.')
 
 
 def validate_fen(fen):
@@ -52,29 +56,38 @@ async def describe_examples(rows):
     output = []
     async with AsyncDBSession() as session:
         await session.execute(text("SET LOCAL statement_timeout = '4s'"))
+        compact = compact_for(session) is not None
+        # Compact moves are unique on (link, n_move) and no longer have an id.
+        # Keep deterministic duplicate selection for the legacy layout only.
+        move_order = '' if compact else 'ORDER BY id'
+        example_sql = """
+            SELECT n_move,white_move,black_move FROM moves
+            WHERE link=:link AND n_move<=:n_move ORDER BY n_move LIMIT 100
+        """ if compact else """
+            SELECT DISTINCT ON (n_move) n_move,white_move,black_move FROM moves
+            WHERE link=:link AND n_move<=:n_move ORDER BY n_move,id LIMIT 100
+        """
         for row in rows:
-            arrival = (await session.execute(text("""
+            arrival = (await session.execute(text(f"""
                 SELECT a.game_link, a.n_move, a.move_color,
                     CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END AS san
                 FROM (SELECT game_link,n_move,move_color FROM game_fen_association
                     WHERE fen_id=(SELECT fen_id FROM fen WHERE fen=:fen) LIMIT 1) a
                 LEFT JOIN LATERAL (SELECT white_move,black_move FROM moves
-                    WHERE link=a.game_link AND n_move=a.n_move ORDER BY id LIMIT 1) m ON TRUE
+                    WHERE link=a.game_link AND n_move=a.n_move {move_order} LIMIT 1) m ON TRUE
             """), {'fen': row['fen']})).mappings().first()
             item = {**row, 'label': 'Position', 'example_line': None}
             if arrival:
                 item['label'] = move_label(arrival['n_move'], arrival['move_color'], arrival['san'])
                 if arrival['n_move'] <= 100:
-                    moves = (await session.execute(text("""
-                        SELECT DISTINCT ON (n_move) n_move,white_move,black_move FROM moves
-                        WHERE link=:link AND n_move<=:n_move ORDER BY n_move,id LIMIT 100
-                    """), {'link': arrival['game_link'], 'n_move': arrival['n_move']})).mappings().all()
+                    moves = (await session.execute(text(example_sql),
+                        {'link': arrival['game_link'], 'n_move': arrival['n_move']})).mappings().all()
                     item['example_line'] = verified_example_line(moves,arrival['n_move'],arrival['move_color'],row['fen'])
             output.append(item)
     return output
 
 
-async def explore_positions(redis, account_id, scope, token=None, page=0):
+async def explore_positions(redis, account_id, scope, token=None, page=0, *, include_details=True):
     scope_filter(scope)
     if not 0 <= page < 10: raise ValueError('Sample page must be between 0 and 9.')
     if token and not re.fullmatch(r'[0-9a-f]{32}', token): raise ValueError('Invalid sample token.')
@@ -88,10 +101,14 @@ async def explore_positions(redis, account_id, scope, token=None, page=0):
         if not raw: raise LookupError('This sample expired. Shuffle to load new examples.')
         data = json.loads(raw)
         if data['scope'] != scope: raise ValueError('Sample does not match this slice.')
-    key = f'fen-explorer:{account_id}:{token}:page:{page}'
-    cached = await redis.get(key)
-    rows = json.loads(cached) if cached else await describe_examples(data['rows'][page*10:page*10+10])
-    if not cached: await redis.set(key,json.dumps(rows),ex=TTL)
+    rows = data['rows'][page*10:page*10+10]
+    # Thumbnails only need the FEN. Avoid per-position game/move lookups, while
+    # preserving the existing detailed response for callers that still use it.
+    if include_details:
+        key = f'fen-explorer:{account_id}:{token}:page:{page}'
+        cached = await redis.get(key)
+        rows = json.loads(cached) if cached else await describe_examples(rows)
+        if not cached: await redis.set(key,json.dumps(rows),ex=TTL)
     return {'token': token, 'scope': scope, 'page': page, 'rows': rows,
             'sample_size': len(data['rows']), 'has_next': (page+1)*10 < len(data['rows']),
             'sampled': True}

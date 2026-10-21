@@ -9,7 +9,8 @@ from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, Cloud
 from chessism_api.database.cloud_codec import checksum
 from stockfish_batch.performance import validate_performance
 from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
-from .artifacts import read_manifest, read_performance
+from .artifacts import read_completion
+from .preparation import StageTimings
 from .ingestion import ingest_ready
 from .importer import validate_manifest
 
@@ -27,6 +28,7 @@ async def import_unit(cloud, unit):
     if run.results_verified_at:
         return {**unit, 'verified': True, 'manifest_sha256': run.completion_manifest_sha256,
                 'performance': run.launch['performance']}
+    job_id = run.job_id
     await ingest_ready(storage, run, [{'output': unit['config']['output'], 'count': unit['count'],
                                       'contract': unit['contract']}], storage_factory=cloud.storage)
     del run  # Never retain two input/receipt snapshots while catching up.
@@ -35,18 +37,23 @@ async def import_unit(cloud, unit):
             CloudAnalysisRun.id == unit['run_id']))
     if imported != unit['count']:
         return unit
-    manifest = await read_manifest(storage, unit['config']['output'])
-    report = await read_performance(storage, unit['config']['output'])
-    if manifest is None or report is None:
-        return unit
-    performance = validate_performance(report, unit['contract'], CPUS)
-    async with AsyncDBSession() as session, session.begin():
-        run = await session.get(CloudAnalysisRun, unit['run_id'], with_for_update=True)
-        validate_manifest(manifest, run.positions, run.contract, run.receipts)
-        run.launch = {**run.launch, 'manifest': manifest, 'performance': performance}
-        run.completion_manifest_sha256 = checksum(manifest)
-        run.results_verified_at = datetime.now(timezone.utc)
-        run.status = 'unit_verified'
+    timings = StageTimings()
+    try:
+        with timings.measure('verify_unit_artifacts'):
+            manifest, report = await asyncio.to_thread(read_completion, cloud.storage, unit['config']['output'])
+            if manifest is None or report is None:
+                return unit
+            performance = validate_performance(report, unit['contract'], CPUS)
+        with timings.measure('verify_unit_commit'):
+            async with AsyncDBSession() as session, session.begin():
+                run = await session.get(CloudAnalysisRun, unit['run_id'], with_for_update=True)
+                validate_manifest(manifest, run.positions, run.contract, run.receipts)
+                run.launch = {**run.launch, 'manifest': manifest, 'performance': performance}
+                run.completion_manifest_sha256 = checksum(manifest)
+                run.results_verified_at = datetime.now(timezone.utc)
+                run.status = 'unit_verified'
+    finally:
+        await timings.save(job_id, unit['run_id'])
     return {**unit, 'verified': True, 'manifest_sha256': checksum(manifest), 'performance': performance}
 
 

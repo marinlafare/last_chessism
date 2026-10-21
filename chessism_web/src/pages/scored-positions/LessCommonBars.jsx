@@ -20,7 +20,7 @@ export default function LessCommonBars({ items, interactions }) {
   return <figure className="less-common-figure">
     <svg {...styleTarget('repeated.outline')} className="less-common-chart" ref={ref}
       viewBox={`0 0 ${width} ${height}`} role="group"
-      aria-label="almos unique FENs: appearances from 2 to 10 on X, distinct FEN counts on Y, linear scale">
+      aria-label="Almost unique FENs: appearances from 2 to 10 on X, distinct FEN counts on Y, linear scale">
       {scale.ticks.map(tick => <g key={tick} className="commonness-y-tick" aria-hidden="true">
         <line x1={left} x2={right} y1={y(tick)} y2={y(tick)} />
         <text x={left - 5} y={y(tick) + 3} textAnchor="end">{compact.format(tick)}</text>
@@ -42,6 +42,6 @@ export default function LessCommonBars({ items, interactions }) {
         x={left + slot * (bar.appearances - 1.5)} y={bottom + 14} textAnchor="middle">{bar.appearances}</text>)}
       {!total && <text x={(left + right) / 2} y={(top + bottom) / 2} textAnchor="middle">No FENs</text>}
     </svg>
-    <figcaption {...styleTarget('circle.caption')}>almos unique</figcaption>
+    <figcaption {...styleTarget('circle.caption')}>Almost unique</figcaption>
   </figure>
 }

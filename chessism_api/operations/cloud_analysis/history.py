@@ -39,7 +39,7 @@ async def transition(session, run, previous, following):
         row.finished_at = now
         row.duration_seconds = max(0, (now - row.started_at).total_seconds())
         row.outcome = 'failed' if following == 'failed' else 'complete'
-    if following not in {'complete', 'failed'}:
+    if following not in {'complete', 'failed', 'cancelled'}:
         session.add(CloudPhaseTiming(job_id=run.job_id, run_id=run.id, phase=following,
                                     started_at=now, outcome='running'))
 

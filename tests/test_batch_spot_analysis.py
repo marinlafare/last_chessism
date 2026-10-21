@@ -213,9 +213,14 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         storage = Mock()
         storage.read.side_effect = lambda uri, *args: objects.get(uri)
         launch = await results.collect(storage, run, deepcopy(run.launch))
+        parallel = await results.collect(storage, run, deepcopy(run.launch), storage_factory=lambda: storage)
+        self.assertEqual(parallel, launch)
         self.assertEqual(launch["performance"]["position_count"], 5)
         self.assertEqual(launch["performance"]["vm_count"], 2)
         results.validate_saved(run, launch)
+        del objects[run.launch['tasks'][1]['config']['output'] + '/manifest.json']
+        with self.assertRaisesRegex(ValueError, 'no completion manifest'):
+            await results.collect(storage, run, deepcopy(run.launch), storage_factory=lambda: storage)
         launch["task_performance"][1]["fingerprint"] = "foreign"
         with self.assertRaises(ValueError): results.validate_saved(run, launch)
 

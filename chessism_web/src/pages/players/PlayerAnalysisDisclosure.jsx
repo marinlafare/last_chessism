@@ -5,7 +5,7 @@ import './player-analysis-disclosure.css'
 const AnalysisVisible = createContext(true)
 export const useAnalysisVisible = () => useContext(AnalysisVisible)
 
-export default function PlayerAnalysisDisclosure({ label, children, buttonTarget, target = 'card', level = 3, disabled = false }) {
+export default function PlayerAnalysisDisclosure({ label, children, buttonTarget, target = 'card', level = 3, disabled = false, loading = false }) {
   const [open, setOpen] = useState(false)
   const [visited, setVisited] = useState(false)
   const parentVisible = useAnalysisVisible()
@@ -15,16 +15,18 @@ export default function PlayerAnalysisDisclosure({ label, children, buttonTarget
     <section {...pageStyleTarget(target)} className={`player-analysis-disclosure${level === 2 ? ' player-analysis-group' : ''}`}>
       <Heading {...pageStyleTarget('title')} className="player-analysis-disclosure-heading">
         <button {...pageStyleTarget(buttonTarget)} type="button" className="player-analysis-disclosure-toggle"
-          id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} disabled={disabled}
+          id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} disabled={disabled || loading}
+          aria-busy={loading || undefined}
           onClick={() => { setVisited(true); setOpen(value => !value) }}>
           <span>{label}</span>
-          <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+          {loading ? <i className="player-analysis-disclosure-spinner" aria-hidden="true" />
+            : <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>}
         </button>
       </Heading>
       <div id={`${id}-content`} className="player-analysis-disclosure-content" hidden={!open}
         role="region" aria-labelledby={`${id}-toggle`}>
         {/* Mount on first expansion, then preserve filters/zoom while hidden. */}
-        <AnalysisVisible.Provider value={parentVisible && open && !disabled}>
+        <AnalysisVisible.Provider value={parentVisible && open && !disabled && !loading}>
           {visited ? children : null}
         </AnalysisVisible.Provider>
       </div>

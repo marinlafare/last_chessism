@@ -15,7 +15,7 @@ export function draftSubmitError(draft, nVms) {
   if (!draft || !draft.entries.length) return 'Add at least one game selection.'
   if (draft.submitted_job_id) return 'This draft has already been submitted.'
   const preview = draft.preview
-  if (!preview || preview.revision !== draft.revision) return 'Preview the combined selection before submitting.'
+  if (!preview || preview.revision !== draft.revision) return 'Recalculate group data before running.'
   if (!Number.isInteger(preview.fens_to_analyze) || preview.fens_to_analyze < 1) return 'No available unscored FENs in this selection.'
   if (preview.fens_to_analyze > draft.max_fens) return `Reduce the selection to at most ${draft.max_fens.toLocaleString('en-US')} FENs.`
   if (!Number.isInteger(Number(nVms)) || Number(nVms) < 1 || Number(nVms) > MAX_BATCH_VMS) return `Choose 1–${MAX_BATCH_VMS} Spot VMs.`

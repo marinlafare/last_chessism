@@ -1,8 +1,8 @@
 """Player-perspective position histograms and frequency-ranked FEN pages.
 
 No new tables or engine work. Aggregate the histogram directly into its bins;
-only position pages group FEN identities, after filtering the score interval.
-Read-only, bounded queries; cache small histograms and ranked chunks, not the
+position pages rank narrow identities before fetching candidate scores.
+Read-only, bounded queries; cache small histograms and position pages, not the
 whole position corpus. Overlapping requests share one in-flight calculation.
 """
 import asyncio
@@ -20,13 +20,14 @@ from sqlalchemy.exc import DBAPIError
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_score_histogram import BATCH_SELECTION, read_histogram_batches
+from chessism_api.operations.player_score_position_page import read_position_page
 
 MODES = ('bullet', 'blitz', 'rapid')
 CACHE_SECONDS = 900
 HISTOGRAM_RETENTION_SECONDS = 86400
 PAGE_SIZE = 10
-CHUNK_SIZE = 100
 READ_SLOTS = asyncio.Semaphore(1)
+POSITION_READ_SLOTS = asyncio.Semaphore(1)
 IN_FLIGHT = {}
 PROGRESS = {}
 MAX_IN_FLIGHT = 8
@@ -199,9 +200,10 @@ async def save_cache(redis, key, value, *, seconds=CACHE_SECONDS):
 
 
 @asynccontextmanager
-async def read_slot(*, wait_seconds=30):
+async def read_slot(*, wait_seconds=30, slots=None):
+    slots = READ_SLOTS if slots is None else slots
     try:
-        await asyncio.wait_for(READ_SLOTS.acquire(), timeout=wait_seconds)
+        await asyncio.wait_for(slots.acquire(), timeout=wait_seconds)
     except asyncio.TimeoutError as error:
         raise ScoreDistributionBusy('Position calculations are busy. Please retry shortly.') from error
     try:
@@ -211,7 +213,7 @@ async def read_slot(*, wait_seconds=30):
             raise ScoreDistributionBusy('Position calculation took too long. Please retry shortly.') from error
         raise
     finally:
-        READ_SLOTS.release()
+        slots.release()
 
 
 async def shared_calculation(key, factory, *, timeout=None, wait_seconds=None):
@@ -330,7 +332,7 @@ async def calculate_distribution(player, modes, redis):
 
 
 def encode_cursor(scope, after_count, after_id, offset):
-    raw = json.dumps([1, scope, after_count, after_id, offset], separators=(',', ':')).encode()
+    raw = json.dumps([2, scope, after_count, after_id, offset], separators=(',', ':')).encode()
     return base64.urlsafe_b64encode(raw).decode().rstrip('=')
 
 
@@ -342,7 +344,9 @@ def decode_cursor(cursor, scope):
             raise ValueError()
         version, expected, count, fen_id, offset = json.loads(base64.b64decode(
             cursor + '=' * (-len(cursor) % 4), altchars=b'-_', validate=True))
-        if version != 1 or expected != scope or type(offset) is not int or not 0 <= offset < CHUNK_SIZE or offset % PAGE_SIZE:
+        if version == 1:
+            raise ScoreDistributionChanged('Position browsing was updated; reopen this list to continue.')
+        if version != 2 or expected != scope or type(offset) is not int or offset != 0:
             raise ValueError()
         if not ((count is None and fen_id is None) or
                 (type(count) is int and type(fen_id) is int and 0 < count < 2**63 and 0 < fen_id < 2**63)):
@@ -366,7 +370,7 @@ async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=N
         snapshot = current_snapshot
     scope = key_for('selection', player, modes, bin_id, snapshot)
     after_count, after_id, offset = decode_cursor(cursor, scope)
-    key = key_for('chunk', scope, after_count, after_id)
+    key = key_for('page', scope, after_count, after_id)
     chunk = await read_cache(redis, key)
     # Already cached pages remain valid as a retained ranking even when more
     # positions arrive. Only an uncached continuation needs a new source read.
@@ -380,11 +384,9 @@ async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=N
         # the read slot. The first page uses the calculation's actual snapshot.
         snapshot = chunk['snapshot']
         scope = key_for('selection', player, modes, bin_id, snapshot)
-    rows = chunk['rows'][offset:offset + PAGE_SIZE]
+    rows = chunk['rows'][:PAGE_SIZE]
     next_cursor = None
-    if offset + PAGE_SIZE < len(chunk['rows']):
-        next_cursor = encode_cursor(scope, after_count, after_id, offset + PAGE_SIZE)
-    elif rows and chunk['has_more']:
+    if rows and chunk['has_more']:
         last = rows[-1]
         next_cursor = encode_cursor(scope, last['appearances'], int(last['fen_id']), 0)
     return {'rows': rows, 'next_cursor': next_cursor, 'snapshot': snapshot,
@@ -394,41 +396,28 @@ async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=N
 
 
 async def calculate_chunk(player, modes, bin_id, snapshot, after_count, after_id, redis, key, *, rebase=False):
-    async with read_slot():
+    # An open popup must not wait behind a whole-player histogram refresh.
+    # One position reader and one histogram reader at most, independently.
+    async with read_slot(wait_seconds=2, slots=POSITION_READ_SLOTS):
         chunk = await read_cache(redis, key)
         if chunk is not None:
             return chunk
         async with AsyncDBSession() as session:
             await prepare(session)
+            await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
             current_snapshot = await source_state(session, player)
             if current_snapshot != snapshot:
                 if not rebase:
                     raise ScoreDistributionChanged('The position list changed; restart it to use the latest ranking.')
                 snapshot = current_snapshot
                 scope = key_for('selection', player, modes, bin_id, snapshot)
-                key = key_for('chunk', scope, after_count, after_id)
+                key = key_for('page', scope, after_count, after_id)
                 cached = await read_cache(redis, key)
                 if cached:
                     return cached
-            layout = storage_for(session)
-            fen = layout.table('fen') if layout else 'fen'
-            query = positions_sql(session) + f''', counts AS (
-                SELECT fen_id, COUNT(*)::bigint AS appearances,
-                    MIN(player_score) AS score_min, MAX(player_score) AS score_max
-                FROM classified WHERE score_kind='cp' AND bin_id=:bin_id GROUP BY fen_id
-            ), ranked AS MATERIALIZED (
-                SELECT * FROM counts WHERE CAST(:after_count AS bigint) IS NULL
-                    OR appearances<:after_count OR (appearances=:after_count AND fen_id>:after_id)
-                ORDER BY appearances DESC, fen_id ASC LIMIT :chunk_limit
-            )
-            SELECT r.*, f.fen FROM ranked r JOIN {fen} f ON f.fen_id=r.fen_id
-            ORDER BY r.appearances DESC, r.fen_id ASC'''
-            rows = (await session.execute(text(query), {'player': player, 'modes': list(modes),
-                'bin_id': bin_id, 'after_count': after_count, 'after_id': after_id,
-                'chunk_limit': CHUNK_SIZE + 1})).mappings().all()
-        chunk = {'version': 1, 'snapshot': snapshot, 'has_more': len(rows) > CHUNK_SIZE, 'rows': [
-            {'fen_id': str(row['fen_id']), 'fen': row['fen'], 'appearances': int(row['appearances']),
-             'score_min': float(row['score_min']), 'score_max': float(row['score_max'])}
-            for row in rows[:CHUNK_SIZE]]}
+            rows, has_more = await read_position_page(session, games_sql(session),
+                {'player': player, 'modes': list(modes), 'after_count': after_count, 'after_id': after_id},
+                bins()[bin_id], PAGE_SIZE)
+        chunk = {'version': 1, 'snapshot': snapshot, 'has_more': has_more, 'rows': rows}
         await save_cache(redis, key, chunk)
         return chunk

@@ -6,6 +6,7 @@ import { isTrackedJobActive } from './positionPageSupport'
 export default function FenIngestionPanel({
   jobState = {}, ingestionTiming, loading = false, error = '', timingError = '',
   className = '', title = 'Ingestion',
+  completedRuns = [], onDismiss,
 }) {
   const active = ingestionTiming
     ? ingestionTiming.status === 'running'
@@ -20,6 +21,19 @@ export default function FenIngestionPanel({
       {active && ['gameParsing', 'fen', 'tablebase'].map((key) => (
         jobState[key]?.error
           ? <div className="status-banner warn" role="alert" key={key}>{jobState[key].error}</div> : null
+      ))}
+      {completedRuns.map(({ run, key }) => (
+        <div className="fen-ingestion-result" key={key}>
+          <div className="fen-ingestion-result-heading">
+            <strong {...pageStyleTarget('title')}>{run.player_name || 'Automatic ingestion'}</strong>
+            <span {...pageStyleTarget('text')}>{run.status === 'complete' ? 'Completed' : run.status}</span>
+          </div>
+          {run.last_error && <div className="status-banner warn" role="alert">{run.last_error}</div>}
+          <FenPipelineStages jobState={{}} ingestionTiming={run} />
+          <button {...pageStyleTarget('button')} type="button" className="fen-ingestion-dismiss"
+            title="Hide this progress result. Downloaded games, positions and ingestion history are kept."
+            onClick={() => onDismiss(key)}>Reviewed — dismiss progress</button>
+        </div>
       ))}
       <IngestionHistory revision={`${ingestionTiming?.run_id || ''}:${ingestionTiming?.status || ''}`} />
     </section>

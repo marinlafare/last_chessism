@@ -36,6 +36,24 @@ function formatClock(seconds) {
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
 }
 
+function GameReviewDate({ value }) {
+  const date = value ? new Date(value) : null
+  if (!date || !Number.isFinite(date.getTime())) {
+    return <span {...pageStyleTarget('text')} className="game-review-date-badge">Date unavailable</span>
+  }
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getUTCMonth()]
+  const day = String(date.getUTCDate()).padStart(2, '0')
+  const time = `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
+  const label = `Game started: ${date.getUTCFullYear()} ${month} ${day}, ${time} UTC`
+  return <time {...pageStyleTarget('text')} className="game-review-start-date" dateTime={date.toISOString()}
+    title={label} aria-label={label}>
+    <span className="game-review-date-badge">{date.getUTCFullYear()}</span>
+    <span className="game-review-date-badge">{month}</span>
+    <span className="game-review-date-badge">{day}</span>
+    <span className="game-review-date-badge">{time}</span>
+  </time>
+}
+
 function clockHistory(moves, timeControl) {
   const control = /^(\d+)(?:\+(\d+))?$/.exec(String(timeControl ?? ''))
   const initial = control ? Number(control[1]) : null
@@ -213,7 +231,10 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
       <section {...pageStyleTarget('panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
         <header className="game-modal-header game-review-header">
           <div className="game-review-heading">
-            <p {...pageStyleTarget('text')} className="eyebrow">GAME REVIEW</p>
+            <div className="game-review-heading-meta">
+              <p {...pageStyleTarget('text')} className="eyebrow">GAME REVIEW</p>
+              {game && !request.loading ? <GameReviewDate value={game.played_at_utc} /> : null}
+            </div>
             <h2 {...pageStyleTarget('title')}>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
           </div>
           <div className="game-review-window-actions">

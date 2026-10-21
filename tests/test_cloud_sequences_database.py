@@ -17,7 +17,14 @@ from chessism_api.operations.cloud_analysis import controller, sequence, importe
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
 from chessism_api.operations.cloud_analysis.migrate_sequences import upgrade
-from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs, stop_repeating
+from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs
+
+
+async def persisted_legacy_stop(job_id):
+    """Older stored intents still recover; the public stop-after-cycle route is gone."""
+    async with AsyncDBSession() as session, session.begin():
+        row = await session.get(CloudBatchSequence, job_id, with_for_update=True)
+        row.stop_requested = True
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL database')
@@ -107,7 +114,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_stop_during_selection_releases_only_this_sequences_unstarted_claims(self):
         await self.start()
         await self.tick()
-        await stop_repeating(self.job.id)
+        await persisted_legacy_stop(self.job.id)
         await self.tick()
         self.assertEqual((await self.job_state()).status,'cancelled')
         async with AsyncDBSession() as session:
@@ -121,7 +128,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         stack.enter_context(patch.object(fleet.batch_spot, 'check_quota', return_value={}))
         stack.enter_context(patch.object(fleet, 'inspect_worker', return_value=('sha256:'+'a'*64,{})))
         stack.enter_context(patch.object(fleet, 'prepare', return_value={}))
-        stack.enter_context(patch.object(fleet, 'cleaning_job', return_value={'complete':True}))
+        stack.enter_context(patch.object(fleet.batch_cleanup, 'apply', new_callable=AsyncMock, return_value={'complete':True}))
         stack.enter_context(patch.object(fleet, 'plan_logs', return_value={}))
         stack.enter_context(patch.object(fleet, 'remove_logs', return_value={'complete':True}))
         stack.enter_context(patch.object(importer, 'refresh_global_projections', new_callable=AsyncMock))
@@ -173,7 +180,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
                             CloudPhaseTiming.run_id==first.id,CloudPhaseTiming.phase=='global_summaries',
                             CloudPhaseTiming.outcome=='complete')))
                 if stop and first.status=='running' and not stopped:
-                    await stop_repeating(self.job.id)
+                    await persisted_legacy_stop(self.job.id)
                     stopped=True
                 saved=await self.job_state()
                 if saved.status in {'complete','cancelled'}:break
@@ -206,7 +213,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         for _, root in rows:
             for unit in root.launch['units']:
                 objects.update(await self.objects(unit))
-        with self.cloud_stubs(objects), patch.object(fleet, 'cleaning_job', side_effect=RuntimeError('cleanup unavailable')):
+        with self.cloud_stubs(objects), patch.object(fleet.batch_cleanup, 'apply', new_callable=AsyncMock, side_effect=RuntimeError('cleanup unavailable')):
             for _ in range(30):
                 await self.tick()
                 job = await self.job_state()

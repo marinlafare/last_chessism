@@ -58,6 +58,25 @@ class CloudAnalysisRun(Base):
     completion_manifest_sha256 = Column(String(64))
 
 
+class CloudJobCancellation(Base):
+    """Durable stop/cleanup intent; never a successful-analysis completion."""
+    __tablename__ = 'cloud_job_cancellation'
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), primary_key=True)
+    phase = Column(String(32), nullable=False, default='stopping')
+    cursor = Column(Integer, nullable=False, default=0)
+    requested_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    finished_at = Column(DateTime(timezone=True))
+    CLOUD_DOCUMENTS = ('batch_plan', 'artifact_plan')
+    _batch_plan_ref = Column('batch_plan_record_id', String(96))
+    _artifact_plan_ref = Column('artifact_plan_record_id', String(96))
+    batch_plan = Document('batch_plan', 'cleanup')
+    artifact_plan = Document('artifact_plan', 'cleanup')
+
+    @property
+    def id(self):
+        return self.job_id + ':cancellation'
+
+
 class CloudGameDraft(Base):
     """A shared, durable selection builder; never authorizes work until submitted."""
     __tablename__ = 'cloud_game_draft'
@@ -98,7 +117,7 @@ class CloudGameDraftGame(Base):
     ordinal = Column(Integer, nullable=False)
 
 
-install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun))
+install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation))
 
 
 class CloudBatchUnit(Base):

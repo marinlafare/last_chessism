@@ -14,7 +14,7 @@ from .importer import import_batch
 from stockfish_batch.checkpoints import BatchCheckpoints
 
 
-async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency=4, writer=None):
+async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency=4, writer=None, scan_missing=False):
     if type(concurrency) is not int or not 1 <= concurrency <= 4:
         raise ValueError('Ingestion concurrency must be 1–4')
     writer = writer or import_batch
@@ -39,18 +39,21 @@ async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency
             if state['done'] or state['checking']:
                 misses += 1
                 continue
+            # Durable receipts already prove these batches were validated and
+            # committed. Fully imported tasks need no repeated contract reads
+            # on every poll; final manifest/performance verification still runs.
+            prefix = f"tasks/{task['index']:06d}/" if task.get('index') is not None else ''
+            while state['next'] < (task['count'] + 499) // 500 and (
+                prefix + f"batches/{state['next']:06d}.json") in run.receipts:
+                state['next'] += 1
+            if state['next'] >= (task['count'] + 499) // 500:
+                state['done'] = True
+                misses += 1
+                continue
             if not state['checked']:
                 state['checking'] = True
                 index, uri, limit = None, task['output'] + '/contract.json', 2 * 1024 * 1024
             else:
-                prefix = f"tasks/{task['index']:06d}/" if task.get('index') is not None else ''
-                while state['next'] < (task['count'] + 499) // 500 and (
-                    prefix + f"batches/{state['next']:06d}.json") in run.receipts:
-                    state['next'] += 1
-                if state['next'] >= (task['count'] + 499) // 500:
-                    state['done'] = True
-                    misses += 1
-                    continue
                 index = state['next']
                 state['next'] += 1
                 uri, limit = task['output'] + f'/batches/{index:06d}.json', BatchCheckpoints.MAX_BYTES
@@ -63,7 +66,9 @@ async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency
             state, index, future = pending.popleft()
             raw, elapsed = await future
             task = state['task']
-            if raw is None:
+            # After cancellation, later completed batches must survive gaps.
+            # Live polling still stops at a gap and retries on its next tick.
+            if raw is None and (index is None or not scan_missing):
                 state['done'] = True
             elif index is None:
                 if json.loads(raw) != task['contract']:

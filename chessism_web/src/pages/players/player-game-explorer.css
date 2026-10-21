@@ -350,6 +350,40 @@
   text-align: center;
 }
 
+.game-review-heading-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 5px;
+  text-align: left;
+}
+
+.game-review-heading-meta .eyebrow { margin: 0; }
+
+.game-review-start-date {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-review-date-badge {
+  display: inline-block;
+  padding: 3px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
+
 .game-review-window-actions {
   display: flex;
   gap: 6px;

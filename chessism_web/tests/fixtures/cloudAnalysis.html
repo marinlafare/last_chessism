@@ -30,8 +30,9 @@ window.fetch = async (input, options = {}) => {
         target: payload.mode === 'games' ? state.previewCount : payload.total_fens, runs: [], selection: payload })
       return reply({ id: job.id, status: job.status }, 202)
     }
-    return reply({ controller_online: state.online, cloud_busy: job.status !== 'complete',
-      blocking_job_id: job.status === 'complete' ? null : job.id, jobs: [job, ...state.history] })
+    const terminal = ['complete', 'cancelled'].includes(job.status)
+    return reply({ controller_online: state.online, cloud_busy: !terminal,
+      blocking_job_id: terminal ? null : job.id, jobs: [job, ...state.history] })
   }
   if (url.pathname.endsWith('/analysis/player_games/preview')) {
     if (state.previewError) return reply({ detail: state.previewError }, 500)
@@ -67,6 +68,7 @@ window.fetch = async (input, options = {}) => {
       return reply(draft)
     }
     if (drafts.endsWith('/preview')) {
+      if (state.groupError) return reply({ detail: state.groupError }, 500)
       draft.preview = { revision: draft.revision, unique_games: draft.entries.length * 30,
         unique_missing_fens: draft.entries.length > 1 ? 1300000 : 800000, claimed_fens: 0,
         fens_to_analyze: draft.entries.length > 1 ? 1300000 : 800000, within_limit: true }
@@ -82,7 +84,10 @@ window.fetch = async (input, options = {}) => {
   }
   if (url.pathname.endsWith('/analysis_counts')) return reply({ total_positions: 3000, analyzed_positions: 1000 })
   if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }
-  if (url.pathname.endsWith('/stop-repeating')) { job.sequence.stop_requested = true; return reply({ id: job.id }, 202) }
+  if (url.pathname.endsWith('/stop-and-cleanup')) {
+    job.stop_cleanup = { phase: 'stopping', requested_at: new Date().toISOString(), finished_at: null }
+    return reply({ id: job.id, status: 'stop_cleanup_requested', phase: 'stopping' }, 202)
+  }
   throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
 }
 createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection, { collapsible: restoreDraft }))

@@ -1,11 +1,12 @@
 """Cloud Run backend. PostgreSQL is authoritative; no host needed during execution."""
 import asyncio
-from .result_receipts import task_receipts, completion_manifest
+from .result_receipts import completion_manifest
 from dataclasses import asdict
 
 from . import runtime
-from .importer import validate_manifest, refresh_projections
-from .artifacts import read_manifest, read_performance
+from .importer import validate_manifest
+from .cloud_run_results import verify_tasks
+from .preparation import StageTimings
 from .preflight import verify_clean_workspace
 from cloud_job import cloud_run as api
 from cloud_job.launch import inspect_worker, expected_contract
@@ -115,18 +116,13 @@ async def advance(controller, job, run):
         elif state == "SUCCEEDED":
             async with AsyncDBSession() as session:
                 current = await session.get(CloudAnalysisRun, run.id)
-            performance = []
-            for task in launch["tasks"]:
-                cfg = api.task_config(config, task["index"], len(launch["tasks"]))
-                receipts = task_receipts(current.receipts, task['index'])
-                manifest = await read_manifest(storage, cfg.output)
-                if manifest is None:
-                    raise ValueError("Successful Cloud Run task has no manifest")
-                validate_manifest(manifest, run.positions[task["start"]:task["start"] + task["count"]], task["contract"], receipts)
-                report = await read_performance(storage, cfg.output)
-                if report is None:
-                    raise ValueError("Cloud Run task performance report missing")
-                performance.append(validate_performance(report, task["contract"], 1))
+            timings = StageTimings()
+            try:
+                with timings.measure('verify_task_artifacts'):
+                    performance = await asyncio.to_thread(verify_tasks, cloud.storage, config,
+                        launch['tasks'], run.positions, current.receipts)
+            finally:
+                await timings.save(run.job_id, run.id)
             launch["task_performance"] = performance
             launch["execution_summary"] = execution
             launch["manifest"] = completion_manifest(run.contract, len(run.positions), current.receipts)
@@ -148,7 +144,11 @@ async def advance(controller, job, run):
             plan = await asyncio.to_thread(prepare, cloud, launch, run.id)
             await save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
         else:
-            result = await asyncio.to_thread(apply, cloud, run.cleanup_plan)
+            timings = StageTimings()
+            try:
+                result = await asyncio.to_thread(apply, cloud, run.cleanup_plan, timings=timings)
+            finally:
+                await timings.save(run.job_id, run.id)
             launch["cleanup_report"] = result
             await save_run(run.id, launch=launch, status="refreshing" if result["complete"] else "cleaning", error=None)
     elif run.status == "failed":
