@@ -2,6 +2,7 @@
 from datetime import datetime, timezone
 import json
 from uuid import uuid4
+from typing import Literal
 from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
@@ -11,7 +12,7 @@ from chessism_api.database.models import (CloudGameDraft, CloudGameDraftEntry, C
     CloudAnalysisJob, CloudBatchSequence)
 from chessism_api.operations.cloud_analysis import game_drafts as drafts
 from chessism_api.operations.cloud_analysis.admission import require_available
-from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_BATCH_TOTAL_FENS, batch_cycle_count
+from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_BATCH_TOTAL_FENS, MAX_CLOUD_RUN_FENS, batch_cycle_count
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from chessism_api.redis_client import get_redis_pool
 
@@ -29,7 +30,9 @@ class AddSelection(Revision):
 
 
 class SubmitDraft(Revision):
+    backend: Literal['batch_spot', 'cloud_run'] = 'batch_spot'
     n_vms: int = Field(1, ge=1, le=10, strict=True)
+    n_cpus: int = Field(4, ge=1, le=100, strict=True)
 
 
 @router.get('/current')
@@ -129,7 +132,11 @@ async def submit_draft(draft_id: str, data: SubmitDraft):
         draft = await drafts.locked_draft(session, draft_id, editable=False)
         if draft.submitted_job_id:
             job = await session.get(CloudAnalysisJob, draft.submitted_job_id)
-            return {'id': job.id, 'status': job.status, 'target': job.target, 'already_submitted': True}
+            backend = job.selection.get('backend', 'batch_spot')
+            if backend != data.backend:
+                raise HTTPException(409, 'This draft was already submitted to a different cloud backend; start another process')
+            return {'id': job.id, 'status': job.status, 'target': job.target,
+                    'backend': backend, 'already_submitted': True}
         if data.revision != draft.revision or draft.preview_revision != draft.revision:
             raise HTTPException(409, 'Preview the current combined selection before submitting')
         if not await controller_online(session):
@@ -137,22 +144,29 @@ async def submit_draft(draft_id: str, data: SubmitDraft):
         await require_available(session)
         counts = await drafts.count_union(session, draft.id)
         target = counts['eligible']
-        if not 0 < target <= MAX_BATCH_TOTAL_FENS:
-            raise HTTPException(409, f'Select 1–{MAX_BATCH_TOTAL_FENS:,} available unscored FENs; preview again')
+        is_run = data.backend == 'cloud_run'
+        maximum = MAX_CLOUD_RUN_FENS if is_run else MAX_BATCH_TOTAL_FENS
+        backend_label = 'Cloud Run' if is_run else 'Batch Spot'
+        if not 0 < target <= maximum:
+            raise HTTPException(409, f'{backend_label} requires 1–{maximum:,} available unscored FENs; adjust the selection and preview again')
         if target > draft.preview_fens:
             raise HTTPException(409, 'Available FEN count increased; preview again before authorizing this job')
         links = await drafts.game_links(session, draft.id)
-        # The unchanged controller already knows how to freeze a deduplicated
-        # game set into bounded units and run it as an offline-capable sequence.
-        selection = CloudJobRequest(mode='games', plan_id=draft.id, n_vms=data.n_vms).model_dump()
+        # Both existing execution paths accept the same deduplicated game set.
+        # Cloud Run gets one bounded job, never a Batch sequence or Spot VMs.
+        selection = CloudJobRequest(mode='games', plan_id=draft.id, backend=data.backend,
+                                    n_vms=data.n_vms, n_cpus=data.n_cpus).model_dump()
         selection.update(game_links=links, player_name='', total_fens=target,
             nodes=DEFAULT_ANALYSIS_NODES, stall_timeout_seconds=CLOUD_STALL_TIMEOUT_SECONDS,
-            execution_mode='batch_sequence_v2', recovery_policy='google-preemption-v1')
+            execution_mode='cloud_run_v1' if is_run else 'batch_sequence_v2',
+            recovery_policy='cloud-run-task-retry-v1' if is_run else 'google-preemption-v1')
         job = CloudAnalysisJob(id=uuid4().hex, status='queued', target=target, imported=0, selection=selection)
         session.add(job)
         await session.flush()
-        session.add(CloudBatchSequence(job_id=job.id, requested_count=target,
-                                      repeat_count=batch_cycle_count(target, data.n_vms)))
+        if not is_run:
+            session.add(CloudBatchSequence(job_id=job.id, requested_count=target,
+                                          repeat_count=batch_cycle_count(target, data.n_vms)))
         draft.submitted_job_id = job.id
         draft.updated_at = datetime.now(timezone.utc)
-        return {'id': job.id, 'status': job.status, 'target': target, 'already_submitted': False}
+        return {'id': job.id, 'status': job.status, 'target': target,
+                'backend': data.backend, 'already_submitted': False}

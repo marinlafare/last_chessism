@@ -269,11 +269,15 @@ def owned_resources(cloud, plan):
     return result
 
 
+class InventoryChanged(CleanupError):
+    """The saved exact-generation plan cannot authorize the current objects."""
+
+
 def check_inventory(cloud, plan):
     current = inventory(cloud, plan["prefixes"])
     expected = {(o["name"], o["generation"]) for o in plan["objects"]}
-    require(all((o["name"], o["generation"]) in expected for o in current),
-            "New/replaced objects appeared after planning; cleanup stopped without deleting those objects")
+    if not all((o["name"], o["generation"]) in expected for o in current):
+        raise InventoryChanged("New/replaced objects appeared after planning; cleanup stopped without deleting those objects")
     return current
 
 

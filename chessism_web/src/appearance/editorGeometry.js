@@ -10,6 +10,16 @@ export function fitEditor(box, viewport) {
     left: Math.max(EDITOR_MARGIN, Math.min(box.left, viewport.width - width - EDITOR_MARGIN)),
     top: Math.max(EDITOR_MARGIN, Math.min(box.top, viewport.height - height - EDITOR_MARGIN)) }
 }
+
+export function placeEditorOpposite(box, point, viewport) {
+  const fitted = fitEditor(box, viewport)
+  return fitEditor({ ...fitted,
+    left: point.x < viewport.width / 2
+      ? viewport.width - fitted.width - EDITOR_MARGIN : EDITOR_MARGIN,
+    top: point.y,
+  }, viewport)
+}
+
 export function resizeEditor(start, edge, dx, dy, viewport) {
   const minWidth = Math.min(280, viewport.width - EDITOR_MARGIN * 2)
   const minHeight = Math.min(160, viewport.height - EDITOR_MARGIN * 2)

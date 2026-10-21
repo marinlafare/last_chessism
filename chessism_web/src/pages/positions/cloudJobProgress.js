@@ -69,8 +69,8 @@ export function cloudTaskLabel(job, run) {
 
 export function cloudJobProgress(job) {
   if (job.stop_cleanup) {
-    const phases = ['stopping', 'importing', 'planning', 'cleaning', 'logs', 'refreshing', 'finishing', 'complete']
-    const names = ['Stop cloud workers and recovery', 'Save completed results', 'Prepare cleanup',
+    const phases = ['stopping', 'settling', 'importing', 'planning', 'cleaning', 'logs', 'refreshing', 'finishing', 'complete']
+    const names = ['Stop cloud workers and recovery', 'Wait for late uploads', 'Save completed results', 'Prepare cleanup',
       'Clean up cloud resources', 'Clean up eligible logs', 'Refresh database totals', 'Release unfinished FENs', 'Cancelled — cleaned']
     const current = Math.max(0, phases.indexOf(job.stop_cleanup.phase))
     const finished = job.status === 'cancelled' && job.stop_cleanup.phase === 'complete'

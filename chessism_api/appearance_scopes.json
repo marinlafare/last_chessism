@@ -905,6 +905,16 @@
           "initialStyleFrom": "button",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
         },
+        "cloud.run.single.toggle": {
+          "label": "Cloud Run · One process button",
+          "initialStyleFrom": "cloud.single.toggle",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "cloud.run.combined.toggle": {
+          "label": "Cloud Run · Combined button",
+          "initialStyleFrom": "cloud.combined.toggle",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
         "cloud.single.toggle": {
           "label": "One process button",
           "initialStyleFrom": "button",
@@ -975,6 +985,98 @@
           "label": "Cloud progress · process name badges",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
         },
+        "cloud.steps": {
+          "label": "Cloud progress · process list container",
+          "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.complete": {
+          "label": "Cloud progress · completed step row",
+          "editorParent": "cloud.steps",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.complete.number": {
+          "label": "Cloud progress · completed step number",
+          "initialStyleFrom": "cloud.step.number",
+          "editorParent": "cloud.step.complete",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.complete.name": {
+          "label": "Cloud progress · completed step name",
+          "initialStyleFrom": "cloud.step.name",
+          "editorParent": "cloud.step.complete",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.complete.status": {
+          "label": "Cloud progress · completed status text",
+          "editorParent": "cloud.step.complete",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.current": {
+          "label": "Cloud progress · in-progress step row",
+          "editorParent": "cloud.steps",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.current.number": {
+          "label": "Cloud progress · in-progress step number",
+          "initialStyleFrom": "cloud.step.number",
+          "editorParent": "cloud.step.current",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.current.name": {
+          "label": "Cloud progress · in-progress step name",
+          "initialStyleFrom": "cloud.step.name",
+          "editorParent": "cloud.step.current",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.current.status": {
+          "label": "Cloud progress · in-progress status text",
+          "editorParent": "cloud.step.current",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.pending": {
+          "label": "Cloud progress · pending step row",
+          "editorParent": "cloud.steps",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.pending.number": {
+          "label": "Cloud progress · pending step number",
+          "initialStyleFrom": "cloud.step.number",
+          "editorParent": "cloud.step.pending",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.pending.name": {
+          "label": "Cloud progress · pending step name",
+          "initialStyleFrom": "cloud.step.name",
+          "editorParent": "cloud.step.pending",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.pending.status": {
+          "label": "Cloud progress · pending status text",
+          "editorParent": "cloud.step.pending",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.attention": {
+          "label": "Cloud progress · needs-attention step row",
+          "editorParent": "cloud.steps",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+        },
+        "cloud.step.attention.number": {
+          "label": "Cloud progress · needs-attention step number",
+          "initialStyleFrom": "cloud.step.number",
+          "editorParent": "cloud.step.attention",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.attention.name": {
+          "label": "Cloud progress · needs-attention step name",
+          "initialStyleFrom": "cloud.step.name",
+          "editorParent": "cloud.step.attention",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.step.attention.status": {
+          "label": "Cloud progress · needs-attention status text",
+          "editorParent": "cloud.step.attention",
+          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
         "cloud.vm.toggle": {
           "label": "Cloud progress · VM buttons",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]
@@ -1008,6 +1110,26 @@
             "radius",
             "padding"
           ]
+        },
+        "coverage.label.games": {
+          "label": "Coverage · Games label",
+          "editorParent": "coverage.panel",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "coverage.label.games-analyzed": {
+          "label": "Coverage · Scored games label",
+          "editorParent": "coverage.panel",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "coverage.label.positions": {
+          "label": "Coverage · Positions label",
+          "editorParent": "coverage.panel",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "coverage.label.analyzed": {
+          "label": "Coverage · Scored positions label",
+          "editorParent": "coverage.panel",
+          "properties": ["color","fontSize","fontFamily","textAlign"]
         },
         "local.panel": {
           "label": "Local analysis",

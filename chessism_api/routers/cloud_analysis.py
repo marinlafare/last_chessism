@@ -20,10 +20,12 @@ from chessism_api.database.cloud_codec import read_projections
 from chessism_api.database.cloud_columns import SCHEMAS
 from .cloud_game_drafts import router as game_drafts_router
 from .cloud_billing import router as billing_router
+from .cloud_history import router as history_router
 
 router = APIRouter()
 router.include_router(game_drafts_router, prefix='/drafts')
 router.include_router(billing_router, prefix='/billing')
+router.include_router(history_router, prefix='/history')
 
 
 async def controller_online(session):

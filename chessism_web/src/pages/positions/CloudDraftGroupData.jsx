@@ -1,9 +1,10 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
-import { draftTaskSummary, draftVmPlan } from './cloudGameDraft'
+import { draftFenLimit, draftTaskSummary, draftVmPlan } from './cloudGameDraft'
 
-export default function CloudDraftGroupData({ draft, nVms, loading, phase, onRefresh }) {
+export default function CloudDraftGroupData({ draft, backend = 'batch_spot', nVms, loading, phase, onRefresh }) {
   const preview = draft?.preview?.revision === draft?.revision ? draft?.preview : null
-  const vmPlan = draftVmPlan(preview?.fens_to_analyze, nVms)
+  const isRun = backend === 'cloud_run'
+  const vmPlan = isRun ? null : draftVmPlan(preview?.fens_to_analyze, nVms)
   const count = value => value == null ? '—' : value.toLocaleString('en-US')
   return <section {...pageStyleTarget('card')} className="cloud-draft-preview" aria-label="Group data">
     <div className="cloud-draft-group-heading">
@@ -18,7 +19,7 @@ export default function CloudDraftGroupData({ draft, nVms, loading, phase, onRef
     </dl>
     {loading && <p {...pageStyleTarget('text')} role="status">{phase}</p>}
     {preview && <>
-      <p {...pageStyleTarget('text')}>{draftTaskSummary(preview.fens_to_analyze, nVms)}</p>
+      {!isRun && <p {...pageStyleTarget('text')}>{draftTaskSummary(preview.fens_to_analyze, nVms)}</p>}
       {vmPlan && <>
         <p {...pageStyleTarget('text')}>Up to {Math.min(Number(nVms), preview.fens_to_analyze) * 16} vCPUs concurrently.</p>
         <table {...pageStyleTarget('table')} className="cloud-draft-vm-plan" aria-label="Planned Batch VM allocation">
@@ -30,7 +31,7 @@ export default function CloudDraftGroupData({ draft, nVms, loading, phase, onRef
           </tr>)}</tbody>
         </table>
       </>}
-      <small {...pageStyleTarget('text')}>Shared positions count once. Counts are rechecked at launch; maximum {count(draft.max_fens)} FENs.</small>
+      <small {...pageStyleTarget('text')}>Shared positions count once. Counts are rechecked at launch; maximum {count(draftFenLimit(draft, backend))} FENs.</small>
     </>}
   </section>
 }

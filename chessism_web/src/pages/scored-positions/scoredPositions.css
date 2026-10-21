@@ -159,7 +159,9 @@
 .appearance-empty { fill: var(--surface-2); stroke: var(--border-soft); stroke-width: 1; }
 .appearance-circle text { fill: var(--muted); font-size: 14px; }
 .appearance-circle [role="button"] { cursor: pointer; outline: none; }
-.appearance-pie [data-slice] { stroke: var(--surface); stroke-width: 1; }
+.appearance-circle [data-circle-slice] { stroke: var(--pie-outline-color, #fff); stroke-width: var(--pie-outline-width, 1.5px); stroke-linejoin: round; }
+.appearance-circle [data-circle-slice] > path,
+.appearance-circle [data-circle-slice] > circle { vector-effect: non-scaling-stroke; }
 .appearance-circle [role="button"]:hover,
 .appearance-circle [role="button"]:focus-visible { stroke: var(--text); stroke-width: 2; filter: brightness(1.12); }
 .commonness-chart-scroll { flex: 1; min-width: 0; min-height: 0; overflow-x: auto; overflow-y: hidden; overscroll-behavior-x: contain; }

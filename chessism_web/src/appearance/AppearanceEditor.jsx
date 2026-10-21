@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { useAppearance } from './AppearanceProvider'
 import { registryScope } from './styleCore'
-import { fitEditor, resizeEditor, RESIZE_EDGES } from './editorGeometry'
+import { fitEditor, placeEditorOpposite, resizeEditor, RESIZE_EDGES } from './editorGeometry'
 import { editorTargets, restoreSavedStyle } from './editorTargets'
 import AppearancePropertyFields from './AppearancePropertyFields'
 
@@ -18,9 +18,9 @@ export default function AppearanceEditor() {
     window.addEventListener('resize',clamp)
     return()=>window.removeEventListener('resize',clamp)
   },[])
-  useEffect(()=>{
+  useLayoutEffect(()=>{
     dragCleanup.current?.()
-    if(selection){setPosition(p=>fitEditor({...p,left:selection.x,top:selection.y},viewport()));setMinimized(false)}
+    if(selection){setPosition(p=>placeEditorOpposite(p,selection,viewport()));setMinimized(false)}
   },[selection])
   useLayoutEffect(()=>{
     if(!selection)return undefined
@@ -63,7 +63,7 @@ export default function AppearanceEditor() {
       </header>
       {!minimized&&<div className="appearance-editor-body">
         <small>{registryScope(saved.registry,selection.scope).label} · {saved.presets.find(p=>p.id===saved.active_preset_id)?.name||'Default (editing a copy)'}</small>
-        <button type="button" disabled={!selection.element.parentElement?.closest('[data-style-id]')} onClick={()=>ctx.select(selection.element.parentElement,position.left,position.top)}>Select enclosing container</button>
+        <button type="button" disabled={!selection.element.parentElement?.closest('[data-style-id]')} onClick={()=>ctx.select(selection.element.parentElement,selection.x,selection.y)}>Select enclosing container</button>
         {targets.map((item,index)=><div className="appearance-property-group" data-appearance-target={item.id} key={item.id}>
           {index>0&&<strong>{item.spec.label}</strong>}
           <AppearancePropertyFields editable={item} related={index>0}/>

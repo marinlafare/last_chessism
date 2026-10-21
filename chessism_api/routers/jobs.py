@@ -1,9 +1,10 @@
+import asyncio
 from datetime import datetime
 import json
 from typing import Any
 
 from arq.jobs import Job, JobStatus
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
 from arq.connections import ArqRedis
 
@@ -187,6 +188,56 @@ async def api_get_analysis_jobs(redis: ArqRedis = Depends(get_redis_pool)) -> JS
         float(item.get("score") or 0),
     ))
     return JSONResponse(content={"jobs": jobs})
+
+
+@router.get("/analysis/history")
+async def api_get_analysis_history(
+    limit: int = Query(20, ge=1, le=100),
+    offset: int = Query(0, ge=0, le=1000),
+    redis: ArqRedis = Depends(get_redis_pool),
+) -> JSONResponse:
+    """Read retained local results only; never launch work or extend retention.
+
+    ARQ results expire. SCAN and bounded batches avoid blocking Redis or
+    fetching an unbounded result set for this optional history view.
+    """
+    cursor, keys, seen = 0, [], set()
+    for _ in range(40):
+        cursor, batch = await redis.scan(cursor=cursor, match="arq:result:*", count=100)
+        for key in batch:
+            if key not in seen:
+                seen.add(key)
+                keys.append(key)
+        if not cursor or len(keys) >= 1000:
+            break
+    scan_limited = bool(cursor) or len(keys) > 1000
+    jobs = []
+
+    async def retained_job(key):
+        key_text = key.decode("utf-8") if isinstance(key, bytes) else str(key)
+        job_id = key_text.removeprefix("arq:result:")
+        result = await Job(job_id, redis, _queue_name="analysis_queue").result_info()
+        if (not result or result.queue_name != "analysis_queue"
+                or result.function not in ANALYSIS_JOB_FUNCTIONS):
+            return None
+        return {
+            "job_id": job_id,
+            "status": "complete" if result.success else "failed",
+            "info": _serialize_job_info(result),
+            "result": _serialize_result(result),
+            "progress": await _read_progress(redis, job_id),
+        }
+
+    for start in range(0, min(len(keys), 1000), 20):
+        rows = await asyncio.gather(*(retained_job(key) for key in keys[start:min(start + 20, 1000)]))
+        jobs.extend(row for row in rows if row is not None)
+    jobs.sort(key=lambda row: (row["result"]["start_time"] or "", row["job_id"]), reverse=True)
+    return JSONResponse(content={
+        "jobs": jobs[offset:offset + limit],
+        "has_more": len(jobs) > offset + limit,
+        "note": "Local history contains retained queue results only; expired records are no longer available.",
+        "scan_limited": scan_limited,
+    })
 
 
 @router.delete("/{job_id}/queued")

@@ -4,6 +4,16 @@
 .cloud-analysis-grid .analysis-disclosure-toggle { font-size: 16px; }
 .cloud-analysis-grid .analysis-disclosure-chevron { margin-left: auto; }
 .cloud-analysis-grid .analysis-disclosure-panel { padding: 12px; }
+#cloud-run-single-panel,
+#cloud-run-combined-panel,
+#cloud-batch-single-panel,
+#cloud-batch-combined-panel { padding-inline: 0; }
+.cloud-process-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr); align-items: start; min-width: 0; }
+.cloud-process-content { grid-column: 2; grid-row: 1; width: 100%; min-width: 0; }
+@media (max-width: 900px) {
+  .cloud-process-layout { grid-template-columns: minmax(0, 1fr); gap: .75rem; }
+  .cloud-process-content { grid-column: 1; grid-row: 2; }
+}
 .cloud-selection, .cloud-job { display: flex; flex-direction: column; gap: .75rem; padding: 1rem; background: #142322; border-radius: 8px; }
 .cloud-selection label { display: flex; flex-direction: column; gap: .4rem; }
 .cloud-selection fieldset { display: flex; flex-direction: column; flex: 1; gap: .75rem; min-width: 0; margin: 0; padding: 0; border: 0; }
@@ -12,7 +22,6 @@
 .cloud-selection--pending { border: 1px dashed #526669; background: #172322; }
 .cloud-selection--pending > .btn:disabled { opacity: .55; cursor: not-allowed; }
 .cloud-pending-notice { align-self: flex-start; padding: .35rem .65rem; border-radius: 6px; background: #283a3c; color: #c5d2d4; }
-.cloud-busy-notice { padding: .75rem; border-left: 3px solid #9c7ab4; background: #1b2c2b; }
 .cloud-fen-progress { display: flex; flex-direction: column; gap: .5rem; }
 .cloud-fen-count { display: flex; justify-content: space-between; gap: .5rem; }
 .cloud-fen-label { display: inline-flex; align-items: center; gap: .7rem; }
@@ -106,8 +115,8 @@
 .cloud-draft-builder { position: relative; display: flex; flex-direction: column; gap: 1rem; min-width: 0; border: 1px solid #35525a; border-radius: 8px; padding: 1rem; background: #142322; }
 .cloud-draft-builder-heading { min-height: 2.5rem; }
 .cloud-draft-editor { display: grid; grid-template-columns: minmax(0, 1fr); gap: .75rem; min-width: 0; margin: 0; border: 0; padding: 0; }
-.cloud-draft-editor label, .cloud-draft-vms { display: flex; flex-direction: column; gap: .4rem; min-width: 0; text-align: center; }
-.cloud-draft-editor .text-input, .cloud-draft-vms .text-input { width: 100%; min-width: 0; box-sizing: border-box; text-align: center; }
+.cloud-draft-editor label { display: flex; flex-direction: column; gap: .4rem; min-width: 0; text-align: center; }
+.cloud-draft-editor .text-input { width: 100%; min-width: 0; box-sizing: border-box; text-align: center; }
 .cloud-draft-editor select { text-align-last: center; }
 .cloud-draft-editor > p, .cloud-draft-editor > .cloud-draft-actions { grid-column: 1 / -1; margin: 0; }
 .cloud-draft-editor:disabled { opacity: .65; }
@@ -118,8 +127,10 @@
 .cloud-draft-totals { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: .75rem; margin: 1rem 0; }
 .cloud-draft-totals dt { font-size: 12px; color: #a9b9bd; }
 .cloud-draft-totals dd { font-size: 20px; font-weight: 700; margin: .25rem 0 0; overflow-wrap: anywhere; }
-.cloud-draft-process-settings { display: flex; justify-content: flex-start; }
-.cloud-draft-vms { width: 112px; max-width: 100%; }
+.cloud-compute-settings { grid-column: 1; grid-row: 1; min-width: 0; margin-left: 2rem; margin-right: .75rem; }
+.cloud-compute-field { display: flex; align-items: center; gap: .5rem; min-width: 0; width: max-content; max-width: 100%; }
+.cloud-compute-label { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto; min-height: 40px; padding: .5rem .65rem; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); font-weight: 700; }
+.cloud-compute-field .text-input { width: 4.5rem; min-width: 0; text-align: center; }
 .cloud-draft-run { width: 100%; }
 .cloud-draft-vm-plan { width: 100%; border-collapse: collapse; margin: .75rem 0; }
 .cloud-draft-vm-plan th, .cloud-draft-vm-plan td { text-align: left; vertical-align: top; padding: .4rem; border-bottom: 1px solid #35525a; overflow-wrap: anywhere; }

@@ -183,7 +183,11 @@ test('finished progress stays visible until explicitly reviewed, including after
 test('cancellation has its own stages and is never analysis success', () => {
   let job = { ...jobAt('running'), stop_cleanup: { phase: 'importing' } }
   assert.equal(cloudJobProgress(job).label, 'Save completed results')
+  assert.equal(cloudJobProgress(job).steps[2].state, 'current')
+  job = { ...job, stop_cleanup: { phase: 'settling' } }
+  assert.equal(cloudJobProgress(job).label, 'Wait for late uploads')
   assert.equal(cloudJobProgress(job).steps[1].state, 'current')
+  assert.equal(cloudJobProgress(job).steps[3].state, 'pending')
   job = { ...job, status: 'cancelled', stop_cleanup: { phase: 'complete' } }
   assert.equal(cloudJobDone(job), false)
   assert.equal(cloudJobProgress(job).label, 'Cancelled — cleaned')

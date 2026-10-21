@@ -5,6 +5,10 @@ export const fetchGameAnalysisOverview = () => getJson('/fens/scored/games/overv
 export const fetchAnalysisCounts = () => getJson('/fens/analysis_counts')
 export const fetchLatestIngestionTiming = () => getJson('/fens/pipeline/timings/latest')
 export const fetchAnalysisProcesses = () => getJson('/jobs/analysis')
+export const fetchAnalysisHistory = (backend, offset = 0, options) => getJson(
+  backend === 'local' ? `/jobs/analysis/history?limit=20&offset=${offset}`
+    : `/analysis/cloud/history?backend=${encodeURIComponent(backend)}&limit=20&offset=${offset}`, options)
+export const fetchCloudHistoryUsage = (id, options) => getJson(`/analysis/cloud/${encodeURIComponent(id)}/usage`, options)
 export const fetchActiveJobs = () => getJson('/jobs/active')
 export const fetchPositionJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
 export const fetchPlayerAnalysisCounts = (playerName) => (

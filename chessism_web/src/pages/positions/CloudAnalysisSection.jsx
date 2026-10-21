@@ -4,8 +4,8 @@ import {
   createCloudAnalysis, resumeCloudAnalysis, retryCloudAnalysis, stopAndCleanCloudAnalysis,
   previewPlayerGameAnalysis, fetchPlayerAnalysisCounts, reviseCloudVms, fetchCloudDraft,
 } from './positionsApi'
-import { cloudDefaults, cloudRunDefaults, cloudPayload, cloudGamePreview, cloudBound, cloudGameSelectionError,
-  cloudLimit, MAX_BATCH_VMS, MAX_CLOUD_RUN_CPUS } from './cloudAnalysisForm'
+import { cloudDefaults, cloudRunDefaults, cloudPayload, cloudGamePreview, cloudGameSelectionError,
+  cloudLimit, MAX_BATCH_VMS } from './cloudAnalysisForm'
 import { blockingCloudJob, cloudIsBusy } from './cloudJobState'
 import CloudFenProgress from './CloudFenProgress'
 import CloudJobOverview from './CloudJobOverview'
@@ -14,9 +14,11 @@ import { cloudJobProgress, cloudActiveRun, cloudJobDone } from './cloudJobProgre
 import useCloudJobDisplay from './useCloudJobDisplay'
 import useCloudStatus from './useCloudStatus'
 import CloudGameDraft from './CloudGameDraft'
+import CloudComputeField from './CloudComputeField'
 import { hasSavedCloudDraft } from './cloudGameDraft'
 import CloudJobIndicator from './CloudJobIndicator'
 import AnalysisDisclosure from './AnalysisDisclosure'
+import AnalysisHistory from './AnalysisHistory'
 import './cloudAnalysis.css'
 
 export default function CloudAnalysisSection({ onProgress, collapsible = false }) {
@@ -25,6 +27,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
   const [sendingStop, setSendingStop] = useState(null)
   const [revisedVms, setRevisedVms] = useState(1)
   const [savedDraft, setSavedDraft] = useState(null)
+  const [restoredDraftId, setRestoredDraftId] = useState(null)
   const [draftError, setDraftError] = useState('')
   // Keep the open report available after its progress card is dismissed.
   const [performanceRun, setPerformanceRun] = useState(null)
@@ -32,11 +35,13 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
     const controller = new AbortController()
     // Read the saved selection, not a new preview or reservation. Never submit
     // work as a side effect of visiting or refreshing the page.
-    fetchCloudDraft({ signal: controller.signal }).then(draft => { if (!controller.signal.aborted) setSavedDraft(draft) })
+    fetchCloudDraft({ signal: controller.signal }).then(draft => { if (!controller.signal.aborted) {
+      setSavedDraft(draft)
+      setRestoredDraftId(hasSavedCloudDraft(draft) ? draft.id : null)
+    } })
       .catch(err => { if (!controller.signal.aborted) setDraftError(err.message) })
     return () => controller.abort()
   }, [])
-  const draftAvailable = hasSavedCloudDraft(savedDraft)
   const action = async (fn) => {
     setBusy(true)
     try { await fn(); await refresh() } catch (err) { setError(err.message) }
@@ -49,30 +54,33 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
   const runDisplay = displayedJobs.find(({ job }) => job.selection.backend === 'cloud_run')
   const batchDisplay = displayedJobs.find(({ job }) => job.selection.backend !== 'cloud_run')
   const statusJob = activeJob || displayedJobs[0]?.job
+  const historyRevision = backend => data.jobs.filter(job => (job.selection.backend || 'batch_spot') === backend)
+    .map(job => `${job.id}:${job.status}`).join('|')
   const content = (
     <section {...pageStyleTarget('cloud.panel')} className="cloud-analysis" aria-label="Google Cloud analysis">
       {!data.controller_online && <p {...pageStyleTarget('text')} role="status">Controller offline — start cloud-controller with Docker Compose.</p>}
       {error && <div role="alert" className="status-banner warn">{error}</div>}
       {draftError && <p {...pageStyleTarget('text')} role="alert">Could not restore the saved FEN set: {draftError}. Open the combined builder and reload the saved draft.</p>}
-      {cloudBusy && <p {...pageStyleTarget('text')} role="status" className="cloud-busy-notice">
-        A cloud job is {activeJob?.status || 'active'}. New submissions are disabled until it finishes
-        importing and cleaning up. Paused/failed jobs must be recovered first. Local analysis remains available.
-      </p>}
       <div className="cloud-analysis-grid">
         <AnalysisDisclosure id="analysis-cloud-run" label="Cloud Run" level={3}
           hidden={cloudBusy && activeBackend !== 'cloud_run'}>
           <CloudSelection backend="cloud_run" disabled={busy || !data.controller_online || cloudBusy}
             job={runDisplay?.job}
+            onSubmitted={refresh}
+            savedDraft={savedDraft} onDraftChange={setSavedDraft}
             create={(payload) => action(() => createCloudAnalysis(payload))} />
+          <AnalysisHistory backend="cloud_run" revision={historyRevision('cloud_run')} />
         </AnalysisDisclosure>
         <AnalysisDisclosure id="analysis-batch-spot" label="Batch Spot" level={3}
           hidden={cloudBusy && activeBackend !== 'batch_spot'}
-          revealKey={draftAvailable ? savedDraft.id : null}>
+          revealKey={restoredDraftId}>
           <CloudSelection backend="batch_spot" disabled={busy || !data.controller_online || cloudBusy}
             job={batchDisplay?.job}
             onSubmitted={refresh}
             savedDraft={savedDraft} onDraftChange={setSavedDraft}
+            revealDraftId={restoredDraftId}
             create={(payload) => action(() => createCloudAnalysis(payload))} />
+          <AnalysisHistory backend="batch_spot" revision={historyRevision('batch_spot')} />
         </AnalysisDisclosure>
       </div>
       {!!displayedJobs.length && <h3 {...pageStyleTarget('title')}>CLOUD JOB PROGRESS</h3>}
@@ -146,16 +154,13 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
     </section>
   )
   return collapsible ? <AnalysisDisclosure id="analysis-gcloud" label="GCloud"
-    revealKey={draftAvailable ? savedDraft.id : null}
-    status={statusJob ? <><CloudJobIndicator job={statusJob} />
-      <span>{cloudJobProgress(statusJob).label} · {statusJob.imported.toLocaleString('en-US')} / {statusJob.target.toLocaleString('en-US')} FENs</span>
-    </> : error ? 'Unable to refresh cloud status' : draftAvailable ? 'Saved FEN set ready to review'
-      : data.controller_online ? 'No active cloud jobs' : 'Controller offline'}>
+    revealKey={restoredDraftId}
+    indicator={statusJob ? <CloudJobIndicator job={statusJob} /> : null}>
     {content}
   </AnalysisDisclosure> : content
 }
 
-function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraft, onDraftChange }) {
+function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraft, onDraftChange, revealDraftId }) {
   const isRun = backend === 'cloud_run'
   const maximum = cloudLimit(backend)
   const title = isRun ? 'Cloud Run' : 'Batch Spot'
@@ -193,7 +198,8 @@ function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraf
     finally { setLoading(false) }
   }
   const singleSelection = (
-    <form {...pageStyleTarget('cloud.selection')} className="cloud-selection" aria-label={`${title} selection`} onSubmit={(event) => {
+    <form {...pageStyleTarget('cloud.selection')} id={`${id}-selection-form`}
+      className="cloud-selection cloud-process-content" aria-label={`${title} selection`} onSubmit={(event) => {
       event.preventDefault()
       if (disabled || loading) return
       try { create(cloudPayload(mode, form, preview)) } catch (err) { setError(err.message) }
@@ -211,22 +217,6 @@ function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraf
           <option value="loop">Grouped positions — all or player</option>
         </select>
       </label>
-      {isRun ? <><label {...pageStyleTarget('label')}>Simultaneous CPUs (n_cpus)
-        <input {...pageStyleTarget('field')} className="text-input" type="number" min="1" max={MAX_CLOUD_RUN_CPUS} step="1" required
-          aria-label="Simultaneous CPUs (n_cpus)" aria-describedby="cloud-run-cpus-help"
-          value={form.n_cpus} onChange={(event) => change('n_cpus', event.target.value)} />
-      </label>
-      <small {...pageStyleTarget('text')} id="cloud-run-cpus-help">Maximum concurrent one-vCPU workers, not threads per FEN.
-        Up to {MAX_CLOUD_RUN_CPUS}, subject to your Google Cloud quota and the amount of selected work.</small></> : <>
-        <label {...pageStyleTarget('label')}>Spot VMs (n_vms)
-          <input {...pageStyleTarget('field')} className="text-input" type="number" min="1" max={MAX_BATCH_VMS} step="1" required
-            aria-label="Spot VMs (n_vms)" aria-describedby="cloud-batch-vms-help"
-            value={form.n_vms} onChange={(event) => change('n_vms', event.target.value)} />
-        </label>
-        <small {...pageStyleTarget('text')} id="cloud-batch-vms-help">Each VM: 16 vCPUs, 16 GiB RAM (n2d-highcpu-16, Spot only).
-          {' '}{Number(form.n_vms) * 16} vCPUs requested. Up to {MAX_BATCH_VMS} VMs, subject to quota;
-          insufficient quota pauses before launch. Fewer VMs are used only when there are fewer FENs than VMs.</small>
-      </>}
       {mode === 'loop' && <label {...pageStyleTarget('label')}>Scope
         <select {...pageStyleTarget('field')} className="text-input" value={form.scope} onChange={(event) => change('scope', event.target.value)}>
           <option value="all">All positions</option><option value="player">Player</option>
@@ -266,23 +256,30 @@ function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraf
         disabled={loading || !form.player.trim()} onClick={inspect}>Preview games</button>}
       {preview && <p {...pageStyleTarget('text')}>Frozen preview: {preview.selected_games} games, {preview.fens_to_analyze} missing FENs.
         The system sets the FEN count from this selection. Selections over {maximum.toLocaleString('en-US')} FENs cannot be submitted.</p>}
-      <small {...pageStyleTarget('text')}>{cloudBound(mode, form, preview)}</small>
       {error && <p {...pageStyleTarget('text')} role="alert" className="status-banner warn">{error}</p>}
-      <button {...pageStyleTarget('button')} className="btn" type="submit" disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview, backend))}>
-        Create {title} job — billable
+      <button {...pageStyleTarget('button')} className="btn" type="submit" title="Start billable Google Cloud analysis"
+        disabled={disabled || loading || (mode === 'games' && !!cloudGameSelectionError(preview, backend))}>
+        {isRun ? 'Run' : `Create ${title} job — billable`}
       </button>
       </fieldset>
     </form>
   )
-  if (isRun) return singleSelection
+  const selectionLayout = <div className="cloud-process-layout">
+    <CloudComputeField resource={isRun ? 'cpu' : 'vm'}
+      value={isRun ? form.n_cpus : form.n_vms} onChange={value => change(isRun ? 'n_cpus' : 'n_vms', value)}
+      disabled={disabled || loading} label={isRun ? 'CPUs' : 'Spot VMs (n_vms)'} formId={`${id}-selection-form`} />
+    {singleSelection}
+  </div>
   return <div className="cloud-process-choices">
-    <AnalysisDisclosure id={`${id}-single`} label="One process" level={4}>{singleSelection}</AnalysisDisclosure>
+    <AnalysisDisclosure id={`${id}-single`} label="One process" level={4}>
+      {selectionLayout}
+    </AnalysisDisclosure>
     <AnalysisDisclosure id={`${id}-combined`} label="Combined" level={4} lazy
-      revealKey={hasSavedCloudDraft(savedDraft) ? savedDraft.id : null}
-      status={hasSavedCloudDraft(savedDraft) ? `${savedDraft.entries.length} saved step${savedDraft.entries.length === 1 ? '' : 's'}` : null}>
+      revealKey={revealDraftId}>
       <CloudGameDraft launchDisabled={disabled} onSubmitted={onSubmitted}
-        initialDraft={savedDraft} onDraftChange={onDraftChange}
-        nVms={form.n_vms} onVmChange={value => change('n_vms', value)} />
+        backend={backend} draft={savedDraft} setDraft={onDraftChange}
+        nVms={form.n_vms} onVmChange={value => change('n_vms', value)}
+        nCpus={form.n_cpus} onCpuChange={value => change('n_cpus', value)} />
     </AnalysisDisclosure>
   </div>
 }

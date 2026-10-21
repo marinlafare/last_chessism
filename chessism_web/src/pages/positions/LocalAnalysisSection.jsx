@@ -5,17 +5,16 @@ import LocalGameSelection from './LocalGameSelection'
 import LocalLoopSelection from './LocalLoopSelection'
 import LocalAnalysisActivity from './LocalAnalysisActivity'
 import { JobStatus } from './JobStatus'
-import { DEFAULT_ANALYSIS_NODES, MAX_ANALYSIS_BATCH_SIZE, MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
+import { MAX_ANALYSIS_BATCH_SIZE, MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
   clampAnalysisBatchInput, formatNumber, getAnalysisButtonLabel, isTrackedJobActive } from './positionPageSupport'
 
 export default function LocalAnalysisSection({ page }) {
   const [mode, setMode] = useState('all')
   const activeCount = page.analysisProcessViews.length
   return <AnalysisDisclosure id="analysis-local" label="Local"
-    status={activeCount ? `${activeCount} active / queued processes` : 'Compute on this computer'}>
+    indicator={activeCount > 0 ? <span className="analysis-disclosure-live" role="img"
+      aria-label="Local analysis running or queued" title="Local analysis running or queued" /> : null}>
     <section {...pageStyleTarget('local.selection')} className="local-analysis-selection" aria-label="Local FEN selection">
-      <p {...pageStyleTarget('text')}>Choose one FEN set for local Stockfish. Only missing, unreserved positions are selected;
-        FENs assigned to the running cloud job are skipped. {formatNumber(DEFAULT_ANALYSIS_NODES)} nodes per FEN.</p>
       <label {...pageStyleTarget('label')} className="local-selection-picker">
         <span {...pageStyleTarget('label')} className="field-label">FEN selection</span>
         <select {...pageStyleTarget('field')} className="text-input" aria-label="Local FEN selection" value={mode}
@@ -81,7 +80,7 @@ function LocalPositionSelection({ page, mode }) {
           onChange={event => update(current => ({ ...current, batchSize: clampAnalysisBatchInput(event.target.value, maximum) }))} />
       </label>
     </div>
-    <button {...pageStyleTarget('button')} className="btn btn-primary" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
+    <button {...pageStyleTarget('button')} className="btn btn-primary local-analyze-button" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
       {status?.loading || isTrackedJobActive(status) ? getAnalysisButtonLabel(status) : 'Analyze locally'}
     </button>
     <JobStatus jobKey={key} page={page} />

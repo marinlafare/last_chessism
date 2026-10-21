@@ -59,6 +59,21 @@ job submission, incremental database imports and this final cleanup hook. These
 cleanup scripts themselves do not import results. Keep the built Docker image on your PC for the next push;
 cleanup never deletes local Docker images or invokes a rebuild.
 
+The REST adapter retries transient failures up to three times (1/2/4-second
+backoff plus jitter) only for reads and exact-generation Storage deletes. Each
+delete retry keeps both `generation` and `ifGenerationMatch`; a confirmed 404
+means that generation is already gone. Permission/precondition failures still
+stop cleanup. Job launches and other mutations are never replayed after an
+ambiguous transport failure. The existing single retry after an explicit 401
+authentication rejection is separate. Exhausted retries retain the saved plan
+for **Resume cleanup**.
+
+Cancellation records `cancel_*` phase-attempt timings, including failures, in
+`cloud_phase_timing`. These measure active work, excluding time paused awaiting
+operator recovery. Detailed cleanup and summary substeps overlap their parent
+phase: do not add both when calculating elapsed work. Older attempts are not
+backfilled with estimated timings.
+
 New UI requests use one VM for the whole selection, not one VM per 1,000 FENs.
 They also save a worker performance summary locally before resource cleanup.
 The UI's separate `log_cleanup` phase then deletes only allowlisted global
@@ -203,6 +218,25 @@ can recreate the log. This mode excludes audit logs, `ping`, `diagnostic-log`,
 billing records and all storage/log buckets. Do not put it in the per-job loop.
 
 ## Offline tests
+
+### Cancelled Cloud Run uploads
+
+An execution's terminal cancellation status does not prove its final uploads
+have stopped. The cancellation controller shows **Wait for late uploads**, waits
+at least 120 seconds after its first terminal observation and requires 30 seconds
+without new object generations. Continued uploads beyond ten minutes pause with
+checkpoints retained. These are observation gates, not proof by elapsed time:
+inventory is checked again after imports, verification, and immediately before
+exact-generation deletion. New uploads restart the drain/import pass.
+
+Only known task paths and in-range batches are eligible. Every present batch
+must match a committed database receipt; present contracts, manifests, and
+performance reports must match the task. Both cleanup plans are then extended,
+preserving saved job UIDs, image upload identities, and old object generations.
+Replacements and unexpected paths still fail closed. A controller restart resets
+the observation window and receipt gate; it never resumes deletion on trust alone.
+Batch Spot's existing cancellation behavior is unchanged. No new analysis is
+launched by cancellation recovery.
 
 ### Local imported benchmark copies
 

@@ -3,9 +3,10 @@ import asyncio
 import os
 from types import SimpleNamespace
 import unittest
-from unittest.mock import AsyncMock, Mock
+from unittest.mock import AsyncMock, Mock, patch
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.operations.cloud_analysis import runtime
+from chessism_api.operations.cloud_analysis import runtime, cancellation
+from chessism_api.operations.cloud_analysis.preparation import StageTimings
 from chessism_api.operations.cloud_analysis.cancellation_cloud import stop_batch, cancel_batch
 from chessism_api.operations.cloud_analysis.ingestion import ingest_ready
 from chessism_api.routers.cloud_analysis import cancel_cloud_job, stop_repeating
@@ -13,6 +14,30 @@ from cleaning_job.cancelled_artifacts import prepare, apply, validate
 from cleaning_job.cleanup import digest
 from cleaning_job.cloud import BUCKET, PROJECT, REGION, CleanupError
 from fastapi import HTTPException
+
+
+class CancellationTimingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_records_each_phase_attempt_including_failure_without_paused_time(self):
+        for phase in ('stopping', 'settling', 'importing', 'planning', 'cleaning', 'logs', 'refreshing', 'finishing'):
+            for fail in (False, True):
+                with self.subTest(phase=phase, fail=fail):
+                    saved = []
+                    async def persist(timings, job_id, run_id):
+                        self.assertEqual((job_id, run_id), ('job', None))
+                        saved.extend(timings.rows)
+                    operation = AsyncMock(side_effect=CleanupError('transient exhausted') if fail else None)
+                    with patch.object(cancellation, 'advance', operation), patch.object(StageTimings, 'save', persist):
+                        if fail:
+                            with self.assertRaises(CleanupError):
+                                await cancellation.tick(Mock(), SimpleNamespace(id='job'), SimpleNamespace(phase=phase))
+                        else:
+                            await cancellation.tick(Mock(), SimpleNamespace(id='job'), SimpleNamespace(phase=phase))
+                    self.assertEqual(len(saved), 1)
+                    self.assertEqual(saved[0]['phase'], 'cancel_' + phase)
+                    self.assertEqual(saved[0]['outcome'], 'failed' if fail else 'complete')
+                    self.assertIsNotNone(saved[0]['finished_at'])
+                    self.assertGreaterEqual(saved[0]['duration_seconds'], 0)
+                    self.assertIsInstance(operation.call_args.args[-1], StageTimings)
 
 
 class CancellationSafetyTests(unittest.TestCase):

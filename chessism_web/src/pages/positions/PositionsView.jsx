@@ -4,6 +4,7 @@ import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
 import CloudAnalysisSection from './CloudAnalysisSection'
 import LocalAnalysisSection from './LocalAnalysisSection'
+import { AnalysisDisclosureGroup } from './AnalysisDisclosure'
 import { formatNumber, formatTruncatedMillions } from './positionPageSupport'
 
 export default function PositionsView({ page }) {
@@ -16,7 +17,7 @@ export default function PositionsView({ page }) {
     <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
       <div className="home-shell">
-        <Header eyebrow="AMALIZE POSITIONS" title="cChessism" />
+        <Header eyebrow={null} title="ANALYZE POSITIONS" />
         <main className="positions-main">
           <section className="coverage-summary-grid" aria-label="Game and position coverage">
             {coverageError ? <div className="status-banner warn">{coverageError}</div> : null}
@@ -25,7 +26,9 @@ export default function PositionsView({ page }) {
                 {coverageBarItems.filter(item => group.keys.includes(item.key)).map((item) => (
                   <div className={`coverage-bar-row coverage-bar-row-${item.key}`} key={item.key}>
                     <div className="coverage-bar-meta">
-                      <span>{item.key === 'games-analyzed' ? 'Scored games' : item.label}</span>
+                      <span {...pageStyleTarget(`coverage.label.${item.key}`)}>
+                        {item.key === 'games-analyzed' ? 'Scored games' : item.label}
+                      </span>
                       <strong {...pageStyleTarget('value')}>
                         {item.ready
                           ? item.displayInMillions
@@ -45,8 +48,10 @@ export default function PositionsView({ page }) {
               </section>
             ))}
           </section>
-          <LocalAnalysisSection page={page} />
-          <CloudAnalysisSection collapsible onProgress={page.refreshCloudProgress} />
+          <AnalysisDisclosureGroup>
+            <LocalAnalysisSection page={page} />
+            <CloudAnalysisSection collapsible onProgress={page.refreshCloudProgress} />
+          </AnalysisDisclosureGroup>
         </main>
         <Footer />
       </div>

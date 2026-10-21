@@ -1,4 +1,4 @@
-import { cloudDefaults, MAX_BATCH_VMS, batchCycleCapacity, cloudLimit } from './cloudAnalysisForm.js'
+import { cloudDefaults, MAX_BATCH_VMS, MAX_CLOUD_RUN_CPUS, batchCycleCapacity, cloudLimit } from './cloudAnalysisForm.js'
 
 export function hasSavedCloudDraft(draft) {
   return Boolean(draft?.id && !draft.submitted_job_id && draft.entries?.length)
@@ -11,14 +11,20 @@ export function draftEntryForm(entry) {
     order: entry.selection_order === 'oldest' ? 'oldest' : 'latest' }
 }
 
-export function draftSubmitError(draft, nVms) {
+export const draftFenLimit = (draft, backend = 'batch_spot') => Math.min(draft?.max_fens ?? cloudLimit(backend), cloudLimit(backend))
+
+export function draftSubmitError(draft, parallelism, backend = 'batch_spot') {
   if (!draft || !draft.entries.length) return 'Add at least one game selection.'
   if (draft.submitted_job_id) return 'This draft has already been submitted.'
   const preview = draft.preview
   if (!preview || preview.revision !== draft.revision) return 'Recalculate group data before running.'
   if (!Number.isInteger(preview.fens_to_analyze) || preview.fens_to_analyze < 1) return 'No available unscored FENs in this selection.'
-  if (preview.fens_to_analyze > draft.max_fens) return `Reduce the selection to at most ${draft.max_fens.toLocaleString('en-US')} FENs.`
-  if (!Number.isInteger(Number(nVms)) || Number(nVms) < 1 || Number(nVms) > MAX_BATCH_VMS) return `Choose 1–${MAX_BATCH_VMS} Spot VMs.`
+  const maximum = draftFenLimit(draft, backend)
+  if (preview.fens_to_analyze > maximum) return `Reduce the selection to at most ${maximum.toLocaleString('en-US')} FENs.`
+  const maxParallelism = backend === 'cloud_run' ? MAX_CLOUD_RUN_CPUS : MAX_BATCH_VMS
+  if (!Number.isInteger(Number(parallelism)) || Number(parallelism) < 1 || Number(parallelism) > maxParallelism) {
+    return `Choose 1–${maxParallelism} ${backend === 'cloud_run' ? 'CPUs' : 'Spot VMs'}.`
+  }
   return ''
 }
 

@@ -14,9 +14,11 @@ from . import runtime, history
 from .cancellation_cloud import stop_batch, stop_run
 from .ingestion import ingest_ready
 from .importer import refresh_unit_projections, refresh_global_projections
+from .preparation import StageTimings
 from cleaning_job import cancelled_artifacts
-from cleaning_job.cleanup import prepare, cleaning_job, owned_resources
+from cleaning_job.cleanup import prepare, cleaning_job, owned_resources, InventoryChanged
 from cleaning_job.cloud import BUCKET
+from . import cancellation_drain
 
 
 async def save(job_id, **changes):
@@ -54,7 +56,7 @@ def import_tasks(run):
     return [{'output': launch['config']['output'], 'count': run.position_count, 'contract': run.contract}]
 
 
-async def import_available(cloud, ident):
+async def import_available(cloud, ident, *, observed_objects=None):
     async with AsyncDBSession() as session:
         run = await session.get(CloudAnalysisRun, ident)
     if run.details_pruned or run.results_verified_at:
@@ -71,7 +73,8 @@ async def import_available(cloud, ident):
             if not task['output'].startswith(base):
                 raise ValueError('Unexpected cancellation result bucket')
             prefix = task['output'][len(base):].rstrip('/') + '/batches/'
-            objects = await asyncio.to_thread(cloud.objects, prefix)
+            objects = ([obj for obj in observed_objects if obj['name'].startswith(prefix)]
+                       if observed_objects is not None else await asyncio.to_thread(cloud.objects, prefix))
             receipt_prefix = f"tasks/{task['index']:06d}/" if task.get('index') is not None else ''
             for obj in objects:
                 receipt = receipt_prefix + 'batches/' + obj['name'][len(prefix):]
@@ -123,6 +126,39 @@ async def finish(job_id, all_ids):
 
 
 async def tick(controller, job, cancellation):
+    # Each row measures actual work in one phase attempt, not time left paused
+    # awaiting recovery. Substep rows overlap this parent; do not sum both.
+    # Persist even when cleanup fails, without making metrics a safety gate.
+    timings = StageTimings()
+    try:
+        with timings.measure('cancel_' + cancellation.phase):
+            try:
+                await advance(controller, job, cancellation, timings)
+            except cancellation_drain.LateUploads:
+                await save(job.id, phase='settling', cursor=0)
+                controller.continue_immediately = False
+            except InventoryChanged:
+                # Exact-generation cleanup may see an upload after our last
+                # check. Only recognized, new task files allow a drain retry;
+                # replacements, bad paths and unchanged failures still pause.
+                drain = getattr(controller, 'cancellation_drains', {}).get(job.id)
+                if cancellation.phase == 'cleaning' and drain is not None:
+                    await asyncio.to_thread(drain.observe, controller.cloud)
+                    if drain.approved is None:
+                        await save(job.id, phase='settling', cursor=0)
+                        controller.continue_immediately = False
+                        return
+                raise
+    except Exception:
+        # A later manual resume starts a new observation budget. Durable plans
+        # still protect every previously authorized generation.
+        getattr(controller, 'cancellation_drains', {}).pop(job.id, None)
+        raise
+    finally:
+        await timings.save(job.id, None)
+
+
+async def advance(controller, job, cancellation, timings):
     from .controller import save_run
     async with AsyncDBSession() as session:
         roots = (await session.scalars(select(CloudAnalysisRun).where(CloudAnalysisRun.job_id == job.id,
@@ -133,14 +169,35 @@ async def tick(controller, job, cancellation):
             ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.root_run_id))).order_by(CloudAnalysisRun.id))).all()
         control = await session.get(CloudSequenceControl, job.id)
     phase, cloud = cancellation.phase, controller.cloud
+    run_roots = [root for root in roots if root.launch.get('backend') == 'cloud_run']
+    drain, observed = None, None
+    if run_roots and phase in {'settling', 'importing', 'planning', 'cleaning'}:
+        if not hasattr(controller, 'cancellation_drains'):
+            controller.cancellation_drains = {}
+        drain = controller.cancellation_drains.get(job.id)
+        if drain is None:
+            drain = cancellation_drain.Drain(run_roots, cancellation.artifact_plan, all_ids,
+                {root.id: import_tasks(root) for root in run_roots})
+            controller.cancellation_drains[job.id] = drain
+        observed = await asyncio.to_thread(drain.observe, cloud)
+        if phase != 'settling' and (not drain.ready() or (phase == 'cleaning' and drain.approved is None)):
+            await save(job.id, phase='settling', cursor=0)
+            return
     if phase == 'stopping':
         quiet, _ = await resources(controller, roots, control, signal=True)
         if not quiet:
             return
+        await save(job.id, phase='settling' if run_roots else 'importing', cursor=0)
+    elif phase == 'settling':
+        quiet, _ = await resources(controller, roots, control, signal=False)
+        if not quiet or not drain.ready():
+            return
         await save(job.id, phase='importing', cursor=0)
     elif phase == 'importing':
         if cancellation.cursor < len(data_ids):
-            await import_available(cloud, data_ids[cancellation.cursor])
+            ident = data_ids[cancellation.cursor]
+            await import_available(cloud, ident,
+                observed_objects=observed if ident in {r.id for r in run_roots} else None)
             await save(job.id, cursor=cancellation.cursor + 1)
         else:
             await save(job.id, phase='planning', cursor=0)
@@ -148,17 +205,43 @@ async def tick(controller, job, cancellation):
         quiet, jobs = await resources(controller, roots, control, signal=False)
         if not quiet:
             raise ValueError('Cloud work is still active; cleanup withheld')
+        if drain:
+            for root in run_roots:
+                if root.details_pruned:
+                    if any(o['name'].startswith(f'results/ui-{root.id}/') for o in observed):
+                        raise ValueError('Results reappeared after import details were pruned; cleanup withheld')
+                else:
+                    await asyncio.to_thread(cancellation_drain.verify_artifacts, cloud, root, import_tasks(root), observed)
+            after = await asyncio.to_thread(drain.observe, cloud)
+            drain.approve(observed, after)
         # Adopt an existing plan if normal cleanup had already started.
         batch_plan = next((root.cleanup_plan for root in roots if root.cleanup_plan
                            and root.cleanup_plan.get('backend') != 'cloud_run'), None)
         if not batch_plan and jobs:
             batch_plan = await asyncio.to_thread(prepare, cloud, jobs, include_failed=True)
         for root in roots:
-            if root.launch.get('backend') == 'cloud_run' and root.launch.get('run_uid') and not root.cleanup_plan:
-                from cloud_job.cloud_run_cleanup import prepare as prepare_run
-                plan = await asyncio.to_thread(prepare_run, cloud, root.launch, root.id, cancelled=True)
+            if root.launch.get('backend') == 'cloud_run' and root.launch.get('run_uid'):
+                plan = await asyncio.to_thread(cancellation_drain.replan_run, cloud, root, drain)
                 await save_run(root.id, cleanup_plan=plan)
-        artifact_plan = await asyncio.to_thread(cancelled_artifacts.prepare, cloud, all_ids) if all_ids else None
+        artifact_plan = cancellation.artifact_plan if drain else None
+        if artifact_plan:
+            cancelled_artifacts.validate(artifact_plan, all_ids)
+            from cleaning_job import images
+            await asyncio.to_thread(images.remaining, cloud, artifact_plan)
+            # Retain the original image snapshots and all old generations.
+            from copy import deepcopy
+            from cleaning_job.cleanup import digest
+            artifact_plan = deepcopy(artifact_plan)
+            saved_objects = {o['name']: o for o in artifact_plan['objects']}
+            saved_objects.update(drain.seen)
+            artifact_plan['objects'] = sorted(saved_objects.values(), key=lambda o: (o['name'], o['generation']))
+            artifact_plan['sha256'] = digest(artifact_plan)
+        else:
+            artifact_plan = await asyncio.to_thread(cancelled_artifacts.prepare, cloud, all_ids) if all_ids else None
+            if drain and artifact_plan:
+                drain.require_approved(artifact_plan['objects'])
+        if drain:
+            drain.require_approved(await asyncio.to_thread(drain.observe, cloud))
         await save(job.id, batch_plan=batch_plan, artifact_plan=artifact_plan, phase='cleaning')
     elif phase == 'cleaning':
         quiet, _ = await resources(controller, roots, control, signal=False)
@@ -166,22 +249,23 @@ async def tick(controller, job, cancellation):
             raise ValueError('Supervisor/execution is still active; cleanup withheld')
         if cancellation.batch_plan:
             report = await asyncio.to_thread(cleaning_job, plan=cancellation.batch_plan, execute=True,
-                cloud=cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT)
+                cloud=cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT, timings=timings)
             if not report['complete']:
                 return
         for root in roots:
             if root.cleanup_plan and root.cleanup_plan.get('backend') == 'cloud_run':
                 from cloud_job.cloud_run_cleanup import apply as clean_run
-                report = await asyncio.to_thread(clean_run, cloud, root.cleanup_plan)
+                report = await asyncio.to_thread(clean_run, cloud, root.cleanup_plan, timings=timings)
                 if not report['complete']:
                     return
         uids = {uid for root in roots for task in root.launch.get('tasks', [root.launch])
                 for uid in [*task.get('prior_uids', {}).values(), *task.get('recovery_summary', {}).get('uids', {}).values()]}
         if uids and await asyncio.to_thread(owned_resources, cloud, {'jobs': [{'uid': uid} for uid in uids]}):
             return  # Metadata deletion alone is not proof that VM/disk cleanup finished.
-        if cancellation.artifact_plan and not await asyncio.to_thread(
-                cancelled_artifacts.apply, cloud, cancellation.artifact_plan, all_ids):
-            return
+        if cancellation.artifact_plan:
+            with timings.measure('cancel_leftover_artifacts'):
+                if not await asyncio.to_thread(cancelled_artifacts.apply, cloud, cancellation.artifact_plan, all_ids):
+                    return
         await save(job.id, phase='logs')
     elif phase == 'logs':
         if cancellation.batch_plan and roots:
@@ -204,7 +288,7 @@ async def tick(controller, job, cancellation):
             async with AsyncDBSession() as session:
                 row = await session.get(CloudAnalysisRun, ident)
             if row.imported_count and not row.details_pruned:
-                await refresh_unit_projections([ident])
+                await refresh_unit_projections([ident], timings=timings)
             await save(job.id, cursor=cancellation.cursor + 1)
         else:
             if job.imported:
@@ -213,6 +297,7 @@ async def tick(controller, job, cancellation):
             await save(job.id, phase='finishing')
     elif phase == 'finishing':
         await finish(job.id, all_ids)
+        getattr(controller, 'cancellation_drains', {}).pop(job.id, None)
     else:
         raise ValueError('Unexpected stop/cleanup phase: ' + phase)
     controller.continue_immediately = True

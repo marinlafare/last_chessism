@@ -27,6 +27,12 @@ class CloudAdapterTests(unittest.TestCase):
         self.network = patch("cleaning_job.cloud.urlopen")
         self.urlopen = self.network.start()
         self.addCleanup(self.network.stop)
+        sleep = patch('cleaning_job.cloud.time.sleep')
+        self.sleep = sleep.start()
+        self.addCleanup(sleep.stop)
+        jitter = patch('cleaning_job.cloud.random.uniform', return_value=0)
+        jitter.start()
+        self.addCleanup(jitter.stop)
         self.respond({})
 
     def credential(self, token="test-token", lifetime=3600):
@@ -185,6 +191,79 @@ class CloudAdapterTests(unittest.TestCase):
         self.assertEqual(request.get_method(), "DELETE")
         self.assertEqual(url.path, f"/storage/v1/b/{BUCKET}/o/results%2Frun-one%2Fa%3F%23%20%2A.json")
         self.assertEqual(parse_qs(url.query), {"generation": ["123"], "ifGenerationMatch": ["123"]})
+
+    def test_lost_delete_response_retries_same_generation_and_accepts_missing(self):
+        self.urlopen.side_effect = [TimeoutError('secret transport detail'),
+            HTTPError('https://example.invalid', 404, 'gone', {}, io.BytesIO())]
+        self.assertIsNone(self.cloud.delete_object({'name': 'results/run/a.json', 'generation': '123'}))
+        first, second = [call.args[0] for call in self.urlopen.call_args_list]
+        self.assertEqual((first.full_url, first.method, first.data), (second.full_url, second.method, second.data))
+        self.assertEqual(parse_qs(urlsplit(second.full_url).query),
+                         {'generation': ['123'], 'ifGenerationMatch': ['123']})
+        self.sleep.assert_called_once_with(1)
+
+    def test_safe_read_retries_transient_status_and_respects_retry_after(self):
+        response = self.urlopen.return_value
+        self.urlopen.side_effect = [HTTPError('https://example.invalid', 429, 'busy', {'Retry-After': '3'}, io.BytesIO()),
+            HTTPError('https://example.invalid', 503, 'busy', {}, io.BytesIO()), response]
+        self.assertEqual(self.cloud.bucket(), {})
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [3, 2])
+        self.assertEqual(self.urlopen.call_count, 3)
+
+    def test_safe_read_retries_invalid_json_without_exposing_response(self):
+        self.urlopen.return_value.__enter__.return_value.read.side_effect = [b'secret invalid response', b'{}']
+        self.assertEqual(self.cloud.bucket(), {})
+        self.assertEqual(self.urlopen.call_count, 2)
+
+    def test_retries_are_bounded_and_error_omits_transport_secrets(self):
+        self.urlopen.side_effect = URLError('secret')
+        with self.assertRaisesRegex(CleanupError, r'URLError.*4 attempt') as error:
+            self.cloud.delete_object({'name': 'results/run/a.json', 'generation': '123'})
+        self.assertNotIn('secret', ''.join(traceback.format_exception(error.exception)))
+        self.assertEqual(self.urlopen.call_count, 4)
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [1, 2, 4])
+
+    def test_unsafe_mutations_and_unpinned_deletes_never_retry_transport_errors(self):
+        for service, path, method, params in [
+            ('run', 'projects/test/jobs', 'POST', None),
+            ('run', 'projects/test/jobs/job', 'DELETE', {'etag': 'saved'}),
+            ('storage', f'b/{BUCKET}/o/result', 'DELETE', None),
+            ('storage', f'b/{BUCKET}/o/result', 'DELETE', {'generation': '123', 'ifGenerationMatch': '456'}),
+        ]:
+            with self.subTest(method=method, params=params):
+                self.urlopen.reset_mock()
+                self.urlopen.side_effect = TimeoutError('ambiguous response')
+                with self.assertRaises(CleanupError):
+                    self.cloud.request(service, path, method=method, params=params, missing_ok=True)
+                self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
+
+    def test_permission_and_generation_conflicts_are_not_retried(self):
+        for status in (403, 409, 412):
+            with self.subTest(status=status):
+                self.urlopen.reset_mock()
+                self.urlopen.side_effect = HTTPError('https://example.invalid', status, 'unsafe', {}, io.BytesIO())
+                with self.assertRaises(CleanupError):
+                    self.cloud.delete_object({'name': 'results/run/a.json', 'generation': '123'})
+                self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
+
+    def test_long_retry_after_pauses_instead_of_ignoring_server_delay(self):
+        self.urlopen.side_effect = HTTPError('https://example.invalid', 429, 'busy', {'Retry-After': '120'}, io.BytesIO())
+        with self.assertRaisesRegex(CleanupError, 'retry budget'):
+            self.cloud.bucket()
+        self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
+
+    def test_auth_refresh_and_transient_retry_have_separate_bounded_budgets(self):
+        self.urlopen.side_effect = [TimeoutError(),
+            HTTPError('https://example.invalid', 401, 'expired', {}, io.BytesIO()),
+            HTTPError('https://example.invalid', 503, 'busy', {}, io.BytesIO()),
+            self.urlopen.return_value]
+        self.cloud.delete_object({'name': 'results/run/a.json', 'generation': '123'})
+        self.assertEqual(self.urlopen.call_count, 4)
+        self.assertEqual(self.run.call_count, 2)
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [1, 2])
 
     def test_objects_are_listed_by_literal_prefix_with_all_versions(self):
         self.respond({"items": [{"name": "results/run-one/x", "generation": "1"}]})

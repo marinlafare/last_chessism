@@ -6,6 +6,9 @@ Credentials stay in memory. All API URLs are constructed here, never from plans.
 
 import json
 from datetime import datetime, timezone
+from http.client import HTTPException
+import logging
+import random
 import subprocess
 import threading
 import time
@@ -33,6 +36,10 @@ ENDPOINTS = {
     "run_inventory": "https://run.googleapis.com/apis/",
     "serviceusage": "https://serviceusage.googleapis.com/v1beta1/",
 }
+
+logger = logging.getLogger(__name__)
+TRANSIENT_STATUSES = {408, 429, 500, 502, 503, 504}
+MAX_TRANSIENT_RETRIES = 3
 
 
 class CleanupError(RuntimeError):
@@ -110,7 +117,20 @@ class Cloud:
             url += "?" + urlencode(params)
         data = None if body is None else json.dumps(body).encode()
         token, _ = self.tokens.get()
-        for attempt in range(2):
+        generation = (params or {}).get('generation')
+        # Retrying a lost DELETE response must never target a newer object.
+        # Other mutations (including launch/cancel, image/job/log deletion)
+        # keep their existing explicit recovery paths; no ambiguous replay.
+        retry_safe = method == 'GET' or (
+            service == 'storage' and method == 'DELETE' and missing_ok
+            and path.startswith(f'b/{BUCKET}/o/')
+            and isinstance(generation, str) and generation.isdigit()
+            and (params or {}).get('ifGenerationMatch') == generation
+        )
+        retries, attempts, refreshed = 0, 0, False
+        while True:
+            attempts += 1
+            retry_after = None
             request = Request(url, method=method, data=data, headers={
                 "Authorization": "Bearer " + token,
                 "User-Agent": "chessism-cleaning-job/1",
@@ -121,17 +141,35 @@ class Cloud:
                     raw = response.read()
                     return json.loads(raw) if raw else {}
             except HTTPError as exc:
+                code = exc.code
+                retry_after = exc.headers.get('Retry-After') if exc.headers else None
                 exc.close()
-                if exc.code == 401 and attempt == 0:
+                if code == 401 and not refreshed:
                     # Only explicit rejection authorizes an auth retry. Replay
                     # the identical request, including generation/requestId.
                     token, _ = self.tokens.get(force=True, rejected_token=token)
+                    refreshed = True
                     continue
-                if missing_ok and exc.code == 404:
+                if missing_ok and code == 404:
                     return None
-                raise CleanupError(f"{service} {method} {path}: HTTP {exc.code}; cleanup stopped") from None
-            except (URLError, TimeoutError, ValueError):
-                raise CleanupError(f"{service} {method} {path}: request failed; cleanup stopped") from None
+                reason = f'HTTP {code}'
+                transient = code in TRANSIENT_STATUSES
+            except (URLError, TimeoutError, ConnectionError, HTTPException, ValueError) as exc:
+                # Exception text/response bodies can contain credentials. Keep
+                # only the class so a timeout is distinguishable from bad JSON.
+                reason = f'request failed ({type(exc).__name__})'
+                transient = True
+            if not retry_safe or not transient or retries >= MAX_TRANSIENT_RETRIES:
+                raise CleanupError(f"{service} {method} {path}: {reason} after {attempts} attempt(s); cleanup stopped") from None
+            delay = 2 ** retries + random.uniform(0, .25)
+            if retry_after and retry_after.isdigit():
+                if int(retry_after) > 30:
+                    raise CleanupError(f"{service} {method} {path}: {reason}; server retry delay exceeds cleanup retry budget") from None
+                delay = max(delay, int(retry_after))
+            retries += 1
+            logger.warning('Retrying safe cloud request %s %s %s: %s; retry %s/%s in %.2fs',
+                           service, method, path, reason, retries, MAX_TRANSIENT_RETRIES, delay)
+            time.sleep(delay)
 
     def pages(self, service, path, **params):
         seen = set()

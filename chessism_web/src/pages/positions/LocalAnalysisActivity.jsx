@@ -1,15 +1,13 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { EstimatedTime } from './JobStatus'
-import FenIngestionPanel from './FenIngestionPanel'
+import AnalysisHistory from './AnalysisHistory'
 import { formatNumber } from './positionPageSupport'
 
 export default function LocalAnalysisActivity({ page }) {
-  const { analysisProcessViews, analysisProcessesError, deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, handleDeleteAnalysisProcess, ingestionTiming, jobState } = page
+  const { analysisProcessViews, analysisProcessesError, deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, handleDeleteAnalysisProcess } = page
   return (
-    <details className="local-activity">
-      <summary {...pageStyleTarget('disclosure')}>Local activity and ingestion · {analysisProcessViews.length} analysis processes</summary>
-    <FenIngestionPanel className="local-ingestion-status" title="Ingestion pipeline" jobState={jobState} ingestionTiming={ingestionTiming} />
-    <section {...pageStyleTarget('panel')} className="local-process-status" aria-live="polite">
+    <>
+    {(analysisProcessViews.length > 0 || analysisProcessesError) && <section {...pageStyleTarget('panel')} className="local-process-status" aria-live="polite">
       <div className="analysis-processes-heading">
         <div>
           <p {...pageStyleTarget('text')} className="eyebrow">ACTIVE ANALYSIS PROCESSES</p>
@@ -19,10 +17,6 @@ export default function LocalAnalysisActivity({ page }) {
       </div>
 
       {analysisProcessesError ? <div className="status-banner warn">{analysisProcessesError}</div> : null}
-      {!analysisProcessesError && analysisProcessViews.length === 0 ? (
-        <div className="analysis-process-empty">No running or queued Stockfish analysis.</div>
-      ) : null}
-
       <div className="analysis-process-list">
         {analysisProcessViews.map((process) => (
           <article {...pageStyleTarget('card')} className="analysis-process-card" key={process.job_id}>
@@ -72,7 +66,8 @@ export default function LocalAnalysisActivity({ page }) {
           </article>
         ))}
       </div>
-    </section>
-    </details>
+    </section>}
+    <AnalysisHistory backend="local" revision={analysisProcessViews.map(process => `${process.job_id}:${process.status}`).join('|')} />
+    </>
   )
 }
