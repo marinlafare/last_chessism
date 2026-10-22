@@ -77,7 +77,7 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
     {!draft?.submitted_job_id && <CloudComputeField resource={isRun ? 'cpu' : 'vm'}
       value={parallelism} onChange={isRun ? onCpuChange : onVmChange}
       disabled={loading || !ready} label={isRun ? 'Combined CPUs' : 'Combined Spot VMs'} />}
-    <section {...pageStyleTarget('cloud.draft')} className="cloud-game-draft cloud-process-content" aria-label="Combined player-game selection" aria-busy={loading}>
+    <section {...pageStyleTarget(isRun ? 'cloud.run.draft' : 'cloud.batch.draft')} className="cloud-game-draft cloud-process-content" aria-label="Combined player-game selection" aria-busy={loading}>
     {error && <div role="alert" className="status-banner warn">
       <p {...pageStyleTarget('text')}>{error}</p>
       <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={loading}
@@ -98,7 +98,7 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
           </button>
         </li>)}
       </ol>}
-      <section {...pageStyleTarget('cloud.selection')} className="cloud-draft-builder" aria-label="Combined selection setup">
+      <section {...pageStyleTarget(isRun ? 'cloud.run.draft.selection' : 'cloud.batch.draft.selection')} className="cloud-draft-builder" aria-label="Combined selection setup">
         <div className="cloud-draft-builder-heading">
           {showEditor && <span {...pageStyleTarget('value')} className="cloud-draft-step-number" aria-label={`Step ${step}`}>{step}</span>}
         </div>

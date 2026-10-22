@@ -1,7 +1,6 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useState } from 'react'
 import { styleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
-import AppearanceChartDetails from './AppearanceChartDetails'
 import { circleDistribution, coverageDistribution, pieSegments } from './appearanceCircles'
 import useCircleRotation from '../../hooks/useCircleRotation'
 import { circlePercentage } from '../../utils/circleRotation'
@@ -74,18 +73,6 @@ export default function AppearanceCircles({ data, error, view, active }) {
     }
   }
   return <div className="appearance-circles-panel">
-    <div className="pending-repetition-heading">
-      <AppearanceChartDetails>
-        <p>The left pie compares distinct FENs appearing exactly once (green) with all FENs appearing more than once (red), including those appearing more than ten times. FENs without recorded appearances are excluded.</p>
-        <p>Click the red non-unique slice to reveal the Almost unique chart in the middle. It counts distinct FENs with 2–10 appearances, not their combined appearances. Its bars show appearances from 2 to 10 on X and distinct FEN counts on Y, on a linear scale.</p>
-        <p>The Positions pie compares scored and unscored FENs across the entire database, including FENs without recorded appearances, using the same cached snapshot.</p>
-        <p>Equal circle sizes do not compare totals. Hover or focus for percentages and exact counts; each percentage is relative to its own pie.</p>
-        <p>Scroll over either circle to rotate it, without zooming. Double-click to reset. Keyboard: arrow keys to rotate, 0 to reset.</p>
-        <p>Click the unique slice, a bar, or either Positions slice for ten sampled thumbnails at a time. Hover or focus a thumbnail to enlarge the board; thumbnails do not open games.</p>
-        {data?.refreshed_at && <p>Snapshot: <time dateTime={data.refreshed_at}>{new Date(data.refreshed_at).toLocaleString()}</time>
-          {data.stale ? ' · Changes pending; summary refreshes in the background.' : ''}</p>}
-      </AppearanceChartDetails>
-    </div>
     <AppearanceCircleTooltip selection={selected} />
     {explorer&&<Suspense fallback={null}><FenPositionExplorer key={explorer.key} scope={explorer.scope} anchor={explorer} onClose={()=>setExplorer(null)}/></Suspense>}
     {(error || data?.refresh_error) && <div className="status-banner warn" role="alert">{error || data.refresh_error}</div>}

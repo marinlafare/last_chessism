@@ -1,7 +1,7 @@
 import { registryTarget } from './styleCore.js'
 
-// A slice edits its own fill and its registered circle's outline in one popup.
-// Keep border overrides on the SVG parent so sibling slices share one border.
+// Expose a slice's own colors and borders alongside the registered chart's
+// shared styling, without changing other charts on the page.
 export function editorTargets(registry, selection) {
   if (!selection) return []
   const spec = registryTarget(registry, selection.scope, selection.id)

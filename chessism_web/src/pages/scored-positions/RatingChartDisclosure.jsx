@@ -32,18 +32,18 @@ function RatingChartDisclosure() {
   }
 
   return <section {...styleTarget('chart.disclosure')} className="scored-positions-panel scored-rating-scatter-panel" aria-label="Rating groups chart">
-    <h2 className="rating-chart-heading"><button type="button" id="rating-chart-toggle" className="rating-chart-toggle"
+    <h2 className="rating-chart-heading"><button {...styleTarget('rating.toggle')} type="button" id="rating-chart-toggle" className="rating-chart-toggle"
       aria-expanded={open} aria-controls="rating-chart-content" onClick={() => setOpen(value => !value)}>
       <span>Rating groups</span>
       <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
     </button></h2>
-    <div id="rating-chart-content" role="region" aria-labelledby="rating-chart-toggle" hidden={!open}>
+    <div {...styleTarget('rating.content')} id="rating-chart-content" role="region" aria-labelledby="rating-chart-toggle" hidden={!open}>
       {open && <>
-        <div className="rating-chart-toolbar">
+        <div {...styleTarget('rating.toolbar')} className="rating-chart-toolbar">
           <p>{payload
             ? `Loaded ${loadedAt.toLocaleTimeString()}. Refresh to include newer analyses.`
             : 'Chart data loads only when this section is opened.'}</p>
-          <button type="button" className="btn btn-secondary btn-inline" disabled={!payload && !error} onClick={refresh}>
+          <button {...styleTarget('rating.refresh')} type="button" className="btn btn-secondary btn-inline" disabled={!payload && !error} onClick={refresh}>
             {error ? 'Retry chart' : 'Refresh chart'}
           </button>
         </div>

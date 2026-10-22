@@ -2,28 +2,20 @@ import { useEffect, useMemo, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import { appearanceHistogram, APPEARANCE_Y_LIMIT } from './pendingRepetitions'
-import AppearanceChartDetails from './AppearanceChartDetails'
 import useAppearancePlot from './useAppearancePlot'
+
+const compactNumber = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
 
 export default function PendingRepetitionChart({ data, error }) {
   const [selected, setSelected] = useState(null)
   useEffect(() => { setSelected(null) }, [data?.refreshed_at])
   const view = useMemo(() => appearanceHistogram(data?.rows), [data])
   const { ref, width, height } = useAppearancePlot()
-  const left = 70, right = 12, top = 8, baseline = Math.max(top + 24, height - 34), step = (width - left - right) / view.bars.length
+  const left = 58, right = 12, top = 8, baseline = Math.max(top + 24, height - 24), step = (width - left - right) / view.bars.length
   const y = value => baseline - (value / APPEARANCE_Y_LIMIT) * (baseline - top)
-  return <div className="pending-repetition-panel">
+  return <div {...pageStyleTarget('unscored.panel')} className="pending-repetition-panel unscored-panel">
     <div className="pending-repetition-heading">
-      <h2 className="panel-title">Unscored FEN appearances</h2>
-      <AppearanceChartDetails>
-        <p>Y-axis capped at 1,000. Hover, tap or focus a bar for the exact count.</p>
-        {data?.refreshed_at && <>
-          {view.withoutAppearances > 0 && <p>{formatNumber(view.withoutAppearances)} FENs with zero recorded appearances excluded.</p>}
-          {view.aboveRange > 0 && <p>{formatNumber(view.aboveRange)} FENs with more than 10 appearances are outside this view.</p>}
-          <p>Snapshot: <time dateTime={data.refreshed_at}>{new Date(data.refreshed_at).toLocaleString()}</time>
-            {data.stale ? ' · Changes pending; summary refreshes in the background.' : ''}</p>
-        </>}
-      </AppearanceChartDetails>
+      <h2 {...pageStyleTarget('unscored.title')} className="panel-title">UNSCORED</h2>
     </div>
     {(error || data?.refresh_error) && <div className="status-banner warn" role="alert">{error || data.refresh_error}</div>}
     {!data?.refreshed_at ? <p role="status">{error || data?.refresh_error
@@ -35,7 +27,7 @@ export default function PendingRepetitionChart({ data, error }) {
             aria-label="Unscored FENs with 1 to 10 appearances. Y-axis is capped at 1,000; select a bar for its exact count.">
             {[0, 250, 500, 750, 1000].map(value => <g key={value}>
               <line className="repetition-grid" x1={left} x2={width - right} y1={y(value)} y2={y(value)} />
-              <text x={left - 10} y={y(value) + 4} textAnchor="end">{formatNumber(value)}</text>
+              <text x={left - 10} y={y(value) + 4} textAnchor="end">{compactNumber.format(value).replace('K', 'k')}</text>
             </g>)}
             {view.bars.map((bar, index) => {
               const barWidth = Math.min(64, step * .72), x = left + (index + .5) * step - barWidth / 2
@@ -52,10 +44,10 @@ export default function PendingRepetitionChart({ data, error }) {
                 <text x={x + barWidth / 2} y={baseline + 20} textAnchor="middle">{formatNumber(bar.appearances)}</text>
               </g>
             })}
-            <text x={width / 2} y={height - 4} textAnchor="middle">Appearances</text>
-            <text transform={`translate(12 ${(top + baseline) / 2}) rotate(-90)`} textAnchor="middle">Distinct FENs</text>
+            <text transform={`translate(12 ${(top + baseline) / 2}) rotate(-90)`} textAnchor="middle">n positions</text>
           </svg>
         </div>
+        <div {...pageStyleTarget('unscored.axisTitle')} className="unscored-axis-title">Appearances</div>
       </>}
   </div>
 }

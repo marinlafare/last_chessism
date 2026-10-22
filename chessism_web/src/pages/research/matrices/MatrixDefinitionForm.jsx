@@ -5,7 +5,7 @@ export default function MatrixDefinitionForm({ model }) {
   const { name, rowTypeKey, features, labels } = form
   return <>
     <section {...pageStyleTarget('panel')} className="matrix-panel">
-      <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">1 · ROW UNIT</p><h2 {...pageStyleTarget('title')}>Choose what one row represents</h2></div></div>
+      <div className="section-head"><h2 {...pageStyleTarget('title')}>1.- Row unit</h2></div>
       <div className="matrix-row-types">
         {rowTypes.map((item) => (
           <button {...pageStyleTarget('button')} className={item.key === rowTypeKey ? 'active' : ''} type="button" key={item.key} onClick={() => changeRowType(item.key)}>
@@ -17,7 +17,7 @@ export default function MatrixDefinitionForm({ model }) {
     </section>
 
     <section {...pageStyleTarget('panel')} className="matrix-panel">
-      <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">2 · COLUMNS</p><h2 {...pageStyleTarget('title')}>Assign features and labels</h2></div></div>
+      <div className="section-head"><h2 {...pageStyleTarget('title')}>2.- Columns</h2></div>
         <div className="matrix-column-head"><span>Column</span><span>Feature</span><span>Label</span></div>
         <div className="matrix-columns">
           {(rowType?.columns || []).map((column) => (
@@ -32,7 +32,7 @@ export default function MatrixDefinitionForm({ model }) {
     </section>
 
     <section {...pageStyleTarget('panel')} className="matrix-panel matrix-build-panel">
-      <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">3 · FORMULA</p><h2 {...pageStyleTarget('title')}>Save reusable columns</h2></div></div>
+      <div className="section-head"><h2 {...pageStyleTarget('title')}>3.- Formula</h2></div>
       <div className="matrix-build-row matrix-definition-build-row">
         <label {...pageStyleTarget('label')}><span>Formula name</span><input {...pageStyleTarget('field')} value={name} maxLength="100" onChange={(event) => changeName(event.target.value)} /></label>
         <button {...pageStyleTarget('button')} className="btn btn-primary btn-inline" type="button" onClick={save} disabled={working || !catalog || !features.length}>{working === 'save' ? 'Saving' : 'Save to collection'}</button>

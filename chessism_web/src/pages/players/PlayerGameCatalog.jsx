@@ -22,17 +22,68 @@ export default function PlayerGameCatalog({ playerName, kind }) {
   const [retry, setRetry] = useState(0)
   const [selection, setSelection] = useState(null)
   const [reviewGameId, setReviewGameId] = useState(null)
+  const [highlightedKey, setHighlightedKey] = useState(null)
   const cache = useRef(new Map())
   const listRef = useRef(null)
   const paginationSentinel = useRef(null)
   const paginationController = useRef(null)
   const dataSource = useRef(null)
+  const lastPointer = useRef(null)
   const requestKey = JSON.stringify([playerName, kind, filters])
   const data = request.key === requestKey ? request.data : null
   const error = request.key === requestKey ? request.error : ''
   const searchPending = searchText.trim() !== filters.search
   const loading = searchPending || request.key !== requestKey || request.loading
   const pagination = data?.pagination
+
+  useEffect(() => { setHighlightedKey(null) }, [requestKey])
+
+  useEffect(() => {
+    const list = listRef.current
+    if (!visible || loading || !data?.rows.length || !list || selection || reviewGameId) return
+    const region = list.closest('.player-analysis-disclosure-content')
+    // Opening a disclosure leaves focus on its button. Transfer it once rows
+    // arrive, but never steal focus from search, filters, or another section.
+    if (document.activeElement?.id === region?.getAttribute('aria-labelledby')) {
+      list.focus({ preventScroll: true })
+    }
+  }, [visible, loading, data?.rows.length, selection, reviewGameId])
+
+  const highlightPointerRow = (event, rowKey) => {
+    const coordinates = `${event.clientX}:${event.clientY}`
+    // Scrolling the list under a stationary mouse must not undo arrow selection.
+    if (lastPointer.current === coordinates) return
+    lastPointer.current = coordinates
+    setHighlightedKey(rowKey)
+    const focused = document.activeElement
+    const editing = focused?.matches('input,textarea,select,[contenteditable="true"]')
+    if (!editing && !selection && !reviewGameId) event.currentTarget.focus({ preventScroll: true })
+  }
+
+  const handleListKey = event => {
+    if (event.target !== listRef.current && !event.target.closest('.player-game-catalog-row')) return
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', ' '].includes(event.key)) return
+    const rows = [...listRef.current.querySelectorAll('.player-game-catalog-row:not(:disabled)')]
+    if (!rows.length) return
+    event.preventDefault()
+    event.stopPropagation()
+    const current = rows.findIndex(row => row.dataset.catalogKey === highlightedKey)
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (current >= 0) rows[current].click()
+      return
+    }
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1
+      : current < 0 ? (event.key === 'ArrowUp' ? rows.length - 1 : 0)
+      : Math.min(rows.length - 1, Math.max(0, current + (event.key === 'ArrowDown' ? 1 : -1)))
+    setHighlightedKey(rows[next].dataset.catalogKey)
+    rows[next].focus({ preventScroll: true })
+    // Scroll only the results viewport, never the entire document.
+    const viewport = listRef.current.getBoundingClientRect()
+    const bounds = rows[next].getBoundingClientRect()
+    if (bounds.top < viewport.top) listRef.current.scrollTop -= viewport.top - bounds.top
+    else if (bounds.bottom > viewport.bottom) listRef.current.scrollTop += bounds.bottom - viewport.bottom
+    if (event.key === 'ArrowDown' && next === rows.length - 1) loadMore()
+  }
 
   useEffect(() => {
     if (!visible || !searchPending) return undefined
@@ -195,17 +246,23 @@ export default function PlayerGameCatalog({ playerName, kind }) {
     {loading && !data ? <p className="player-game-catalog-message" role="status">Loading {openings ? 'openings' : 'opponents'}…</p> : null}
     {data && !data.rows.length ? <p className="player-game-catalog-message">No {openings ? 'openings' : 'opponents'} {filters.search ? 'match this search.' : 'in this selection.'}</p> : null}
     {data ? <div key={requestKey} ref={listRef} className="player-game-catalog-rows"
-      tabIndex={0} role="region"
+      tabIndex={0} role="region" onKeyDown={handleListKey}
       aria-label={`${openings ? 'Openings' : 'Opponents'} — scroll to load more`}>
       {data.rows.map(row => {
+        const rowKey = String(row.key ?? '')
+        const highlighted = highlightedKey === rowKey
         const label = openings ? openingLabel(row.key) : row.key || 'Unknown opponent'
         const description = `${label}: ${formatNumber(row.games)} games; ${results.map(([key, name]) => `${formatNumber(row[key])} ${name.toLowerCase()}`).join(', ')}`
         // Older API instances omit this field until the prepared backend is deployed.
         const showRatings = !openings && row.latest_ratings != null
         return <button type="button" key={row.key}
-          className="player-game-catalog-row" disabled={loading || (!openings && !row.key)}
+          className={`player-game-catalog-row${highlighted ? ' is-highlighted' : ''}`}
+          data-catalog-key={rowKey} tabIndex={highlighted ? 0 : -1}
+          disabled={loading || (!openings && !row.key)}
+          onPointerMove={event => highlightPointerRow(event, rowKey)}
+          onFocus={() => setHighlightedKey(rowKey)}
           onClick={() => openGames(row)} aria-label={`${description}. Browse games.`}>
-          <span {...pageStyleTarget(`${target}.row`)} className={`player-game-catalog-identity${showRatings ? ' has-ratings' : ''}`}>
+          <span {...pageStyleTarget(`${target}.row`)} data-active={highlighted ? 'true' : undefined} className={`player-game-catalog-identity${showRatings ? ' has-ratings' : ''}`}>
             <span {...pageStyleTarget(`${target}.rank`)} className="player-game-catalog-rank"
               title="Rank by games in the selected mode and color">#{formatNumber(row.rank)}</span>
             <span className="player-game-catalog-name" title={label}>{label}</span>
@@ -221,7 +278,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
               })}
             </span> : null}
           </span>
-          <span {...pageStyleTarget(`${target}.row`)} className="player-game-catalog-statistics">
+          <span {...pageStyleTarget(`${target}.row`)} data-active={highlighted ? 'true' : undefined} className="player-game-catalog-statistics">
             <span className="player-game-catalog-results" title={description} aria-hidden="true">
               <span className="player-game-catalog-result-bar">
                 {results.map(([key, name]) => row[key] > 0 ? <i key={key} className={key}

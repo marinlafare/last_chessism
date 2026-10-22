@@ -17,6 +17,11 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
   const pendingScroll = useRef(false)
   const [scrollRequest, setScrollRequest] = useState(0)
   const [titledOnly, setTitledOnly] = useState(true)
+  const [minimized, setMinimized] = useState(() => ({ summary: Boolean(selectedPlayer), players: Boolean(selectedPlayer) }))
+  const minimizeOverview = () => setMinimized({ summary: true, players: true })
+  useEffect(() => {
+    setMinimized({ summary: Boolean(selectedPlayer), players: Boolean(selectedPlayer) })
+  }, [selectedPlayer])
   const playerGroups = useRef(new Map())
   const rememberPlayerGroup = useCallback(profile => {
     const name = normalizePlayer(profile?.player_name)
@@ -57,10 +62,32 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
       <div className="home-shell">
         <main>
           <div {...pageStyleTarget('overview.layout')} className="home-overview">
+            <div className="home-overview-section">
+            {selectedPlayer && minimized.summary && <button {...pageStyleTarget('overview.restore')} className="home-overview-restore"
+              aria-expanded={false} aria-controls="home-summary-content" type="button"
+              onClick={() => setMinimized(value => ({ ...value, summary: false }))}>Player overview</button>}
+            <div id="home-summary-content" className="home-overview-content" hidden={Boolean(selectedPlayer && minimized.summary)}>
+            {selectedPlayer && <button {...pageStyleTarget('overview.minimize')} className="home-overview-minimize" type="button"
+              title="Minimize overview panels" aria-label="Minimize both overview panels" onClick={minimizeOverview}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 14h12" /></svg>
+            </button>}
             <DashboardSummaryPanel onSelectPlayer={selectPlayer} titledOnly={titledOnly}
               onTitleFilterChange={changeTitleFilter} />
+            </div>
+            </div>
+            <div className="home-overview-section">
+            {selectedPlayer && minimized.players && <button {...pageStyleTarget('overview.restore')} className="home-overview-restore"
+              aria-expanded={false} aria-controls="home-rankings-content" type="button"
+              onClick={() => setMinimized(value => ({ ...value, players: false }))}>Player rankings</button>}
+            <div id="home-rankings-content" className="home-overview-content" hidden={Boolean(selectedPlayer && minimized.players)}>
+            {selectedPlayer && <button {...pageStyleTarget('overview.minimize')} className="home-overview-minimize" type="button"
+              title="Minimize overview panels" aria-label="Minimize both overview panels" onClick={minimizeOverview}>
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 14h12" /></svg>
+            </button>}
             <MainCharactersCarousel selectedPlayer={selectedPlayer} onSelectPlayer={selectPlayer}
               titledOnly={titledOnly} onTitleFilterChange={changeTitleFilter} />
+            </div>
+            </div>
           </div>
           <section {...pageStyleTarget('player.panel')} className="home-player-workspace" id="selected-player" ref={playerSection}
             tabIndex={-1} aria-label={selectedPlayer ? `Player workspace: ${selectedPlayer}` : 'Player workspace'}>

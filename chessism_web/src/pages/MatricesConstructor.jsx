@@ -15,17 +15,6 @@ export default function MatricesConstructor() {
       <div className="home-shell">
         <Header />
         <main className="matrix-main">
-          <section {...pageStyleTarget('panel')} className="matrix-hero">
-            <div>
-              <p {...pageStyleTarget('text')} className="eyebrow">SUPERUSER RESEARCH</p>
-              <h1 {...pageStyleTarget('heading')}>Matrices constructor</h1>
-              <p {...pageStyleTarget('text')}>Build your own column formulas here. Browse saved and default formulas in Algorithm creation → Input formulas. Saving does not select games or create matrix files.</p>
-            </div>
-            <nav className="matrix-hero-actions" aria-label="Matrix pages">
-              <a {...pageStyleTarget('link')} className="matrix-back" href="/research/algorithms">Algorithm creation</a>
-              <a {...pageStyleTarget('link')} className="matrix-back" href="/research">Research index</a>
-            </nav>
-          </section>
           {error ? <div className="status-banner warn" role="alert">{error}</div> : null}
           {notice ? <div className="status-banner" role="status">{notice} {savedDefinition ? <a {...pageStyleTarget('link')} className="matrix-back" href={`/research/algorithms?preview=${encodeURIComponent(savedDefinition.id)}`}>Review saved formula →</a> : null}</div> : null}
           <MatrixDefinitionForm model={model} />

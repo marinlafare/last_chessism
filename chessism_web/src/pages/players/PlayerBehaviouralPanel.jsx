@@ -80,6 +80,16 @@ function groupByMode(observations) {
   return Array.from(grouped.entries())
 }
 
+function RatingPoints({ line, radius }) {
+  // Disconnected circles in one path per mode keep long histories lightweight.
+  // There is no interpolation or connection between recorded ratings.
+  const path = useMemo(() => line.points.map(point =>
+    `M${(point.x - radius).toFixed(2)},${point.y.toFixed(2)}a${radius},${radius} 0 1,0 ${radius * 2},0a${radius},${radius} 0 1,0 ${-radius * 2},0Z`
+  ).join(' '), [line.points, radius])
+  return <path className="behavior-rating-point" pointerEvents="none" d={path}
+    fill={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`} />
+}
+
 function buildRatingPlot(ratings, selectedYear = 'all') {
   const observations = (ratings?.series || []).flatMap((series) => (
     (series.points || [])
@@ -271,6 +281,7 @@ function WeekdayStartChart({
                   <div
                     className="behavior-weekday-summary"
                   >
+                    <span className="behavior-weekday-identity">
                     <button {...pageStyleTarget('player.days.label')}
                       className="behavior-weekday-badge"
                       type="button"
@@ -285,6 +296,13 @@ function WeekdayStartChart({
                     >
                       {String(weekday.label).toUpperCase()}
                     </button>
+                    <span {...pageStyleTarget('player.days.count')}
+                      className="behavior-weekday-count"
+                      aria-label={`${weekday.label}: ${formatNumber(weekday.games)} games`}
+                      title={`${formatNumber(weekday.games)} games`}>
+                      {formatNumber(weekday.games)}
+                    </span>
+                    </span>
                     <span className="behavior-weekday-stage">
                       <span className="behavior-weekday-hours" aria-hidden={!isExpanded}>
                         {Array.from({ length: 24 }, (_, hour) => {
@@ -325,13 +343,6 @@ function WeekdayStartChart({
                           <i style={{ backgroundColor: scoreColor(weekday) }} />
                         </span>
                       </button>
-                    </span>
-                    <span {...pageStyleTarget('value')}
-                      className="behavior-weekday-count"
-                      aria-label={`${weekday.label}: ${formatNumber(weekday.games)} games`}
-                      title={`${formatNumber(weekday.games)} games`}
-                    >
-                      {formatNumber(weekday.games)}
                     </span>
                   </div>
                   <span className="behavior-weekday-note" id={noteId} role="tooltip">
@@ -532,16 +543,7 @@ export default function PlayerBehaviouralPanel({
                   )
                 })}
                 {visibleRatingLines.map((line) => (
-                  <g key={line.mode} pointerEvents="none">
-                    <polyline
-                      className="behavior-rating-line"
-                      fill="none"
-                      stroke={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`}
-                      points={line.points.map((point) => `${point.x},${point.y}`).join(' ')}
-                    />
-                    {line.points.length === 1 ? <circle className="behavior-rating-point"
-                      cx={line.points[0].x} cy={line.points[0].y} r={3} fill={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`} /> : null}
-                  </g>
+                  <RatingPoints key={line.mode} line={line} radius={selectedRatingYear === 'all' ? 1.8 : 2.5} />
                 ))}
                 <text className="graph-axis-label" pointerEvents="none" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
                 <text className="graph-axis-label" pointerEvents="none" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>

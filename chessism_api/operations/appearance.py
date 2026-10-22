@@ -20,6 +20,32 @@ REGISTRY['scopes'] = {
 }
 # Additive registry expansion: all v1 Scored Positions preset keys remain valid.
 REGISTRY['scopes'][REGISTRY['scope']]['targets'].update(REGISTRY['targets'])
+# Explicit selectors describe painted data, never axes, labels or invisible hit
+# areas. Styles remain scoped to the existing chart identity and page. Additive
+# properties keep old presets valid and do not change their appearance.
+_INTERACTIONS = json.loads((Path(__file__).parents[1] / 'appearance_chart_interactions.json').read_text())
+for _scope in REGISTRY['scopes'].values():
+    for _group in _INTERACTIONS['groups']:
+        for _ident in _group['targets']:
+            _target = _scope['targets'].get(_ident)
+            if _target is None:
+                continue
+            _target['chartInteraction'] = [paint for family in _group['families']
+                                           for paint in _INTERACTIONS['families'][family]]
+            _extra = ['stroke', 'strokeWidth', 'barHoverColor', 'barHoverBorder']
+            if _group['container']:
+                _extra += ['background', 'hoverBackground', 'borderColor', 'borderWidth', 'hoverBorderColor', 'padding', 'radius']
+            _target['properties'] = list(dict.fromkeys([*_target['properties'], *_extra]))
+            _target['propertyLabels'] = {
+                'stroke': 'Data border color', 'strokeWidth': 'Data border width',
+                'barHoverColor': 'Hover fill color', 'barHoverBorder': 'Hover border color',
+                **_target.get('propertyLabels', {}),
+            }
+# Every registered Positions-page background also exposes its hover state.
+for _target in REGISTRY['scopes']['scored_positions']['targets'].values():
+    if 'background' in _target['properties'] and 'hoverBackground' not in _target['properties']:
+        _target['properties'] = [*_target['properties'], 'hoverBackground']
+
 MAX_OVERRIDES = 2000
 
 

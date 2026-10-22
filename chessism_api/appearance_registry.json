@@ -29,6 +29,27 @@
       "css": "--summary-bar-height",
       "default": 16
     },
+    "cycleDividerColor": {
+      "label": "Cycle divider color",
+      "kind": "color",
+      "css": "--cloud-cycle-divider-color",
+      "default": "#5e9bce"
+    },
+    "cycleDividerHoverColor": {
+      "label": "Cycle divider hover color",
+      "kind": "color",
+      "css": "--cloud-cycle-divider-hover-color",
+      "default": "#5e9bce"
+    },
+    "cycleDividerWidth": {
+      "label": "Cycle divider thickness",
+      "kind": "number",
+      "min": 0,
+      "max": 12,
+      "unit": "px",
+      "css": "--cloud-cycle-divider-width",
+      "default": 2
+    },
     "repeatMarkColor": {
       "label": "Repeat symbol color",
       "kind": "color",

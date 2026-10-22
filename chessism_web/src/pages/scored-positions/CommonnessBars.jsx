@@ -3,11 +3,14 @@ import { styleTarget } from '../../appearance/styleCore'
 import { commonnessScale } from './commonness'
 import useAppearancePlot from './useAppearancePlot'
 
+const compactNumber = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
+const tickLabel = value => compactNumber.format(value).replace('K', 'k')
+
 export default function CommonnessBars({ rows, selected, onSelect, onClear }) {
   const { ref, width, height } = useAppearancePlot()
   const bars = rows.slice(0, 10)
   const scale = commonnessScale(bars)
-  const left = Math.max(58, formatNumber(scale.upper).length * 7 + 14), right = width - 12, top = 8
+  const left = Math.max(44, tickLabel(scale.upper).length * 7 + 14), right = width - 12, top = 8
   const slot = (right - left) / 10
   const angled = bars.some(bar => bar.label.length * 6 > slot * .9)
   const baseline = Math.max(top + 24, height - (angled ? 58 : 28))
@@ -17,7 +20,7 @@ export default function CommonnessBars({ rows, selected, onSelect, onClear }) {
       role="group" aria-label="Ten most-common positions per page. Move on X, number of appearances on Y; linear scale.">
       {scale.ticks.map(tick => <g key={tick} className="commonness-y-tick">
         <line x1={left} x2={right} y1={y(tick)} y2={y(tick)} />
-        <text {...styleTarget('position.count')} x={left - 8} y={y(tick) + 4} textAnchor="end">{formatNumber(tick)}</text>
+        <text {...styleTarget('position.count')} x={left - 8} y={y(tick) + 4} textAnchor="end">{tickLabel(tick)}</text>
       </g>)}
       {bars.map((bar, index) => {
         const x = left + (index + .5) * slot, barWidth = slot * .65

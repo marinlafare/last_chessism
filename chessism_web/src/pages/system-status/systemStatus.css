@@ -63,3 +63,9 @@
 .cloud-status-eta { width: 100%; padding-top: 12px; border-top: 1px solid #06110c25; }
 .cloud-status-eta-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 12px; }
 .cloud-status-eta-label strong { font-family: "IBM Plex Mono", monospace; }
+.system-times { margin-top: 16px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
+.system-times > h2 { margin: 0; }
+.system-times-toggle { width: 100%; padding: 18px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: center; }
+.system-times-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.system-times [hidden] { display: none; }
+.analysis-times-content { display: grid; gap: 16px; padding: 16px; }

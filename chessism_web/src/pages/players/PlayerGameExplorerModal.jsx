@@ -48,8 +48,83 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const paginationController = useRef(null)
   const dataSource = useRef(null)
   const listRef = useRef(null)
+  const modalRef = useRef(null)
+  const lastPointer = useRef(null)
+  const [highlightedKey, setHighlightedKey] = useState(null)
   const paginationSentinel = useRef(null)
   const pagination = request.data?.pagination
+
+  useEffect(() => {
+    if (!selection) return undefined
+    const opener = document.activeElement
+    setHighlightedKey(null)
+    lastPointer.current = null
+    modalRef.current?.focus({ preventScroll: true })
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true })
+    }
+  }, [playerName, selection])
+
+  useEffect(() => {
+    // Transfer focus only on initial arrival, not on pagination or while the
+    // user is editing styles / using another control in the modal.
+    if (request.data?.games.length && document.activeElement === modalRef.current) {
+      listRef.current?.focus({ preventScroll: true })
+    }
+  }, [request.data?.games.length])
+
+  const highlightPointerRow = (event, key) => {
+    const coordinates = `${event.clientX}:${event.clientY}`
+    if (lastPointer.current === coordinates) return
+    lastPointer.current = coordinates
+    setHighlightedKey(key)
+    const focused = document.activeElement
+    if (!focused?.closest('[data-appearance-tools]')
+      && !focused?.matches('input,textarea,select,[contenteditable="true"]')) {
+      event.currentTarget.focus({ preventScroll: true })
+    }
+  }
+
+  const handleListKey = event => {
+    if (event.target !== listRef.current && !event.target.closest('[data-game-key]')) return
+    if (!['ArrowUp', 'ArrowDown', 'Home', 'End', 'Enter', ' '].includes(event.key)) return
+    event.preventDefault()
+    event.stopPropagation()
+    const rows = [...listRef.current.querySelectorAll('[data-game-key]')]
+    if (!rows.length) return
+    const current = rows.findIndex(row => row.dataset.gameKey === highlightedKey)
+    if (event.key === 'Enter' || event.key === ' ') {
+      if (current >= 0) rows[current].click()
+      return
+    }
+    const next = event.key === 'Home' ? 0 : event.key === 'End' ? rows.length - 1
+      : current < 0 ? (event.key === 'ArrowUp' ? rows.length - 1 : 0)
+      : Math.min(rows.length - 1, Math.max(0, current + (event.key === 'ArrowDown' ? 1 : -1)))
+    setHighlightedKey(rows[next].dataset.gameKey)
+    rows[next].focus({ preventScroll: true })
+    const viewport = listRef.current.getBoundingClientRect()
+    const bounds = rows[next].getBoundingClientRect()
+    if (bounds.top < viewport.top) listRef.current.scrollTop -= viewport.top - bounds.top
+    else if (bounds.bottom > viewport.bottom) listRef.current.scrollTop += bounds.bottom - viewport.bottom
+    if (event.key === 'ArrowDown' && next === rows.length - 1) loadMore()
+  }
+
+  const handleModalKey = event => {
+    if (event.target.closest('[data-appearance-tools]')) return
+    if (event.target === modalRef.current && ['ArrowUp', 'ArrowDown', 'Home', 'End', ' '].includes(event.key)) {
+      event.preventDefault()
+    }
+    if (event.key !== 'Tab') return
+    const controls = [...modalRef.current.querySelectorAll('button:not(:disabled),[tabindex="0"]')]
+      .filter(element => element.tabIndex >= 0 && element.getClientRects().length)
+    const first = controls[0], last = controls.at(-1)
+    if (!first) { event.preventDefault(); return }
+    if (event.shiftKey && (event.target === first || event.target === modalRef.current)) {
+      event.preventDefault(); last.focus({ preventScroll: true })
+    } else if (!event.shiftKey && (event.target === last || event.target === modalRef.current)) {
+      event.preventDefault(); first.focus({ preventScroll: true })
+    }
+  }
 
   useEffect(() => {
     dataSource.current = null
@@ -152,6 +227,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('gameExplorer.panel')}
+        ref={modalRef} tabIndex={-1} onKeyDown={handleModalKey}
         className="game-explorer-modal"
         role="dialog"
         aria-modal="true"
@@ -183,9 +259,16 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
         {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message">{analyzedOnly ? 'No analyzed games are in this bin.' : 'No games are in this bin.'}</p> : null}
 
         {games.length ? (
-          <div ref={listRef} className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}>
-            {games.map((game) => (
+          <div ref={listRef} className={`game-explorer-list${chartSelection ? ' game-explorer-list-compact' : ''}`}
+            tabIndex={0} role="region" aria-label="Games — use arrow keys to navigate and Enter to open" onKeyDown={handleListKey}>
+            {games.map((game) => {
+              const key = `${game.game_id}-${game.player_color}`
+              const highlighted = highlightedKey === key
+              return (
               <button {...pageStyleTarget('gameExplorer.row')} type="button" onClick={() => onOpenGame(game.game_id)} key={`${game.game_id}-${game.player_color}`}
+                data-game-key={key} data-active={highlighted ? 'true' : undefined}
+                className={highlighted ? 'is-highlighted' : undefined} tabIndex={highlighted ? 0 : -1}
+                onPointerMove={event => highlightPointerRow(event, key)} onFocus={() => setHighlightedKey(key)}
                 title={selection.scope === 'blunders' && game.blunder_count != null ? `Blunders: ${game.blunder_count}`
                   : selection.scope === 'unexpected_endings' && game.final_player_cp != null
                     ? `Final position: ${game.final_player_cp > 0 ? '+' : ''}${game.final_player_cp} cp (${playerName}'s perspective)`
@@ -204,7 +287,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
                   aria-label={`Player color: ${game.player_color || 'unknown'}`}
                   title={`Player color: ${game.player_color || 'unknown'}`} />
               </button>
-            ))}
+            )})}
             <div ref={paginationSentinel} className="game-explorer-pagination">
               {request.error ? <>
                 <p {...pageStyleTarget('gameExplorer.text')} role="alert">{request.error}</p>

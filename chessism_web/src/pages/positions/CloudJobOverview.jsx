@@ -19,22 +19,26 @@ export default function CloudJobOverview({ job, active, onOpenReport }) {
     : [...job.runs].reverse().find(run => run.vm_statuses?.length)
   return <>
     <header {...pageStyleTarget('cloud.job.summary')} className="cloud-job-part cloud-job-heading" aria-label="Cloud job selection">
-      <div className="cloud-job-kind">
-        <strong {...pageStyleTarget('cloud.job.backend')} className="cloud-job-badge">{backend}</strong>
-        <span aria-hidden="true">→</span>
-        <strong {...pageStyleTarget('cloud.job.mode')} className="cloud-job-badge">{selectionLabel}</strong>
+      <div className="cloud-job-summary-row">
+        <div {...pageStyleTarget('cloud.job.kind')} className="cloud-job-kind">
+          <span className="cloud-job-kind-items">
+            <strong {...pageStyleTarget('cloud.job.backend')} className="cloud-job-badge">{backend}</strong>
+            <span {...pageStyleTarget('cloud.job.arrow')} aria-hidden="true">→</span>
+            <strong {...pageStyleTarget('cloud.job.mode')} className="cloud-job-badge">{selectionLabel}</strong>
+          </span>
+        </div>
+        <div {...pageStyleTarget('cloud.job.total-row')} className="cloud-job-total">
+          <strong {...pageStyleTarget('cloud.job.total')} className="cloud-job-badge cloud-job-count"
+            title="Total FENs" aria-label={`Total FENs: ${number(job.target)}`}>{number(job.target)}</strong>
+        </div>
       </div>
       {combined ? <ul className="cloud-job-players">{combined.players.map(player => <li key={player}>
         <span {...pageStyleTarget('cloud.job.player')} className="cloud-job-badge">{player}</span>
-        <strong {...pageStyleTarget('cloud.job.count')} className="cloud-job-badge" title={playerCountNote}>
+        <strong {...pageStyleTarget('cloud.job.count')} className="cloud-job-badge cloud-job-count" title={playerCountNote}>
           {number(combined.player_fen_previews?.[player])}
         </strong>
       </li>)}</ul> : job.selection.player_name && <span {...pageStyleTarget('cloud.job.player')}
         className="cloud-job-badge">{job.selection.player_name}</span>}
-      <div className="cloud-job-total">
-        <strong {...pageStyleTarget('label')}>Total FENs</strong>
-        <strong {...pageStyleTarget('cloud.job.total')} className="cloud-job-badge">{number(job.target)}</strong>
-      </div>
     </header>
     <section {...pageStyleTarget('cloud.job.progress')} className="cloud-job-part cloud-job-progress" aria-label="Cloud progress and process steps">
       <CloudFenProgress job={job} />

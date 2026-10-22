@@ -6,6 +6,7 @@ import './research/researchHub.css'
 
 const RESEARCH_AREAS = [
   {
+    id: 'coefficient',
     href: '/research/chessism-coefficient',
     eyebrow: 'ACCURACY MODEL',
     title: 'Accuracy coefficient',
@@ -13,6 +14,7 @@ const RESEARCH_AREAS = [
     action: 'Open coefficient research',
   },
   {
+    id: 'matrices',
     href: '/research/matrices',
     eyebrow: 'DATASETS',
     title: 'Matrices constructor',
@@ -20,6 +22,7 @@ const RESEARCH_AREAS = [
     action: 'Open matrix constructor',
   },
   {
+    id: 'algorithms',
     href: '/research/algorithms',
     eyebrow: 'CALCULATIONS',
     title: 'Algorithm creation',
@@ -27,6 +30,7 @@ const RESEARCH_AREAS = [
     action: 'Open algorithm creation',
   },
   {
+    id: 'salience',
     href: '/research/salience',
     eyebrow: 'SIMILARITY',
     title: 'Game salience',
@@ -42,18 +46,18 @@ export default function Research() {
       <div className="home-shell">
         <Header />
         <main className="research-hub-main">
-          <section {...pageStyleTarget('panel')} className="research-hub-hero">
-            <p {...pageStyleTarget('text')} className="eyebrow">SUPERUSER RESEARCH</p>
-            <h1 {...pageStyleTarget('heading')}>Research</h1>
-            <p {...pageStyleTarget('text')}>Build reproducible experiments and datasets without changing production analysis.</p>
+          <section {...pageStyleTarget('intro.panel')} className="research-hub-hero">
+            <p {...pageStyleTarget('intro.eyebrow')} className="eyebrow">SUPERUSER RESEARCH</p>
+            <h1 {...pageStyleTarget('intro.heading')}>Research</h1>
+            <p {...pageStyleTarget('intro.text')}>Build reproducible experiments and datasets without changing production analysis.</p>
           </section>
           <section {...pageStyleTarget('areas.panel')} className="research-hub-grid" aria-label="Research areas">
             {RESEARCH_AREAS.map((area) => (
-              <a {...pageStyleTarget('link')} className="research-hub-card" href={area.href} key={area.href}>
-                <span className="eyebrow">{area.eyebrow}</span>
-                <h2 {...pageStyleTarget('title')}>{area.title}</h2>
-                <p {...pageStyleTarget('text')}>{area.description}</p>
-                <strong {...pageStyleTarget('value')}>{area.action} →</strong>
+              <a {...pageStyleTarget(`area.${area.id}.panel`)} className="research-hub-card" href={area.href} key={area.href}>
+                <span {...pageStyleTarget(`area.${area.id}.eyebrow`)} className="eyebrow">{area.eyebrow}</span>
+                <h2 {...pageStyleTarget(`area.${area.id}.title`)}>{area.title}</h2>
+                <p {...pageStyleTarget(`area.${area.id}.text`)}>{area.description}</p>
+                <strong {...pageStyleTarget(`area.${area.id}.action`)}>{area.action} →</strong>
               </a>
             ))}
           </section>

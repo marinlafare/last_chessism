@@ -17,7 +17,15 @@ export default function PlayerAnalysisDisclosure({ label, children, buttonTarget
         <button {...pageStyleTarget(buttonTarget)} type="button" className="player-analysis-disclosure-toggle"
           id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} disabled={disabled || loading}
           aria-busy={loading || undefined}
-          onClick={() => { setVisited(true); setOpen(value => !value) }}>
+          onClick={event => { event.currentTarget.focus({ preventScroll: true }); setVisited(true); setOpen(value => !value) }}
+          onKeyDown={event => {
+            if (!open || !['player.opponents.toggle', 'player.openings.toggle'].includes(buttonTarget)
+              || !['ArrowUp', 'ArrowDown'].includes(event.key)) return
+            event.preventDefault()
+            const list = document.getElementById(`${id}-content`)?.querySelector('.player-game-catalog-rows')
+            list?.focus({ preventScroll: true })
+            list?.dispatchEvent(new KeyboardEvent('keydown', { key: event.key, bubbles: true, cancelable: true }))
+          }}>
           <span>{label}</span>
           {loading ? <i className="player-analysis-disclosure-spinner" aria-hidden="true" />
             : <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>}

@@ -1,0 +1,105 @@
+{
+  "families": {
+    "homeGames": [{
+      "kind": "svg",
+      "marks": [".home-games-bar", ".home-games-scored-bar"],
+      "hover": [".home-games-player:is(:hover,:focus-visible) .home-games-bar"]
+    }, {
+      "kind": "svg",
+      "hoverColorProperty": "scoredBarHoverColor",
+      "hoverBorderProperty": "scoredBarHoverBorder",
+      "marks": [],
+      "hover": [".home-games-scored-bar:hover", ".home-games-player:focus-visible .home-games-scored-bar"]
+    }],
+    "bars": [{
+      "kind": "svg",
+      "marks": [":is(.commonness-bar,.repetition-bar,.less-common-bar,.home-games-bar,.home-games-scored-bar,.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss,.rating-distribution-bar,.score-distribution-bar,.blunder-distribution-bar,.measure-hour-bar)"],
+      "hover": [
+        ":is(.commonness-column,.less-common-column,.home-games-player,.behavior-results-column,.score-distribution-column,.blunder-distribution-column,g[role=button]):is(:hover,:focus-visible) :is(.commonness-bar,.repetition-bar,.less-common-bar,.home-games-bar,.home-games-scored-bar,.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss,.score-distribution-bar,.blunder-distribution-bar)",
+        ":is(.rating-distribution-bar,.measure-hour-bar,.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss):is(:hover,:focus-visible,.active)",
+        "g:has(> .behavior-bar-hitbox:is(:hover,:focus-visible)) > :is(.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss)"
+      ]
+    }],
+    "htmlBars": [{
+      "kind": "html",
+      "marks": [":is(.analytics-bar-fill,.mode-moves-chart-bar,.coverage-bar-fill,.scored-summary-fill,.unexpected-ending-segment,.wl-fill-win,.wl-fill-draw,.wl-fill-loss,.wins,.draws,.losses)", ".rating-distribution-zoom-track > i"],
+      "hover": [
+        ":is(.analytics-bar-col,.mode-moves-chart-col,.coverage-bar-row,.scored-summary-row,.rating-distribution-zoom-column):is(:hover,:focus-visible,:focus-within) :is(.analytics-bar-fill,.mode-moves-chart-bar,.coverage-bar-fill,.scored-summary-fill,i)",
+        ":is(.unexpected-ending-segment,.wl-fill-win,.wl-fill-draw,.wl-fill-loss,.wins,.draws,.losses):is(:hover,:focus-visible)"
+      ]
+    }],
+    "points": [{
+      "kind": "svg",
+      "marks": [":is(.measure-daily-efficiency-point,.main-character-scatter-point,.scatter-point,.coefficient-point,.behavior-rating-point)", ".rating-scatter-chart circle"],
+      "hover": [":is(.measure-daily-efficiency-point,.main-character-scatter-point,.scatter-point,.coefficient-point,.behavior-rating-point):is(:hover,:focus-visible,.active)", ".rating-scatter-chart circle:hover"]
+    }],
+    "lines": [{
+      "kind": "line",
+      "marks": [":is(.behavior-rating-line,.coefficient-line,.coefficient-baseline)"],
+      "hover": [":is(.behavior-rating-line,.coefficient-line,.coefficient-baseline):hover"]
+    }],
+    "pies": [{
+      "kind": "svg",
+      "marks": ["[data-circle-slice]", ".home-summary-slice", ".player-coverage-slice"],
+      "hover": ["[data-circle-slice]:is(:hover,:focus-visible)", ".home-summary-slice:is(:hover,:focus-visible)", ".player-coverage-slice:is(:hover,:focus-visible)"]
+    }, {
+      "kind": "outline",
+      "marks": [".appearance-circle-outline"],
+      "hover": ["&:is(:hover,:focus-within) .appearance-circle-outline"]
+    }],
+    "slice": [{
+      "kind": "svg",
+      "marks": ["&"],
+      "hover": ["&:is(:hover,:focus-visible)"]
+    }],
+    "individualBar": [{
+      "kind": "svg",
+      "marks": [".less-common-bar"],
+      "hover": ["&:is(:hover,:focus-visible) .less-common-bar"]
+    }],
+    "research": [{
+      "kind": "svg",
+      "marks": ["& circle", "& rect"],
+      "hover": ["& circle:hover", "& rect:hover"]
+    }, {
+      "kind": "line",
+      "marks": ["& polyline"],
+      "hover": ["& polyline:hover"]
+    }],
+    "track": [{
+      "kind": "html",
+      "marks": [".scored-summary-fill", ".coverage-bar-fill"],
+      "hover": ["&:hover .scored-summary-fill", "&:hover .coverage-bar-fill", ".scored-summary-row:is(:hover,:focus-visible) > & .scored-summary-fill"]
+    }],
+    "heatmap": [{
+      "kind": "html",
+      "marks": [".heat-cell", ".behavior-weekday-hour > i", ".behavior-weekday-wide-bar > i"],
+      "hover": [".heat-cell:hover", ".behavior-weekday-hour:is(:hover,:focus-visible) > i", ".behavior-weekday-curtain:is(:hover,:focus-visible) .behavior-weekday-wide-bar > i"]
+    }],
+    "storage": [{
+      "kind": "html",
+      "marks": ["&"],
+      "hover": ["&:hover", ".backup-volume-region:is(:hover,:focus-visible) &"]
+    }],
+    "catalog": [{
+      "kind": "html",
+      "marks": [".player-game-catalog-result-bar > i"],
+      "hover": [".player-game-catalog-result-bar > i:hover"]
+    }]
+  },
+  "groups": [
+    {"targets": ["summary.games"], "families": ["homeGames"], "container": true},
+    {"targets": ["chart.bars", "chart.pending", "chart.appearances", "chart.outcomes", "chart.results", "chart.measures", "repeated.outline", "player.scores.chart", "player.accuracyDistribution.chart", "player.endings.card"], "families": ["bars", "htmlBars"], "container": true},
+    {"targets": ["chart.coverage", "player.coverage.games", "player.coverage.positions"], "families": ["pies", "htmlBars", "track"], "container": true},
+    {"targets": ["chart.ratingGroups", "chart.accuracy", "chart.bubbles"], "families": ["points"], "container": true},
+    {"targets": ["chart.ratingModes", "chart.coefficients"], "families": ["points", "lines"], "container": true},
+    {"targets": ["chart.research"], "families": ["research"], "container": true},
+    {"targets": ["unique.outline", "coverage.outline", "summary.positions"], "families": ["pies"], "container": true},
+    {"targets": ["unique.slice", "nonunique.slice", "coverage.scored", "coverage.unscored", "summary.titled", "summary.other"], "families": ["slice"], "container": false},
+    {"targets": ["slice.2", "slice.3", "slice.4", "slice.5", "slice.6", "slice.7", "slice.8", "slice.9", "slice.10"], "families": ["individualBar"], "container": false},
+    {"targets": ["metric.unscored_positions", "metric.scored_positions", "metric.games", "metric.unscored_games"], "families": ["track"], "container": true},
+    {"targets": ["chart.heatmap", "player.days.row"], "families": ["heatmap"], "container": true},
+    {"targets": ["storage.disk", "storage.allocation", "storage.used", "storage.reserve", "storage.other", "storage.free"], "families": ["storage"], "container": true},
+    {"targets": ["player.opponents.row", "player.openings.row"], "families": ["catalog"], "container": false}
+  ]
+}

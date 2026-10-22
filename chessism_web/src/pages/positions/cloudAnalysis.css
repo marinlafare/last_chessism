@@ -22,9 +22,10 @@
 .cloud-selection--pending { border: 1px dashed #526669; background: #172322; }
 .cloud-selection--pending > .btn:disabled { opacity: .55; cursor: not-allowed; }
 .cloud-pending-notice { align-self: flex-start; padding: .35rem .65rem; border-radius: 6px; background: #283a3c; color: #c5d2d4; }
-.cloud-fen-progress { display: flex; flex-direction: column; gap: .5rem; }
+.cloud-fen-progress { display: flex; flex-direction: column; gap: .5rem; min-width: 0; box-sizing: border-box; }
 .cloud-fen-count { display: flex; justify-content: space-between; gap: .5rem; }
-.cloud-fen-label { display: inline-flex; align-items: center; gap: .7rem; }
+.cloud-fen-label { display: inline-flex; align-items: center; gap: .7rem; flex: 1; min-width: 0; }
+.cloud-fen-label > [data-style-id] { flex: 1; min-width: 0; }
 .cloud-job-indicator { display: inline-block; flex: 0 0 14px; width: 14px; height: 14px; border-radius: 50%; background: #94a3b8; }
 .cloud-job-indicator--running { background: #ff922b; box-shadow: 0 0 8px 2px #ff922b80; animation: cloud-job-glow 2s ease-in-out infinite; }
 .cloud-job-indicator--success { background: #4ade80; box-shadow: 0 0 8px 2px #4ade8066; }
@@ -35,23 +36,32 @@
   50% { box-shadow: 0 0 14px 4px #ff922b99; }
 }
 @media (prefers-reduced-motion: reduce) { .cloud-job-indicator--running { animation: none; } }
-.cloud-fen-progress { --cloud-progress-color: #9c7ab4; }
-.cloud-fen-progress--cycle { --cloud-progress-color: #5e9bce; padding-left: .75rem; border-left: 2px solid #5e9bce; }
-.cloud-fen-progress progress { appearance: none; width: 100%; height: 16px; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: var(--cloud-progress-color); }
-.cloud-fen-progress progress::-webkit-progress-bar { background: #283a3c; }
-.cloud-fen-progress progress::-webkit-progress-value { background: var(--cloud-progress-color); }
-.cloud-fen-progress progress::-moz-progress-bar { background: var(--cloud-progress-color); }
+.cloud-fen-progress { --cloud-progress-default: #9c7ab4; }
+.cloud-fen-progress--cycle { --cloud-progress-default: #5e9bce; --cloud-cycle-divider-color: #5e9bce; --cloud-cycle-divider-hover-color: var(--cloud-cycle-divider-color); --cloud-cycle-divider-width: 2px; position: relative; padding-left: calc(.75rem + var(--cloud-cycle-divider-width)); }
+/* The divider is independent of both the container rim and the bar fill. */
+.cloud-fen-progress--cycle::before { content: ''; position: absolute; inset: 0 auto 0 0; width: var(--cloud-cycle-divider-width); background: var(--cloud-cycle-divider-color); pointer-events: none; }
+.cloud-fen-progress--cycle:hover::before { background: var(--cloud-cycle-divider-hover-color); }
+.cloud-fen-progress progress { --chart-color-1: var(--cloud-progress-default); --bar-hover-color: var(--chart-color-1); --summary-bar-height: 16px; --cloud-progress-fill: var(--chart-color-1); appearance: none; width: 100%; height: var(--summary-bar-height); box-sizing: border-box; border: 0; border-radius: 8px; overflow: hidden; background: #283a3c; accent-color: var(--cloud-progress-fill); }
+.cloud-fen-progress progress:hover { --cloud-progress-fill: var(--bar-hover-color, var(--chart-color-1, var(--cloud-progress-default))); }
+.cloud-fen-progress progress::-webkit-progress-bar { background: transparent; border-radius: inherit; }
+.cloud-fen-progress progress::-webkit-progress-value { background: var(--cloud-progress-fill); }
+.cloud-fen-progress progress::-moz-progress-bar { background: var(--cloud-progress-fill); }
 .cloud-selection .btn { margin-top: auto; }
 .cloud-job { margin-top: 1rem; }
 .cloud-job progress { width: 100%; }
 .cloud-job small { overflow-wrap: anywhere; }
 .cloud-job-part { min-width: 0; padding: 1rem; border: 1px solid #2c4348; border-radius: 8px; background: #10191f; }
-.cloud-job-heading { display: flex; flex-direction: column; gap: .75rem; overflow-wrap: anywhere; }
-.cloud-job-kind { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: .6rem; }
+.cloud-job-heading { display: flex; flex-direction: column; gap: .75rem; overflow-wrap: anywhere; text-align: left; }
+.cloud-job-summary-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .75rem; min-width: 0; }
+.cloud-job-kind { min-width: 0; }
+.cloud-job-kind-items { display: inline-flex; flex-wrap: wrap; align-items: center; gap: .6rem; max-width: 100%; vertical-align: top; }
 .cloud-job-badge { display: flex; align-items: center; justify-content: center; min-width: 0; padding: .45rem .75rem; border: 1px solid #35525a; border-radius: 6px; background: #1b2c2b; text-align: center; font-variant-numeric: tabular-nums; }
+.cloud-job-heading .cloud-job-badge { display: block; text-align: inherit; }
+.cloud-job-heading .cloud-job-count { text-align: right; }
 .cloud-job-players { display: grid; gap: .5rem; margin: 0; padding: 0; list-style: none; }
-.cloud-job-players li, .cloud-job-total { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, auto); align-items: center; gap: .65rem; }
-.cloud-job-total { padding-top: .75rem; border-top: 1px solid #2c4348; text-align: center; }
+.cloud-job-players li { display: grid; grid-template-columns: minmax(0, 1fr) minmax(7rem, auto); align-items: center; gap: .65rem; }
+.cloud-job-total { min-width: 0; }
+.cloud-job-total .cloud-job-count { white-space: nowrap; }
 .cloud-job-progress { display: flex; flex-direction: column; gap: 1.25rem; }
 .cloud-job-controls { display: flex; flex-direction: column; gap: .75rem; }
 .cloud-job-stop, .cloud-job-dismiss { width: 100%; padding: .85rem; border: 1px solid #824a45; border-radius: 8px; background: #442824; color: inherit; font: inherit; cursor: pointer; }

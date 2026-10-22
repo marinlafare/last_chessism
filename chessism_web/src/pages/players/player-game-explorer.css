@@ -194,12 +194,14 @@
   cursor: pointer;
 }
 
-.game-explorer-list > button:hover,
-.game-explorer-list > button:focus-visible {
+.game-explorer-list > button.is-highlighted {
   border-color: rgba(21, 199, 128, 0.7);
   background: rgba(21, 199, 128, 0.06);
   outline: none;
 }
+
+.game-explorer-list:focus-visible { outline: 1px solid var(--accent); outline-offset: -3px; }
+.game-explorer-modal:focus { outline: none; }
 
 .game-explorer-list-compact > button {
   grid-template-columns: 32px max-content minmax(0, 1fr) minmax(44px, auto) 22px;

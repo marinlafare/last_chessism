@@ -31,6 +31,7 @@
     "heading": {
       "label": "Page heading",
       "properties": [
+        "background",
         "color",
         "fontSize",
         "fontFamily",
@@ -40,6 +41,7 @@
     "title": {
       "label": "Section titles",
       "properties": [
+        "background",
         "color",
         "fontSize",
         "fontFamily",
@@ -49,6 +51,7 @@
     "text": {
       "label": "Body text",
       "properties": [
+        "background",
         "color",
         "fontSize",
         "fontFamily",
@@ -58,6 +61,7 @@
     "label": {
       "label": "Field labels",
       "properties": [
+        "background",
         "color",
         "fontSize",
         "fontFamily",
@@ -67,6 +71,7 @@
     "value": {
       "label": "Metric values",
       "properties": [
+        "background",
         "color",
         "fontSize",
         "fontFamily",
@@ -106,6 +111,12 @@
     "link": {
       "label": "Links on this page",
       "properties": [
+        "background",
+        "hoverBackground",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
         "color",
         "fontSize",
         "fontFamily",
@@ -203,9 +214,14 @@
       ],
       "targets": {
         "overview.layout": {
-          "label": "First row spacing",
-          "properties": ["homeTopMargin"]
+          "label": "First row background and spacing",
+          "properties": ["homeTopMargin", "background", "hoverBackground", "radius", "padding"]
         },
+        "overview.minimize": {"label":"Overview minimize icons","properties":["background","color","borderColor","borderWidth","radius","hoverBackground","hoverColor"]},
+        "overview.restore": {"label":"Collapsed overview buttons","properties":["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]},
+        "player.compare.toggle": {"label":"Compare button","initialStyleFrom":"player.analysis.toggle","properties":["background","color","fontSize","fontFamily","textAlign","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]},
+        "player.compare.panel": {"label":"Compare container","properties":["background","borderColor","borderWidth","radius","padding"]},
+        "player.compare.text": {"label":"Compare placeholder","properties":["background","color","fontSize","fontFamily","textAlign"]},
         "summary.panel": {
           "label": "Database summary",
           "editorParent": "overview.layout",
@@ -237,9 +253,9 @@
         },
         "summary.games": {
           "label": "Games chart colors and border",
-          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth", "barHoverColor", "barHoverBorder"],
+          "properties": ["chartColor1", "chartColor2", "chartColor3", "chartColor4", "stroke", "strokeWidth", "barHoverColor", "barHoverBorder", "scoredBarHoverColor", "scoredBarHoverBorder"],
           "hiddenProperties": ["chartColor3", "chartColor4"],
-          "propertyLabels": {"chartColor1": "Total games", "chartColor2": "Scored games", "stroke": "Bar border", "barHoverColor": "Bar hover color", "barHoverBorder": "Bar hover border"}
+          "propertyLabels": {"chartColor1": "Total games", "chartColor2": "Scored games", "stroke": "Bar border", "barHoverColor": "Total games hover fill", "barHoverBorder": "Total games hover border"}
         },
         "characters.panel": {
           "label": "Player rankings",
@@ -279,6 +295,7 @@
         },
         "gameExplorer.row": {
           "label": "Game list · game buttons and text",
+          "hoverState": "[data-active=\"true\"]",
           "properties": ["color","fontSize","fontFamily","textAlign","hoverColor","background","hoverBackground","borderColor","borderWidth","radius","padding"]
         },
         "gameExplorer.dateBadge": {
@@ -418,6 +435,7 @@
           "editorParent": "player.days.row",
           "properties": ["background","color","fontSize","fontFamily","borderColor","radius"]
         },
+        "player.days.count": {"label":"Days · game-count badges","initialStyleFrom":"value","properties":["background","color","fontSize","fontFamily","borderColor","borderWidth","radius"]},
         "player.opponents.toggle": {
           "label": "Behavioral analysis · Opponents button",
           "initialStyleFrom": "button",
@@ -430,6 +448,7 @@
         },
         "player.opponents.row": {
           "label": "Opponents · rows",
+          "hoverState": "[data-active=\"true\"]",
           "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
         },
         "player.opponents.text": {
@@ -468,6 +487,7 @@
         },
         "player.openings.row": {
           "label": "Opening repertoire · rows",
+          "hoverState": "[data-active=\"true\"]",
           "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
         },
         "player.openings.text": {
@@ -769,9 +789,12 @@
     "system_status": {
       "label": "System Status",
       "routes": [
-        "/system_status"
+        "/system_status",
+        "/analyze_times"
       ],
       "targets": {
+        "times.panel": {"label":"Timing container","properties":["background","borderColor","borderWidth","radius","padding"]},
+        "times.toggle": {"label":"Times button","properties":["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]},
         "local.panel": {
           "label": "Local system status",
           "properties": [
@@ -927,11 +950,78 @@
         },
         "cloud.job.summary": {
           "label": "Cloud progress · general data container",
-          "properties": ["background","borderColor","borderWidth","radius","padding"]
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.job.kind": {
+          "label": "Cloud progress · backend and selection row", "editorParent": "cloud.job.summary",
+          "propertyLabels": {"textAlign": "Row alignment"},
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","textAlign"]
+        },
+        "cloud.job.arrow": {
+          "label": "Cloud progress · selection arrow", "editorParent": "cloud.job.kind",
+          "properties": ["color","hoverColor","fontSize","fontFamily"]
+        },
+        "cloud.job.total-row": {
+          "label": "Cloud progress · total FEN row", "editorParent": "cloud.job.summary",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","textAlign"]
+        },
+        "cloud.job.total-label": {
+          "label": "Cloud progress · Total FENs label", "initialStyleFrom": "label", "editorParent": "cloud.job.total-row",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign","borderColor","borderWidth","radius","padding"]
         },
         "cloud.job.progress": {
           "label": "Cloud progress · bars and process container",
-          "properties": ["background","borderColor","borderWidth","radius","padding"]
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.progress.overall": {
+          "label": "Overall progress · container", "editorParent": "cloud.job.progress",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","textAlign"]
+        },
+        "cloud.progress.overall.title": {
+          "label": "Overall progress · title", "initialStyleFrom": "label", "editorParent": "cloud.progress.overall",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.overall.count": {
+          "label": "Overall progress · FEN counts", "editorParent": "cloud.progress.overall",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.overall.percentage": {
+          "label": "Overall progress · percentage", "initialStyleFrom": "value", "editorParent": "cloud.progress.overall",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.overall.bar": {
+          "label": "Overall progress · bar", "editorParent": "cloud.progress.overall",
+          "propertyLabels": {"chartColor1":"Completed fill","barHoverColor":"Hover completed fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.progress.overall.status": {
+          "label": "Overall progress · current process", "initialStyleFrom": "text", "editorParent": "cloud.progress.overall",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.cycle": {
+          "label": "Cycle progress · container", "editorParent": "cloud.job.progress",
+          "properties": ["cycleDividerColor","cycleDividerHoverColor","cycleDividerWidth","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","textAlign"]
+        },
+        "cloud.progress.cycle.title": {
+          "label": "Cycle progress · title", "initialStyleFrom": "label", "editorParent": "cloud.progress.cycle",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.cycle.count": {
+          "label": "Cycle progress · FEN counts", "editorParent": "cloud.progress.cycle",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.cycle.percentage": {
+          "label": "Cycle progress · percentage", "initialStyleFrom": "value", "editorParent": "cloud.progress.cycle",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "cloud.progress.cycle.bar": {
+          "label": "Cycle progress · bar", "editorParent": "cloud.progress.cycle",
+          "propertyLabels": {"chartColor1":"Completed fill","barHoverColor":"Hover completed fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.progress.cycle.status": {
+          "label": "Cycle progress · current process", "initialStyleFrom": "text", "editorParent": "cloud.progress.cycle",
+          "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.job.vms": {
           "label": "Cloud progress · VM container",
@@ -959,23 +1049,28 @@
         },
         "cloud.job.backend": {
           "label": "Cloud progress · backend badge",
-          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+          "editorParent": "cloud.job.kind",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.job.mode": {
           "label": "Cloud progress · selection badge",
-          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+          "editorParent": "cloud.job.kind",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.job.player": {
           "label": "Cloud progress · player badges",
-          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+          "editorParent": "cloud.job.summary",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.job.count": {
           "label": "Cloud progress · player FEN count badges",
-          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+          "editorParent": "cloud.job.summary",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.job.total": {
           "label": "Cloud progress · total FEN count badge",
-          "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily"]
+          "editorParent": "cloud.job.total-row",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "cloud.step.number": {
           "label": "Cloud progress · process number badges",
@@ -1141,6 +1236,11 @@
             "padding"
           ]
         },
+        "local.panel.body": {
+          "label": "Local · expanded content",
+          "editorParent": "local.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
         "local.selection": {
           "label": "Local FEN selection",
           "properties": [
@@ -1152,14 +1252,104 @@
           ]
         },
         "cloud.panel": {
-          "label": "Cloud analysis",
+          "label": "GCloud · outer container",
           "properties": [
             "background",
+            "hoverBackground",
             "borderColor",
+            "hoverBorderColor",
             "borderWidth",
             "radius",
             "padding"
           ]
+        },
+        "cloud.panel.body": {
+          "label": "GCloud · expanded content", "editorParent": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.content": {
+          "label": "GCloud · configuration and progress container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.panel": {
+          "label": "Cloud Run · outer container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.panel.body": {
+          "label": "Cloud Run · expanded content", "editorParent": "cloud.run.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.panel": {
+          "label": "Batch Spot · outer container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.panel.body": {
+          "label": "Batch Spot · expanded content", "editorParent": "cloud.batch.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.single.panel": {
+          "label": "Batch Spot · One process container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.single.panel.body": {
+          "label": "Batch Spot · One process expanded content", "editorParent": "cloud.single.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.combined.panel": {
+          "label": "Batch Spot · Combined container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.combined.panel.body": {
+          "label": "Batch Spot · Combined expanded content", "editorParent": "cloud.combined.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.single.panel": {
+          "label": "Cloud Run · One process container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.single.panel.body": {
+          "label": "Cloud Run · One process expanded content", "editorParent": "cloud.run.single.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.combined.panel": {
+          "label": "Cloud Run · Combined container", "initialStyleFrom": "cloud.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.combined.panel.body": {
+          "label": "Cloud Run · Combined expanded content", "editorParent": "cloud.run.combined.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.selection": {
+          "label": "Cloud Run · One process FEN selection", "initialStyleFrom": "cloud.selection",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.selection": {
+          "label": "Batch Spot · One process FEN selection", "initialStyleFrom": "cloud.selection",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.draft": {
+          "label": "Cloud Run · Combined builder", "initialStyleFrom": "cloud.draft",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.draft": {
+          "label": "Batch Spot · Combined builder", "initialStyleFrom": "cloud.draft",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.draft.selection": {
+          "label": "Cloud Run · Combined step FEN selection", "initialStyleFrom": "cloud.selection",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.draft.selection": {
+          "label": "Batch Spot · Combined step FEN selection", "initialStyleFrom": "cloud.selection",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.run.draft.group": {
+          "label": "Cloud Run · Combined group data", "initialStyleFrom": "card",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "cloud.batch.draft.group": {
+          "label": "Batch Spot · Combined group data", "initialStyleFrom": "card",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
         },
         "cloud.selection": {
           "label": "Cloud job configuration",
@@ -1173,9 +1363,12 @@
         },
         "cloud.job": {
           "label": "Cloud job progress",
+          "initialStyleFrom": "card",
           "properties": [
             "background",
+            "hoverBackground",
             "borderColor",
+            "hoverBorderColor",
             "borderWidth",
             "radius",
             "padding"
@@ -1217,13 +1410,150 @@
       "routes": [
         "/scored_positions"
       ],
-      "targets": {}
+      "targets": {
+        "layout.top": {"label":"Positions first-row background","properties":["background","hoverBackground","borderColor","borderWidth","radius","padding"]},
+        "details.panel": {"label":"Chart details popup","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "details.toggle": {"label":"Chart details button","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "commonness.paging": {"label":"Commonness paging background","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "explorer.close": {"label":"Position list close button","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "explorer.paging": {"label":"Position list paging buttons","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "rating.toggle": {
+          "label": "Rating groups button",
+          "initialStyleFrom": "chart.disclosure",
+          "editorParent": "chart.disclosure",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding",
+            "color",
+            "hoverColor",
+            "fontSize",
+            "fontFamily",
+            "textAlign"
+          ]
+        },
+        "rating.content": {
+          "label": "Rating groups content background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "rating.toolbar": {
+          "label": "Rating groups toolbar background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "rating.refresh": {
+          "label": "Rating groups refresh button",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding",
+            "color",
+            "hoverColor",
+            "fontSize",
+            "fontFamily"
+          ]
+        },
+        "appearance.tabs": {
+          "label": "Positions tab strip background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "appearance.uniqueness.panel": {
+          "label": "Uniqueness tab background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "appearance.commonness.panel": {
+          "label": "Commonness tab background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "appearance.unscored.panel": {
+          "label": "Unscored tab background",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "unscored.panel": {
+          "label": "Unscored chart container",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "borderColor",
+            "borderWidth",
+            "radius",
+            "padding"
+          ]
+        },
+        "unscored.title": {
+          "label": "Unscored chart heading",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "color",
+            "fontSize",
+            "fontFamily",
+            "textAlign"
+          ]
+        },
+        "unscored.axisTitle": {
+          "label": "Unscored X-axis title",
+          "properties": [
+            "background",
+            "hoverBackground",
+            "color",
+            "fontSize",
+            "fontFamily",
+            "textAlign"
+          ]
+        }
+      }
     },
     "analyze_times": {
       "label": "Analyze Times",
-      "routes": [
-        "/analyze_times"
-      ],
+      "routes": [],
       "targets": {
         "summary.panel": {
           "label": "Analysis timing summary",
@@ -1263,6 +1593,30 @@
         "/research"
       ],
       "targets": {
+        "intro.panel": {"label":"Research introduction background","initialStyleFrom":"panel","properties":["background","borderColor","borderWidth","radius","padding"]},
+        "intro.eyebrow": {"label":"Research introduction eyebrow","initialStyleFrom":"text","editorParent":"intro.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "intro.heading": {"label":"Research introduction title","initialStyleFrom":"heading","editorParent":"intro.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "intro.text": {"label":"Research introduction text","initialStyleFrom":"text","editorParent":"intro.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.coefficient.panel": {"label":"Accuracy coefficient · card background","initialStyleFrom":"link","properties":["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]},
+        "area.coefficient.eyebrow": {"label":"Accuracy coefficient · eyebrow","initialStyleFrom":"text","editorParent":"area.coefficient.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.coefficient.title": {"label":"Accuracy coefficient · title","initialStyleFrom":"title","editorParent":"area.coefficient.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.coefficient.text": {"label":"Accuracy coefficient · text","initialStyleFrom":"text","editorParent":"area.coefficient.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.coefficient.action": {"label":"Accuracy coefficient · action","initialStyleFrom":"value","editorParent":"area.coefficient.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.matrices.panel": {"label":"Matrices · card background","initialStyleFrom":"link","properties":["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]},
+        "area.matrices.eyebrow": {"label":"Matrices · eyebrow","initialStyleFrom":"text","editorParent":"area.matrices.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.matrices.title": {"label":"Matrices · title","initialStyleFrom":"title","editorParent":"area.matrices.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.matrices.text": {"label":"Matrices · text","initialStyleFrom":"text","editorParent":"area.matrices.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.matrices.action": {"label":"Matrices · action","initialStyleFrom":"value","editorParent":"area.matrices.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.algorithms.panel": {"label":"Algorithms · card background","initialStyleFrom":"link","properties":["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]},
+        "area.algorithms.eyebrow": {"label":"Algorithms · eyebrow","initialStyleFrom":"text","editorParent":"area.algorithms.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.algorithms.title": {"label":"Algorithms · title","initialStyleFrom":"title","editorParent":"area.algorithms.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.algorithms.text": {"label":"Algorithms · text","initialStyleFrom":"text","editorParent":"area.algorithms.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.algorithms.action": {"label":"Algorithms · action","initialStyleFrom":"value","editorParent":"area.algorithms.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.salience.panel": {"label":"Salience · card background","initialStyleFrom":"link","properties":["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","hoverBackground","hoverColor"]},
+        "area.salience.eyebrow": {"label":"Salience · eyebrow","initialStyleFrom":"text","editorParent":"area.salience.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.salience.title": {"label":"Salience · title","initialStyleFrom":"title","editorParent":"area.salience.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.salience.text": {"label":"Salience · text","initialStyleFrom":"text","editorParent":"area.salience.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
+        "area.salience.action": {"label":"Salience · action","initialStyleFrom":"value","editorParent":"area.salience.panel","properties":["background","color","fontSize","fontFamily","textAlign"]},
         "areas.panel": {
           "label": "Research areas",
           "properties": [
@@ -1444,6 +1798,9 @@
         "/backups"
       ],
       "targets": {
+        "backup.actions": {"label":"Recovery buttons container","initialStyleFrom":"panel","properties":["background","borderColor","borderWidth","radius","padding"]},
+        "backup.run": {"label":"Backup button","properties":["actionReadyBackground","actionRunningBackground","actionDisabledBackground","color","fontSize","fontFamily","borderColor","borderWidth","radius"]},
+        "backup.test": {"label":"Test backup button","properties":["actionReadyBackground","actionRunningBackground","actionDisabledBackground","color","fontSize","fontFamily","borderColor","borderWidth","radius"]},
         "storage.disk": {
           "label": "Backup volume outline",
           "properties": ["background", "borderColor", "borderWidth", "radius"]
@@ -1565,6 +1922,15 @@
       "label": "Navigation (all pages)",
       "routes": [],
       "targets": {
+        "menu": {"label":"Sidebar button group","initialStyleFrom":"toolbar","properties":["background","hoverBackground","borderColor","borderWidth","radius","padding"]},
+        "item.positions": {"label":"Sidebar · Positions button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.analyze": {"label":"Sidebar · Analyze button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.research": {"label":"Sidebar · Research button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.database": {"label":"Sidebar · Database button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.live": {"label":"Sidebar · Live button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.hegel": {"label":"Sidebar · Hegel button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.backups": {"label":"Sidebar · Backups button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
+        "item.system": {"label":"Sidebar · System Status button","initialStyleFrom":"button","editorParent":"menu","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","borderWidth","radius","padding"]},
         "sidebar": {
           "label": "Sidebar",
           "properties": [

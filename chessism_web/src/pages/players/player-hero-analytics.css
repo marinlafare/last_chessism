@@ -127,7 +127,7 @@
 
 .behavior-weekday-chart {
   --weekday-bin-gap: 3px;
-  --weekday-columns: 10% minmax(0, 1fr) 7rem;
+  --weekday-columns: 10% minmax(0, 1fr) 0.833333%;
   display: grid;
   gap: 10px;
   padding: 14px 16px 16px;
@@ -224,13 +224,15 @@
   text-align: left;
 }
 
+.behavior-weekday-identity { display: grid; gap: 2px; min-width: 0; padding: 0 8px; }
+
 .behavior-weekday-badge {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   align-self: center;
-  height: 75%;
-  margin: 0 10px 0 8px;
+  min-height: 18px;
+  margin: 0;
   border: 1px solid rgba(255, 255, 255, 0.82);
   border-radius: 5px;
   background: #fff;
@@ -247,9 +249,9 @@
   align-items: center;
   justify-content: center;
   align-self: center;
-  height: 75%;
-  margin: 0 8px 0 10px;
-  padding: 0 8px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0 4px;
   border: 1px solid var(--border-soft);
   border-radius: 5px;
   background: #172029;
@@ -316,7 +318,7 @@
 .behavior-weekday-hours {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  gap: var(--weekday-bin-gap);
+  gap: 0;
   height: 100%;
   pointer-events: none;
 }
@@ -329,7 +331,7 @@
   display: block;
   min-width: 0;
   height: 100%;
-  padding: 0;
+  padding: 0 calc(var(--weekday-bin-gap) / 2);
   border: 0;
   background: transparent;
   cursor: pointer;
@@ -389,7 +391,7 @@
 .behavior-weekday-ticks {
   display: grid;
   grid-template-columns: repeat(24, minmax(0, 1fr));
-  gap: var(--weekday-bin-gap);
+  gap: 0;
 }
 
 .behavior-weekday-ticks span {

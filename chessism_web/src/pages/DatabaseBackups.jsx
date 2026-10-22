@@ -147,7 +147,7 @@ export default function DatabaseBackups() {
   useEffect(() => {
     const backupRunning = overview?.status?.status === 'running'
     const restoreRunning = ['queued', 'running'].includes(overview?.restore_test?.status)
-    if (job?.jobId || (!backupRunning && !restoreRunning)) return undefined
+    if ((job?.jobId && !TERMINAL_PHASES.has(job.phase)) || (!backupRunning && !restoreRunning)) return undefined
     let cancelled = false
     const pollOverview = async () => {
       try {
@@ -161,7 +161,7 @@ export default function DatabaseBackups() {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [job?.jobId, loadOverview, overview?.restore_test?.status, overview?.status?.status])
+  }, [job?.jobId, job?.phase, loadOverview, overview?.restore_test?.status, overview?.status?.status])
 
   const startBackup = async () => {
     unlockCompletionAudio(audioContextRef)
@@ -222,6 +222,7 @@ export default function DatabaseBackups() {
   const backups = Array.isArray(overview?.backups) ? overview.backups : []
   const policy = overview?.policy || {}
   const latestBackup = backups[0] || null
+  const latestBackupTested = Boolean(latestBackup?.restore_tested)
   const snapshotNeedsTest = latestBackup?.storage_mode === 'compressed_snapshot_v1' && !latestBackup?.restore_tested
   const trackedJobActive = Boolean(job?.jobId && !TERMINAL_PHASES.has(job.phase))
   const backupActive = Boolean(
@@ -327,33 +328,30 @@ export default function DatabaseBackups() {
       <div className="home-shell">
         <Header />
         <main className="database-backups-main">
-          <section {...pageStyleTarget('panel')} className="database-backups-hero">
-            <div className="section-head">
-              <div>
-                <p {...pageStyleTarget('text')} className="eyebrow">RECOVERY</p>
-                <h1 {...pageStyleTarget('heading')}>Database Backups</h1>
-                <p {...pageStyleTarget('text')} className="database-backups-copy">Matrix and algorithm definitions, plus completed algorithm results, are included inside PostgreSQL. Previews and temporary algorithm inputs create no backup files. Existing legacy matrix snapshots remain protected separately, with unchanged copies reused. The portable FEN-analysis export is updated separately. Only a superuser click starts a backup or restore test.</p>
-              </div>
-              <div className="database-backups-actions">
-                <button {...pageStyleTarget('button')}
-                  className="btn btn-primary btn-inline"
+          <section {...pageStyleTarget('backup.actions')} className="database-backups-hero database-backups-actions" aria-label="Database recovery actions">
+                <button {...pageStyleTarget('backup.run')}
+                  className="database-backup-action"
+                  data-running={backupActive ? 'true' : undefined}
+                  aria-busy={backupActive}
                   type="button"
                   disabled={active || !storage.available || storage.error || snapshotNeedsTest}
                   onClick={startBackup}
                 >
-                  {backupActive ? 'Backup running' : 'Backup database'}
+                  Backup
                 </button>
-                <button {...pageStyleTarget('button')}
-                  className="btn btn-inline"
+                <button {...pageStyleTarget('backup.test')}
+                  className="database-backup-action"
+                  data-running={restoreActive ? 'true' : undefined}
+                  aria-busy={restoreActive}
                   type="button"
-                  disabled={active || !storage.available || !latestBackup}
+                  disabled={active || !storage.available || Boolean(storage.error) || !latestBackup || latestBackupTested}
+                  title={latestBackupTested ? 'The latest backup has already passed its restore test.' : 'Test the latest backup.'}
                   onClick={startRestoreTest}
                 >
-                  {restoreActive ? 'Test running' : 'Test backup'}
+                  Test backup
                 </button>
-              </div>
-            </div>
-
+          </section>
+          {(error || !storage.available || storage.error || policy.migration_required || snapshotNeedsTest) && <div role="status">
             {error ? <div className="status-banner warn">{error}</div> : null}
             {!storage.available ? <div className="status-banner warn">{storage.error || 'Dedicated backup volume unavailable.'}</div> : null}
             {storage.available && storage.error ? <div className="status-banner warn">{storage.error}</div> : null}
@@ -363,7 +361,7 @@ export default function DatabaseBackups() {
               </div>
             ) : null}
             {snapshotNeedsTest ? <div className="status-banner">Test the new compressed snapshot before replacing the previous backup.</div> : null}
-          </section>
+          </div>}
 
           <section {...pageStyleTarget('storage.panel')} className="database-backups-panel">
             <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">STORAGE</p><h2 {...pageStyleTarget('title')}>Protected Allocation</h2></div></div>

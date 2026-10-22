@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore'
 import { formatNumber } from '../../utils/formatters'
 import { appearanceWindow } from './pendingRepetitions'
-import AppearanceChartDetails from './AppearanceChartDetails'
 import useAppearancePlot from './useAppearancePlot'
 
 export default function AllFenAppearanceChart({ data, error, mode, view, scale, logarithmic, onScaleChange }) {
@@ -28,17 +27,6 @@ export default function AllFenAppearanceChart({ data, error, mode, view, scale, 
           <option value="log">Logarithmic</option><option value="linear">Linear</option>
         </select>
       </label>
-      <AppearanceChartDetails>
-        <p>{isCommon ? 'Starts at the ten highest appearance counts; single-appearance FENs are excluded. More/Less browses toward more/less repetition.'
-          : 'Starts at the ten lowest populated appearance counts, including FENs that occur once.'}</p>
-        <p>X spacing is compressed: only appearance counts with FENs are shown, in ascending order.</p>
-        <p>Y is {logarithmic ? 'log-frequency' : 'frequency'} normalized to the full chart range (0–1), shared by Uniqueness and Communess. It is not a per-FEN score or percentage.</p>
-        {data?.refreshed_at && <>
-          {view.withoutAppearances > 0 && <p>{formatNumber(view.withoutAppearances)} FENs with zero recorded appearances excluded.</p>}
-          <p>Snapshot: <time dateTime={data.refreshed_at}>{new Date(data.refreshed_at).toLocaleString()}</time>
-            {data.stale ? ' · Changes pending; summary refreshes in the background.' : ''}</p>
-        </>}
-      </AppearanceChartDetails>
     </div>
     {(error || data?.refresh_error) && <div className="status-banner warn" role="alert">{error || data.refresh_error}</div>}
     {!data?.refreshed_at ? <p role="status">{error || data?.refresh_error

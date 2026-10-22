@@ -2,15 +2,14 @@ import { styleTarget } from '../../appearance/styleCore.js'
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
-    { href: '/scored_positions', label: 'Positions', short: 'P' },
-    { href: '/analize_positions', label: 'Analyze', short: 'A' },
-    { href: '/research', label: 'Research', short: 'R' },
-    { href: '/database', label: 'Database', short: 'D' },
-    { href: '/live_analysis', label: 'Live', short: 'L' },
-    { href: '/analyze_times', label: 'Times', short: 'T' },
-    { href: '/hegel', label: 'hegel', short: 'H' },
-    { href: '/backups', label: 'Backups', short: 'B' },
-    { href: '/system_status', label: 'System Status', short: '●' }
+    { id: 'positions', href: '/scored_positions', label: 'Positions' },
+    { id: 'analyze', href: '/analize_positions', label: 'Analyze' },
+    { id: 'research', href: '/research', label: 'Research' },
+    { id: 'database', href: '/database', label: 'Database' },
+    { id: 'live', href: '/live_analysis', label: 'Live' },
+    { id: 'hegel', href: '/hegel', label: 'Hegel' },
+    { id: 'backups', href: '/backups', label: 'Backups' },
+    { id: 'system', href: '/system_status', label: 'System Status' }
   ]
 
   return (
@@ -20,15 +19,15 @@ function SideRail() {
           <img className="left-rail-icon" src="/chessism.jpg" alt="Chessism icon" />
           <span>Chessism</span>
         </a>
-        <nav {...styleTarget('toolbar', 'navigation')} className="rail-nav" aria-label="Main navigation">
+        <nav {...styleTarget('menu', 'navigation')} className="rail-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a {...styleTarget('button', 'navigation')}
+            <a {...styleTarget(`item.${item.id}`, 'navigation')}
               key={item.href}
-              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/')) ? 'active' : ''}`}
+              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/'))
+                || (item.href === '/system_status' && path === '/analyze_times') ? 'active' : ''}`}
               href={item.href}
               title={item.label}
             >
-              <span className="rail-btn-icon" aria-hidden="true">{item.short}</span>
               <span>{item.label}</span>
             </a>
           ))}

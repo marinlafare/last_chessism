@@ -25,11 +25,30 @@
 }
 
 .database-backups-actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-height: 160px;
 }
+
+.database-backup-action {
+  --action-ready-background: #155b3c;
+  --action-running-background: #8a5418;
+  --action-disabled-background: #202930;
+  min-height: 120px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--action-ready-background);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.database-backup-action[data-style-id="backup.test"] { --action-ready-background: #225775; }
+.database-backup-action:disabled { background: var(--action-disabled-background); color: var(--muted); cursor: default; }
+.database-backup-action[data-running="true"] { background: var(--action-running-background); color: #fff; cursor: progress; }
+.database-backup-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 
 .database-backups-progress span {
   color: var(--muted);

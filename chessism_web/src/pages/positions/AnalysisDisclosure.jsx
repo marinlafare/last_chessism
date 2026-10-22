@@ -13,6 +13,17 @@ const BUTTON_TARGETS = {
   'cloud-batch-combined': 'cloud.combined.toggle',
 }
 
+const PANEL_TARGETS = {
+  'analysis-local': 'local.panel',
+  'analysis-gcloud': 'cloud.panel',
+  'analysis-cloud-run': 'cloud.run.panel',
+  'analysis-batch-spot': 'cloud.batch.panel',
+  'cloud-run-single': 'cloud.run.single.panel',
+  'cloud-run-combined': 'cloud.run.combined.panel',
+  'cloud-batch-single': 'cloud.single.panel',
+  'cloud-batch-combined': 'cloud.combined.panel',
+}
+
 const DisclosureGroup = createContext(null)
 
 export function AnalysisDisclosureGroup({ children, enabled = true }) {
@@ -40,14 +51,17 @@ export function useAnalysisDisclosure(id, revealKey) {
     if (setActiveId) setActiveId(current => current === id ? null : id)
     else setStandaloneOpen(current => !current)
   }
-  return { open, visited, toggle }
+  const openSiblingId = group?.enabled && group.activeId !== id ? group.activeId : null
+  return { open, visited, toggle, openSiblingId }
 }
 
-export default function AnalysisDisclosure({ id, label, indicator, children, revealKey, level = 2, lazy = false, hidden = false }) {
-  const { open, visited, toggle } = useAnalysisDisclosure(id, revealKey)
-  const target=id==='analysis-local'?'local.panel':'cloud.panel'
+export default function AnalysisDisclosure({ id, label, indicator, children, revealKey, level = 2, lazy = false,
+  hidden = false, hideWhenOpen = null }) {
+  const { open, visited, toggle, openSiblingId } = useAnalysisDisclosure(id, revealKey)
+  const target = PANEL_TARGETS[id] || 'card'
+  const concealed = hidden || Boolean(hideWhenOpen && openSiblingId === hideWhenOpen)
   const Heading = `h${level}`
-  return <section {...pageStyleTarget(target)} className={`analysis-disclosure${open ? ' is-open' : ''}`} aria-label={`${label} analysis`} hidden={hidden}>
+  return <section {...pageStyleTarget(target)} className={`analysis-disclosure${open ? ' is-open' : ''}`} aria-label={`${label} analysis`} hidden={concealed}>
     <Heading {...pageStyleTarget('title')} className="analysis-disclosure-heading">
       <button {...pageStyleTarget(BUTTON_TARGETS[id] || 'button')} className="analysis-disclosure-toggle" type="button" id={`${id}-toggle`}
         aria-label={label} aria-expanded={open} aria-controls={`${id}-panel`}
@@ -60,9 +74,9 @@ export default function AnalysisDisclosure({ id, label, indicator, children, rev
       </button>
     </Heading>
     {/* Lazy editors mount on first use, then retain their unsaved input on collapse. */}
-    <div id={`${id}-panel`} className="analysis-disclosure-panel" role="region"
+    <div {...pageStyleTarget(PANEL_TARGETS[id] ? `${target}.body` : 'card')} id={`${id}-panel`} className="analysis-disclosure-panel" role="region"
       aria-labelledby={`${id}-toggle`} hidden={!open}>
-      <AnalysisDisclosureGroup enabled={open && !hidden}>{(!lazy || visited) && children}</AnalysisDisclosureGroup>
+      <AnalysisDisclosureGroup enabled={open && !concealed}>{(!lazy || visited) && children}</AnalysisDisclosureGroup>
     </div>
   </section>
 }

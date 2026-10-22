@@ -18,6 +18,10 @@ export default function PlayerAnalysisWorkspace({ playerName, disabled = false }
       <BehaviouralContent playerName={playerName} disabled={disabled} />
     </PlayerAnalysisDisclosure>
     <PlayerMeasuresWorkspace key={`measures-${playerName}`} playerName={playerName} disabled={disabled} />
+    <PlayerAnalysisDisclosure key={`compare-${playerName}`} label="Compare" target="player.compare.panel"
+      buttonTarget="player.compare.toggle" level={2} disabled={disabled}>
+      <p {...pageStyleTarget('player.compare.text')} className="player-compare-placeholder">Not yet implemented.</p>
+    </PlayerAnalysisDisclosure>
   </>
 }
 

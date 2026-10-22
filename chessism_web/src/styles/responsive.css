@@ -20,7 +20,7 @@
 
 @media (max-width: 1100px) {
   :root {
-    --rail-width: 84px;
+    --rail-width: 160px;
   }
 
   .superadmin-account-controls {
@@ -31,13 +31,8 @@
     font-size: 11px;
   }
 
-  .rail-brand span,
-  .rail-btn span:last-child {
-    display: none;
-  }
-
   .rail-btn {
-    justify-content: center;
+    text-align: center;
   }
 
   .players-top-grid,
@@ -103,7 +98,7 @@
 
   .rail-nav {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   }
 
   .rail-brand span {

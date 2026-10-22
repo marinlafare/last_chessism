@@ -17,7 +17,7 @@ import CloudGameDraft from './CloudGameDraft'
 import CloudComputeField from './CloudComputeField'
 import { hasSavedCloudDraft } from './cloudGameDraft'
 import CloudJobIndicator from './CloudJobIndicator'
-import AnalysisDisclosure from './AnalysisDisclosure'
+import AnalysisDisclosure, { AnalysisDisclosureGroup } from './AnalysisDisclosure'
 import AnalysisHistory from './AnalysisHistory'
 import './cloudAnalysis.css'
 
@@ -57,7 +57,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
   const historyRevision = backend => data.jobs.filter(job => (job.selection.backend || 'batch_spot') === backend)
     .map(job => `${job.id}:${job.status}`).join('|')
   const content = (
-    <section {...pageStyleTarget('cloud.panel')} className="cloud-analysis" aria-label="Google Cloud analysis">
+    <section {...pageStyleTarget('cloud.content')} className="cloud-analysis" aria-label="Google Cloud analysis">
       {!data.controller_online && <p {...pageStyleTarget('text')} role="status">Controller offline — start cloud-controller with Docker Compose.</p>}
       {error && <div role="alert" className="status-banner warn">{error}</div>}
       {draftError && <p {...pageStyleTarget('text')} role="alert">Could not restore the saved FEN set: {draftError}. Open the combined builder and reload the saved draft.</p>}
@@ -69,7 +69,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
             onSubmitted={refresh}
             savedDraft={savedDraft} onDraftChange={setSavedDraft}
             create={(payload) => action(() => createCloudAnalysis(payload))} />
-          <AnalysisHistory backend="cloud_run" revision={historyRevision('cloud_run')} />
+          {!runDisplay && <AnalysisHistory backend="cloud_run" revision={historyRevision('cloud_run')} />}
         </AnalysisDisclosure>
         <AnalysisDisclosure id="analysis-batch-spot" label="Batch Spot" level={3}
           hidden={cloudBusy && activeBackend !== 'batch_spot'}
@@ -80,7 +80,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
             savedDraft={savedDraft} onDraftChange={setSavedDraft}
             revealDraftId={restoredDraftId}
             create={(payload) => action(() => createCloudAnalysis(payload))} />
-          <AnalysisHistory backend="batch_spot" revision={historyRevision('batch_spot')} />
+          {!batchDisplay && <AnalysisHistory backend="batch_spot" revision={historyRevision('batch_spot')} />}
         </AnalysisDisclosure>
       </div>
       {!!displayedJobs.length && <h3 {...pageStyleTarget('title')}>CLOUD JOB PROGRESS</h3>}
@@ -93,8 +93,10 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
         const canDismiss = cloudJobDone(job) || job.status === 'cancelled'
         const stopping = Boolean(job.stop_cleanup || sendingStop === job.id) && !canDismiss
         const stopLabel = sendingStop === job.id ? 'Sending stop request…' : cloudJobProgress(job).label
+        const backend = job.selection.backend || 'batch_spot'
+        const showHistory = (backend === 'cloud_run' ? runDisplay : batchDisplay)?.job.id === job.id
         return (
-          <article {...pageStyleTarget(stopping ? 'cloud.job.stopping' : 'card')}
+          <article {...pageStyleTarget(stopping ? 'cloud.job.stopping' : 'cloud.job')}
             className={`cloud-job${stopping ? ' cloud-job-stopping' : ''}`} key={job.id}>
             <CloudJobOverview job={job} active={active} onOpenReport={setPerformanceRun} />
             {(job.error || canRevise || canResume || canRetry) && <section {...pageStyleTarget('cloud.job.controls')}
@@ -144,12 +146,12 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
             {canDismiss && <button {...pageStyleTarget('cloud.job.dismiss')} className="cloud-job-dismiss" type="button"
               title="Hide this progress card. Saved scores, reports and job history are kept."
               onClick={() => dismiss(job.id)}>Reviewed — dismiss progress</button>}
+            {showHistory && <AnalysisDisclosureGroup>
+              <AnalysisHistory backend={backend} revision={historyRevision(backend)} />
+            </AnalysisDisclosureGroup>}
           </article>
         )
       })}
-      {!!displayedJobs.length && <p {...pageStyleTarget('text')}>Temporary job data and its image are deleted; the empty bucket/repository, recovery workflow and permissions remain.
-        Eligible, job-owned VM or Cloud Run log streams are removed after a performance report is saved locally.
-        Shared logs and Google audit/billing/monitoring/workflow history remain. Failed jobs retain checkpoints for recovery.</p>}
       {performanceRun && <CloudPerformanceReportModal run={performanceRun} onClose={() => setPerformanceRun(null)} />}
     </section>
   )
@@ -198,7 +200,7 @@ function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraf
     finally { setLoading(false) }
   }
   const singleSelection = (
-    <form {...pageStyleTarget('cloud.selection')} id={`${id}-selection-form`}
+    <form {...pageStyleTarget(isRun ? 'cloud.run.selection' : 'cloud.batch.selection')} id={`${id}-selection-form`}
       className="cloud-selection cloud-process-content" aria-label={`${title} selection`} onSubmit={(event) => {
       event.preventDefault()
       if (disabled || loading) return
@@ -271,10 +273,10 @@ function CloudSelection({ backend, disabled, create, job, onSubmitted, savedDraf
     {singleSelection}
   </div>
   return <div className="cloud-process-choices">
-    <AnalysisDisclosure id={`${id}-single`} label="One process" level={4}>
+    <AnalysisDisclosure id={`${id}-single`} label="One process" level={4} hideWhenOpen={isRun ? null : `${id}-combined`}>
       {selectionLayout}
     </AnalysisDisclosure>
-    <AnalysisDisclosure id={`${id}-combined`} label="Combined" level={4} lazy
+    <AnalysisDisclosure id={`${id}-combined`} label="Combined" level={4} lazy hideWhenOpen={isRun ? null : `${id}-single`}
       revealKey={revealDraftId}>
       <CloudGameDraft launchDisabled={disabled} onSubmitted={onSubmitted}
         backend={backend} draft={savedDraft} setDraft={onDraftChange}

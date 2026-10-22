@@ -15,7 +15,6 @@ import LiveAnalysis from './pages/LiveAnalysis'
 import ScoredPositions from './pages/ScoredPositions'
 import AppearanceProvider, { AppearanceControls } from './appearance/AppearanceProvider'
 import { styleTarget } from './appearance/styleCore.js'
-import AnalyzeTimes from './pages/AnalyzeTimes'
 import Research from './pages/Research'
 import AccuracyCoefficient from './pages/AccuracyCoefficient'
 import MatricesConstructor from './pages/MatricesConstructor'
@@ -233,7 +232,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings
   } else if (path === '/scored_positions') {
     page = <ScoredPositions />
   } else if (path === '/analyze_times') {
-    page = <AnalyzeTimes />
+    page = <SystemStatus initialTimesOpen />
   } else if (path === '/research') {
     page = <Research />
   } else if (path === '/research/chessism-coefficient') {

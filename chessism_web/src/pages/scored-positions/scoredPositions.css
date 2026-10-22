@@ -1,7 +1,11 @@
+.scored-positions-page > .home-shell { padding-top: 1rem; }
+.scored-positions-title { margin: 0 0 2rem; }
+.scored-positions-main > section + section { margin-top: 18px; }
+
 .scored-positions-main {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 0;
 }
 
 .scored-positions-panel.scored-rating-scatter-panel { padding: 0; }
@@ -19,12 +23,13 @@
   font: inherit;
   font-size: 18px;
   text-transform: uppercase;
-  text-align: left;
+  text-align: inherit;
   cursor: pointer;
 }
 .rating-chart-toggle:hover { background: var(--surface-2); }
 .rating-chart-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
-.rating-chart-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.rating-chart-toggle > span { flex: 1; min-width: 0; text-align: inherit; }
+.rating-chart-toggle svg { flex: 0 0 20px; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
 .rating-chart-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
 #rating-chart-content:not([hidden]) { padding: 0 18px 18px; }
 .rating-chart-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
@@ -98,13 +103,6 @@
 .appearance-pages button { padding: 3px 6px; }
 .appearance-pages button { cursor: pointer; }
 .appearance-pages button:disabled { cursor: default; opacity: .4; }
-.appearance-details { position: relative; flex-shrink: 0; }
-.appearance-details summary { list-style: none; color: var(--muted); cursor: pointer; padding: 2px 4px; }
-.appearance-details summary::-webkit-details-marker { display: none; }
-.appearance-details summary:focus-visible { outline: 2px solid var(--accent); }
-.appearance-details-popover { position: absolute; z-index: 3; top: 100%; right: 0; width: min(290px, 65vw); padding: 10px; border: 1px solid var(--border-soft); border-radius: 6px; background: var(--surface-2); color: var(--muted); font-size: 12px; box-shadow: var(--shadow); }
-.appearance-details-popover p { margin: 0 0 8px; }
-.appearance-details-popover p:last-child { margin-bottom: 0; }
 .appearance-tooltip { position: absolute; z-index: 2; top: 2px; right: 2px; max-width: min(340px, 85%); padding: 6px 8px; border: 1px solid var(--border-soft); border-radius: 5px; background: var(--surface-2); color: var(--text); font-size: 12px; pointer-events: none; }
 .appearance-circles-panel { position: relative; }
 .appearance-circles {
@@ -190,6 +188,9 @@
 .cuda-reservation-icon { width: 52px; height: 52px; fill: none; stroke: #e76e65; stroke-width: 2.5; stroke-linecap: round; }
 
 .pending-repetition-panel { min-width: 0; }
+.unscored-panel { padding: .5rem; box-sizing: border-box; }
+.unscored-panel .panel-title { text-align: center; }
+.unscored-axis-title { flex-shrink: 0; margin-top: 1rem; color: var(--muted); font-size: 12px; text-align: center; }
 .pending-repetition-heading { display: flex; flex-shrink: 0; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; }
 .pending-repetition-heading .panel-title { margin: 0; flex: 1; min-width: 0; font-size: 13px; }
 .pending-repetition-scroll { position: relative; overflow-x: auto; flex: 1; min-height: 0; }

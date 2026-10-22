@@ -1,11 +1,11 @@
-import { pageStyleTarget } from '../appearance/styleCore.js'
+import { styleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import './analyze-times/analyzeTimes.css'
-import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
-import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
 import { fetchAnalysisTimesSummary } from './analyze-times/analyzeTimesApi'
+
+// Preserve saved timing styles when the content is embedded in System status.
+const pageStyleTarget = id => styleTarget(id, 'analyze_times')
 
 function AnalyzeTimes() {
   const [data, setData] = useState(null)
@@ -36,11 +36,7 @@ function AnalyzeTimes() {
   )
 
   return (
-    <div {...pageStyleTarget('page')} className="page-frame">
-      <SideRail />
-      <div className="home-shell">
-        <Header />
-        <main>
+    <div {...pageStyleTarget('page')} className="analysis-times-content">
           <section {...pageStyleTarget('panel')} className="analysis-times-hero">
             <div className="section-head">
               <div>
@@ -131,9 +127,6 @@ function AnalyzeTimes() {
               </table>
             </div>
           </section>
-        </main>
-        <Footer />
-      </div>
     </div>
   )
 }

@@ -53,7 +53,7 @@ export default function FenPositionExplorer({scope,anchor,onClose}) {
   const previewLeft=Math.max(8,Math.min(left+width+previewWidth+34<=viewport.width?left+width+10:left-previewWidth-34,viewport.width-previewWidth-32))
   return createPortal(<>
     <section ref={panel} className="fen-explorer-popup" {...styleTarget('explorer.panel')} role="dialog" aria-label={title} tabIndex={-1} style={{left,top,width,maxHeight:Math.min(520,viewport.height-top-8)}}>
-      <header><strong>{title}</strong><button type="button" onClick={onClose} aria-label="Close position explorer">×</button></header>
+      <header><strong>{title}</strong><button {...styleTarget('explorer.close')} type="button" onClick={onClose} aria-label="Close position explorer">×</button></header>
       <small>Sampled positions. Hover or focus to enlarge.</small>
       <div className="fen-explorer-body" onScroll={()=>setHover(null)}>
         {list.loading?<p role="status">Finding examples…</p>:list.error?<p role="alert">{list.error}</p>:<>
@@ -67,7 +67,7 @@ export default function FenPositionExplorer({scope,anchor,onClose}) {
           </ul>}
         </>}
       </div>
-      <nav aria-label="Position sample pages"><button type="button" disabled={!page||list.loading} onClick={()=>setPage(p=>p-1)}>Previous</button><span>{list.sample_size?`${page*10+1}–${page*10+(list.rows?.length||0)} / ${list.sample_size} sampled`:''}</span><button type="button" disabled={!list.has_next||list.loading} onClick={()=>setPage(p=>p+1)}>Next 10</button><button type="button" disabled={list.loading} onClick={refresh}>Shuffle</button></nav>
+      <nav aria-label="Position sample pages"><button {...styleTarget('explorer.paging')} type="button" disabled={!page||list.loading} onClick={()=>setPage(p=>p-1)}>Previous</button><span>{list.sample_size?`${page*10+1}–${page*10+(list.rows?.length||0)} / ${list.sample_size} sampled`:''}</span><button {...styleTarget('explorer.paging')} type="button" disabled={!list.has_next||list.loading} onClick={()=>setPage(p=>p+1)}>Next 10</button><button {...styleTarget('explorer.paging')} type="button" disabled={list.loading} onClick={refresh}>Shuffle</button></nav>
     </section>
     {hover&&<aside id={previewId} role="tooltip" aria-label="Enlarged chess position" className="fen-thumbnail-preview"
       style={{left:previewLeft,top:Math.max(8,Math.min(hover.rect.top,viewport.height-previewWidth-32))}}>

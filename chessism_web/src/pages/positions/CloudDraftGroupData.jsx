@@ -6,7 +6,7 @@ export default function CloudDraftGroupData({ draft, backend = 'batch_spot', nVm
   const isRun = backend === 'cloud_run'
   const vmPlan = isRun ? null : draftVmPlan(preview?.fens_to_analyze, nVms)
   const count = value => value == null ? '—' : value.toLocaleString('en-US')
-  return <section {...pageStyleTarget('card')} className="cloud-draft-preview" aria-label="Group data">
+  return <section {...pageStyleTarget(isRun ? 'cloud.run.draft.group' : 'cloud.batch.draft.group')} className="cloud-draft-preview" aria-label="Group data">
     <div className="cloud-draft-group-heading">
       <h5 {...pageStyleTarget('title')}>Group data</h5>
       {!!draft?.entries.length && <button {...pageStyleTarget('button')} className="cloud-draft-refresh" type="button"

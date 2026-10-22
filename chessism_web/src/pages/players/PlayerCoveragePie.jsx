@@ -52,7 +52,7 @@ export default function PlayerCoveragePie({ kind, total, scored, ready }) {
   const tipText = tip ? `${tip.sliceKey === 'scored' ? 'scored: ' : ''}${integer.format(tip.value)}` : ''
 
   return (
-    <figure ref={figureRef} className={`player-coverage-pie player-coverage-${kind}`} aria-busy={!ready}>
+    <figure {...pageStyleTarget(`player.coverage.${kind}`)} ref={figureRef} className={`player-coverage-pie player-coverage-${kind}`} aria-busy={!ready}>
       <svg {...rotation.svg} role="group" aria-label={`${label} analysis coverage. Scroll to rotate; double-click to reset.`}>
         {!slices.length && <circle className="player-coverage-empty" cx="100" cy="100" r="94" />}
         <g transform={`rotate(${rotation.angle} 100 100)`}>

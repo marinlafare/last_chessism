@@ -1,4 +1,5 @@
 import { scopeForPath } from './pageScopes.js'
+import { chartInteractionCss } from './chartInteractionCss.js'
 
 export const styleTarget = (id, scope = 'scored_positions') => ({ 'data-style-scope': scope, 'data-style-id': id })
 // Evaluated during rendering, including portal content. No DOM scanning or
@@ -59,7 +60,12 @@ export function appearanceCss(registry, rows) {
     const pressed = ((target.pressedUsesHoverColor && row.property === 'hoverColor')
       || (target.pressedUsesHoverBackground && row.property === 'hoverBackground'))
       ? `,${selector}[aria-pressed="true"]` : ''
-    return [`${selector}${spec.state || ''}${pressed}{${spec.css}:${value};${row.property==='borderWidth'?'border-style:solid;':''}}`]
+    const state = spec.state === ':hover' && target.hoverState ? target.hoverState : spec.state || ''
+    // Padding belongs inside the chart's measured box, not outside a 100%-wide
+    // SVG, so it cannot push the chart outside its parent container.
+    const chartBox = row.property === 'padding' && target.chartInteraction ? 'box-sizing:border-box;' : ''
+    return [`${selector}${state}${pressed}{${spec.css}:${value};${row.property==='borderWidth'?'border-style:solid;':''}${chartBox}}`,
+      ...chartInteractionCss(selector, target, row.property)]
   }).join('\n')
 }
 

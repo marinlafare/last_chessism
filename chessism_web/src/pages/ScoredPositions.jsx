@@ -53,11 +53,12 @@ function ScoredPositions() {
   }, [])
 
   return (
-    <div {...styleTarget('page')} className="page-frame">
+    <div {...styleTarget('page')} className="page-frame scored-positions-page">
       <SideRail />
       <div className="home-shell">
         <main className="scored-positions-main">
-          <section className="scored-top-grid">
+          <h1 {...styleTarget('heading')} className="scored-positions-title">POSITIONS</h1>
+          <section {...styleTarget('layout.top')} className="scored-top-grid">
             <section {...styleTarget('metrics.panel')} className="scored-positions-panel scored-engine-panel">
               {error ? <div className="status-banner warn">{error}</div> : null}
               {gameOverviewError ? <div className="status-banner warn">{gameOverviewError}</div> : null}

@@ -413,7 +413,7 @@ function HeatStrip({ title, labels, values, singleRow = false }) {
   }
 
   return (
-    <div className="heat-strip-wrap">
+    <div {...pageStyleTarget('chart.heatmap')} className="heat-strip-wrap">
       <h3 {...pageStyleTarget('title')}>{title}</h3>
       <div
         className={`heat-strip-grid${singleRow ? ' single-row' : ''}`}

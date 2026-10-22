@@ -15,7 +15,7 @@ export const PAGE_SCOPES = {
   "/live_analysis": "live_analysis",
   "/live_analyzis": "live_analysis",
   "/scored_positions": "scored_positions",
-  "/analyze_times": "analyze_times",
+  "/analyze_times": "system_status",
   "/research": "research",
   "/research/chessism-coefficient": "accuracy_coefficient",
   "/research/matrices": "matrices",
