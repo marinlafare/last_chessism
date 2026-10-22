@@ -273,6 +273,123 @@
           "initialStyleFrom": "value",
           "properties": ["color","fontSize","fontFamily","textAlign"]
         },
+        "characters.view": {
+          "label": "Player rankings · list/chart toggle",
+          "pressedUsesHoverColor": true,
+          "pressedUsesHoverBackground": true,
+          "properties": ["background","color","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
+        },
+        "characters.chart": {
+          "label": "Player rankings · overlapping ratings chart",
+          "editorRelated": ["characters.chart.tooltip"],
+          "properties": ["background","hoverBackground","borderColor","borderWidth","hoverBorderColor","padding","radius","chartColor1","chartColor2","chartColor3","stroke","strokeWidth","barHoverColor","barHoverBorder"],
+          "hiddenProperties": ["chartColor1","chartColor2","chartColor3","stroke","strokeWidth","barHoverColor","barHoverBorder"],
+          "propertyLabels": {"chartColor1":"Bullet","chartColor2":"Blitz","chartColor3":"Rapid","stroke":"Bar border","strokeWidth":"Bar border width"}
+        },
+        "characters.chart.blitz": {
+          "label": "Player ratings · Blitz bars and legend",
+          "editorParent": "characters.chart",
+          "properties": ["fill","barOpacity","stroke","strokeWidth","barHoverColor","barHoverBorder"],
+          "propertyLabels": {"fill":"Blitz color","stroke":"Blitz border","strokeWidth":"Blitz border width","barHoverColor":"Blitz hover color","barHoverBorder":"Blitz hover border"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover","&:focus-visible"]}]
+        },
+        "characters.chart.rapid": {
+          "label": "Player ratings · Rapid bars and legend",
+          "editorParent": "characters.chart",
+          "properties": ["fill","barOpacity","stroke","strokeWidth","barHoverColor","barHoverBorder"],
+          "propertyLabels": {"fill":"Rapid color","stroke":"Rapid border","strokeWidth":"Rapid border width","barHoverColor":"Rapid hover color","barHoverBorder":"Rapid hover border"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover","&:focus-visible"]}]
+        },
+        "characters.chart.bullet": {
+          "label": "Player ratings · Bullet bars and legend",
+          "editorParent": "characters.chart",
+          "properties": ["fill","barOpacity","stroke","strokeWidth","barHoverColor","barHoverBorder"],
+          "propertyLabels": {"fill":"Bullet color","stroke":"Bullet border","strokeWidth":"Bullet border width","barHoverColor":"Bullet hover color","barHoverBorder":"Bullet hover border"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover","&:focus-visible"]}]
+        },
+        "characters.chart.previous": {
+          "label": "Player rankings · previous ten players",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor","hoverBorderColor"]
+        },
+        "characters.chart.next": {
+          "label": "Player rankings · next ten players",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor","hoverBorderColor"]
+        },
+        "characters.chart.legend": {
+          "label": "Player ratings · legend container",
+          "properties": ["background","hoverBackground","borderColor","borderWidth","hoverBorderColor","padding","radius"]
+        },
+        "characters.chart.legend.blitz": {
+          "label": "Player ratings · Blitz legend text",
+          "properties": ["color","fontFamily","fontSize","hoverColor","background","hoverBackground","padding","radius"]
+        },
+        "characters.chart.legend.rapid": {
+          "label": "Player ratings · Rapid legend text",
+          "properties": ["color","fontFamily","fontSize","hoverColor","background","hoverBackground","padding","radius"]
+        },
+        "characters.chart.legend.bullet": {
+          "label": "Player ratings · Bullet legend text",
+          "properties": ["color","fontFamily","fontSize","hoverColor","background","hoverBackground","padding","radius"]
+        },
+        "characters.chart.yTitle": {
+          "label": "Player ratings · y-axis title",
+          "properties": ["fill","fontSize","fontFamily","barHoverColor"],
+          "propertyLabels": {"fill":"Text color","barHoverColor":"Hover text color"},
+          "chartInteraction": [{"kind":"svg","marks":[],"hover":["&:hover"]}]
+        },
+        "characters.chart.yTicks": {
+          "label": "Player ratings · y-axis numbers",
+          "properties": ["fill","fontSize","fontFamily","barHoverColor"],
+          "propertyLabels": {"fill":"Text color","barHoverColor":"Hover text color"},
+          "chartInteraction": [{"kind":"svg","marks":[],"hover":["&:hover"]}]
+        },
+        "characters.chart.grid": {
+          "label": "Player ratings · grid lines",
+          "properties": ["stroke","strokeWidth","barHoverBorder"],
+          "propertyLabels": {"stroke":"Line color","strokeWidth":"Line width","barHoverBorder":"Hover line color"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover"]}]
+        },
+        "characters.chart.dividers": {
+          "label": "Player ratings · player separators",
+          "properties": ["stroke","strokeWidth","barHoverBorder"],
+          "propertyLabels": {"stroke":"Line color","strokeWidth":"Line width","barHoverBorder":"Hover line color"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover"]}]
+        },
+        "characters.chart.xTicks": {
+          "label": "Player ratings · player tick marks",
+          "properties": ["stroke","strokeWidth","barHoverBorder"],
+          "propertyLabels": {"stroke":"Line color","strokeWidth":"Line width","barHoverBorder":"Hover line color"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover"]}]
+        },
+        "characters.chart.missing": {
+          "label": "Player ratings · missing-rating marks",
+          "properties": ["stroke","strokeWidth","barHoverBorder"],
+          "propertyLabels": {"stroke":"Line color","strokeWidth":"Line width","barHoverBorder":"Hover line color"},
+          "chartInteraction": [{"kind":"svg","marks":["&"],"hover":["&:hover"]}]
+        },
+        "characters.chart.photos": {
+          "label": "Player ratings · profile photos",
+          "properties": ["chartColor1","stroke","strokeWidth","barHoverBorder","photoCornerRadius","imageOpacity"],
+          "propertyLabels": {"chartColor1":"Photo background","stroke":"Photo frame color","strokeWidth":"Photo frame width","barHoverBorder":"Hover photo frame"},
+          "chartInteraction": [{"kind":"outline","marks":[".home-games-avatar-frame"],"hover":["&:hover .home-games-avatar-frame"]}]
+        },
+        "characters.chart.tooltip": {
+          "label": "Player ratings · hover notes",
+          "properties": ["background","color","fontSize","fontFamily","textAlign","borderColor","borderWidth","radius","padding"]
+        },
+        "characters.chart.empty": {
+          "label": "Player ratings · empty/loading chart text",
+          "properties": ["fill","fontSize","fontFamily"],
+          "propertyLabels": {"fill":"Text color"}
+        },
+        "characters.chart.status": {
+          "label": "Player ratings · loading/error messages",
+          "properties": ["color","fontSize","fontFamily","textAlign","background","hoverBackground","padding","radius"]
+        },
+        "characters.chart.retry": {
+          "label": "Player ratings · retry button",
+          "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]
+        },
         "gameExplorer.panel": {
           "label": "Game list · popup",
           "properties": ["background","borderColor","borderWidth","radius","padding"]
@@ -1083,6 +1200,101 @@
         "cloud.steps": {
           "label": "Cloud progress · process list container",
           "properties": ["background","borderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.reserve": {
+          "label": "Queue and reserve FENs · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.preflight": {
+          "label": "Workspace and quota · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.publish": {
+          "label": "Publish worker image · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.upload": {
+          "label": "Upload selected FENs · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.start": {
+          "label": "Start cloud workers · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.analyze": {
+          "label": "Analyze FENs and import results · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.verify": {
+          "label": "Verify imported results · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.cleanup": {
+          "label": "Clean up resources and logs · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.summaries": {
+          "label": "Refresh database totals · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.done": {
+          "label": "Done · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-stopping": {
+          "label": "Stop · cloud workers · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-settling": {
+          "label": "Stop · wait for late uploads · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-importing": {
+          "label": "Stop · save completed results · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-planning": {
+          "label": "Stop · prepare cleanup · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-cleaning": {
+          "label": "Stop · clean up resources · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-logs": {
+          "label": "Stop · clean up logs · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-refreshing": {
+          "label": "Stop · refresh database totals · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-finishing": {
+          "label": "Stop · release unfinished FENs · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "cloud.step.progress.stop-complete": {
+          "label": "Stop · cancelled and cleaned · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
         "cloud.step.complete": {
           "label": "Cloud progress · completed step row",

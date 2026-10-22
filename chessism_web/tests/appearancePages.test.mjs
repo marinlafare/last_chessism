@@ -4,10 +4,29 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { PAGE_SCOPES,scopeForPath } from '../src/appearance/pageScopes.js'
 import { appearanceCss,registryTarget,seedIndependentStyles } from '../src/appearance/styleCore.js'
+import { cloudJobProgress } from '../src/pages/positions/cloudJobProgress.js'
 const legacy=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_registry.json',import.meta.url)))
 const extra=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_scopes.json',import.meta.url)))
 const charts=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_charts.json',import.meta.url)))
 const registry={...legacy,properties:{...legacy.properties,...charts.properties},scopes:Object.fromEntries(Object.entries(extra.scopes).map(([id,spec])=>[id,{...spec,targets:{...extra.common_targets,...charts.targets,...spec.targets,...(id===legacy.scope?legacy.targets:{})}}]))}
+
+test('each normal and cancellation step exposes an independent progress-bar style', () => {
+  const normal = cloudJobProgress({ status: 'queued', runs: [] }).steps
+  const stopping = cloudJobProgress({ status: 'running', runs: [], stop_cleanup: { phase: 'stopping' } }).steps
+  const targets = [...normal, ...stopping].map(step => `cloud.step.progress.${step.id}`)
+  assert.equal(new Set(targets).size, targets.length)
+  for (const target of targets) {
+    const spec = registryTarget(registry, 'positions', target)
+    assert.equal(spec.editorParent, 'cloud.steps')
+    for (const [property, value] of Object.entries({
+      chartColor1: '#123456', barHoverColor: '#abcdef', background: '#101010', hoverBackground: '#202020',
+      borderColor: '#112233', hoverBorderColor: '#334455', borderWidth: 2, summaryBarHeight: 10, radius: 4, padding: 2,
+    })) {
+      assert.ok(appearanceCss(registry, [{ scope: 'positions', target, property, value }]), `${target}/${property}`)
+      assert.equal(appearanceCss(registry, [{ scope: 'home', target, property, value }]), '')
+    }
+  }
+})
 
 test('every editable app route and alias has an explicit, server-validated scope',()=>{
   const routes=Object.fromEntries(Object.entries(extra.scopes).flatMap(([scope,spec])=>spec.routes.map(route=>[route,scope])))

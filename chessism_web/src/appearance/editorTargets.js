@@ -7,6 +7,14 @@ export function editorTargets(registry, selection) {
   const spec = registryTarget(registry, selection.scope, selection.id)
   if (!spec) return []
   const targets = [{ ...selection, spec }]
+  // Explicit, server-owned related targets let non-interactive tooltips be
+  // edited from their chart without trying to right-click a disappearing tip.
+  for (const id of spec.editorRelated || []) {
+    if (!/^[\w.-]+$/.test(id)) continue
+    const element = selection.element.querySelector(`[data-style-id="${id}"]`)
+    const related = registryTarget(registry, selection.scope, id)
+    if (related && element?.dataset.styleScope === selection.scope) targets.push({ element, scope: selection.scope, id, spec: related })
+  }
   if (!spec.editorParent) return targets
   let parent = selection.element.parentElement
   while (parent) {

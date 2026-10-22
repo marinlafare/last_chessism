@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { positionSlices, rankedGamePlayers, gamePlayerPage, gameAxisMax, gameBarLabel, sliceDescription, fenTotalLabel, playerAvatarUrl } from '../src/pages/home/summaryData.js'
+import { positionSlices, summaryGamePlayers, rankedGamePlayers, gamePlayerPage, gameAxisMax, gameBarLabel, sliceDescription, fenTotalLabel, playerAvatarUrl } from '../src/pages/home/summaryData.js'
 import { pieSegments } from '../src/utils/pieSegments.js'
 
 assert.deepEqual(positionSlices(null), [])
@@ -16,6 +16,16 @@ const summary = {refreshed_at:'2026-10-11',total_fens:4,titled_fens:2,players:[
   {player_name:'b',title:'IM',games:1,game_half_units:1},
   {player_name:'c',title:'WFM',games:0,game_half_units:0},
 ]}
+assert.equal(summaryGamePlayers(null), undefined)
+assert.equal(summaryGamePlayers(summary), summary.players)
+const livePlayers = [{player_name:'just-ingested',title:'GM',games:12}]
+const fanPlayers = [{player_name:'new-fan',title:'',games:8}]
+const liveSummary = {...summary, refreshed_at:null, stale:true,
+  game_players:{titled:livePlayers,untitled:fanPlayers}}
+assert.equal(summaryGamePlayers(liveSummary),livePlayers)
+assert.equal(summaryGamePlayers(liveSummary,false),fanPlayers)
+assert.deepEqual(summaryGamePlayers({...summary,game_players:{titled:[]}}),[])
+assert.equal(gamePlayerPage(summaryGamePlayers(liveSummary)).players[0].player_name,'just-ingested')
 assert.deepEqual(positionSlices(summary).map(s=>s.value),[2,2])
 assert.equal(sliceDescription(pieSegments(positionSlices(summary))[0]),'professionals\n50%\n2')
 assert.equal(sliceDescription(pieSegments(positionSlices(summary))[1]),'fans\n50%\n2')

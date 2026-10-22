@@ -48,6 +48,38 @@
   padding: 18px;
 }
 
+.character-heading-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.character-view-toggle { display: grid; place-items: center; width: 34px; height: 25.5px; padding: 1.75px 6px; border: 1px solid var(--border-soft); border-radius: 5px; background: transparent; color: var(--muted); cursor: pointer; }
+.character-view-toggle:hover, .character-view-toggle[aria-pressed="true"] { color: var(--accent); }
+.character-view-toggle svg { width: 18px; height: 18px; }
+.character-view-toggle:focus-visible, .character-chart-navigation button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.character-ranking-content { position: relative; display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.character-list-view { display: flex; flex-direction: column; flex: 1; gap: 14px; min-width: 0; }
+.character-list-view.is-hidden { visibility: hidden; pointer-events: none; }
+.character-chart-view { position: absolute; inset: 0; min-width: 0; }
+.character-ratings-chart { display: flex; flex-direction: column; height: 100%; margin: 0; min-width: 0; padding: .5rem; border-radius: var(--radius); box-sizing: border-box; }
+.character-chart-legend { display: flex; justify-content: center; flex-wrap: wrap; gap: 14px; font-size: 11px; color: var(--muted); }
+.character-chart-legend span { display: inline-flex; align-items: center; gap: 5px; text-transform: capitalize; }
+.character-chart-legend svg { display: block; width: 12px; height: 12px; }
+.character-chart-navigation { display: grid; grid-template-columns: 20px minmax(0, 1fr) 20px; grid-template-rows: minmax(0, 1fr); flex: 1; min-height: 0; gap: 4px; align-items: stretch; }
+.character-chart-navigation svg { display: block; width: 100%; height: 100%; min-height: 0; overflow: visible; }
+.character-chart-navigation button { padding: 0; margin: 8px 0 4px; border: 1px solid var(--border-soft); border-radius: 4px; background: transparent; color: var(--text); font-size: 23px; cursor: pointer; }
+.character-chart-navigation button:disabled { opacity: .35; cursor: default; }
+.character-chart-navigation text { fill: var(--muted); font-size: 11px; stroke: none; }
+.character-chart-tick line, .character-chart-player-tick { stroke: var(--border-soft); stroke-width: 1; }
+.character-chart-player { cursor: pointer; outline: none; }
+.character-chart-bar, .character-chart-swatch { fill: var(--rating-mode-color); stroke: var(--pie-outline-color, #030609); stroke-width: var(--pie-outline-width, 1.5px); vector-effect: non-scaling-stroke; }
+.character-chart-bar:hover, .character-chart-bar:focus-visible, .character-chart-swatch:hover { fill: var(--bar-hover-color, var(--rating-mode-color)); filter: brightness(1.18); stroke: var(--bar-hover-border, #fff); outline: none; }
+.character-chart-divider { stroke: #030609; stroke-width: 3; pointer-events: stroke; vector-effect: non-scaling-stroke; }
+.character-chart-missing { stroke: var(--muted); stroke-width: 2; stroke-dasharray: 3 2; }
+.character-chart-player .home-games-avatar-frame { stroke: var(--border-soft); }
+.character-chart-player .home-games-avatar { --chart-color-1: var(--surface-2); }
+.character-chart-player .home-games-avatar-background { fill: var(--chart-color-1); }
+.character-chart-player .home-games-avatar rect { rx: var(--player-photo-radius, 6px); }
+.character-chart-player .home-games-avatar:hover .home-games-avatar-frame, .character-chart-player:focus-visible .home-games-avatar-frame, .character-chart-player[aria-current="true"] .home-games-avatar-frame { stroke: var(--accent); stroke-width: 2; }
+.character-chart-status { color: var(--muted); text-align: center; font-size: 11px; margin: 6px 0 0; }
+.character-chart-status button { font: inherit; color: var(--accent); background: transparent; border: 0; cursor: pointer; text-decoration: underline; }
+
 .home-summary-charts { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.4fr); align-items: center; gap: 14px; }
 .home-summary-pie { margin: 0; min-width: 0; text-align: center; }
 .home-summary-total { margin-bottom: 6px; color: var(--text); font-size: 20px; font-weight: 700; }

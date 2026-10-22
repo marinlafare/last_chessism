@@ -7,7 +7,7 @@ import { CloudPerformanceSummary } from './CloudPerformanceSummary'
 const number = value => Number.isFinite(value) ? value.toLocaleString('en-US') : '—'
 const playerCountNote = 'Saved selection-time FEN count; multiple selections for the same player are added together. Shared or subsequently reserved positions can make these counts exceed the deduplicated job total.'
 
-export default function CloudJobOverview({ job, active, onOpenReport }) {
+export default function CloudJobOverview({ job, active, onOpenReport, controllerOnline = true }) {
   const combined = job.combined_selection
   const backend = job.selection.backend === 'cloud_run' ? 'Cloud Run' : 'Batch Spot'
   const cycles = job.runs.filter(run => run.positions > 0)
@@ -46,7 +46,7 @@ export default function CloudJobOverview({ job, active, onOpenReport }) {
         <CloudFenProgress job={{ ...job, target: progressRun.positions, imported: progressRun.imported, runs: [progressRun] }}
           label={cycleLabel(progressRun)} variant="cycle" showCompletionStatus={false} />
       </div>}
-      <CloudJobSteps job={job} />
+      <CloudJobSteps job={job} controllerOnline={controllerOnline} />
     </section>
     {vmRun && <CloudVmTiles key={vmRun.id} run={vmRun} cycleLabel={job.sequence ? cycleLabel(vmRun) : null} />}
     {job.runs.map(run => <CloudPerformanceSummary key={run.id} run={run} onOpen={onOpenReport} />)}

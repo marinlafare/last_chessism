@@ -1,5 +1,8 @@
 {
   "properties": {
+    "photoCornerRadius": {"label":"Photo corner radius","kind":"number","css":"--player-photo-radius","min":0,"max":20,"unit":"px","default":6},
+    "imageOpacity": {"label":"Photo opacity","kind":"number","css":"opacity","min":0,"max":1,"step":0.05,"default":1},
+    "barOpacity": {"label":"Bar opacity (0–1)","kind":"number","css":"opacity","min":0,"max":1,"step":0.05,"default":1},
     "chartColor1": {"label":"Primary color","kind":"color","css":"--chart-color-1","default":"#15c780"},
     "chartColor2": {"label":"Secondary color","kind":"color","css":"--chart-color-2","default":"#d55c5c"},
     "chartColor3": {"label":"Third color","kind":"color","css":"--chart-color-3","default":"#8d6bb4"},

@@ -42,6 +42,7 @@ async def persist_positions(session, fens, associations, reporter=None):
         await conn.copy_records_to_table("ingestion_fen_input",
             columns=["fen", "piece_count", "moves_counter"],
             records=[(r["fen"], r["piece_count"], r["moves_counter"]) for r in fens])
+        await conn.execute("ANALYZE pg_temp.ingestion_fen_input")
         # Resolve new AND existing rows in a single ordered pass. A separate
         # SELECT FOR UPDATE followed by INSERT misses concurrently created rows
         # and conflicts with the KEY SHARE locks used by association FK checks.
@@ -67,6 +68,7 @@ async def persist_positions(session, fens, associations, reporter=None):
             columns=["game_link", "n_move", "is_white", "fen"],
             records=[(r["game_link"], r["n_move"], r["move_color"] == "white", r["fen_fen"])
                      for r in associations])
+        await conn.execute("ANALYZE pg_temp.ingestion_link_input")
         if await conn.fetchval(f"""SELECT EXISTS(
             SELECT 1 FROM ingestion_link_input i
             WHERE NOT EXISTS(SELECT 1 FROM {fen} f WHERE f.fen=i.fen))"""):
@@ -79,6 +81,7 @@ async def persist_positions(session, fens, associations, reporter=None):
                 ORDER BY i.game_link,i.n_move,i.is_white
                 ON CONFLICT(game_link,n_move,is_white) DO NOTHING RETURNING fen_id
             ) SELECT fen_id,COUNT(*)::bigint AS occurrences FROM inserted GROUP BY fen_id""")
+        await conn.execute("ANALYZE pg_temp.ingestion_link_delta")
         conflict = await conn.fetchval(f"""SELECT EXISTS(
             SELECT 1 FROM ingestion_link_input i
             JOIN {fen} f USING(fen)

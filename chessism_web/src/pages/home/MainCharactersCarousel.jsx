@@ -3,22 +3,21 @@ import { useEffect, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import { fetchTopMainCharacters } from './homeApi'
 import { isPlainClick, normalizePlayer, playerHomeHref } from '../../services/navigation'
+import PlayerRatingsChart from './PlayerRatingsChart.jsx'
+import useRankingModes from './useRankingModes.js'
+import { playerDisplayName as getDisplayName, playerRating, PLAYER_FETCH_LIMIT } from './ratingChartData.js'
 
 const PLAYER_PAGE_SIZE = 50
-const PLAYER_FETCH_LIMIT = 5000
-
-const getDisplayName = (player) => {
-  const fullName = String(player?.full_name || '').trim()
-  return fullName || String(player?.player_name || '').trim() || 'Unknown player'
-}
-
-const getPlayerRating = (player) => Number(player?.rating ?? player?.last_rating ?? player?.avg_game_rating ?? 0)
+const getPlayerRating = player => playerRating(player) ?? 0
 
 function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnly = true, onTitleFilterChange }) {
   const [players, setPlayers] = useState([])
   const [page, setPage] = useState(1)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [chartView, setChartView] = useState(false)
+  const [chartPage, setChartPage] = useState(0)
+  const modeData = useRankingModes(chartView, titledOnly)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -28,6 +27,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
       setError('')
       setPlayers([])
       setPage(1)
+      setChartPage(0)
 
       try {
         const payload = await fetchTopMainCharacters(
@@ -67,6 +67,8 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
     <section {...pageStyleTarget('characters.panel')} className="main-characters-carousel" aria-labelledby="main-characters-title">
       {error ? <div className="status-banner warn">{error}</div> : null}
 
+      <div className="character-ranking-content">
+      <div className={`character-list-view${chartView ? ' is-hidden' : ''}`} aria-hidden={chartView || undefined} inert={chartView ? '' : undefined}>
       <div className="character-rating-list" aria-label={`${titledOnly ? 'Titled' : 'Untitled'} players by blitz rating`} aria-busy={loading}>
         {!loading && !error && !pagePlayers.length && <p className="character-rating-empty">No {titledOnly ? 'titled' : 'untitled'} players with blitz games yet.</p>}
         {loading
@@ -118,10 +120,26 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
           </div>
         </div>
       </div>}
+      </div>
+      {chartView && <div className="character-chart-view">
+        <PlayerRatingsChart key={titledOnly ? 'titled' : 'untitled'} players={players} modeData={modeData}
+          page={chartPage} onPageChange={setChartPage} loading={loading} error={error}
+          selectedPlayer={selectedPlayer} onSelectPlayer={onSelectPlayer} />
+      </div>}
+      </div>
       <div className="character-list-heading-row">
         <h2 {...pageStyleTarget('title')} className="character-list-title" id="main-characters-title">
           {titledOnly ? 'TITLED' : 'UNTITLED'}
         </h2>
+        <div className="character-heading-actions">
+        <button {...pageStyleTarget('characters.view')} className="character-view-toggle" type="button"
+          aria-label={chartView ? 'Show player list' : 'Show player rating chart'} aria-pressed={chartView}
+          title={chartView ? 'Show player list' : 'Show player rating chart'} onClick={() => setChartView(value => !value)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" aria-hidden="true">
+            {chartView ? <path d="M9 6h12M9 12h12M9 18h12M3 6h2M3 12h2M3 18h2" />
+              : <><path d="M3 3v18h18" /><path d="M7 17v-5h3v5m3 0V6h3v11m3 0V9h3v8" /></>}
+          </svg>
+        </button>
         <button {...pageStyleTarget('characters.medal')} type="button" className="character-medal-toggle"
           aria-label="Titled players" aria-pressed={titledOnly}
           title={titledOnly ? 'Show untitled players · Blitz rating' : 'Show titled players · Blitz rating'}
@@ -132,6 +150,7 @@ function MainCharactersCarousel({ selectedPlayer = '', onSelectPlayer, titledOnl
             <path d="m12 12 1.1 2.3 2.5.4-1.8 1.7.4 2.5-2.2-1.2-2.2 1.2.4-2.5-1.8-1.7 2.5-.4Z" fill="currentColor" stroke="none" />
           </svg>
         </button>
+        </div>
       </div>
     </section>
   )

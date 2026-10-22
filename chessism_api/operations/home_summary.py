@@ -11,6 +11,7 @@ from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.compact_storage import compact_for
+from chessism_api.database.relational_storage import storage_for
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES as TITLES
 
 LOG = logging.getLogger(__name__)
@@ -29,8 +30,9 @@ def needs_refresh(meta, now=None):
 
 
 async def get_home_summary(redis):
-    # Counts stay cached; profile lookups and the tiny per-player/mode summary
-    # supply avatars and untitled-player game totals without scanning game/FEN rows.
+    # Position unions and legacy half-game credits share the cached snapshot.
+    # The bar-chart roster must not wait for that expensive rebuild: game-player
+    # ownership is committed with ingestion, before FEN extraction/scoring.
     async with AsyncDBSession() as session:
         rows = (await session.execute(text("""
             SELECT m.*, s.revision AS current_revision,
@@ -52,6 +54,7 @@ async def get_home_summary(redis):
             HAVING SUM(s.n_games) > 0
             ORDER BY games DESC, p.player_name
         """), {"titles": list(TITLES)})).mappings().all()
+        game_players = await get_home_game_players(session)
     meta = dict(rows[0])
     error = meta.get("last_error")
     if needs_refresh(meta):
@@ -70,6 +73,7 @@ async def get_home_summary(redis):
         "refreshed_at": refreshed.isoformat() if refreshed else None,
         "stale": not refreshed or meta.get("source_revision") != meta.get("current_revision"),
         "refresh_error": error,
+        "game_players": game_players,
         "players": [{"player_name": row["player_name"], "title": row["title"],
                      "games": int(row["games"]), "game_half_units": int(row["game_half_units"]),
                      "avatar": row["avatar"]}
@@ -78,6 +82,36 @@ async def get_home_summary(redis):
                               "games": int(row["games"]), "avatar": row["avatar"]}
                              for row in untitled],
     }
+
+
+async def get_home_game_players(session):
+    """Exact, live game totals for downloaded profiles, across all game modes.
+
+    Count through the indexed ownership relation, never through moves or FENs.
+    Use physical numeric IDs with normalized storage to avoid expensive read
+    view joins. Opponent-only profile shells and deleted players stay hidden.
+    """
+    layout = storage_for(session)
+    profiles = layout.table('player') if layout else 'player'
+    ownership = layout.table('game_player') if layout else 'game_player'
+    owner = 'gp.player_id = p.id' if layout else 'gp.player_name = p.player_name'
+    rows = (await session.execute(text(f"""
+        SELECT p.player_name, UPPER(TRIM(COALESCE(p.title, ''))) AS title,
+               p.avatar, counts.games
+        FROM {profiles} p
+        CROSS JOIN LATERAL (
+            SELECT count(*) AS games FROM {ownership} gp WHERE {owner}
+        ) counts
+        WHERE p.deleted_at IS NULL AND COALESCE(p.joined, 0) > 0
+          AND counts.games > 0
+        ORDER BY counts.games DESC, p.player_name
+    """))).mappings().all()
+    groups = {"titled": [], "untitled": []}
+    for row in rows:
+        group = "titled" if row["title"] in TITLES else "untitled"
+        groups[group].append({"player_name": row["player_name"], "title": row["title"],
+                              "avatar": row["avatar"], "games": int(row["games"])})
+    return groups
 
 
 async def run_home_summary_refresh(ctx):

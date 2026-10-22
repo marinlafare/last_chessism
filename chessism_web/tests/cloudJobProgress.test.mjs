@@ -2,7 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   cloudJobDone, cloudJobProgress, cloudJobIndicator,
-  cloudActiveRun, cloudTaskLabel,
+  cloudActiveRun, cloudTaskLabel, cloudStepProgress, CLOUD_JOB_STEP_IDS,
 } from '../src/pages/positions/cloudJobProgress.js'
 import { trackProgress, showProgress, dismissProgress } from '../src/pages/positions/cloudProgressReview.js'
 
@@ -20,6 +20,70 @@ const sequenceAtSix = () => ({
     cloud_state: index < 5 ? 'SUCCEEDED' : index === 5 ? 'RUNNING' : 'PENDING',
     imported: index < 5 ? 500000 : index === 5 ? 260000 : 0,
   })),
+})
+
+test('every workflow step has a stable independently editable progress identity', () => {
+  const steps = cloudJobProgress(jobAt('preparing')).steps
+  assert.deepEqual(steps.map(step => step.id), CLOUD_JOB_STEP_IDS)
+  assert.equal(new Set(CLOUD_JOB_STEP_IDS).size, steps.length)
+  const stop = cloudJobProgress({ ...jobAt('running'), stop_cleanup: { phase: 'cleaning' } }).steps
+  assert.ok(stop.every(step => step.id.startsWith('stop-') && !CLOUD_JOB_STEP_IDS.includes(step.id)))
+  assert.equal(new Set(stop.map(step => step.id)).size, stop.length)
+})
+
+test('reservation progress uses only durable counters, including zero and a partial final selection', () => {
+  const job = { status: 'running', runs: [], sequence: { automatic: true, phase: 'selecting', requested: 6000000, reserved: 0 } }
+  const step = cloudJobProgress(job).steps[0]
+  assert.equal(cloudStepProgress(job, step).value, 0)
+  job.sequence.reserved = 50000
+  assert.equal(cloudStepProgress(job, step).value, 50000 / 6000000 * 100)
+  assert.match(cloudStepProgress(job, step).detail, /FENs reserved/)
+  job.sequence.reserved = 5999999
+  assert.match(cloudStepProgress(job, step).detail, /99%$/)
+  job.sequence.phase = 'preparing'
+  job.sequence.reserved = 3000000
+  assert.equal(cloudStepProgress(job, cloudJobProgress(job).steps[0]).value, 100)
+})
+
+test('unknown preparation progress is indeterminate, never a fabricated percentage', () => {
+  for (const phase of ['preparing', 'publishing', 'uploading', 'submitting', 'finalizing', 'cleaning', 'refreshing']) {
+    const job = jobAt(phase)
+    const step = cloudJobProgress(job).steps.find(step => step.state === 'current')
+    assert.equal(cloudStepProgress(job, step).value, null, phase)
+    assert.match(cloudStepProgress(job, step).detail, /percentage unavailable/)
+  }
+  const job = { status: 'queued', runs: [] }
+  assert.equal(cloudStepProgress(job, cloudJobProgress(job).steps[0]).value, null)
+})
+
+test('analysis progress distinguishes concurrent sequence totals from legacy cycle counts', () => {
+  const job = sequenceAtSix()
+  let step = cloudJobProgress(job).steps[5]
+  assert.equal(cloudStepProgress(job, step).value, 69)
+  job.sequence.automatic = false
+  job.runs[0].status = 'complete'
+  job.runs[1] = { status: 'running', positions: 500000, imported: 100000 }
+  step = cloudJobProgress(job).steps[5]
+  assert.equal(cloudStepProgress(job, step).value, 20)
+  const single = { ...jobAt('running'), runs: [{ status: 'running', positions: 2000, imported: 500 }] }
+  assert.equal(cloudStepProgress(single, step).value, 25)
+})
+
+test('completed and pending meters are fixed; paused and malformed counters cannot fake activity', () => {
+  const job = jobAt('publishing', 'paused')
+  const steps = cloudJobProgress(job).steps
+  assert.equal(cloudStepProgress(job, steps[0]).value, 100)
+  assert.equal(cloudStepProgress(job, steps[2]).value, null)
+  assert.equal(cloudStepProgress(job, steps[2]).detail, 'Needs attention')
+  assert.equal(cloudStepProgress(job, steps[3]).value, 0)
+  const step = { id: 'analyze', state: 'current' }
+  for (const imported of [null, undefined, NaN, Infinity, -1]) {
+    assert.equal(cloudStepProgress({ target: 100, imported }, step).value, null)
+  }
+  assert.equal(cloudStepProgress({ target: 100, imported: 101 }, step).value, 100)
+  assert.equal(cloudStepProgress({ target: 0, imported: 0 }, step).value, null)
+  const done = cloudJobProgress(jobAt('complete', 'complete')).steps
+  assert.ok(done.every(step => cloudStepProgress(job, step).value === 100))
 })
 
 test('task six is selected ahead of five tasks awaiting shared cleanup', () => {

@@ -61,6 +61,7 @@ async def save_compact_batch(session, solved, unavailable):
     await conn.copy_records_to_table("tablebase_result_input",
         columns=["fen", "piece_count", "score", "next_moves", "wdl_win", "wdl_draw",
                  "wdl_loss", "tablebase_wdl", "tablebase_dtz", "available"], records=rows)
+    await conn.execute("ANALYZE pg_temp.tablebase_result_input")
     # Caller owns FEN row locks and has rechecked cloud claims.
     await conn.execute(f"""UPDATE {target} f SET piece_count=i.piece_count,
         score=CASE WHEN i.available THEN i.score ELSE f.score END,

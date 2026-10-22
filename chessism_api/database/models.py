@@ -130,6 +130,24 @@ class CloudBatchUnit(Base):
     position_count = Column(Integer, nullable=False)
 
 
+class CloudGameFenQueue(Base):
+    """A job-local ordered candidate snapshot, not a cache of engine results."""
+    __tablename__ = 'cloud_game_fen_queue'
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), primary_key=True)
+    selection_sha256 = Column(String(64), nullable=False)
+    built_at = Column(DateTime(timezone=True))
+    candidate_count = Column(BigInteger, nullable=False, default=0)
+
+
+class CloudGameFenCandidate(Base):
+    __tablename__ = 'cloud_game_fen_candidate'
+    job_id = Column(String(32), ForeignKey('cloud_game_fen_queue.job_id', ondelete='CASCADE'), primary_key=True)
+    ordinal = Column(BigInteger, primary_key=True)
+    # IDs are immutable; live eligibility is checked under the real FEN lock.
+    # No FK here: queue maintenance must not take millions of FEN key-share locks.
+    fen_id = Column(BigInteger, nullable=False)
+
+
 class CloudBatchSequence(Base):
     """One frozen input set, consumed by sequential normal cloud lifecycles."""
     __tablename__ = 'cloud_batch_sequence'

@@ -67,6 +67,49 @@ Keep machine-family/VM-count cost benchmarks separate from this recovery test.
 
 ## Lifecycle
 
+### Indexed preparation queue for Batch game selections
+
+`game_fen_queue.py` builds the ordered, deduplicated candidate list once per job,
+instead of rebuilding it for every 50,000-FEN work unit. It stores only native
+FEN IDs and ordering keys in `cloud_game_fen_queue` / `cloud_game_fen_candidate`.
+The ordering matches the original game-priority, move-priority and FEN-text
+tie-break. A selection fingerprint rejects reuse with a different game order.
+
+The initial build is atomic. Subsequent reads page the `(job_id, ordinal)` index
+and lock bounded FEN lookups. A fresh snapshot rechecks scores and cloud claims.
+Locked FENs remain queued for a subsequent attempt; positions found scored or
+claimed are excluded. Queue consumption commits in the same transaction as
+the validated work unit and its reservations, so failures restore the queue.
+The inexpensive claim-table statistics refresh is retained. Timings distinguish
+the one-time `prepare_queue_build` from `prepare_select`, `prepare_recheck` and
+`prepare_queue_consume` for each unit.
+
+The candidate snapshot is preparation scratch data, not a replacement for durable
+work-unit inputs, claims or result receipts. It is discarded after freezing the
+selection, on cancellation, and on terminal completion as a fallback. Existing
+cloud execution, retries, import and cleanup contracts are unchanged. All-position
+and player-frequency selection paths, local analysis and Cloud Run are unchanged.
+
+Deployment is deliberately deferred while a cloud job is running. After all
+cloud jobs are terminal, stop only the idle cloud controller and apply the
+additive migration using the new code and normal database environment:
+
+```bash
+python -m chessism_api.operations.cloud_analysis.migrate_game_fen_queue
+```
+
+The migration refuses a running controller, a concurrent submission or any
+unfinished request. Deploy/restart the updated controller only after this succeeds;
+never switch a live reservation process mid-flight. No Google calls or resources
+are needed for the migration. The API's schema initialization must not be used
+as a substitute for this explicit rollout gate.
+
+Validation: `tests/test_cloud_game_queue.py` and
+`tests/check_cloud_game_queue_postgres.py`. The latter starts its own disposable
+PostgreSQL cluster and covers parity, concurrent claims, restart/rollback,
+coordinator integration, scoped cleanup, migration guards and a synthetic timing
+comparison. Run it without networking, live database volumes or cloud credentials.
+
 ### Automatic cloud tasks over one frozen FEN set
 
 Enter **Total FEN positions**, not Times. Batch still accepts at most 10,000,000

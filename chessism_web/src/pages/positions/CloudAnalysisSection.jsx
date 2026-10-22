@@ -98,7 +98,7 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
         return (
           <article {...pageStyleTarget(stopping ? 'cloud.job.stopping' : 'cloud.job')}
             className={`cloud-job${stopping ? ' cloud-job-stopping' : ''}`} key={job.id}>
-            <CloudJobOverview job={job} active={active} onOpenReport={setPerformanceRun} />
+            <CloudJobOverview job={job} active={active} onOpenReport={setPerformanceRun} controllerOnline={data.controller_online} />
             {(job.error || canRevise || canResume || canRetry) && <section {...pageStyleTarget('cloud.job.controls')}
               className="cloud-job-part cloud-job-controls" aria-label="Cloud job stop and recovery">
             {job.error && <p {...pageStyleTarget('text')} className="status-banner warn">{job.error}</p>}

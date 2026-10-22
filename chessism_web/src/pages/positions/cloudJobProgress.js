@@ -18,6 +18,13 @@ export const CLOUD_JOB_STEPS = [
   'Done',
 ]
 
+// Stable identities keep a step's appearance independent of its current state
+// and of the separate cancellation workflow.
+export const CLOUD_JOB_STEP_IDS = [
+  'reserve', 'preflight', 'publish', 'upload', 'start',
+  'analyze', 'verify', 'cleanup', 'summaries', 'done',
+]
+
 const phaseSteps = {
   preparing: 1, publishing: 2, uploading: 3,
   submitting: 4, run_creating: 4, run_start: 4, run_discover: 4,
@@ -75,7 +82,7 @@ export function cloudJobProgress(job) {
     const current = Math.max(0, phases.indexOf(job.stop_cleanup.phase))
     const finished = job.status === 'cancelled' && job.stop_cleanup.phase === 'complete'
     return { done: false, label: `${job.status === 'paused' ? 'Paused — ' : ''}${names[current]}`,
-      steps: names.map((title, index) => ({ title, state: finished || index < current ? 'complete'
+      steps: names.map((title, index) => ({ id: `stop-${phases[index]}`, title, state: finished || index < current ? 'complete'
         : index === current ? job.status === 'paused' ? 'attention' : 'current' : 'pending' })) }
   }
   const done = cloudJobDone(job)
@@ -95,11 +102,38 @@ export function cloudJobProgress(job) {
   return {
     done, label,
     steps: CLOUD_JOB_STEPS.map((title, index) => ({
+      id: CLOUD_JOB_STEP_IDS[index],
       title,
       state: done || index < step ? 'complete'
         : index === step ? interrupted ? 'attention' : 'current' : 'pending',
     })),
   }
+}
+
+export function cloudStepProgress(job, step) {
+  if (step.state === 'complete') return { value: 100, detail: 'Complete' }
+  if (step.state === 'pending') return { value: 0, detail: 'Pending' }
+  let completed, total, unit
+  if (step.id === 'reserve' && job.sequence) {
+    completed = job.sequence.reserved
+    total = job.sequence.requested
+    unit = 'FENs reserved'
+  } else if (step.id === 'analyze') {
+    // Legacy cycles use their own counts; automatic sequences import several
+    // cycles concurrently, so use their overall saved-result count.
+    const run = !job.sequence?.automatic && cloudActiveRun(job)
+    completed = run?.positions > 0 ? run.imported : job.imported
+    total = run?.positions > 0 ? run.positions : job.target
+    unit = 'FENs saved locally'
+  }
+  if (Number.isFinite(completed) && completed >= 0 && Number.isFinite(total) && total > 0) {
+    const value = Math.min(100, completed / total * 100)
+    // Do not round 99.9% to 100%, nor infer workflow completion from counts.
+    return { value, detail: `${completed.toLocaleString()} / ${total.toLocaleString()} ${unit} · ${Math.floor(value)}%` }
+  }
+  // Publishing, quota checks and cleanup do not expose work counters. An
+  // animated activity bar is honest; elapsed time is not a completion estimate.
+  return { value: null, detail: step.state === 'attention' ? 'Needs attention' : 'In progress — percentage unavailable' }
 }
 
 export function cloudJobIndicator(job) {

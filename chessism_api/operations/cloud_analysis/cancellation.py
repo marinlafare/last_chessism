@@ -123,6 +123,8 @@ async def finish(job_id, all_ids):
             await session.execute(delete(cloud_columns.ROOTS).where(cloud_columns.ROOTS.c.id.in_(refs)))
         cancellation.phase, cancellation.finished_at = 'complete', now
         job.status, job.error, job.updated_at = 'cancelled', None, now
+        from .game_fen_queue import discard_queue
+        await discard_queue(session, job_id)
 
 
 async def tick(controller, job, cancellation):

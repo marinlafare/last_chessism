@@ -24,18 +24,22 @@ from .importer import refresh_unit_projections
 
 
 async def reserve_unit(job, root, launch, vm, limit):
-    from chessism_api.database.ask_db import get_fens_for_analysis, get_player_fens_for_analysis, get_game_set_fens_for_analysis
+    from chessism_api.database.ask_db import get_fens_for_analysis, get_player_fens_for_analysis
+    from .game_fen_queue import get_game_queue_fens
     selection, timings = job.selection, PreparationTimings()
     session, timing_run_id = None, root.id
     try:
+        # The fresh-snapshot eligibility query still uses the claim table.
+        # Retain this cheap safeguard as claims grow during reservation.
         with timings.measure('prepare_statistics'):
             await refresh_claim_statistics()
         if selection['mode'] == 'games':
-            session, fens = await get_game_set_fens_for_analysis(selection['game_links'], limit, raise_errors=True, timings=timings)
-        elif selection.get('player_name'):
-            session, fens = await get_player_fens_for_analysis(selection['player_name'], limit, raise_errors=True, timings=timings)
+            session, fens = await get_game_queue_fens(job.id, selection['game_links'], limit, timings=timings)
         else:
-            session, fens = await get_fens_for_analysis(limit, raise_errors=True, timings=timings)
+            if selection.get('player_name'):
+                session, fens = await get_player_fens_for_analysis(selection['player_name'], limit, raise_errors=True, timings=timings)
+            else:
+                session, fens = await get_fens_for_analysis(limit, raise_errors=True, timings=timings)
         if session is None:
             return 0
         with timings.measure('prepare_encode'):
@@ -134,6 +138,10 @@ async def advance(controller, job, run):
                 return
         launch['tasks'] = lanes(launch)
         await save_run(run.id, launch=launch, status='publishing', error=None)
+        if job.selection['mode'] == 'games':
+            from .game_fen_queue import discard_queue
+            async with AsyncDBSession() as session, session.begin():
+                await discard_queue(session, job.id)
     elif run.status == 'publishing':
         await asyncio.to_thread(check_bucket, cloud)
         launch['image'] = await asyncio.to_thread(cloud.publish, run.id, launch['image_id'])

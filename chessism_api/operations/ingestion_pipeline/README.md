@@ -85,6 +85,17 @@ Exact WDL, DTZ and best-move selection are unchanged. Compact writes use COPY
 and one UPDATE rather than one update execution per solved FEN. Coverage still
 uses the established retry-safe refresh after each committed batch.
 
+Scoped coverage refreshes analyze their temporary game-ID table; scopes of up
+to 10,000 games aggregate through indexed per-game lookups. This prevents small batches from choosing
+full scans of all game-position associations and all FENs. Large cloud scopes
+and explicit full repairs retain the grouped query; an empty selection is a no-op,
+never a request for a global rebuild. Stable game locks and absolute counts
+are unchanged, including for FENs shared with other players' games.
+COPY inputs and occurrence-delta scratch tables are also analyzed before their
+joins; PostgreSQL's autovacuum cannot supply statistics for temporary tables.
+Per-batch tablebase refreshes remain in place: this optimization does not defer
+correctness work into an in-memory-only end-of-run list.
+
 `INGESTION_CPU_LIMIT` defaults to one CPU for the coordinator/tablebase worker
 (previously half a CPU). It does not alter Stockfish nodes, threads, VM counts,
 or the independent cloud controller.

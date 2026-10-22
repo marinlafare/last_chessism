@@ -74,6 +74,8 @@ async def freeze(job_id):
         job = await session.get(CloudAnalysisJob, job_id)
         # Retain the requested count in the sequence; progress uses actual FENs.
         job.target = sequence.reserved_count
+        from .game_fen_queue import discard_queue
+        await discard_queue(session, job_id)
 
 
 async def select_next(controller, job, rows):
@@ -137,6 +139,8 @@ async def stop_unstarted(job_id):
             root.status, root.details_pruned = 'cancelled', True
         job = await session.get(CloudAnalysisJob, job_id)
         job.status, job.error = 'cancelled', 'Stopped remaining loops; completed results are retained.'
+        from .game_fen_queue import discard_queue
+        await discard_queue(session, job_id)
 
 
 async def tick(controller, job):

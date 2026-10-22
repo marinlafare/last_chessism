@@ -60,6 +60,9 @@ async def save_job(job_id, **changes):
         for key, value in changes.items():
             setattr(job, key, value)
         job.updated_at = datetime.now(timezone.utc)
+        if changes.get('status') in {'complete', 'limit_reached', 'cancelled'}:
+            from .game_fen_queue import discard_queue
+            await discard_queue(session, job_id)
 
 
 async def reserve(job, limit):

@@ -8,6 +8,14 @@ export function positionSlices(summary) {
 
 export const GAME_PLAYERS_PER_PAGE = 4
 
+export function summaryGamePlayers(summary, titledOnly = true) {
+  const live = summary?.game_players?.[titledOnly ? 'titled' : 'untitled']
+  // Retain compatibility while an API deployment is rolling out. An empty live
+  // roster is authoritative; never resurrect a deleted player from the cache.
+  if (Array.isArray(live)) return live
+  return titledOnly ? summary?.players : summary?.untitled_players
+}
+
 const compactWhole = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 0 })
 export function gameBarLabel(games) {
   const unit = games >= 1e9 ? 1e9 : games >= 1e6 ? 1e6 : games >= 1e3 ? 1e3 : 1

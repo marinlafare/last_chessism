@@ -219,6 +219,7 @@ async def main():
         factory = async_sessionmaker(engine, expire_on_commit=False,
             info={SESSION_KEY: RelationalStorage("public", "archive", "reads", "relational_v3")})
         await asyncio.wait_for(exercise(conn, factory), 180)
+        await asyncio.wait_for(exercise_coverage(conn, factory), 90)
     finally:
         if engine:
             await engine.dispose()
@@ -226,6 +227,63 @@ async def main():
             await conn.close()
         with suppress(Exception):
             await restore._run_command_capture(restore.PG_CTL, "-D", str(pgdata), "-m", "fast", "-w", "stop")
+
+
+async def exercise_coverage(conn, factory):
+    from chessism_api.operations.relational_coverage import FIELDS, coverage_source_sql, refresh_coverage
+    layout = RelationalStorage('public', 'archive', 'reads', 'relational_v3')
+    scores = [None, 0, -49, 50, -149, 150, -299, 300, -8999, 9000, -10000]
+    identities = []
+    for index, score in enumerate(scores):
+        identities.append(await conn.fetchval("""INSERT INTO fen(fen,n_games,moves_counter,score)
+            VALUES($1,1,'fixture',$2) RETURNING fen_id""", f'coverage-fixture-{index}', score))
+    await conn.executemany("""INSERT INTO game_fen_association(game_link,n_move,is_white,fen_id)
+        VALUES($1,$2,true,$3)""", [(901,index+1,identity) for index,identity in enumerate(identities)]
+        + [(902,index+1,identities[1]) for index in range(10)]
+        + [(904,1,identities[0]), (905,1,identities[1])])
+    # An obsolete empty-game cache row must be removed, not turned into 0/0=100%.
+    await conn.execute('INSERT INTO game_analysis_coverage(link) VALUES(903)')
+    async def refresh(links=None, **kwargs):
+        async with factory.begin() as session:
+            return await refresh_coverage(session, links, **kwargs)
+    async def snapshot():
+        return [tuple(row) for row in await conn.fetch(
+            f"SELECT link,{','.join(FIELDS)} FROM game_analysis_coverage WHERE link>=901 ORDER BY link")]
+    async with factory.begin() as session:
+        rows = await refresh_coverage(session, [901, 902, 903, 904, 905, 901])
+        assert [row['link'] for row in rows] == [901,902,904,905]
+        scoped = (await session.execute(text(coverage_source_sql(layout, scoped=True)))).all()
+        grouped = (await session.execute(text(coverage_source_sql(layout, scoped=False)))).all()
+        assert scoped == grouped, 'Scoped and whole-corpus formulas disagree'
+    before = await snapshot()
+    assert before[0] == (901,11,10,1,False,2,2,2,2,2), before[0]
+    assert before[1] == (902,10,10,0,True,10,0,0,0,0), before[1]
+    assert await refresh([]) == []
+    assert await refresh(fens=[]) == []
+    assert await snapshot() == before
+    await asyncio.gather(refresh([901,902,904]), refresh([902,901,904]))
+    assert await snapshot() == before, 'Concurrent replay changed absolute counters'
+    # Shared FENs must refresh other players' games too; repeated occurrences
+    # within one game must still count separately.
+    await conn.execute('UPDATE fen SET score=100 WHERE fen_id=$1', identities[1])
+    changed = await refresh(fens=['coverage-fixture-1'])
+    assert [row['link'] for row in changed] == [901,902,905]
+    after = await snapshot()
+    assert after[1] == (902,10,10,0,True,0,10,0,0,0), after[1]
+    assert after[-1] == (905,1,1,0,True,0,1,0,0,0), after[-1]
+    await refresh(fens=['coverage-fixture-1'])
+    assert await snapshot() == after
+    try:
+        async with factory.begin() as session:
+            await session.execute(text('UPDATE fen SET score=NULL WHERE fen_id=:id'), {'id':identities[1]})
+            await refresh_coverage(session, [901,902,905])
+            raise RuntimeError('interrupted transaction')
+    except RuntimeError:
+        pass
+    assert await snapshot() == after, 'Rollback published uncommitted coverage'
+    await refresh()
+    assert await snapshot() == after
+    print('PASS scoped/full parity, score boundaries, shared FENs, empty scopes, concurrent replay and rollback', flush=True)
 
 
 if __name__ == "__main__":

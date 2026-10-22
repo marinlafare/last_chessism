@@ -79,6 +79,8 @@ async def refresh_game_player_engine_summaries(
 ) -> dict[str, int]:
     """Build compact per-player scores for fully analyzed games."""
     links = sorted({int(link) for link in game_links or ()})
+    if game_links is not None and not links:
+        return {"game_players": 0, "games": 0}
     params = {"all_games": not links, "game_links": links}
     delete_sql = text("""
         DELETE FROM game_player_engine_summary engine_summary

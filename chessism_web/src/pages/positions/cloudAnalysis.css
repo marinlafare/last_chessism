@@ -111,6 +111,24 @@
 .cloud-step--attention { background: #453626; border-left-color: #ddb676; }
 .cloud-step--complete { color: #9bd5b6; }
 .cloud-step--pending { color: #a9b9bd; }
+.cloud-step-meter { grid-column: 2 / -1; min-width: 0; display: grid; gap: .25rem; }
+.cloud-step-bar { --chart-color-1: #b194c4; --bar-hover-color: var(--chart-color-1); --summary-bar-height: 8px; --cloud-step-fill: var(--chart-color-1); display: flex; align-items: stretch; min-width: 0; min-height: var(--summary-bar-height); padding: 0; border: 0 solid transparent; border-radius: 4px; overflow: hidden; background: #243638; box-sizing: border-box; }
+.cloud-step-bar:hover { --cloud-step-fill: var(--bar-hover-color); }
+.cloud-step-bar-fill { display: block; flex: 0 0 auto; min-height: var(--summary-bar-height); border-radius: inherit; background: var(--cloud-step-fill); transition: width .3s ease; pointer-events: none; }
+.cloud-step--complete .cloud-step-bar { --chart-color-1: #64ac85; }
+.cloud-step--attention .cloud-step-bar { --chart-color-1: #ddb676; }
+.cloud-step-bar.is-indeterminate .cloud-step-bar-fill { transform: translateX(116%); }
+.cloud-step-bar.is-indeterminate.is-active .cloud-step-bar-fill { animation: cloud-step-travel 1.8s ease-in-out infinite alternate; }
+/* A faint track pulse keeps a measured zero visibly active before the first
+   durable reservation/import checkpoint, without inventing completed work. */
+.cloud-step-bar.is-active:not(.is-indeterminate) { animation: cloud-step-busy 2s ease-in-out infinite; }
+.cloud-step .cloud-step-detail { color: inherit; text-align: right; font-variant-numeric: tabular-nums; }
+@keyframes cloud-step-travel { from { transform: translateX(0); } to { transform: translateX(233.333%); } }
+@keyframes cloud-step-busy { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+@media (prefers-reduced-motion: reduce) {
+  .cloud-step-bar.is-active, .cloud-step-bar.is-indeterminate.is-active .cloud-step-bar-fill { animation: none; }
+  .cloud-step-bar-fill { transition: none; }
+}
 .cloud-analysis small { color: #a9b9bd; }
 .cloud-game-draft { display: flex; flex-direction: column; gap: .75rem; }
 .cloud-draft-entries { display: flex; flex-wrap: wrap; gap: .5rem; padding: 0; margin: 0; list-style: none; }

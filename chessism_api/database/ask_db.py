@@ -3120,6 +3120,8 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
     only those games are refreshed.
     """
     clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
+    if game_links is not None and not clean_links:
+        return {'games': 0, 'scope': 'links'}
     from chessism_api.database.relational_storage import storage_for
     async with AsyncDBSession() as relational_session:
         if storage_for(relational_session):
