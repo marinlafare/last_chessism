@@ -1,10 +1,11 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { cloudStatusSummary } from './cloudStatusSummary'
 import CloudEtaBar from './CloudEtaBar'
+import CloudJobRecovery from './CloudJobRecovery'
 
 const number = value => value == null ? '—' : value.toLocaleString('en-US')
 
-export default function CloudStatusPanel({ loading, error, data, lastSuccessAt }) {
+export default function CloudStatusPanel({ loading, error, data, lastSuccessAt, refresh }) {
   const view = cloudStatusSummary(data, { loading, error })
   const { job, progress } = view
 
@@ -49,5 +50,7 @@ export default function CloudStatusPanel({ loading, error, data, lastSuccessAt }
         <p {...pageStyleTarget('text')} className="meta">{error ? 'last known status' : 'refreshes every 5s'}</p>
       </article>
     </div>
+    {job && <CloudJobRecovery key={job.id} job={job} available={!error && Boolean(data?.controller_online)}
+      lastSuccessAt={lastSuccessAt} refresh={refresh} />}
   </section>
 }

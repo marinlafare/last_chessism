@@ -66,7 +66,7 @@ export default function AppearanceEditor() {
         <button type="button" disabled={!selection.element.parentElement?.closest('[data-style-id]')} onClick={()=>ctx.select(selection.element.parentElement,selection.x,selection.y)}>Select enclosing container</button>
         {targets.map((item,index)=><div className="appearance-property-group" data-appearance-target={item.id} key={item.id}>
           {index>0&&<strong>{item.spec.label}</strong>}
-          <AppearancePropertyFields editable={item} related={index>0}/>
+          <AppearancePropertyFields editable={item} related={index>0} idSuffix={index>1?`${item.id}-`:''}/>
         </div>)}
         {ctx.error&&<p role="alert">{ctx.error}</p>}
         <button type="button" disabled={!ctx.dirty||ctx.busy} onClick={()=>ctx.save()}>{ctx.busy?'Saving…':'Save all style changes'}</button>

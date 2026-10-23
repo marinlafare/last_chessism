@@ -32,7 +32,7 @@ export function EstimatedTime({ jobId, progress, status, etaClockMs, etaEstimate
   return (
     <div className={`job-progress-eta ${hasRate ? '' : 'is-calculating'}`}>
       <span>Estimated time left</span>
-      <strong {...pageStyleTarget('value')}>{hasRate ? formatCountdown(countdown) : 'Calculating…'}</strong>
+      <strong {...pageStyleTarget('local.job.eta.value')}>{hasRate ? formatCountdown(countdown) : 'Calculating…'}</strong>
     </div>
   )
 }
@@ -45,13 +45,13 @@ function JobProgress({ mode, state, status, etaClockMs, etaEstimatesRef }) {
     <div className="job-progress">
       <div className="job-progress-head">
         <span>{formatNumber(processed)} / {formatNumber(progress.target)}</span>
-        <strong {...pageStyleTarget('value')}>{progress.percent}%</strong>
+        <strong {...pageStyleTarget('local.job.percent')}>{progress.percent}%</strong>
       </div>
       <div className="job-progress-track">
         <div className="job-progress-fill" style={{ width: `${progress.percent}%` }} />
       </div>
       {progress.phase ? (
-        <small {...pageStyleTarget('text')}>{progress.phase}{progress.detail ? ` | ${progress.detail}` : ''}</small>
+        <small {...pageStyleTarget('local.job.detail')}>{progress.phase}{progress.detail ? ` | ${progress.detail}` : ''}</small>
       ) : null}
       <EstimatedTime
         jobId={state.jobId}
@@ -81,17 +81,17 @@ export function JobStatus({ jobKey, page }) {
       ref={page.setJobCardRef(jobKey)}
     >
       <span>{status.replace('_', ' ')}</span>
-      <small {...pageStyleTarget('text')}>{functionName}</small>
+      <small {...pageStyleTarget('local.job.function')}>{functionName}</small>
       {isLoopJobKey(jobKey) ? (
-        <strong {...pageStyleTarget('value')} className="job-scope-label">Running scope: {getLoopScopeLabel(state)}</strong>
+        <strong {...pageStyleTarget('local.job.loop-scope')} className="job-scope-label">Running scope: {getLoopScopeLabel(state)}</strong>
       ) : null}
       {jobKey === 'gameCompletion' ? (
-        <strong {...pageStyleTarget('value')} className="job-scope-label">
+        <strong {...pageStyleTarget('local.job.games-scope')} className="job-scope-label">
           Completing games for {state.status?.info?.kwargs?.player_name || state.payload?.player_name || 'player'}
         </strong>
       ) : null}
       {canDelete ? (
-        <button {...pageStyleTarget('button')}
+        <button {...pageStyleTarget('local.job.delete')}
           className="btn job-delete-queued"
           type="button"
           disabled={state.deleting}

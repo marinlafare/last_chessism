@@ -85,8 +85,9 @@
 .cloud-vm-tile { display: flex; flex-direction: column; justify-content: center; align-items: center; gap: .4rem; width: 100%; min-width: 0; min-height: 64px; padding: .65rem .4rem; box-sizing: border-box; border: 1px solid #35525a; border-radius: 8px; background: #0e151c; color: inherit; font: inherit; cursor: pointer; }
 .cloud-vm-tile strong { white-space: nowrap; }
 .cloud-vm-tile:hover { background: #243638; }
-.cloud-vm-tile[aria-expanded="true"] { outline: 2px solid #b194c4; outline-offset: 2px; }
+.cloud-vm-tile[aria-expanded="true"] { outline: var(--cloud-vm-selected-border-width, 2px) solid var(--cloud-vm-selected-border-color, #b194c4); outline-offset: 2px; }
 .cloud-vm-tile:focus-visible { outline: 2px solid #d6c3e3; outline-offset: 3px; }
+.cloud-vm-tile[aria-expanded="true"]:focus-visible { outline: var(--cloud-vm-selected-border-width, 2px) solid var(--cloud-vm-selected-border-color, #b194c4); outline-offset: 2px; }
 .cloud-vm-tile small { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 11px; }
 .cloud-vm-state { display: flex; align-items: center; justify-content: center; gap: .35rem; min-width: 0; max-width: 100%; }
 .cloud-vm-state-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #94a3b8; }

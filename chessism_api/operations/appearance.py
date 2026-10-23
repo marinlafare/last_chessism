@@ -46,7 +46,24 @@ for _target in REGISTRY['scopes']['scored_positions']['targets'].values():
     if 'background' in _target['properties'] and 'hoverBackground' not in _target['properties']:
         _target['properties'] = [*_target['properties'], 'hoverBackground']
 
-MAX_OVERRIDES = 2000
+# Analyze Positions uses separate identities for its headings, fields, actions
+# and status labels. Every painted box exposes the same corner/border controls.
+for _target in REGISTRY['scopes']['positions']['targets'].values():
+    if 'background' in _target['properties']:
+        _target['properties'] = list(dict.fromkeys([*_target['properties'],
+            'hoverBackground', 'borderColor', 'hoverBorderColor', 'borderWidth', 'radius']))
+
+# Spacing and corner rounding are allowed for every registered target without
+# rewriting presets. The editor hides rounding on elements without corners or
+# a compatible layout box (SVG paths/circles and collapsed table internals).
+for _scope in REGISTRY['scopes'].values():
+    for _target in _scope['targets'].values():
+        _target['properties'] = list(dict.fromkeys([*_target['properties'], *REGISTRY['universalProperties']]))
+
+# Independent controls expand existing presets (the current full-site preset
+# exceeds 2,000 rows after splitting). Keep a bounded allowance for fine-grained
+# page styling; every row still has to match the registry and typed limits.
+MAX_OVERRIDES = 10000
 
 
 class AppearanceConflict(ValueError):
@@ -105,8 +122,12 @@ async def snapshot(session):
     for preset in presets:
         if preset.schema_version != REGISTRY['version']: raise ValueError('Unsupported saved appearance version; saving is disabled.')
         validate_overrides(by_preset[preset.id])
-    active = setting.active_preset_id if setting else None
+    # The reserved Default row is optional for older installations. Once a
+    # theme is promoted, an unset selection uses it, not the source-code theme.
+    default = next((p.id for p in presets if p.name_key == 'default'), None)
+    active = (setting.active_preset_id if setting else None) or default
     return {'revision': setting.revision if setting else 0, 'active_preset_id': active,
+            'default_preset_id': default,
             'presets': [{'id': p.id, 'name': p.name} for p in presets],
             'overrides': by_preset.get(active, []), 'registry': REGISTRY}
 
@@ -130,6 +151,8 @@ async def change_appearance(action, payload, account_id):
             preset_id = payload.get('preset_id')
             preset = await session.get(Preset, preset_id) if preset_id else None
             if preset_id and not preset: raise ValueError('Preset no longer exists.')
+            if action == 'rename' and preset and preset.name_key == 'default':
+                raise ValueError('The Default name is reserved. Create a new preset to make a named copy.')
             if action in ('save', 'rename') and (not preset or action == 'rename'):
                 name = preset_name(payload.get('name'))
                 if (await session.execute(select(Preset.id).where(Preset.name_key == name.casefold(), Preset.id != (preset_id or '')))).scalar():
@@ -148,7 +171,7 @@ async def change_appearance(action, payload, account_id):
                 preset.updated_at = func.now()
                 setting.active_preset_id = preset.id
             elif action == 'activate':
-                setting.active_preset_id = preset_id  # None selects immutable defaults.
+                setting.active_preset_id = preset_id  # None selects the official Default.
             elif action != 'rename':
                 raise ValueError('Unknown appearance action.')
             setting.revision += 1

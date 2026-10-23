@@ -117,6 +117,34 @@ class CloudGameDraftGame(Base):
     ordinal = Column(Integer, nullable=False)
 
 
+class CloudGameDraftCache(Base):
+    """Disposable builder snapshot; never an authorization or FEN reservation."""
+    __tablename__ = 'cloud_game_draft_cache'
+    draft_id = Column(String(32), ForeignKey('cloud_game_draft.id', ondelete='CASCADE'), primary_key=True)
+    revision = Column(Integer, nullable=False)
+    missing = Column(BigInteger, nullable=False, default=0)
+    claimed = Column(BigInteger, nullable=False, default=0)
+    __table_args__ = (CheckConstraint('missing >= 0 AND claimed >= 0 AND claimed <= missing'),)
+
+
+class CloudGameDraftEntryFen(Base):
+    __tablename__ = 'cloud_game_draft_entry_fen'
+    entry_id = Column(String(32), ForeignKey('cloud_game_draft_entry.id', ondelete='CASCADE'), primary_key=True)
+    # No FEN FK: draft calculation must not key-share-lock millions of live FENs.
+    fen_id = Column(BigInteger, primary_key=True)
+    draft_id = Column(String(32), ForeignKey('cloud_game_draft_cache.draft_id', ondelete='CASCADE'), nullable=False, index=True)
+
+
+class CloudGameDraftFen(Base):
+    __tablename__ = 'cloud_game_draft_fen'
+    draft_id = Column(String(32), ForeignKey('cloud_game_draft_cache.draft_id', ondelete='CASCADE'), primary_key=True)
+    fen_id = Column(BigInteger, primary_key=True)
+    n_entries = Column(Integer, nullable=False)
+    is_missing = Column(Boolean, nullable=False)
+    is_claimed = Column(Boolean, nullable=False)
+    __table_args__ = (CheckConstraint('n_entries > 0'), CheckConstraint('NOT is_claimed OR is_missing'))
+
+
 install_cloud_documents((CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation))
 
 
@@ -197,6 +225,22 @@ class CloudPhaseTiming(Base):
     duration_seconds = Column(Float)
     outcome = Column(String(24), nullable=False, default='running')
     error = Column(Text)
+
+
+class CloudRecoveryEvent(Base):
+    """Append-only operational history; never removed by result compaction."""
+    __tablename__ = 'cloud_recovery_event'
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), nullable=False, index=True)
+    episode_id = Column(String(32), nullable=False)
+    kind = Column(String(24), nullable=False)
+    operation = Column(String(80), nullable=False)
+    error_type = Column(String(120))
+    message = Column(Text)
+    attempt = Column(Integer)
+    delay_seconds = Column(Float)
+    elapsed_seconds = Column(Float)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
 
 class CloudResultBatch(Base):

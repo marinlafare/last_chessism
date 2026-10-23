@@ -1,7 +1,19 @@
 {
   "version": 1,
   "scope": "scored_positions",
+  "universalProperties": ["margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "radius"],
   "properties": {
+    "salienceTrackHeight": {"label":"Track height (px)","kind":"number","min":80,"max":480,"unit":"px","css":"--salience-track-height","default":160},
+    "salienceRailWidth": {"label":"Rail width (px)","kind":"number","min":1,"max":12,"unit":"px","css":"--salience-rail-width","default":4},
+    "salienceKnobSize": {"label":"Knob size (px)","kind":"number","min":8,"max":24,"unit":"px","css":"--salience-knob-size","default":12},
+    "margin": {"label":"Margin · all sides (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin"},
+    "marginTop": {"label":"Margin · top (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-top"},
+    "marginRight": {"label":"Margin · right (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-right"},
+    "marginBottom": {"label":"Margin · bottom (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-bottom"},
+    "marginLeft": {"label":"Margin · left (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-left"},
+    "researchIntroWidth": {"label":"Width (%)","kind":"number","min":20,"max":100,"unit":"%","css":"--research-intro-width","default":50},
+    "vmSelectedBorderColor": {"label":"Selected VM border color","kind":"color","css":"--cloud-vm-selected-border-color","default":"#b194c4"},
+    "vmSelectedBorderWidth": {"label":"Selected VM border width","kind":"number","min":0,"max":8,"unit":"px","css":"--cloud-vm-selected-border-width","default":2},
     "modeActiveBackground": {
       "label": "Active background",
       "kind": "color",

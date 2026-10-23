@@ -25,7 +25,7 @@ export default function CloudJobSteps({ job, controllerOnline = true }) {
           <span className="cloud-step-bar-fill" aria-hidden="true" style={{ width: indeterminate ? '30%' : `${progress.value}%` }} />
         </div>
         {(state === 'current' || state === 'attention') && !indeterminate && <small
-          {...pageStyleTarget(`cloud.step.${state}.status`)} className="cloud-step-detail">{progress.detail}</small>}
+          {...pageStyleTarget(`cloud.step.${state}.detail`)} className="cloud-step-detail">{progress.detail}</small>}
       </div>
     </li>})}
   </ol>

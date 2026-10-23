@@ -109,7 +109,8 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.preview()
         await self.add((103,), replace=entry_id)
         self.assertEqual(len(self.draft['entries']), 1)
-        self.assertIsNone(self.draft['preview'])
+        self.assertEqual(self.draft['preview']['revision'], self.draft['revision'])
+        self.assertEqual(self.draft['preview']['fens_to_analyze'], 2)
         async with AsyncDBSession() as s:
             self.assertEqual(await game_drafts.game_links(s, self.draft['id']), [103])
         with self.assertRaises(HTTPException):
@@ -155,6 +156,10 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_preview_required_and_empty_oversized_or_increased_counts_refused(self):
         await self.add()
         await self.available()
+        # A successful Add now publishes a preview atomically. Missing/stale
+        # previews must still fail closed, including legacy saved drafts.
+        async with AsyncDBSession() as s, s.begin():
+            (await s.get(CloudGameDraft, self.draft['id'])).preview_revision = None
         with self.assertRaises(HTTPException):
             await self.submit()
         await self.preview()

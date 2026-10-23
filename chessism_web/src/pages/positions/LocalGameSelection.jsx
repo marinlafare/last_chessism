@@ -5,23 +5,23 @@ import { MAX_LOOP_ANALYSIS_BATCH_SIZE, clampAnalysisBatchInput, formatDuration, 
 export default function LocalGameSelection({ page }) {
   const { handleConfirmPlayerGameAnalysis, handleInspectPlayerGameScope, handlePreviewPlayerGameAnalysis, jobState, playerGameAnalysis, playerGamePreview, playerGamePreviewTotalSeconds, setPlayerGameAnalysis } = page
   return (
-    <section {...pageStyleTarget('panel')} className="local-game-selection">
-      <div className="analysis-processes-heading">
+    <section {...pageStyleTarget('local.games.panel')} className="local-game-selection">
+      <div {...pageStyleTarget('local.games.heading')} className="analysis-processes-heading">
         <div>
-          <p {...pageStyleTarget('text')} className="eyebrow">COMPLETE PLAYER GAMES</p>
-          <small {...pageStyleTarget('text')}>Select exact incomplete games, preview their unique missing FENs, then confirm or cancel.</small>
+          <p {...pageStyleTarget('local.games.title')} className="eyebrow">COMPLETE PLAYER GAMES</p>
+          <small {...pageStyleTarget('local.games.note')}>Select exact incomplete games, preview their unique missing FENs, then confirm or cancel.</small>
         </div>
         {playerGameAnalysis.scope ? (
-          <span className="stat-chip">
+          <span {...pageStyleTarget('local.games.count-badge')} className="stat-chip">
             {formatNumber(playerGameAnalysis.scope.incomplete_games)} incomplete games
           </span>
         ) : null}
       </div>
 
-      <form className="player-game-scope-form" onSubmit={handleInspectPlayerGameScope}>
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Chess.com nickname</span>
-          <input {...pageStyleTarget('field')}
+      <form {...pageStyleTarget('local.games.form')} className="player-game-scope-form" onSubmit={handleInspectPlayerGameScope}>
+        <label {...pageStyleTarget('local.games.player.group')}>
+          <span {...pageStyleTarget('local.games.player.label')} className="field-label">Chess.com nickname</span>
+          <input {...pageStyleTarget('local.games.player.input')}
             className="text-input"
             type="text"
             value={playerGameAnalysis.playerName}
@@ -36,18 +36,18 @@ export default function LocalGameSelection({ page }) {
           />
         </label>
 
-        <div className="player-game-mode" role="radiogroup" aria-label="Game selection method">
+        <div {...pageStyleTarget('local.games.modes')} className="player-game-mode" role="radiogroup" aria-label="Game selection method">
           {[
             ['latest', 'Latest games', 'Newest incomplete games first'],
             ['oldest', 'Oldest games', 'Oldest incomplete games first'],
             ['range', 'Date range', 'Inspect all games between two dates'],
             ['fair_range', 'Fair range', 'Balanced samples across every available month']
           ].map(([value, label, description]) => (
-            <label {...pageStyleTarget('label')}
+            <label {...pageStyleTarget('local.games.mode.group')}
               className={`analysis-loop-scope-option ${playerGameAnalysis.selectionMode === value ? 'selected' : ''}`}
               key={value}
             >
-              <input {...pageStyleTarget('field')}
+              <input {...pageStyleTarget('local.games.mode.input')}
                 type="radio"
                 name="player-game-selection-mode"
                 value={value}
@@ -61,16 +61,16 @@ export default function LocalGameSelection({ page }) {
                   error: ''
                 }))}
               />
-              <span><strong {...pageStyleTarget('value')}>{label}</strong><small {...pageStyleTarget('text')}>{description}</small></span>
+              <span><strong {...pageStyleTarget('local.games.mode.title')}>{label}</strong><small {...pageStyleTarget('local.games.mode.description')}>{description}</small></span>
             </label>
           ))}
         </div>
 
         {playerGameAnalysis.selectionMode === 'range' ? (
-          <div className="player-game-date-fields">
-            <label {...pageStyleTarget('label')}>
-              <span {...pageStyleTarget('label')} className="field-label">Start date</span>
-              <input {...pageStyleTarget('field')}
+          <div {...pageStyleTarget('local.games.dates')} className="player-game-date-fields">
+            <label {...pageStyleTarget('local.games.from.group')}>
+              <span {...pageStyleTarget('local.games.from.label')} className="field-label">Start date</span>
+              <input {...pageStyleTarget('local.games.from.input')}
                 className="text-input"
                 type="date"
                 value={playerGameAnalysis.dateFrom}
@@ -83,9 +83,9 @@ export default function LocalGameSelection({ page }) {
                 }))}
               />
             </label>
-            <label {...pageStyleTarget('label')}>
-              <span {...pageStyleTarget('label')} className="field-label">End date</span>
-              <input {...pageStyleTarget('field')}
+            <label {...pageStyleTarget('local.games.to.group')}>
+              <span {...pageStyleTarget('local.games.to.label')} className="field-label">End date</span>
+              <input {...pageStyleTarget('local.games.to.input')}
                 className="text-input"
                 type="date"
                 value={playerGameAnalysis.dateTo}
@@ -101,7 +101,7 @@ export default function LocalGameSelection({ page }) {
           </div>
         ) : null}
 
-        <button {...pageStyleTarget('button')} className="btn btn-secondary" type="submit" disabled={playerGameAnalysis.loadingScope}>
+        <button {...pageStyleTarget('local.games.inspect')} className="btn btn-secondary" type="submit" disabled={playerGameAnalysis.loadingScope}>
           {playerGameAnalysis.loadingScope ? 'Inspecting games' : 'Inspect games'}
         </button>
       </form>
@@ -109,13 +109,13 @@ export default function LocalGameSelection({ page }) {
       {playerGameAnalysis.error ? <div className="status-banner warn">{playerGameAnalysis.error}</div> : null}
 
       {playerGameAnalysis.scope ? (
-        <div className="player-game-scope-results">
-          <div><small {...pageStyleTarget('text')}>Games with FENs</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGameAnalysis.scope.games_with_fens)}</strong></div>
-          <div><small {...pageStyleTarget('text')}>Already complete</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGameAnalysis.scope.complete_games)}</strong></div>
-          <div><small {...pageStyleTarget('text')}>Incomplete available</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGameAnalysis.scope.incomplete_games)}</strong></div>
+        <div {...pageStyleTarget('local.games.scope-summary')} className="player-game-scope-results">
+          <div><small {...pageStyleTarget('local.games.available.label')}>Games with FENs</small><strong {...pageStyleTarget('local.games.available.value')}>{formatNumber(playerGameAnalysis.scope.games_with_fens)}</strong></div>
+          <div><small {...pageStyleTarget('local.games.complete.label')}>Already complete</small><strong {...pageStyleTarget('local.games.complete.value')}>{formatNumber(playerGameAnalysis.scope.complete_games)}</strong></div>
+          <div><small {...pageStyleTarget('local.games.incomplete.label')}>Incomplete available</small><strong {...pageStyleTarget('local.games.incomplete.value')}>{formatNumber(playerGameAnalysis.scope.incomplete_games)}</strong></div>
           <div>
-            <small {...pageStyleTarget('text')}>Available dates</small>
-            <strong {...pageStyleTarget('value')}>
+            <small {...pageStyleTarget('local.games.dates.label')}>Available dates</small>
+            <strong {...pageStyleTarget('local.games.dates.value')}>
               {playerGameAnalysis.scope.earliest_game
                 ? `${String(playerGameAnalysis.scope.earliest_game).slice(0, 10)} → ${String(playerGameAnalysis.scope.latest_game).slice(0, 10)}`
                 : '--'}
@@ -125,11 +125,11 @@ export default function LocalGameSelection({ page }) {
       ) : null}
 
       {playerGameAnalysis.scope && Number(playerGameAnalysis.scope.incomplete_games || 0) > 0 ? (
-        <div className="player-game-selection-controls">
+        <div {...pageStyleTarget('local.games.controls')} className="player-game-selection-controls">
           {playerGameAnalysis.selectionMode === 'range' ? (
-            <div className="player-game-range-choice">
-              <label {...pageStyleTarget('label')} className="player-game-check-option">
-                <input {...pageStyleTarget('field')}
+            <div {...pageStyleTarget('local.games.range')} className="player-game-range-choice">
+              <label {...pageStyleTarget('local.games.all-games.group')} className="player-game-check-option">
+                <input {...pageStyleTarget('local.games.all-games.input')}
                   type="checkbox"
                   checked={playerGameAnalysis.useAll}
                   onChange={(event) => setPlayerGameAnalysis((current) => ({
@@ -143,11 +143,11 @@ export default function LocalGameSelection({ page }) {
             </div>
           ) : null}
 
-          <div className="player-game-selection-fields">
+          <div {...pageStyleTarget('local.games.fields')} className="player-game-selection-fields">
             {(playerGameAnalysis.selectionMode !== 'range' || !playerGameAnalysis.useAll) ? (
-              <label {...pageStyleTarget('label')}>
-                <span {...pageStyleTarget('label')} className="field-label">Number of games</span>
-                <input {...pageStyleTarget('field')}
+              <label {...pageStyleTarget('local.games.count.group')}>
+                <span {...pageStyleTarget('local.games.count.label')} className="field-label">Number of games</span>
+                <input {...pageStyleTarget('local.games.count.input')}
                   className="text-input number-input-clean"
                   type="number"
                   min="1"
@@ -163,9 +163,9 @@ export default function LocalGameSelection({ page }) {
               </label>
             ) : null}
             {playerGameAnalysis.selectionMode === 'range' ? (
-              <label {...pageStyleTarget('label')}>
-                <span {...pageStyleTarget('label')} className="field-label">Take from range</span>
-                <select {...pageStyleTarget('field')}
+              <label {...pageStyleTarget('local.games.order.group')}>
+                <span {...pageStyleTarget('local.games.order.label')} className="field-label">Take from range</span>
+                <select {...pageStyleTarget('local.games.order.input')}
                   className="text-input"
                   value={playerGameAnalysis.rangeOrder}
                   onChange={(event) => setPlayerGameAnalysis((current) => ({
@@ -181,7 +181,7 @@ export default function LocalGameSelection({ page }) {
             ) : null}
           </div>
 
-          <button {...pageStyleTarget('button')}
+          <button {...pageStyleTarget('local.games.calculate')}
             className="btn btn-primary"
             type="button"
             disabled={playerGameAnalysis.loadingPreview}
@@ -193,45 +193,45 @@ export default function LocalGameSelection({ page }) {
       ) : null}
 
       {playerGamePreview ? (
-        <div className="player-game-confirmation">
-          <div className="player-game-confirmation-heading">
+        <div {...pageStyleTarget('local.games.confirmation')} className="player-game-confirmation">
+          <div {...pageStyleTarget('local.games.confirmation-heading')} className="player-game-confirmation-heading">
             <div>
               <span>CONFIRM FROZEN ANALYSIS PLAN</span>
-              <strong {...pageStyleTarget('value')}>{playerGamePreview.player_name}</strong>
+              <strong {...pageStyleTarget('local.games.player')}>{playerGamePreview.player_name}</strong>
             </div>
             <span className="analysis-process-phase queued">Awaiting confirmation</span>
           </div>
 
-          <div className="player-game-preview-grid">
-            <div><small {...pageStyleTarget('text')}>Games selected</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.selected_games)}</strong></div>
-            <div><small {...pageStyleTarget('text')}>Position occurrences</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.position_occurrences)}</strong></div>
-            <div><small {...pageStyleTarget('text')}>Unique FENs</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.unique_fens)}</strong></div>
-            <div><small {...pageStyleTarget('text')}>Already analyzed</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.analyzed_unique_fens)}</strong></div>
-            <div><small {...pageStyleTarget('text')}>Syzygy exact FENs</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.tablebase_fens)}</strong></div>
+          <div {...pageStyleTarget('local.games.preview')} className="player-game-preview-grid">
+            <div><small {...pageStyleTarget('local.games.selected.label')}>Games selected</small><strong {...pageStyleTarget('local.games.selected.value')}>{formatNumber(playerGamePreview.selected_games)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.occurrences.label')}>Position occurrences</small><strong {...pageStyleTarget('local.games.occurrences.value')}>{formatNumber(playerGamePreview.position_occurrences)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.unique.label')}>Unique FENs</small><strong {...pageStyleTarget('local.games.unique.value')}>{formatNumber(playerGamePreview.unique_fens)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.scored.label')}>Already analyzed</small><strong {...pageStyleTarget('local.games.scored.value')}>{formatNumber(playerGamePreview.analyzed_unique_fens)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.tablebase.label')}>Syzygy exact FENs</small><strong {...pageStyleTarget('local.games.tablebase.value')}>{formatNumber(playerGamePreview.tablebase_fens)}</strong></div>
             <div className="highlight">
-              <small {...pageStyleTarget('text')}>Estimated FENs for Stockfish</small>
-              <strong {...pageStyleTarget('value')}>{formatNumber(Math.max(0, Number(playerGamePreview.fens_to_analyze || 0) - Number(playerGamePreview.tablebase_fens || 0)))}</strong>
+              <small {...pageStyleTarget('local.games.stockfish.label')}>Estimated FENs for Stockfish</small>
+              <strong {...pageStyleTarget('local.games.stockfish.value')}>{formatNumber(Math.max(0, Number(playerGamePreview.fens_to_analyze || 0) - Number(playerGamePreview.tablebase_fens || 0)))}</strong>
             </div>
-            <div><small {...pageStyleTarget('text')}>Expected complete games</small><strong {...pageStyleTarget('value')}>{formatNumber(playerGamePreview.selected_games)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.expected.label')}>Expected complete games</small><strong {...pageStyleTarget('local.games.expected.value')}>{formatNumber(playerGamePreview.selected_games)}</strong></div>
             {playerGamePreview.selection_mode === 'fair_range' ? (
               <div>
-                <small {...pageStyleTarget('text')}>Months sampled</small>
-                <strong {...pageStyleTarget('value')}>
+                <small {...pageStyleTarget('local.games.months.label')}>Months sampled</small>
+                <strong {...pageStyleTarget('local.games.months.value')}>
                   {formatNumber(playerGamePreview.sampled_periods)} / {formatNumber(playerGamePreview.available_periods)}
                 </strong>
               </div>
             ) : null}
             <div>
-              <small {...pageStyleTarget('text')}>Selection order</small>
-              <strong {...pageStyleTarget('value')}>{getPlayerGameSelectionLabel(playerGamePreview.selection_order)}</strong>
+              <small {...pageStyleTarget('local.games.selection-order.label')}>Selection order</small>
+              <strong {...pageStyleTarget('local.games.selection-order.value')}>{getPlayerGameSelectionLabel(playerGamePreview.selection_order)}</strong>
             </div>
-            <div><small {...pageStyleTarget('text')}>Estimated total time</small><strong {...pageStyleTarget('value')}>~{formatDuration(playerGamePreviewTotalSeconds)}</strong></div>
+            <div><small {...pageStyleTarget('local.games.duration.label')}>Estimated total time</small><strong {...pageStyleTarget('local.games.duration.value')}>~{formatDuration(playerGamePreviewTotalSeconds)}</strong></div>
           </div>
 
-          <div className="player-game-runtime-fields">
-            <label {...pageStyleTarget('label')}>
-              <span {...pageStyleTarget('label')} className="field-label">Batch</span>
-              <input {...pageStyleTarget('field')}
+          <div {...pageStyleTarget('local.games.runtime')} className="player-game-runtime-fields">
+            <label {...pageStyleTarget('local.games.batch.group')}>
+              <span {...pageStyleTarget('local.games.batch.label')} className="field-label">Batch</span>
+              <input {...pageStyleTarget('local.games.batch.input')}
                 className="text-input number-input-clean"
                 type="number"
                 min="1"
@@ -243,9 +243,9 @@ export default function LocalGameSelection({ page }) {
                 }))}
               />
             </label>
-            <label {...pageStyleTarget('label')}>
-              <span {...pageStyleTarget('label')} className="field-label">Cool-off every 5,000 FENs</span>
-              <input {...pageStyleTarget('field')}
+            <label {...pageStyleTarget('local.games.cool-off.group')}>
+              <span {...pageStyleTarget('local.games.cool-off.label')} className="field-label">Cool-off every 5,000 FENs</span>
+              <input {...pageStyleTarget('local.games.cool-off.input')}
                 className="text-input number-input-clean"
                 type="number"
                 min="0"
@@ -256,19 +256,19 @@ export default function LocalGameSelection({ page }) {
             </label>
           </div>
 
-          <p {...pageStyleTarget('text')}>
+          <p {...pageStyleTarget('local.games.note-frozen')}>
             The exact {formatNumber(playerGamePreview.selected_games)} game IDs are frozen. Shared FENs are analyzed once,
             and the chosen game order is prioritized.
           </p>
-          <div className="player-game-confirm-actions">
-            <button {...pageStyleTarget('button')}
+          <div {...pageStyleTarget('local.games.actions')} className="player-game-confirm-actions">
+            <button {...pageStyleTarget('local.games.cancel')}
               className="btn btn-secondary"
               type="button"
               onClick={() => setPlayerGameAnalysis((current) => ({ ...current, preview: null }))}
             >
               Cancel
             </button>
-            <button {...pageStyleTarget('button')}
+            <button {...pageStyleTarget('local.games.submit')}
               className="btn btn-primary"
               type="button"
               disabled={jobState.gameCompletion?.loading}

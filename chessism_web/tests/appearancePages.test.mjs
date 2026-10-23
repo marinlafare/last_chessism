@@ -35,10 +35,7 @@ test('every editable app route and alias has an explicit, server-validated scope
   assert.equal(scopeForPath('/games/123?tab=moves'),'games')
   const app=fs.readFileSync(new URL('../src/App.jsx',import.meta.url),'utf8')
   const pathBlock=app.slice(app.indexOf('const APP_PATHS'),app.indexOf('const getLocationKey'))
-  // Hegel is a static Markdown document with no editable page-style targets.
-  const staticDocument=fs.readFileSync(new URL('../src/pages/Hegel.jsx',import.meta.url),'utf8')
-  assert.ok(!staticDocument.includes('pageStyleTarget'))
-  for(const [,route] of pathBlock.matchAll(/'([^']+)'/g))if(route!=='/hegel')assert.ok(routes[route],route)
+  for(const [,route] of pathBlock.matchAll(/'([^']+)'/g))assert.ok(routes[route],route)
 })
 
 test('styles remain page-local and legacy presets still work',()=>{
@@ -117,7 +114,7 @@ test('individual home controls seed saved shared styles once, without relinking 
   const copy=structuredClone(old), seeded=seedIndependentStyles(registry,old)
   assert.deepEqual(old,copy)
   const targets=Object.entries(registry.scopes.home.targets).filter(([,spec])=>spec.initialStyleFrom==='button').map(([id])=>id)
-  assert.equal(targets.length,20)
+  assert.equal(targets.length,22)
   for(const target of targets){
     assert.equal(seeded.find(row=>row.scope==='home' && row.target===target).value,target==='player.name'?'#ffffff':'#123456')
     assert.ok(appearanceCss(registry,[{...legacy,target}]).includes(`data-style-id="${target}"`))
@@ -129,8 +126,8 @@ test('individual home controls seed saved shared styles once, without relinking 
   for(const row of seeded.filter(row=>row.target!=='button'))assert.equal(row.scope,'home')
   const files=['PlayerAnalysisWorkspace.jsx','PlayerBehaviouralPanel.jsx','PlayerMeasuresWorkspace.jsx','PlayerMeasuresPanel.jsx']
   const buttons=files.flatMap(file=>[...fs.readFileSync(new URL(`../src/pages/players/${file}`,import.meta.url),'utf8').matchAll(/buttonTarget="([^"]+)"/g)].map(match=>match[1]))
-  assert.equal(buttons.length,8)
-  assert.equal(new Set(buttons).size,8)
+  assert.equal(buttons.length,9)
+  assert.equal(new Set(buttons).size,9)
   for(const target of buttons)assert.ok(registryTarget(registry,'home',target))
 })
 
@@ -165,8 +162,8 @@ test('player update and delete styles are independent for every editable propert
 test('list rating styles inherit saved metric settings once, then remain independent',()=>{
   const shared={scope:'home',target:'value',property:'color',value:'#123456'}
   const seeded=seedIndependentStyles(registry,[shared])
-  assert.deepEqual(registryTarget(registry,'home','characters.rating').properties,registryTarget(registry,'home','value').properties)
-  assert.deepEqual(seeded,[shared,{...shared,target:'characters.rating'}])
+  assert.deepEqual(registryTarget(registry,'home','characters.rating').properties,registryTarget(registry,'home','value').properties.filter(property=>property!=='background'))
+  assert.deepEqual(seeded.filter(row=>row.target==='value'||row.target==='characters.rating'),[shared,{...shared,target:'characters.rating'}])
   const changed=seeded.map(row=>row.target==='value'?{...row,value:'#abcdef'}:row)
   assert.deepEqual(seedIndependentStyles(registry,changed),changed)
   assert.ok(!appearanceCss(registry,[seeded[1]]).includes('data-style-id="value"'))

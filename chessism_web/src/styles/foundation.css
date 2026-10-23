@@ -227,6 +227,7 @@ code {
   font-size: 12px;
   font-weight: 800;
   line-height: 1;
+  text-align: center;
   box-shadow: var(--shadow);
   cursor: pointer;
   font-family: inherit;
@@ -244,6 +245,8 @@ code {
 }
 
 .admin-online-status span:last-child {
+  flex: 1;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -294,28 +297,41 @@ code {
   display: flex;
   flex-direction: column;
   gap: 22px;
-  height: 100%;
+  height: calc(100% - var(--rail-account-space, 220px));
   padding: 18px 14px;
+  overflow-y: auto;
+  scrollbar-width: thin;
 }
 
 .rail-brand {
   display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
   align-items: center;
   justify-content: center;
   gap: 10px;
   min-height: 44px;
   color: var(--text);
+  font-size: 22px;
   font-weight: 800;
   text-decoration: none;
 }
 
 .left-rail-icon {
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
+  width: 72px;
+  max-width: 72px;
+  min-width: 0;
+  height: auto;
+  aspect-ratio: 1;
+  flex: 1 1 72px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  object-fit: cover;
+  object-fit: contain;
+}
+
+.rail-brand span {
+  flex: 0 0 auto;
+  white-space: nowrap;
 }
 
 .rail-nav {

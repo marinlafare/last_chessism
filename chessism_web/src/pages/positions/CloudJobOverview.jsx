@@ -19,9 +19,9 @@ export default function CloudJobOverview({ job, active, onOpenReport, controller
     : [...job.runs].reverse().find(run => run.vm_statuses?.length)
   return <>
     <header {...pageStyleTarget('cloud.job.summary')} className="cloud-job-part cloud-job-heading" aria-label="Cloud job selection">
-      <div className="cloud-job-summary-row">
+      <div {...pageStyleTarget('cloud.job.summary-row')} className="cloud-job-summary-row">
         <div {...pageStyleTarget('cloud.job.kind')} className="cloud-job-kind">
-          <span className="cloud-job-kind-items">
+          <span {...pageStyleTarget('cloud.job.badges')} className="cloud-job-kind-items">
             <strong {...pageStyleTarget('cloud.job.backend')} className="cloud-job-badge">{backend}</strong>
             <span {...pageStyleTarget('cloud.job.arrow')} aria-hidden="true">→</span>
             <strong {...pageStyleTarget('cloud.job.mode')} className="cloud-job-badge">{selectionLabel}</strong>
@@ -32,7 +32,7 @@ export default function CloudJobOverview({ job, active, onOpenReport, controller
             title="Total FENs" aria-label={`Total FENs: ${number(job.target)}`}>{number(job.target)}</strong>
         </div>
       </div>
-      {combined ? <ul className="cloud-job-players">{combined.players.map(player => <li key={player}>
+      {combined ? <ul {...pageStyleTarget('cloud.job.players')} className="cloud-job-players">{combined.players.map(player => <li key={player}>
         <span {...pageStyleTarget('cloud.job.player')} className="cloud-job-badge">{player}</span>
         <strong {...pageStyleTarget('cloud.job.count')} className="cloud-job-badge cloud-job-count" title={playerCountNote}>
           {number(combined.player_fen_previews?.[player])}
@@ -42,7 +42,7 @@ export default function CloudJobOverview({ job, active, onOpenReport, controller
     </header>
     <section {...pageStyleTarget('cloud.job.progress')} className="cloud-job-part cloud-job-progress" aria-label="Cloud progress and process steps">
       <CloudFenProgress job={job} />
-      {job.sequence?.frozen && progressRun && <div className="cloud-sequence-progress">
+      {job.sequence?.frozen && progressRun && <div {...pageStyleTarget('cloud.job.cycle-container')} className="cloud-sequence-progress">
         <CloudFenProgress job={{ ...job, target: progressRun.positions, imported: progressRun.imported, runs: [progressRun] }}
           label={cycleLabel(progressRun)} variant="cycle" showCompletionStatus={false} />
       </div>}
@@ -50,9 +50,9 @@ export default function CloudJobOverview({ job, active, onOpenReport, controller
     </section>
     {vmRun && <CloudVmTiles key={vmRun.id} run={vmRun} cycleLabel={job.sequence ? cycleLabel(vmRun) : null} />}
     {job.runs.map(run => <CloudPerformanceSummary key={run.id} run={run} onOpen={onOpenReport} />)}
-    {active?.run_job && <small {...pageStyleTarget('text')}>Cloud Run: {active.run_job}</small>}
-    {active?.run_execution && <small {...pageStyleTarget('text')}>Execution: {active.run_execution.name}</small>}
-    {active?.recovery && !vmRun && <p {...pageStyleTarget('text')}>Google interruptions: {active.recovery.preemptions}.
+    {active?.run_job && <small {...pageStyleTarget('cloud.job.run-name')}>Cloud Run: {active.run_job}</small>}
+    {active?.run_execution && <small {...pageStyleTarget('cloud.job.execution')}>Execution: {active.run_execution.name}</small>}
+    {active?.recovery && !vmRun && <p {...pageStyleTarget('cloud.job.recovery')}>Google interruptions: {active.recovery.preemptions}.
       {' '}Application failures: {active.recovery.application_failures} / 2.
       {' '}Recovery: {active.recovery.status.toLowerCase()}.</p>}
   </>

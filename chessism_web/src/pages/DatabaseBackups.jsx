@@ -5,6 +5,7 @@ import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import BackupVolume from './backups/BackupVolume.jsx'
 import FenBackupPanel from './backups/FenBackupPanel.jsx'
+import { backupCompletionTimes } from './backups/backupCompletionTimes.js'
 import {
   fetchBackupJob,
   fetchDatabaseBackups,
@@ -15,18 +16,10 @@ import { playCompletionSound, unlockCompletionAudio } from '../utils/completionA
 import './backups/backups.css'
 
 const TERMINAL_PHASES = new Set(['complete', 'failed', 'unavailable'])
-const TRANSIENT_RESULT_PHASES = new Set(['complete', 'success', 'failed'])
-const RESULT_VISIBILITY_MS = 2 * 60 * 1000
 
 const completedAtMs = (value) => {
   const timestamp = value ? new Date(value).getTime() : Number.NaN
   return Number.isFinite(timestamp) ? timestamp : null
-}
-
-const showRecentResult = (phase, completedAt, now) => {
-  if (!TRANSIENT_RESULT_PHASES.has(String(phase || '').toLowerCase())) return true
-  const timestamp = completedAtMs(completedAt)
-  return timestamp !== null && now - timestamp < RESULT_VISIBILITY_MS
 }
 
 const formatBytes = (value) => {
@@ -236,22 +229,13 @@ export default function DatabaseBackups() {
       || ['queued', 'running'].includes(restoreTest.status)
   )
   const active = backupActive || restoreActive
+  const completed = backupCompletionTimes(overview)
   const rawBackupPhase = job?.kind === 'backup' ? job.phase : status.phase || status.status
   const rawBackupDetail = job?.kind === 'backup' ? job.detail : status.detail
-  const backupCompletedAt = job?.kind === 'backup' ? job.terminalAt : status.completed_at
   const rawRestorePhase = job?.kind === 'restore_test' ? job.phase : restoreTest.status
   const rawRestoreDetail = job?.kind === 'restore_test' ? job.detail : restoreTest.detail
-  const restoreCompletedAt = job?.kind === 'restore_test' ? job.terminalAt : restoreTest.completed_at
-  const backupResultVisible = showRecentResult(rawBackupPhase, backupCompletedAt, statusClock)
-  const restoreResultVisible = showRecentResult(rawRestorePhase, restoreCompletedAt, statusClock)
-  const backupDisplayPhase = backupResultVisible ? rawBackupPhase : 'ready'
-  const backupDisplayDetail = backupResultVisible
-    ? rawBackupDetail
-    : 'Waiting for a new database backup.'
-  const restoreDisplayPhase = restoreResultVisible ? rawRestorePhase : 'ready'
-  const restoreDisplayDetail = restoreResultVisible
-    ? rawRestoreDetail
-    : 'Waiting for a new restore rehearsal.'
+  const backupFailed = ['failed', 'unavailable'].includes(rawBackupPhase)
+  const restoreFailed = ['failed', 'unavailable'].includes(rawRestorePhase)
   const backupStartedAt = status.status === 'running'
     ? status.started_at
     : job?.kind === 'backup'
@@ -307,21 +291,6 @@ export default function DatabaseBackups() {
     return () => window.clearInterval(timer)
   }, [backupActive])
 
-  useEffect(() => {
-    const now = Date.now()
-    const expirations = [backupCompletedAt, restoreCompletedAt]
-      .map(completedAtMs)
-      .filter((timestamp) => timestamp !== null)
-      .map((timestamp) => timestamp + RESULT_VISIBILITY_MS)
-      .filter((timestamp) => timestamp > now)
-    if (!expirations.length) return undefined
-    const timer = window.setTimeout(
-      () => setStatusClock(Date.now()),
-      Math.min(...expirations) - now + 50,
-    )
-    return () => window.clearTimeout(timer)
-  }, [backupCompletedAt, restoreCompletedAt, statusClock])
-
   return (
     <div {...pageStyleTarget('page')} className="page-frame">
       <SideRail />
@@ -364,26 +333,25 @@ export default function DatabaseBackups() {
           </div>}
 
           <section {...pageStyleTarget('storage.panel')} className="database-backups-panel">
-            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">STORAGE</p><h2 {...pageStyleTarget('title')}>Protected Allocation</h2></div></div>
             <BackupVolume />
-            <details className="backup-volume-details">
-              <summary>Chessism file breakdown</summary>
-              <dl>{[
-                ['Database snapshots', storage.database_backup_bytes], ['Legacy archived WAL', storage.archived_wal_bytes],
-                ['FEN exports', storage.fen_analysis_bytes], ['Research files', storage.research_bytes],
-                ['Metadata / other', storage.other_bytes],
-              ].map(([label, size]) => <div key={label}><dt>{label}</dt><dd>{formatBytes(size)}</dd></div>)}</dl>
-              <p>File sizes measured {formatDate(storage.usage_measured_at)}. The disk diagram measures allocated filesystem blocks, so totals can differ.</p>
-            </details>
-            <p {...pageStyleTarget('text')} className="database-backups-location">{storage.storage_location || '/main-monitor-db-backups/chessism'}</p>
           </section>
 
-          <section {...pageStyleTarget('panel')} className="database-backups-panel">
-            <div className="section-head">
-              <div>
-                <p {...pageStyleTarget('text')} className="eyebrow">STATUS</p>
+          <section {...pageStyleTarget('summary.panel')} className="database-backups-panel database-backups-summary" aria-label="Latest backups">
+            <div className="database-backups-results">
+              <div className="database-backups-timestamps" aria-live="polite">
+                {[
+                  ['backup.last', 'Last backup', completed.backup],
+                  ['restore.last', 'Last test', completed.test],
+                ].map(([target, label, date]) => (
+                  <div key={target} {...pageStyleTarget(target)} className="database-backups-timestamp">
+                    <span>{label}</span>
+                    {date ? <time dateTime={date}>{formatDate(date)}</time> : <span>{overview ? 'Not yet' : 'Loading…'}</span>}
+                  </div>
+                ))}
+              </div>
+              {(backupActive || backupFailed) && <div className={`database-backups-progress ${backupFailed ? 'failed' : ''}`} role="status" aria-label="Database backup status">
                 <div className="database-backups-status-title">
-                  <h2 {...pageStyleTarget('title')}>{String(backupDisplayPhase || 'idle').toUpperCase()}</h2>
+                  <strong>Backup · {String(rawBackupPhase || 'queued').replaceAll('_', ' ')}</strong>
                   {backupActive ? (
                     <span
                       className="database-backups-live-light"
@@ -393,53 +361,41 @@ export default function DatabaseBackups() {
                     />
                   ) : null}
                 </div>
-              </div>
-            </div>
-            <div className={`database-backups-progress ${['failed', 'unavailable'].includes(backupDisplayPhase) ? 'failed' : ''}`}>
-              <strong {...pageStyleTarget('value')}>{backupDisplayDetail || 'No database backup has run yet.'}</strong>
-              {backupElapsedMs !== null ? (
-                <span className="database-backups-elapsed">Elapsed: {formatElapsedTime(backupElapsedMs)}</span>
-              ) : null}
-              {backupActive ? (
-                <div className="database-backups-transfer-progress">
-                  <div
-                    className={`database-backups-transfer-meter ${backupProgressTotal > 0 ? '' : 'indeterminate'}`}
-                    role="progressbar"
-                    aria-label="Database backup byte progress"
-                    aria-valuemin="0"
-                    aria-valuemax={backupProgressTotal || undefined}
-                    aria-valuenow={backupProgressTotal ? backupProgressCompleted : undefined}
-                  >
-                    <div style={backupProgressTotal > 0 ? { width: `${backupProgressPercent}%` } : undefined} />
+                <strong {...pageStyleTarget('value')}>{rawBackupDetail || status.error_message || 'Database backup queued.'}</strong>
+                {backupElapsedMs !== null ? (
+                  <span className="database-backups-elapsed">Elapsed: {formatElapsedTime(backupElapsedMs)}</span>
+                ) : null}
+                {backupActive ? (
+                  <div className="database-backups-transfer-progress">
+                    <div
+                      className={`database-backups-transfer-meter ${backupProgressTotal > 0 ? '' : 'indeterminate'}`}
+                      role="progressbar"
+                      aria-label="Database backup byte progress"
+                      aria-valuemin="0"
+                      aria-valuemax={backupProgressTotal || undefined}
+                      aria-valuenow={backupProgressTotal ? backupProgressCompleted : undefined}
+                    >
+                      <div style={backupProgressTotal > 0 ? { width: `${backupProgressPercent}%` } : undefined} />
+                    </div>
+                    <div className="database-backups-transfer-meta">
+                      <span>
+                        {backupProgressTotal > 0
+                          ? `${formatBytes(backupProgressCompleted)} / ${formatBytes(backupProgressTotal)} · ${backupProgressPercent.toFixed(1)}%`
+                          : status.storage_mode === 'compressed_snapshot_v1'
+                            ? `${formatBytes(status.compressed_bytes_written || 0)} compressed · total size known when complete`
+                            : 'Waiting for backup progress'}
+                      </span>
+                      <span>{backupEtaLabel}</span>
+                      {Number.isFinite(backupRateBytesPerSecond) && backupRateBytesPerSecond > 0 ? (
+                        <span>{formatBytes(backupRateBytesPerSecond)}/s</span>
+                      ) : null}
+                    </div>
                   </div>
-                  <div className="database-backups-transfer-meta">
-                    <span>
-                      {backupProgressTotal > 0
-                        ? `${formatBytes(backupProgressCompleted)} / ${formatBytes(backupProgressTotal)} · ${backupProgressPercent.toFixed(1)}%`
-                        : status.storage_mode === 'compressed_snapshot_v1'
-                          ? `${formatBytes(status.compressed_bytes_written || 0)} compressed · total size known when complete`
-                          : 'Waiting for backup progress'}
-                    </span>
-                    <span>{backupEtaLabel}</span>
-                    {Number.isFinite(backupRateBytesPerSecond) && backupRateBytesPerSecond > 0 ? (
-                      <span>{formatBytes(backupRateBytesPerSecond)}/s</span>
-                    ) : null}
-                  </div>
-                </div>
-              ) : null}
-              <span>Latest verified: {formatDate(status.last_verified_at)}</span>
-              <span>Backup type: {status.backup_type || (job?.kind === 'backup' ? job?.result?.type : null) || '-'}</span>
-              <span>Backup ID: {status.backup_id || (job?.kind === 'backup' ? job?.result?.backup_id : null) || '-'}</span>
-              <span>Storage mode: {policy.active_storage_mode === 'compressed_snapshot_v1' ? 'standalone compressed snapshot' : policy.active_storage_mode ? 'legacy recovery chain' : 'not initialized'}</span>
-            </div>
-          </section>
-
-          <section {...pageStyleTarget('panel')} className="database-backups-panel">
-            <div className="section-head">
-              <div>
-                <p {...pageStyleTarget('text')} className="eyebrow">RESTORE REHEARSAL</p>
+                ) : null}
+              </div>}
+              {(restoreActive || restoreFailed) && <div className={`database-backups-progress ${restoreFailed ? 'failed' : ''}`} role="status" aria-label="Database restore test status">
                 <div className="database-backups-status-title">
-                  <h2 {...pageStyleTarget('title')}>{String(restoreDisplayPhase || 'not tested').replaceAll('_', ' ').toUpperCase()}</h2>
+                  <strong>Test backup · {String(rawRestorePhase || 'queued').replaceAll('_', ' ')}</strong>
                   {restoreActive ? (
                     <span
                       className="database-backups-live-light"
@@ -449,50 +405,11 @@ export default function DatabaseBackups() {
                     />
                   ) : null}
                 </div>
-              </div>
+                <strong {...pageStyleTarget('value')}>{rawRestoreDetail || restoreTest.error_message || 'Restore test queued.'}</strong>
+              </div>}
             </div>
-            <div className={`database-backups-progress ${restoreDisplayPhase === 'failed' ? 'failed' : ''}`}>
-              <strong {...pageStyleTarget('value')}>{restoreDisplayDetail || 'No recovery point has been restored and tested yet.'}</strong>
-              <span>Backup ID: {restoreTest.backup_id || (job?.kind === 'restore_test' ? job?.result?.backup_id : null) || '-'}</span>
-              <span>Last tested: {formatDate(restoreTest.completed_at)}</span>
-              <span>Duration: {restoreTest.elapsed_seconds !== null && restoreTest.elapsed_seconds !== undefined ? `${Number(restoreTest.elapsed_seconds).toFixed(1)} seconds` : '-'}</span>
-              <span>Temporary local space required: {formatBytes(restoreTest.required_local_bytes)}</span>
-            </div>
-            <p {...pageStyleTarget('text')} className="database-backups-copy">Runs only when a superuser clicks Test backup. The exact latest recovery point is restored on a private PostgreSQL socket, validated, and deleted afterward.</p>
+            <FenBackupPanel />
           </section>
-
-          <section {...pageStyleTarget('panel')} className="database-backups-panel">
-            <div className="section-head"><div><p {...pageStyleTarget('text')} className="eyebrow">RECOVERY</p><h2 {...pageStyleTarget('title')}>Database Snapshots</h2></div></div>
-            <div className="database-backups-table-wrap">
-              <table {...pageStyleTarget('table')} className="database-backups-table">
-                <thead><tr><th {...pageStyleTarget('table.header')}>Backup</th><th {...pageStyleTarget('table.header')}>Type</th><th {...pageStyleTarget('table.header')}>Storage</th><th {...pageStyleTarget('table.header')}>Completed</th><th {...pageStyleTarget('table.header')}>Database size</th><th {...pageStyleTarget('table.header')}>Compressed size</th><th {...pageStyleTarget('table.header')}>Restore tested</th></tr></thead>
-                <tbody>
-                  {backups.map((backup) => (
-                    <tr key={backup.backup_id}>
-                      <td {...pageStyleTarget('table.cell')}>{backup.backup_id}</td>
-                      <td {...pageStyleTarget('table.cell')}>{backup.type}</td>
-                      <td {...pageStyleTarget('table.cell')}>{backup.storage_mode === 'compressed_snapshot_v1' ? 'compressed' : 'legacy'}</td>
-                      <td {...pageStyleTarget('table.cell')}>{formatDate(backup.completed_at)}</td>
-                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.database_bytes)}</td>
-                      <td {...pageStyleTarget('table.cell')}>{formatBytes(backup.repository_delta_bytes)}</td>
-                      <td {...pageStyleTarget('table.cell')}>
-                        {backup.restore_tested
-                          ? `passed · ${formatDate(backup.restore_tested_at)}`
-                          : backup.restore_test_status === 'failed'
-                            ? 'failed'
-                            : 'not yet'}
-                      </td>
-                    </tr>
-                  ))}
-                  {!backups.length ? <tr><td {...pageStyleTarget('table.cell')} colSpan="7">No verified database backups yet.</td></tr> : null}
-                </tbody>
-              </table>
-            </div>
-            <p {...pageStyleTarget('text')} className="database-backups-copy">
-              Backup database creates one standalone compressed snapshot. Test backup restores it privately and, only after validation passes, removes older snapshots. The last tested backup stays protected until its replacement passes. No archived change history is required. Separate FEN exports and research files are retained.
-            </p>
-          </section>
-          <FenBackupPanel />
         </main>
         <Footer />
       </div>

@@ -11,6 +11,7 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import (CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame,
     CloudAnalysisJob, CloudBatchSequence)
 from chessism_api.operations.cloud_analysis import game_drafts as drafts
+from chessism_api.operations.cloud_analysis import draft_cache
 from chessism_api.operations.cloud_analysis.admission import require_available
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_BATCH_TOTAL_FENS, MAX_CLOUD_RUN_FENS, batch_cycle_count
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
@@ -75,10 +76,12 @@ async def save_entry(draft_id: str, data: AddSelection, redis: ArqRedis = Depend
     values, links = drafts.preview_entry(json.loads(raw))
     async with AsyncDBSession() as session, session.begin():
         draft = await drafts.locked_draft(session, draft_id, data.revision)
+        cache = await draft_cache.ensure(session, draft)
         if data.replace_entry_id:
             entry = await session.get(CloudGameDraftEntry, data.replace_entry_id)
             if not entry or entry.draft_id != draft.id:
                 raise HTTPException(404, 'Selection not found in this draft')
+            await draft_cache.remove_entry(session, cache, entry.id)
             await session.execute(delete(CloudGameDraftGame).where(CloudGameDraftGame.entry_id == entry.id))
             for key, value in values.items():
                 setattr(entry, key, value)
@@ -94,8 +97,9 @@ async def save_entry(draft_id: str, data: AddSelection, redis: ArqRedis = Depend
             await session.execute(insert(CloudGameDraftGame), [
                 {'entry_id': entry.id, 'game_link': link, 'ordinal': offset + i}
                 for i, link in enumerate(links[offset:offset + 1000])])
+        await draft_cache.add_entry(session, cache, entry.id)
         drafts.changed(draft)
-        await session.flush()
+        await draft_cache.publish(session, draft, cache)
         return await drafts.view(session, draft)
 
 
@@ -106,9 +110,12 @@ async def remove_entry(draft_id: str, entry_id: str, data: Revision):
         entry = await session.get(CloudGameDraftEntry, entry_id)
         if not entry or entry.draft_id != draft_id:
             raise HTTPException(404, 'Selection not found in this draft')
+        cache = await draft_cache.ensure(session, draft)
+        await draft_cache.remove_entry(session, cache, entry.id)
         await session.delete(entry)
         drafts.changed(draft)
         await session.flush()
+        await draft_cache.publish(session, draft, cache)
         return await drafts.view(session, draft)
 
 
@@ -116,12 +123,10 @@ async def remove_entry(draft_id: str, entry_id: str, data: Revision):
 async def preview_draft(draft_id: str, data: Revision):
     async with AsyncDBSession() as session, session.begin():
         draft = await drafts.locked_draft(session, draft_id, data.revision)
-        counts = await drafts.count_union(session, draft.id)
-        draft.preview_revision, draft.preview_fens = draft.revision, counts['eligible']
-        draft.preview_games, draft.preview_missing_fens = counts['games'], counts['missing']
-        draft.preview_claimed_fens = counts['claimed']
-        draft.previewed_at = datetime.now(timezone.utc)
-        await session.flush()
+        # Explicit refresh rebuilds current membership/eligibility. Normal Add,
+        # Save and Remove already return their incremental group preview.
+        cache = await draft_cache.ensure(session, draft, rebuild=True)
+        await draft_cache.publish(session, draft, cache)
         return await drafts.view(session, draft)
 
 
@@ -168,5 +173,6 @@ async def submit_draft(draft_id: str, data: SubmitDraft):
                                           repeat_count=batch_cycle_count(target, data.n_vms)))
         draft.submitted_job_id = job.id
         draft.updated_at = datetime.now(timezone.utc)
+        await draft_cache.discard(session, draft.id)
         return {'id': job.id, 'status': job.status, 'target': target,
                 'backend': data.backend, 'already_submitted': False}

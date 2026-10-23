@@ -46,7 +46,7 @@ test('reserve cannot be drawn as free when the physical disk is full', () => {
   assert.equal(full.reserveShortfall, 150)
   assert.ok(!full.rows.some(row => row.id === '__reserve'))
 })
-test('tiny allocations remain proportional and zero-byte apps remain in the key', () => {
+test('tiny allocations remain proportional and zero-byte apps remain in the layout data', () => {
   const layout = backupVolumeLayout({ ...snapshot, allocations: [
     ...snapshot.allocations, { id: 'tiny', used_bytes: 1 }, { id: 'empty', used_bytes: 0 },
   ] })

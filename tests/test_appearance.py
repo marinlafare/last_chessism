@@ -21,6 +21,43 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_independent_analysis_headings_and_controls(self):
+        targets = REGISTRY['scopes']['positions']['targets']
+        for target in ('cloud.heading', 'cloud.job.title', 'cloud.performance.title',
+                       'cloud.run.single.total.input', 'cloud.batch.single.total.input',
+                       'cloud.run.combined.editor.calculate', 'cloud.batch.combined.editor.calculate'):
+            for prop, value in [('radius', 18), ('hoverBorderColor', '#123456'),
+                                ('hoverBackground', '#abcdef'), ('textAlign', 'center')]:
+                validate_overrides([override(scope='positions', target=target, property=prop, value=value)])
+                with self.assertRaises(ValueError):
+                    validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+        self.assertEqual(targets['cloud.toggle']['editorParent'], 'cloud.heading')
+        self.assertEqual(targets['cloud.heading']['initialStyleFrom'], 'title')
+        self.assertEqual(targets['cloud.job.title']['initialStyleFrom'], 'title')
+        # Splitting old shared controls must not make a valid saved preset too
+        # large to save. Exercise real unique registry keys above the old limit.
+        rows = []
+        for target, spec in targets.items():
+            for prop in ('background', 'color', 'borderColor', 'hoverBackground', 'hoverBorderColor'):
+                if prop in spec['properties']:
+                    rows.append(override(scope='positions', target=target, property=prop, value='#123456'))
+        self.assertGreater(len(rows), 2000)
+        self.assertEqual(len(validate_overrides(rows)), len(rows))
+
+    def test_universal_spacing_and_new_container_controls(self):
+        for scope, spec in REGISTRY['scopes'].items():
+            for target in spec['targets']:
+                for prop in REGISTRY['universalProperties']:
+                    row = override(scope=scope, target=target, property=prop, value=12)
+                    self.assertEqual(validate_overrides([row])[0]['number_value'], 12)
+        for prop, value in [('margin', -16), ('marginLeft', 24), ('researchIntroWidth', 65)]:
+            row = override(scope='research', target='intro.panel', property=prop, value=value)
+            self.assertEqual(validate_overrides([row])[0]['number_value'], value)
+            for invalid in (True, '12px', float('inf'), 10000):
+                with self.assertRaises(ValueError): validate_overrides([{**row, 'value': invalid}])
+        for target in ('cloud.job.vms', 'cloud.vm.toggle', 'cloud.vm.details', 'local.toggle', 'local.heading'):
+            validate_overrides([override(scope='positions', target=target, property='hoverBorderColor', value='#abcdef')])
+
     def test_registry_rejects_code_unknown_targets_invalid_values_and_duplicates(self):
         self.assertEqual(validate_overrides([override()])[0]['color_value'],'#abcdef80')
         for row in (override(target='body'),override(scope='another_page'),override(property='position'),
@@ -67,7 +104,7 @@ class AppearanceTests(unittest.TestCase):
     def test_independent_home_buttons_support_legacy_seed_and_scoped_writes(self):
         targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()
                    if spec.get('initialStyleFrom') == 'button']
-        self.assertEqual(len(targets), 20)
+        self.assertEqual(len(targets), 22)
         rows = [override(scope='home', target=target, property='background', value='#123456') for target in targets]
         self.assertEqual(len(validate_overrides(rows)), len(targets))
         with self.assertRaises(ValueError): validate_overrides([{**rows[0], 'scope':'games'}])
@@ -80,6 +117,21 @@ class AppearanceTests(unittest.TestCase):
         row = override(scope='home', target='characters.medal', property='hoverColor', value='#123456')
         self.assertEqual(validate_overrides([row])[0]['color_value'], '#123456')
         self.assertEqual(validate_overrides([{**row, 'property':'hoverBackground'}])[0]['color_value'], '#123456')
+
+    def test_salience_styles_are_scoped_and_dimensions_are_bounded(self):
+        prefix = 'player.accuracy.salience.'
+        targets = {name: spec for name, spec in REGISTRY['scopes']['home']['targets'].items() if name.startswith(prefix)}
+        self.assertEqual(len(targets), 10)
+        for target, spec in targets.items():
+            for prop in spec['properties']:
+                field = REGISTRY['properties'][prop]
+                value = '#123456' if field['kind'] == 'color' else field['min'] if field['kind'] == 'number' else field['options'][0]
+                row = override(scope='home', target=target, property=prop, value=value)
+                self.assertEqual(len(validate_overrides([row])), 1)
+                with self.assertRaises(ValueError): validate_overrides([{**row, 'scope': 'positions'}])
+        for part, prop in [('track', 'salienceTrackHeight'), ('rail', 'salienceRailWidth'), ('minimum.knob', 'salienceKnobSize')]:
+            for value in (-1, True, '20px', 10000):
+                with self.assertRaises(ValueError): validate_overrides([override(scope='home', target=prefix+part, property=prop, value=value)])
 
     def test_player_list_ratings_are_independent_of_profile_values(self):
         target = REGISTRY['scopes']['home']['targets']['characters.rating']

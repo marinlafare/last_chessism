@@ -57,6 +57,9 @@ async def save_job(job_id, **changes):
                 # A stop request can arrive during a cloud API call. Never let
                 # that older tick make the durable cleanup intent unpollable.
                 changes = {**changes, 'status': 'running'}
+        if changes.get('status') == 'paused' and job.status != 'paused':
+            from .recovery_history import transition
+            await transition(session, job, 'paused', message=changes.get('error'))
         for key, value in changes.items():
             setattr(job, key, value)
         job.updated_at = datetime.now(timezone.utc)
@@ -128,6 +131,9 @@ class Controller:
                 CloudAnalysisRun.job_id == job.id,
                 ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at))).all()
         run = next((item for item in runs if item.status != "complete"), None)
+        from .read_recovery import RecoveringClient
+        if isinstance(self.cloud, RecoveringClient):
+            self.cloud.observe_job(job.id)
         try:
             await save_job(job.id, status="running", error=None)
             if cancellation is not None:

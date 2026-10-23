@@ -4,6 +4,10 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import CloudAnalysisSection from '/src/pages/positions/CloudAnalysisSection.jsx'
+import CloudGameDraft from '/src/pages/positions/CloudGameDraft.jsx'
+import AnalysisDisclosure from '/src/pages/positions/AnalysisDisclosure.jsx'
+import AppearanceProvider, { AppearanceControls } from '/src/appearance/AppearanceProvider.jsx'
+import '/src/pages/positions/cloudAnalysis.css'
 import '/src/index.css'
 
 const job = { id: 'cloud-test', status: 'running', target: 2082, imported: 500,
@@ -15,6 +19,18 @@ const state = window.cloudTest = { job, online: true, requests: [], previewCount
     { ...job, id: 'old-cancelled', status: 'cancelled', runs: [] },
   ] }
 const restoreDraft = new URLSearchParams(location.search).has('restoreDraft')
+const draftOnly = new URLSearchParams(location.search).has('draftOnly')
+const appearance = new URLSearchParams(location.search).has('appearance')
+const independentStyles = new URLSearchParams(location.search).has('independentStyles')
+if (appearance) {
+  history.replaceState(null, '', '/positions')
+  job.runs[0].vm_statuses = [0, 1].map(index => ({ index, state: 'RUNNING', positions: 1041, preemptions: 0, application_failures: 0 }))
+}
+const groupPreview = draft => {
+  const fens = draft.entries.length ? (draftOnly ? (draft.entries.length > 1 ? 3 : 2) : (draft.entries.length > 1 ? 1300000 : 800000)) : 0
+  draft.preview = { revision: draft.revision, unique_games: draft.entries.length * 30,
+    unique_missing_fens: fens, claimed_fens: 0, fens_to_analyze: fens, within_limit: true }
+}
 if (restoreDraft) {
   state.draft = JSON.parse(sessionStorage.getItem('cloud-draft-fixture'))
   job.status = 'complete'
@@ -23,6 +39,14 @@ window.fetch = async (input, options = {}) => {
   const url = new URL(input, location.href), method = options.method || 'GET'
   state.requests.push({ path: url.pathname, method, body: options.body ? JSON.parse(options.body) : null })
   const reply = (value, status=200) => new Response(JSON.stringify(value), { status, headers: { 'Content-Type': 'application/json' } })
+  if (url.pathname.endsWith('/appearance') || url.pathname.endsWith('/appearance/save')) {
+    let saved = JSON.parse(localStorage.getItem('cloud-style-fixture') || 'null') || { revision: 0, presets: [], active_preset_id: null, overrides: [] }
+    if (method === 'POST' && url.pathname.endsWith('/appearance/save')) {
+      saved = { revision: saved.revision + 1, presets: [{ id: 'style-test', name: 'Test' }], active_preset_id: 'style-test', overrides: JSON.parse(options.body).overrides }
+      localStorage.setItem('cloud-style-fixture', JSON.stringify(saved))
+    }
+    return reply({ ...saved, registry: window.cloudStyleRegistry })
+  }
   if (url.pathname.endsWith('/analysis/cloud')) {
     if (method === 'POST') {
       const payload = JSON.parse(options.body)
@@ -50,6 +74,8 @@ window.fetch = async (input, options = {}) => {
     }
     const body = options.body ? JSON.parse(options.body) : {}, draft = state.draft
     if (drafts.endsWith('/entries')) {
+      if (state.holdSave) await new Promise(resolve => { state.finishSave = resolve })
+      if (state.entryError) return reply({ detail: state.entryError }, 500)
       const form = state.previewForm
       const entry = { id: body.replace_entry_id || `entry-${draft.revision}`, player_name: form.player_name,
         selection_mode: form.selection_mode, selection_order: form.selection_mode === 'oldest' ? 'oldest' : 'latest',
@@ -58,20 +84,18 @@ window.fetch = async (input, options = {}) => {
       const index = draft.entries.findIndex(e => e.id === body.replace_entry_id)
       if (index >= 0) draft.entries[index] = entry
       else draft.entries.push(entry)
-      draft.revision++; draft.preview = null
+      draft.revision++; groupPreview(draft)
       return reply(draft)
     }
     if (drafts.endsWith('/remove')) {
       const entryId = drafts.split('/').at(-2)
       draft.entries = draft.entries.filter(e => e.id !== entryId)
-      draft.revision++; draft.preview = null
+      draft.revision++; groupPreview(draft)
       return reply(draft)
     }
     if (drafts.endsWith('/preview')) {
       if (state.groupError) return reply({ detail: state.groupError }, 500)
-      draft.preview = { revision: draft.revision, unique_games: draft.entries.length * 30,
-        unique_missing_fens: draft.entries.length > 1 ? 1300000 : 800000, claimed_fens: 0,
-        fens_to_analyze: draft.entries.length > 1 ? 1300000 : 800000, within_limit: true }
+      groupPreview(draft)
       return reply(draft)
     }
     if (drafts.endsWith('/submit')) {
@@ -85,10 +109,27 @@ window.fetch = async (input, options = {}) => {
   if (url.pathname.endsWith('/analysis_counts')) return reply({ total_positions: 3000, analyzed_positions: 1000 })
   if (url.pathname.endsWith('/resume')) { job.status = 'queued'; return reply({ id: job.id, status: job.status }, 202) }
   if (url.pathname.endsWith('/stop-and-cleanup')) {
+    if (state.stopError) return reply({ detail: 'Synthetic stop failed' }, 503)
+    if (state.holdStop) await new Promise(resolve => { state.finishStop = resolve })
     job.stop_cleanup = { phase: 'stopping', requested_at: new Date().toISOString(), finished_at: null }
     return reply({ id: job.id, status: 'stop_cleanup_requested', phase: 'stopping' }, 202)
   }
   throw new Error(`Unexpected request: ${method} ${url.pathname}; no real API requests allowed`)
 }
-createRoot(document.getElementById('root')).render(React.createElement(CloudAnalysisSection, { collapsible: restoreDraft }))
+function DraftFixture() {
+  const [draft, setDraft] = React.useState(null)
+  const [key, setKey] = React.useState(0)
+  const [vms, setVms] = React.useState(6)
+  const [cpus, setCpus] = React.useState(100)
+  state.remount = () => setKey(value => value + 1)
+  return React.createElement(CloudGameDraft, { key, draft, setDraft, launchDisabled: false,
+    backend: new URLSearchParams(location.search).get('backend') || 'batch_spot',
+    nVms: vms, onVmChange: setVms, nCpus: cpus, onCpuChange: setCpus })
+}
+createRoot(document.getElementById('root')).render(draftOnly ? React.createElement(DraftFixture)
+  : appearance ? React.createElement(AppearanceProvider, { account: { role: 'admin' }, pageKey: '/positions' },
+    React.createElement(AppearanceControls),
+    React.createElement(AnalysisDisclosure, { id: 'analysis-local', label: 'Local' }, 'Synthetic local selection'),
+    React.createElement(CloudAnalysisSection, { collapsible: independentStyles }))
+  : React.createElement(CloudAnalysisSection, { collapsible: restoreDraft }))
 </script></body></html>

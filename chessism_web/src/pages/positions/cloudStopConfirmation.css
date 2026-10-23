@@ -1,0 +1,10 @@
+.cloud-stop-confirmation { width: min(480px, calc(100% - 32px)); box-sizing: border-box; max-height: 90dvh; overflow: auto; padding: 24px; border: 1px solid #6d4444; border-radius: 12px; background: #10191f; color: var(--text, #d1d9dc); }
+.cloud-stop-confirmation-backdrop { position: fixed; inset: 0; z-index: 1400; display: grid; place-items: center; background: #000a; backdrop-filter: blur(3px); }
+.cloud-stop-confirmation h3 { margin: 0 0 16px; }
+.cloud-stop-confirmation p { line-height: 1.6; }
+.cloud-stop-confirmation footer { display: flex; justify-content: flex-end; gap: 12px; flex-wrap: wrap; margin-top: 24px; }
+.cloud-stop-confirmation button { padding: 10px 16px; border: 1px solid #52666f; border-radius: 6px; background: #1b2c32; color: inherit; font: inherit; cursor: pointer; }
+.cloud-stop-confirmation button:hover { background: #304751; }
+.cloud-stop-confirmation [data-style-id="cloud.stop.yes"] { background: #862d2d; border-color: #b84a4a; }
+.cloud-stop-confirmation [data-style-id="cloud.stop.yes"]:hover { background: #a73737; }
+.cloud-stop-confirmation button:focus-visible { outline: 2px solid #fff; outline-offset: 3px; }

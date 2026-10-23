@@ -326,7 +326,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
                       className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
                       cx={point.x}
                       cy={point.y}
-                      r={4}
+                      r={2}
                       opacity={1}
                       data-date={point.date}
                       role="button"

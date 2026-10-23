@@ -7,7 +7,6 @@ function SideRail() {
     { id: 'research', href: '/research', label: 'Research' },
     { id: 'database', href: '/database', label: 'Database' },
     { id: 'live', href: '/live_analysis', label: 'Live' },
-    { id: 'hegel', href: '/hegel', label: 'Hegel' },
     { id: 'backups', href: '/backups', label: 'Backups' },
     { id: 'system', href: '/system_status', label: 'System Status' }
   ]

@@ -11,12 +11,14 @@ import threading
 import time
 
 from .importer import import_batch
+from .batch_validation import prepare_in_process
 from stockfish_batch.checkpoints import BatchCheckpoints
 
 
 async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency=4, writer=None, scan_missing=False):
     if type(concurrency) is not int or not 1 <= concurrency <= 4:
         raise ValueError('Ingestion concurrency must be 1–4')
+    prevalidate = writer is None
     writer = writer or import_batch
     thread_state = threading.local()
     def read(uri, limit):
@@ -30,6 +32,14 @@ async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency
                    for task in tasks)
     pending = deque()
     imported = 0
+    async def fetch(task, index, uri, limit):
+        raw, elapsed = await asyncio.to_thread(read, uri, limit)
+        prepared = None
+        if prevalidate and raw is not None and index is not None:
+            start = task.get('start', 0) + index * 500
+            end = min(task.get('start', 0) + task['count'], start + 500)
+            prepared = await prepare_in_process(raw, run.positions[start:end], task['contract'])
+        return raw, elapsed, prepared
     def fill():
         misses = 0
         while len(pending) < concurrency and states and misses < len(states):
@@ -58,13 +68,13 @@ async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency
                 state['next'] += 1
                 uri, limit = task['output'] + f'/batches/{index:06d}.json', BatchCheckpoints.MAX_BYTES
             misses = 0
-            pending.append((state, index, asyncio.create_task(asyncio.to_thread(read, uri, limit))))
+            pending.append((state, index, asyncio.create_task(fetch(task, index, uri, limit))))
 
     try:
         fill()
         while pending:
             state, index, future = pending.popleft()
-            raw, elapsed = await future
+            raw, elapsed, prepared = await future
             task = state['task']
             # After cancellation, later completed batches must survive gaps.
             # Live polling still stops at a gap and retries on its next tick.
@@ -77,7 +87,8 @@ async def ingest_ready(storage, run, tasks, *, storage_factory=None, concurrency
             # Refill BEFORE awaiting the database, overlapping I/O with COMMIT.
             fill()
             if raw is not None and index is not None:
-                imported += await writer(run.id, raw, index, task_index=task.get('index'), download_seconds=elapsed)
+                options = {'_prepared': prepared} if prevalidate else {}
+                imported += await writer(run.id, raw, index, task_index=task.get('index'), download_seconds=elapsed, **options)
     finally:
         # to_thread cannot stop a running HTTP request. Drain its bounded,
         # timeout-protected reads; never leave a detached writer behind.

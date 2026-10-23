@@ -7,43 +7,43 @@ export default function LocalAnalysisActivity({ page }) {
   const { analysisProcessViews, analysisProcessesError, deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, handleDeleteAnalysisProcess } = page
   return (
     <>
-    {(analysisProcessViews.length > 0 || analysisProcessesError) && <section {...pageStyleTarget('panel')} className="local-process-status" aria-live="polite">
-      <div className="analysis-processes-heading">
+    {(analysisProcessViews.length > 0 || analysisProcessesError) && <section {...pageStyleTarget('local.activity.panel')} className="local-process-status" aria-live="polite">
+      <div {...pageStyleTarget('local.activity.heading')} className="analysis-processes-heading">
         <div>
-          <p {...pageStyleTarget('text')} className="eyebrow">ACTIVE ANALYSIS PROCESSES</p>
-          <small {...pageStyleTarget('text')}>Server-side Stockfish jobs currently running or waiting in the queue.</small>
+          <p {...pageStyleTarget('local.activity.title')} className="eyebrow">ACTIVE ANALYSIS PROCESSES</p>
+          <small {...pageStyleTarget('local.activity.note')}>Server-side Stockfish jobs currently running or waiting in the queue.</small>
         </div>
-        <span className="stat-chip">{analysisProcessViews.length} processes</span>
+        <span {...pageStyleTarget('local.activity.count')} className="stat-chip">{analysisProcessViews.length} processes</span>
       </div>
 
       {analysisProcessesError ? <div className="status-banner warn">{analysisProcessesError}</div> : null}
-      <div className="analysis-process-list">
+      <div {...pageStyleTarget('local.activity.list')} className="analysis-process-list">
         {analysisProcessViews.map((process) => (
-          <article {...pageStyleTarget('card')} className="analysis-process-card" key={process.job_id}>
-            <div className="analysis-process-title">
+          <article {...pageStyleTarget('local.activity.card')} className="analysis-process-card" key={process.job_id}>
+            <div {...pageStyleTarget('local.activity.header')} className="analysis-process-title">
               <div>
-                <strong {...pageStyleTarget('value')}>{process.scopeLabel}</strong>
-                <small {...pageStyleTarget('text')}>{String(process.job_id).slice(0, 12)}</small>
+                <strong {...pageStyleTarget('local.activity.scope')}>{process.scopeLabel}</strong>
+                <small {...pageStyleTarget('local.activity.job-id')}>{String(process.job_id).slice(0, 12)}</small>
               </div>
               <span className={`analysis-process-phase ${process.phase}`}>{process.phase}</span>
             </div>
 
-            <div className="analysis-process-parameters">
-              <span><small {...pageStyleTarget('text')}>Positions/run</small><strong {...pageStyleTarget('value')}>{formatNumber(process.positionsPerRun)}</strong></span>
-              <span><small {...pageStyleTarget('text')}>Runs</small><strong {...pageStyleTarget('value')}>{formatNumber(process.runs)}</strong></span>
-              <span><small {...pageStyleTarget('text')}>Batch</small><strong {...pageStyleTarget('value')}>{formatNumber(process.batchSize)}</strong></span>
-              <span><small {...pageStyleTarget('text')}>Cool-off</small><strong {...pageStyleTarget('value')}>{formatNumber(process.coolOff)}s</strong></span>
+            <div {...pageStyleTarget('local.activity.parameters')} className="analysis-process-parameters">
+              <span><small {...pageStyleTarget('local.activity.positions.label')}>Positions/run</small><strong {...pageStyleTarget('local.activity.positions.value')}>{formatNumber(process.positionsPerRun)}</strong></span>
+              <span><small {...pageStyleTarget('local.activity.runs.label')}>Runs</small><strong {...pageStyleTarget('local.activity.runs.value')}>{formatNumber(process.runs)}</strong></span>
+              <span><small {...pageStyleTarget('local.activity.batch.label')}>Batch</small><strong {...pageStyleTarget('local.activity.batch.value')}>{formatNumber(process.batchSize)}</strong></span>
+              <span><small {...pageStyleTarget('local.activity.cool-off.label')}>Cool-off</small><strong {...pageStyleTarget('local.activity.cool-off.value')}>{formatNumber(process.coolOff)}s</strong></span>
             </div>
 
-            <div className="job-progress">
-              <div className="job-progress-head">
+            <div {...pageStyleTarget('local.activity.progress')} className="job-progress">
+              <div {...pageStyleTarget('local.activity.progress-heading')} className="job-progress-head">
                 <span>{formatNumber(process.processed)} / {formatNumber(process.total)}</span>
-                <strong {...pageStyleTarget('value')}>{process.percent}%</strong>
+                <strong {...pageStyleTarget('local.activity.percent')}>{process.percent}%</strong>
               </div>
-              <div className="job-progress-track">
+              <div {...pageStyleTarget('local.activity.track')} className="job-progress-track">
                 <div className="job-progress-fill" style={{ width: `${process.percent}%` }} />
               </div>
-              {process.progress?.detail ? <small {...pageStyleTarget('text')}>{process.progress.detail}</small> : null}
+              {process.progress?.detail ? <small {...pageStyleTarget('local.activity.detail')}>{process.progress.detail}</small> : null}
               <EstimatedTime
                 jobId={process.job_id}
                 progress={process.progress}
@@ -54,7 +54,7 @@ export default function LocalAnalysisActivity({ page }) {
             </div>
 
             {process.isQueued ? (
-              <button {...pageStyleTarget('button')}
+              <button {...pageStyleTarget('local.activity.delete')}
                 className="btn job-delete-queued"
                 type="button"
                 disabled={deletingAnalysisJobIds.has(process.job_id)}

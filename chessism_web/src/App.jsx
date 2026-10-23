@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import Home from './pages/Home'
 import Games from './pages/Games'
 import SystemStatus from './pages/SystemStatus'
@@ -31,7 +31,6 @@ import {
   unlockSuperadmin,
 } from './services/authApi'
 
-const Hegel = lazy(() => import('./pages/Hegel'))
 const Settings = lazy(() => import('./pages/Settings'))
 
 const APP_PATHS = new Set([
@@ -40,7 +39,6 @@ const APP_PATHS = new Set([
   '/players',
   '/system_status',
   '/database',
-  '/hegel',
   '/settings',
   '/add_games',
   '/download_new_games',
@@ -197,16 +195,31 @@ function AdminOnlineStatus({ account, active, onOpenSettings }) {
   const displayName = account?.name || account?.email || 'Admin'
 
   return (
-    <button className="admin-online-status" type="button" onClick={onOpenSettings}
+    <button {...styleTarget('account.online', 'navigation')} className="admin-online-status" type="button" onClick={onOpenSettings}
       title="Settings" aria-label={`${displayName} online — open settings`}
       aria-current={active ? 'page' : undefined}>
-      <span className="admin-online-dot" aria-hidden="true" />
+      <span {...styleTarget('account.indicator', 'navigation')} className="admin-online-dot" aria-hidden="true" />
       <span>{displayName}</span>
     </button>
   )
 }
 
 function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings }) {
+  const accountControlsRef = useRef(null)
+  useEffect(() => {
+    const controls = accountControlsRef.current
+    if (!controls) return undefined
+    const update = () => document.documentElement.style.setProperty(
+      '--rail-account-space', `${Math.ceil(controls.getBoundingClientRect().height) + 36}px`,
+    )
+    const observer = new ResizeObserver(update)
+    observer.observe(controls)
+    update()
+    return () => {
+      observer.disconnect()
+      document.documentElement.style.removeProperty('--rail-account-space')
+    }
+  }, [])
   let page = <Home locationKey={locationKey} />
 
   if (path === '/games' || path.startsWith('/games/')) {
@@ -215,8 +228,6 @@ function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings
     page = <SystemStatus />
   } else if (path === '/database') {
     page = <Database account={account} />
-  } else if (path === '/hegel') {
-    page = <Suspense fallback={<p role="status">Loading Hegel…</p>}><Hegel /></Suspense>
   } else if (path === '/settings') {
     page = <Suspense fallback={<p role="status">Loading settings…</p>}><Settings /></Suspense>
   } else if (path === '/add_games' || path === '/download_new_games') {
@@ -252,7 +263,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings
       <div className="app-route-transition" key={path === '/' ? 'home' : locationKey}>
         {page}
       </div>
-      <div className="superadmin-account-controls">
+      <div ref={accountControlsRef} className="superadmin-account-controls">
         <AppearanceControls />
         <a {...styleTarget('button', 'navigation')}
           className={`rail-btn ${path === '/add_games' || path === '/download_new_games' ? 'active' : ''}`}
@@ -262,7 +273,7 @@ function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings
           <span>Add Games</span>
         </a>
         <AdminOnlineStatus account={account} active={path === '/settings'} onOpenSettings={onOpenSettings} />
-        <button className="superadmin-logout" type="button" onClick={onLogout}>
+        <button {...styleTarget('account.logout', 'navigation')} className="superadmin-logout" type="button" onClick={onLogout}>
           Log out
         </button>
       </div>

@@ -1,9 +1,13 @@
-import { getJson } from '../../services/apiClient'
+import { getJson, postJson } from '../../services/apiClient'
 
 // Read the controller's saved status; never launch or mutate cloud resources.
 export const fetchCloudStatus = ({ signal } = {}) => getJson('/analysis/cloud', { signal })
 export const fetchCloudBilling = ({ signal } = {}) => getJson('/analysis/cloud/billing', { signal })
 export const fetchCloudJobUsage = (id, { signal } = {}) => getJson(`/analysis/cloud/${encodeURIComponent(id)}/usage`, { signal })
+
+// Explicit user action only: reuse the existing job's transfer/cleanup recovery.
+// Never call the new-job or retry-cloud endpoints from System Status.
+export const recoverCloudJob = id => postJson(`/analysis/cloud/${encodeURIComponent(id)}/resume`, {})
 
 export async function fetchStatus({ signal } = {}) {
   const startedAt = performance.now()

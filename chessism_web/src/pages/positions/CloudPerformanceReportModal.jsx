@@ -37,16 +37,16 @@ export default function CloudPerformanceReportModal({ run, onClose }) {
     }
   }, [])
 
-  return createPortal(<div className="cloud-performance-backdrop" onClick={event => {
+  return createPortal(<div {...pageStyleTarget('cloud.performance.backdrop')} className="cloud-performance-backdrop" onClick={event => {
     if (event.target === event.currentTarget) onClose()
   }}>
     <section {...pageStyleTarget('cloud.performance.panel')} className="cloud-performance-modal" ref={panel}
       role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
       <header>
-        <h3 {...pageStyleTarget('title')} id={titleId}>{cloudPerformanceTitle(run.performance)}</h3>
+        <h3 {...pageStyleTarget('cloud.performance.title')} id={titleId}>{cloudPerformanceTitle(run.performance)}</h3>
         <button {...pageStyleTarget('cloud.performance.close')} type="button" onClick={onClose} aria-label="Close performance report">×</button>
       </header>
-      <div className="cloud-performance-body" tabIndex={0} role="region" aria-label="Performance report data">
+      <div {...pageStyleTarget('cloud.performance.body')} className="cloud-performance-body" tabIndex={0} role="region" aria-label="Performance report data">
         <CloudPerformanceDetails run={run} />
       </div>
     </section>

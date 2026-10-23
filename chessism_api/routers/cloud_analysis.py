@@ -205,7 +205,9 @@ async def cloud_usage(job_id: str):
         ).where(CloudResultBatch.run_id.in_(run_ids)))).mappings().one()
         def row(value):
             return {c.name: getattr(value, c.name) for c in value.__table__.columns}
-        return {'job_id': job_id, 'phases': list(map(row, phases)), 'usage': list(map(row, usage)),
+        from chessism_api.operations.cloud_analysis.recovery_history import summary
+        recovery = await summary(session, job_id)
+        return {'job_id': job_id, 'phases': list(map(row, phases)), 'usage': list(map(row, usage)), 'recovery': recovery,
                 'attempts': list(map(row, attempts)), 'imports': dict(totals),
                 'note': 'Worker time and summed download time are not billed duration. NULL costs mean not reconciled.'}
 
@@ -218,6 +220,8 @@ async def resume_cloud_job(job_id: str):
         job = await session.get(CloudAnalysisJob, job_id, with_for_update=True)
         if not job or job.status not in {"paused", "waiting"}:
             raise HTTPException(409, "Only paused or waiting jobs can resume")
+        from chessism_api.operations.cloud_analysis.recovery_history import transition
+        await transition(session, job, 'queued')
         job.status, job.error = "queued", None
         await session.commit()
     return {"id": job_id, "status": "queued"}

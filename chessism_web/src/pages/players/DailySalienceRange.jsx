@@ -11,7 +11,11 @@ export default function DailySalienceRange({ range, scale, onChange }) {
   const actual = (value) => scale.minimum + (scale.maximum - scale.minimum) * value / 100
   const pointerValue = (event) => {
     const rect = track.current.getBoundingClientRect()
-    return Math.max(0, Math.min(100, 100 * (rect.bottom - event.clientY) / rect.height))
+    // Absolute-positioned handles use the padding box, excluding the border.
+    // Keep pointer mapping accurate when Edit styles changes either of them.
+    const height = track.current.clientHeight
+    const bottom = rect.top + track.current.clientTop + height
+    return height ? Math.max(0, Math.min(100, 100 * (bottom - event.clientY) / height)) : 0
   }
   const pointerMove = (event) => {
     if (disabled || drag.current?.pointerId !== event.pointerId) return
@@ -42,9 +46,9 @@ export default function DailySalienceRange({ range, scale, onChange }) {
   }
 
   return (
-    <div className="daily-salience-control" role="group" aria-labelledby={`${id}-label`}>
-      <strong {...pageStyleTarget('value')} id={`${id}-label`}>salience</strong>
-      <div className="daily-salience-track" ref={track} data-disabled={disabled}
+    <div {...pageStyleTarget('player.accuracy.salience.panel')} className="daily-salience-control" role="group" aria-labelledby={`${id}-label`}>
+      <strong {...pageStyleTarget('player.accuracy.salience.title')} id={`${id}-label`}>salience</strong>
+      <div {...pageStyleTarget('player.accuracy.salience.track')} className="daily-salience-track" ref={track} data-disabled={disabled}
         onPointerDown={pointerDown} onPointerMove={pointerMove}
         onPointerUp={(event) => {
           if (drag.current?.pointerId !== event.pointerId) return
@@ -53,21 +57,23 @@ export default function DailySalienceRange({ range, scale, onChange }) {
           if (track.current.hasPointerCapture(event.pointerId)) track.current.releasePointerCapture(event.pointerId)
         }}
         onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}>
-        <span className="daily-salience-rail" aria-hidden="true" />
-        <span className="daily-salience-fill" aria-hidden="true"
+        <span {...pageStyleTarget('player.accuracy.salience.rail')} className="daily-salience-rail" aria-hidden="true" />
+        <span {...pageStyleTarget('player.accuracy.salience.fill')} className="daily-salience-fill" aria-hidden="true"
           style={{ bottom: `${bounds[0]}%`, height: `${bounds[1] - bounds[0]}%` }} />
         {[0, 25, 50, 75, 100].map((value) => (
-          <span key={value} className="daily-salience-tick" style={{ bottom: `${value}%` }} aria-hidden="true">{value}</span>
+          <span {...pageStyleTarget('player.accuracy.salience.ticks')} key={value} className="daily-salience-tick" style={{ bottom: `${value}%` }} aria-hidden="true">{value}</span>
         ))}
         {bounds.map((value, index) => (
-          <button {...pageStyleTarget('button')} key={index} type="button" role="slider" className="daily-salience-handle"
+          <button {...pageStyleTarget(`player.accuracy.salience.${index === 0 ? 'minimum' : 'maximum'}.handle`)} key={index} type="button" role="slider" className="daily-salience-handle"
             data-salience-handle={index} disabled={disabled} style={{ bottom: `${value}%` }}
             aria-label={`${index === 0 ? 'Minimum' : 'Maximum'} relative average game salience`}
             aria-orientation="vertical" aria-valuemin={index === 0 ? 0 : bounds[0]}
             aria-valuemax={index === 0 ? bounds[1] : 100} aria-valuenow={value}
             aria-valuetext={disabled ? 'Salience range unavailable'
               : `${value} of 100; ${actual(value).toPrecision(4)} average game salience`}
-            onKeyDown={(event) => keyDown(event, index)}><span aria-hidden="true" /></button>
+            onKeyDown={(event) => keyDown(event, index)}>
+            <span {...pageStyleTarget(`player.accuracy.salience.${index === 0 ? 'minimum' : 'maximum'}.knob`)} aria-hidden="true" />
+          </button>
         ))}
       </div>
     </div>

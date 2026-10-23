@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from . import runtime
 from cloud_job.launch import Client
+from .read_recovery import RecoveringClient
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.runtime import bind_runtime_engine
 from chessism_api.database.models import CloudControllerHeartbeat
@@ -40,7 +41,7 @@ async def serve(args):
     from .stop_dispatcher import serve as dispatch_stops
     engine = await bind_runtime_engine(url, connect_args=getattr(args, "database_connect_args", {}))
     try:
-        controller = Controller(Client(gcloud=args.gcloud), args.local_image)
+        controller = Controller(RecoveringClient(gcloud=args.gcloud), args.local_image)
         async with engine.connect() as connection:
             if not await connection.scalar(text("SELECT pg_try_advisory_lock(:key)"), {"key": CONTROLLER_LOCK}):
                 raise RuntimeError("Another cloud controller already owns this database")
@@ -58,6 +59,7 @@ async def serve(args):
                 for task in done:
                     task.result()
             finally:
+                controller.cloud.stopping.set()
                 pulse.cancel()
                 work_task.cancel()
                 stop_task.cancel()
@@ -70,6 +72,8 @@ async def serve(args):
                 # A pooled DB connection must not retain a session advisory lock.
                 await connection.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": CONTROLLER_LOCK})
     finally:
+        from .batch_validation import shutdown_pool
+        await asyncio.to_thread(shutdown_pool)
         await engine.dispose()
 
 

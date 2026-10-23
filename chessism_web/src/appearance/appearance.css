@@ -1,4 +1,6 @@
 /* Editor chrome is deliberately outside registered appearance scopes. */
+.appearance-loading { min-height:100vh; box-sizing:border-box; padding:2rem; background:#000; color:#b3c0cb; font:14px system-ui,sans-serif; }
+.appearance-loading button { margin-left:8px; padding:5px 10px; border:1px solid #53606d; border-radius:5px; background:#121920; color:#edf3f8; cursor:pointer; }
 .appearance-account-controls { display:flex; align-items:center; gap:5px; flex-wrap:wrap; max-width:min(720px,80vw); }
 .appearance-account-controls button,.appearance-account-controls select { max-width:100%; background:#121920; color:#edf3f8; border:1px solid #53606d; border-radius:5px; padding:5px 8px; font:12px Inter,system-ui; cursor:pointer; }
 .appearance-account-controls button[aria-pressed="true"] { border-color:#15c780; }

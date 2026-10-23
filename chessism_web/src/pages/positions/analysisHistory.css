@@ -20,3 +20,8 @@
   .analysis-history-job > summary { grid-template-columns: minmax(0, 1fr) auto; }
   .analysis-history-job time { grid-column: 1 / -1; }
 }
+.cloud-recovery-history { margin-top: 1rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.cloud-recovery-history-scroll { max-height: 320px; overflow: auto; }
+.cloud-recovery-history table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.cloud-recovery-history th, .cloud-recovery-history td { padding: .5rem; text-align: left; vertical-align: top; }
+.cloud-recovery-history td:last-child { overflow-wrap: anywhere; }

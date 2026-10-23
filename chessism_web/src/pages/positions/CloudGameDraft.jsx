@@ -33,7 +33,7 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
     return () => { live = false }
   }, [setDraft])
   const resetEditor = () => { setEditing(null); setPending(false); setEditorKey(key => key + 1) }
-  const perform = async (operation, { reset = false, group = false } = {}) => {
+  const perform = async (operation, { reset = false } = {}) => {
     if (loading || working.current) return
     working.current = true
     setLoading(true); setError(''); setPhase('Saving steps…')
@@ -41,11 +41,6 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
       const result = await operation()
       setDraft(result); setReady(true)
       if (reset) resetEditor()
-      // Save first: a failed calculation must not discard or duplicate a step.
-      if (group && result?.entries.length) {
-        setPhase('Calculating group data…')
-        setDraft(await previewCloudDraft(result.id, result.revision))
-      }
     } catch (err) { setError(err.message) }
     finally { setLoading(false); working.current = false }
   }
@@ -55,7 +50,7 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
     return saveCloudDraftEntry(current.id, {
       revision: current.revision, plan_id: planId, ...(entryId ? { replace_entry_id: entryId } : {}),
     })
-  }, { reset: true, group: true })
+  }, { reset: true })
   const submitError = draftSubmitError(draft, parallelism, backend)
   const submit = async () => {
     if (loading || working.current || launchDisabled || submitError || pending || editing) return
@@ -74,23 +69,23 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
   const showEditor = editing || entries.length < (draft?.max_entries ?? 100)
   const step = editing ? entries.findIndex(entry => entry.id === editing.id) + 1 : entries.length + 1
   return <div className="cloud-process-layout">
-    {!draft?.submitted_job_id && <CloudComputeField resource={isRun ? 'cpu' : 'vm'}
+    {!draft?.submitted_job_id && <CloudComputeField resource={isRun ? 'cpu' : 'vm'} variant="combined"
       value={parallelism} onChange={isRun ? onCpuChange : onVmChange}
       disabled={loading || !ready} label={isRun ? 'Combined CPUs' : 'Combined Spot VMs'} />}
     <section {...pageStyleTarget(isRun ? 'cloud.run.draft' : 'cloud.batch.draft')} className="cloud-game-draft cloud-process-content" aria-label="Combined player-game selection" aria-busy={loading}>
     {error && <div role="alert" className="status-banner warn">
-      <p {...pageStyleTarget('text')}>{error}</p>
-      <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={loading}
+      <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.error`)}>{error}</p>
+      <button {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.reload`)} className="btn btn-secondary" type="button" disabled={loading}
         onClick={() => perform(fetchCloudDraft, { reset: true })}>Reload saved draft</button>
     </div>}
     {draft?.submitted_job_id ? <>
-      <p {...pageStyleTarget('text')} role="status">Submitted as job {draft.submitted_job_id}. Follow its progress below.</p>
-      <button {...pageStyleTarget('button')} className="btn" type="button" disabled={loading}
+      <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.submitted`)} role="status">Submitted as job {draft.submitted_job_id}. Follow its progress below.</p>
+      <button {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.new`)} className="btn" type="button" disabled={loading}
         onClick={() => perform(createCloudDraft, { reset: true })}>Start another process</button>
     </> : <>
       {!!entries.length && <ol className="cloud-draft-entries" aria-label="Saved game selections">
         {entries.map((entry, index) => <li key={entry.id}>
-          <button {...pageStyleTarget('button')} type="button" className="cloud-draft-step"
+          <button {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.step-button`)} type="button" className="cloud-draft-step"
             aria-label={`Edit step ${index + 1}: ${entry.player_name}`} aria-pressed={editing?.id === entry.id}
             title={`${entry.player_name} · ${entry.selected_games.toLocaleString('en-US')} games · ${entry.preview_fens.toLocaleString('en-US')} FENs`}
             disabled={loading || pending} onClick={() => { setEditing(entry); setPending(true); setEditorKey(key => key + 1) }}>
@@ -100,23 +95,23 @@ export default function CloudGameDraft({ launchDisabled, onSubmitted, draft = nu
       </ol>}
       <section {...pageStyleTarget(isRun ? 'cloud.run.draft.selection' : 'cloud.batch.draft.selection')} className="cloud-draft-builder" aria-label="Combined selection setup">
         <div className="cloud-draft-builder-heading">
-          {showEditor && <span {...pageStyleTarget('value')} className="cloud-draft-step-number" aria-label={`Step ${step}`}>{step}</span>}
+          {showEditor && <span {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.step-number`)} className="cloud-draft-step-number" aria-label={`Step ${step}`}>{step}</span>}
         </div>
         {showEditor ? <CloudDraftSelectionEditor
-          key={editorKey} entry={editing} disabled={loading || !ready} onSave={save}
+          key={editorKey} backend={backend} entry={editing} disabled={loading || !ready} onSave={save}
           onPendingChange={setPending} onCancel={resetEditor}
-          onRemove={editing ? () => perform(() => removeCloudDraftEntry(draft.id, editing.id, draft.revision), { reset: true, group: true }) : null} />
-          : <p {...pageStyleTarget('text')}>Maximum {draft.max_entries} steps. Select a square to edit or remove a step.</p>}
+          onRemove={editing ? () => perform(() => removeCloudDraftEntry(draft.id, editing.id, draft.revision), { reset: true }) : null} />
+          : <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.limit`)}>Maximum {draft.max_entries} steps. Select a square to edit or remove a step.</p>}
       </section>
       <CloudDraftGroupData draft={draft} backend={backend} nVms={nVms} loading={loading} phase={phase}
         onRefresh={() => perform(() => previewCloudDraft(draft.id, draft.revision))} />
-      {launchDisabled && <p {...pageStyleTarget('text')}>Submission requires an online controller and no unfinished cloud job. You can still prepare steps.</p>}
-      {pending ? <p {...pageStyleTarget('text')}>Add or clear the current step before running.</p>
-        : submitError && !!entries.length && <p {...pageStyleTarget('text')}>{submitError}</p>}
-      <button {...pageStyleTarget('button')} className="btn cloud-draft-run" type="button"
+      {launchDisabled && <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.launch-unavailable`)}>Submission requires an online controller and no unfinished cloud job. You can still prepare steps.</p>}
+      {pending ? <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.pending`)}>Add or clear the current step before running.</p>
+        : submitError && !!entries.length && <p {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.submit-error`)}>{submitError}</p>}
+      <button {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.submit`)} className="btn cloud-draft-run" type="button"
         disabled={loading || !ready || launchDisabled || !!submitError || pending || !!editing}
         onClick={submit}>{isRun ? 'Run' : 'Run process'}</button>
-      <small {...pageStyleTarget('text')}>Billable Google Cloud work. Keep the PC on for uploads, result imports and cleanup. No total-runtime or monetary cap.</small>
+      <small {...pageStyleTarget(`cloud.${isRun ? 'run' : 'batch'}.combined.billing-note`)}>Billable Google Cloud work. Keep the PC on for uploads, result imports and cleanup. No total-runtime or monetary cap.</small>
     </>}
     </section>
   </div>

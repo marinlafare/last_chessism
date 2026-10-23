@@ -62,7 +62,7 @@ export default function AnalysisDisclosure({ id, label, indicator, children, rev
   const concealed = hidden || Boolean(hideWhenOpen && openSiblingId === hideWhenOpen)
   const Heading = `h${level}`
   return <section {...pageStyleTarget(target)} className={`analysis-disclosure${open ? ' is-open' : ''}`} aria-label={`${label} analysis`} hidden={concealed}>
-    <Heading {...pageStyleTarget('title')} className="analysis-disclosure-heading">
+    <Heading {...pageStyleTarget(BUTTON_TARGETS[id] ? BUTTON_TARGETS[id].replace(/\.toggle$/, '.heading') : 'title')} className="analysis-disclosure-heading">
       <button {...pageStyleTarget(BUTTON_TARGETS[id] || 'button')} className="analysis-disclosure-toggle" type="button" id={`${id}-toggle`}
         aria-label={label} aria-expanded={open} aria-controls={`${id}-panel`}
         onClick={toggle}>

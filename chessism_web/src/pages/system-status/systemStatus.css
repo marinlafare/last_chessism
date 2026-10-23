@@ -63,6 +63,18 @@
 .cloud-status-eta { width: 100%; padding-top: 12px; border-top: 1px solid #06110c25; }
 .cloud-status-eta-label { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; font-size: 12px; }
 .cloud-status-eta-label strong { font-family: "IBM Plex Mono", monospace; }
+.cloud-job-recovery { display: flex; align-items: center; flex-wrap: wrap; gap: 12px 18px; margin-top: 16px; padding: 14px; border: 1px solid #bd8b41; border-radius: var(--radius); background: #282014; }
+.cloud-job-recovery-message { flex: 1 1 220px; min-width: 0; color: var(--text); font-size: 13px; overflow-wrap: anywhere; }
+.cloud-job-recovery-message p { margin: 0; }
+.cloud-job-recovery-message p + p { margin-top: 6px; }
+.cloud-job-recovery-detail { font-size: .9em; }
+.cloud-job-recovery-button { display: block; min-width: 128px; padding: 10px 16px; border: 1px solid #d1a35d; border-radius: 8px; background: #6b491d; color: #fff; font: inherit; text-align: center; cursor: pointer; }
+.cloud-job-recovery-button:hover:not(:disabled) { background: #815923; }
+.cloud-job-recovery-button:disabled { opacity: .6; cursor: default; }
+.cloud-job-recovery-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.cloud-job-recovery-spinner { display: inline-block; width: .9em; height: .9em; margin-right: .5em; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: middle; animation: cloud-recovery-spin .8s linear infinite; }
+@keyframes cloud-recovery-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .cloud-job-recovery-spinner { animation: none; } }
 .system-times { margin-top: 16px; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface-2); overflow: hidden; }
 .system-times > h2 { margin: 0; }
 .system-times-toggle { width: 100%; padding: 18px; border: 0; background: transparent; color: var(--text); font: inherit; cursor: pointer; text-align: center; }

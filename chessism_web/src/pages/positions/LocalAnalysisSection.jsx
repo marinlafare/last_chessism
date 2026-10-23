@@ -15,9 +15,9 @@ export default function LocalAnalysisSection({ page }) {
     indicator={activeCount > 0 ? <span className="analysis-disclosure-live" role="img"
       aria-label="Local analysis running or queued" title="Local analysis running or queued" /> : null}>
     <section {...pageStyleTarget('local.selection')} className="local-analysis-selection" aria-label="Local FEN selection">
-      <label {...pageStyleTarget('label')} className="local-selection-picker">
-        <span {...pageStyleTarget('label')} className="field-label">FEN selection</span>
-        <select {...pageStyleTarget('field')} className="text-input" aria-label="Local FEN selection" value={mode}
+      <label {...pageStyleTarget('local.selection.picker.group')} className="local-selection-picker">
+        <span {...pageStyleTarget('local.selection.picker.label')} className="field-label">FEN selection</span>
+        <select {...pageStyleTarget('local.selection.picker.input')} className="text-input" aria-label="Local FEN selection" value={mode}
           onChange={event => setMode(event.target.value)}>
           <option value="all">All positions — unscored FENs</option>
           <option value="player">Player positions — unscored FENs</option>
@@ -42,10 +42,10 @@ function LocalPositionSelection({ page, mode }) {
   return <form className="local-selection-form" aria-label="Local position analysis"
     onSubmit={player ? page.handlePlayerAnalysis : page.handleGlobalAnalysis}>
     {player && <>
-      <label {...pageStyleTarget('label')}>
-        <span {...pageStyleTarget('label')} className="field-label">Chess.com nickname</span>
-        <div className="input-action-row">
-          <input {...pageStyleTarget('field')} className="text-input" type="text" required value={state.playerName}
+      <label {...pageStyleTarget('local.selection.player.group')}>
+        <span {...pageStyleTarget('local.selection.player.label')} className="field-label">Chess.com nickname</span>
+        <div {...pageStyleTarget('local.selection.player-actions')} className="input-action-row">
+          <input {...pageStyleTarget('local.selection.player.input')} className="text-input" type="text" required value={state.playerName}
             onChange={event => {
               update(current => ({ ...current, playerName: event.target.value }))
               page.setPlayerInspection(current => ({ ...current, error: '', data: null }))
@@ -54,33 +54,33 @@ function LocalPositionSelection({ page, mode }) {
               event.preventDefault()
               page.handleInspectPlayer()
             }} placeholder="hikaru" />
-          <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={page.handleInspectPlayer}
+          <button {...pageStyleTarget('local.selection.inspect')} className="btn btn-secondary" type="button" onClick={page.handleInspectPlayer}
             disabled={page.playerInspection.loading}>{page.playerInspection.loading ? 'Inspecting' : 'Inspect player'}</button>
         </div>
       </label>
       {page.playerInspection.error && <div className="status-banner warn">{page.playerInspection.error}</div>}
-      {page.playerInspection.data && <p {...pageStyleTarget('text')} className="local-selection-counts">
+      {page.playerInspection.data && <p {...pageStyleTarget('local.selection.player-counts')} className="local-selection-counts">
         {formatNumber(page.playerInspection.data.total_positions)} positions ·
         {' '}{formatNumber(page.playerInspection.data.analyzed_positions)} analyzed
       </p>}
     </>}
-    {!player && <p {...pageStyleTarget('text')} className="local-selection-counts">
+    {!player && <p {...pageStyleTarget('local.selection.global-counts')} className="local-selection-counts">
       {page.analysisCounts || page.coverage ? formatNumber(page.pendingPositions) : '—'} positions pending ·
       {' '}{page.analysisCounts ? formatNumber(page.scoredPositions) : '—'} scored
     </p>}
-    <div className="local-position-fields">
-      <label {...pageStyleTarget('label')}><span {...pageStyleTarget('label')} className="field-label">FEN positions</span>
-        <input {...pageStyleTarget('field')} className="text-input number-input-clean" type="number" min="1" step="1" required
+    <div {...pageStyleTarget('local.selection.fields')} className="local-position-fields">
+      <label {...pageStyleTarget('local.selection.positions.group')}><span {...pageStyleTarget('local.selection.positions.label')} className="field-label">FEN positions</span>
+        <input {...pageStyleTarget('local.selection.positions.input')} className="text-input number-input-clean" type="number" min="1" step="1" required
           value={state.totalFens} onWheel={event => event.currentTarget.blur()}
           onChange={event => update(current => ({ ...current, totalFens: event.target.value }))} />
       </label>
-      <label {...pageStyleTarget('label')}><span {...pageStyleTarget('label')} className="field-label">Batch size</span>
-        <input {...pageStyleTarget('field')} className="text-input number-input-clean" type="number" min="1" max={maximum} step="1" required
+      <label {...pageStyleTarget('local.selection.batch.group')}><span {...pageStyleTarget('local.selection.batch.label')} className="field-label">Batch size</span>
+        <input {...pageStyleTarget('local.selection.batch.input')} className="text-input number-input-clean" type="number" min="1" max={maximum} step="1" required
           value={state.batchSize} onWheel={event => event.currentTarget.blur()}
           onChange={event => update(current => ({ ...current, batchSize: clampAnalysisBatchInput(event.target.value, maximum) }))} />
       </label>
     </div>
-    <button {...pageStyleTarget('button')} className="btn btn-primary local-analyze-button" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
+    <button {...pageStyleTarget('local.selection.submit')} className="btn btn-primary local-analyze-button" type="submit" disabled={status?.loading || isTrackedJobActive(status)}>
       {status?.loading || isTrackedJobActive(status) ? getAnalysisButtonLabel(status) : 'Analyze locally'}
     </button>
     <JobStatus jobKey={key} page={page} />

@@ -25,7 +25,7 @@
 .daily-salience-track {
   position: relative;
   width: 86px;
-  height: 160px;
+  height: var(--salience-track-height, 160px);
   margin: 12px 0;
   touch-action: none;
   user-select: none;
@@ -35,15 +35,15 @@
 .daily-salience-rail,
 .daily-salience-fill {
   position: absolute;
-  left: 35px;
-  width: 4px;
+  left: calc(37px - var(--salience-rail-width, 4px) / 2);
+  width: var(--salience-rail-width, 4px);
   border-radius: 3px;
   background: #15c780;
-  pointer-events: none;
+  pointer-events: auto;
 }
 
 .daily-salience-rail { inset-block: 0; background: #34444f; }
-.daily-salience-tick { position: absolute; left: 60px; transform: translateY(50%); color: var(--subtle); font-size: 9px; pointer-events: none; }
+.daily-salience-tick { position: absolute; left: 60px; transform: translateY(50%); color: var(--subtle); font-size: 9px; }
 
 .daily-salience-handle {
   position: absolute;
@@ -64,7 +64,7 @@
 
 /* Offset opposite handles so a collapsed range can still be reopened by touch. */
 .daily-salience-handle[data-salience-handle="1"] { left: 31px; }
-.daily-salience-handle span { width: 12px; height: 12px; border: 2px solid #d9fff1; border-radius: 50%; background: #15c780; pointer-events: none; }
+.daily-salience-handle span { width: var(--salience-knob-size, 12px); height: var(--salience-knob-size, 12px); border: 2px solid #d9fff1; border-radius: 50%; background: #15c780; }
 .daily-salience-handle:active { cursor: grabbing; }
 .daily-salience-handle:focus-visible { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; }
 .daily-salience-track[data-disabled="true"] { opacity: 0.4; cursor: default; }

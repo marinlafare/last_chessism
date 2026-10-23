@@ -12,6 +12,12 @@
 }
 
 .research-hub-hero {
+  --research-intro-width: 50%;
+  width: var(--research-intro-width);
+  min-width: min(100%, 280px);
+  max-width: 100%;
+  box-sizing: border-box;
+  justify-self: center;
   padding: 22px;
 }
 
@@ -55,6 +61,7 @@
 }
 
 @media (max-width: 980px) {
+  .research-hub-hero { --research-intro-width: 100%; }
   .research-hub-grid {
     grid-template-columns: 1fr;
   }

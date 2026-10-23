@@ -24,7 +24,7 @@
   }
 
   .superadmin-account-controls {
-    width: 56px;
+    width: calc(var(--rail-width) - 28px);
   }
 
   .superadmin-logout {
@@ -33,6 +33,10 @@
 
   .rail-btn {
     text-align: center;
+  }
+
+  .rail-brand {
+    font-size: 16px;
   }
 
   .players-top-grid,
@@ -86,6 +90,7 @@
   }
 
   .left-rail-menu {
+    height: auto;
     padding: 10px;
   }
 
@@ -103,6 +108,10 @@
 
   .rail-brand span {
     display: inline;
+  }
+
+  .rail-brand {
+    font-size: 22px;
   }
 
   .home-shell {

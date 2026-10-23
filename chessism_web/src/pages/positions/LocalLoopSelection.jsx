@@ -5,20 +5,20 @@ import { MAX_LOOP_ANALYSIS_BATCH_SIZE, clampAnalysisBatchInput, formatNumber } f
 export default function LocalLoopSelection({ page }) {
   const { activeLoopJobCount, handleAnalysisLoop, loopJob, loopJobIsQueueing, setLoopJob } = page
   return (
-    <form className="local-selection-form analysis-loop-card" onSubmit={handleAnalysisLoop}>
-      <div className="analysis-loop-heading">
+    <form {...pageStyleTarget('local.loop.form')} className="local-selection-form analysis-loop-card" onSubmit={handleAnalysisLoop}>
+      <div {...pageStyleTarget('local.loop.heading')} className="analysis-loop-heading">
         <div>
-          <p {...pageStyleTarget('text')} className="eyebrow">ANALYSIS LOOPS</p>
-          <small {...pageStyleTarget('text')}>Run sequential Stockfish passes with a cooling pause between them.</small>
+          <p {...pageStyleTarget('local.loop.title')} className="eyebrow">ANALYSIS LOOPS</p>
+          <small {...pageStyleTarget('local.loop.note')}>Run sequential Stockfish passes with a cooling pause between them.</small>
         </div>
-        <span className="stat-chip">
+        <span {...pageStyleTarget('local.loop.count')} className="stat-chip">
           {formatNumber(Number(loopJob.positionsPerRun || 0) * Number(loopJob.runs || 0))} total positions
         </span>
       </div>
 
-      <div className="analysis-loop-scope" role="radiogroup" aria-label="Analysis loop scope">
-        <label {...pageStyleTarget('label')} className={`analysis-loop-scope-option ${loopJob.scope === 'all' ? 'selected' : ''}`}>
-          <input {...pageStyleTarget('field')}
+      <div {...pageStyleTarget('local.loop.modes')} className="analysis-loop-scope" role="radiogroup" aria-label="Analysis loop scope">
+        <label {...pageStyleTarget('local.loop.all.group')} className={`analysis-loop-scope-option ${loopJob.scope === 'all' ? 'selected' : ''}`}>
+          <input {...pageStyleTarget('local.loop.all.input')}
             type="radio"
             name="analysis-loop-scope"
             value="all"
@@ -26,12 +26,12 @@ export default function LocalLoopSelection({ page }) {
             onChange={() => setLoopJob((current) => ({ ...current, scope: 'all' }))}
           />
           <span>
-            <strong {...pageStyleTarget('value')}>Analyze all</strong>
-            <small {...pageStyleTarget('text')}>Most repeated positions across the database</small>
+            <strong {...pageStyleTarget('local.loop.all.title')}>Analyze all</strong>
+            <small {...pageStyleTarget('local.loop.all.description')}>Most repeated positions across the database</small>
           </span>
         </label>
-        <label {...pageStyleTarget('label')} className={`analysis-loop-scope-option ${loopJob.scope === 'player' ? 'selected' : ''}`}>
-          <input {...pageStyleTarget('field')}
+        <label {...pageStyleTarget('local.loop.player.group')} className={`analysis-loop-scope-option ${loopJob.scope === 'player' ? 'selected' : ''}`}>
+          <input {...pageStyleTarget('local.loop.player.input')}
             type="radio"
             name="analysis-loop-scope"
             value="player"
@@ -39,20 +39,20 @@ export default function LocalLoopSelection({ page }) {
             onChange={() => setLoopJob((current) => ({ ...current, scope: 'player' }))}
           />
           <span>
-            <strong {...pageStyleTarget('value')}>Analyze player</strong>
-            <small {...pageStyleTarget('text')}>Most repeated positions belonging to one player</small>
+            <strong {...pageStyleTarget('local.loop.player.title')}>Analyze player</strong>
+            <small {...pageStyleTarget('local.loop.player.description')}>Most repeated positions belonging to one player</small>
           </span>
         </label>
       </div>
 
-      <p {...pageStyleTarget('text')} className="analysis-loop-selection" aria-live="polite">
-        Selected scope: <strong {...pageStyleTarget('value')}>{loopJob.scope === 'player' ? 'one player' : 'all database positions'}</strong>
+      <p {...pageStyleTarget('local.loop.scope')} className="analysis-loop-selection" aria-live="polite">
+        Selected scope: <strong {...pageStyleTarget('local.loop.scope-value')}>{loopJob.scope === 'player' ? 'one player' : 'all database positions'}</strong>
       </p>
 
       {loopJob.scope === 'player' ? (
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Chess.com nickname</span>
-          <input {...pageStyleTarget('field')}
+        <label {...pageStyleTarget('local.loop.nickname.group')}>
+          <span {...pageStyleTarget('local.loop.nickname.label')} className="field-label">Chess.com nickname</span>
+          <input {...pageStyleTarget('local.loop.nickname.input')}
             className="text-input"
             type="text"
             value={loopJob.playerName}
@@ -62,10 +62,10 @@ export default function LocalLoopSelection({ page }) {
         </label>
       ) : null}
 
-      <div className="analysis-loop-fields">
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Positions / run</span>
-          <input {...pageStyleTarget('field')}
+      <div {...pageStyleTarget('local.loop.fields')} className="analysis-loop-fields">
+        <label {...pageStyleTarget('local.loop.positions.group')}>
+          <span {...pageStyleTarget('local.loop.positions.label')} className="field-label">Positions / run</span>
+          <input {...pageStyleTarget('local.loop.positions.input')}
             className="text-input number-input-clean"
             type="number"
             min="1"
@@ -74,9 +74,9 @@ export default function LocalLoopSelection({ page }) {
             onChange={(event) => setLoopJob((current) => ({ ...current, positionsPerRun: event.target.value }))}
           />
         </label>
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Runs</span>
-          <input {...pageStyleTarget('field')}
+        <label {...pageStyleTarget('local.loop.runs.group')}>
+          <span {...pageStyleTarget('local.loop.runs.label')} className="field-label">Runs</span>
+          <input {...pageStyleTarget('local.loop.runs.input')}
             className="text-input number-input-clean"
             type="number"
             min="1"
@@ -86,9 +86,9 @@ export default function LocalLoopSelection({ page }) {
             onChange={(event) => setLoopJob((current) => ({ ...current, runs: event.target.value }))}
           />
         </label>
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Batch</span>
-          <input {...pageStyleTarget('field')}
+        <label {...pageStyleTarget('local.loop.batch.group')}>
+          <span {...pageStyleTarget('local.loop.batch.label')} className="field-label">Batch</span>
+          <input {...pageStyleTarget('local.loop.batch.input')}
             className="text-input number-input-clean"
             type="number"
             min="1"
@@ -101,9 +101,9 @@ export default function LocalLoopSelection({ page }) {
             }))}
           />
         </label>
-        <label {...pageStyleTarget('label')}>
-          <span {...pageStyleTarget('label')} className="field-label">Cool-off seconds</span>
-          <input {...pageStyleTarget('field')}
+        <label {...pageStyleTarget('local.loop.cool-off.group')}>
+          <span {...pageStyleTarget('local.loop.cool-off.label')} className="field-label">Cool-off seconds</span>
+          <input {...pageStyleTarget('local.loop.cool-off.input')}
             className="text-input number-input-clean"
             type="number"
             min="0"
@@ -115,11 +115,11 @@ export default function LocalLoopSelection({ page }) {
         </label>
       </div>
 
-      <p {...pageStyleTarget('text')} className="analysis-loop-note">
+      <p {...pageStyleTarget('local.loop.hint')} className="analysis-loop-note">
         Batch 500 is recommended because it commits progress more frequently while keeping all four engines busy. The maximum is 1,000.
         {' '}When a schedule is already running, the next one waits in the queue and starts automatically afterward.
       </p>
-      <button {...pageStyleTarget('button')} className="btn btn-primary" type="submit" disabled={loopJobIsQueueing || activeLoopJobCount >= 2}>
+      <button {...pageStyleTarget('local.loop.submit')} className="btn btn-primary" type="submit" disabled={loopJobIsQueueing || activeLoopJobCount >= 2}>
         {loopJobIsQueueing
           ? 'Queueing'
           : activeLoopJobCount >= 2

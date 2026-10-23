@@ -4,6 +4,7 @@
 import React from 'react'
 import { createRoot } from 'react-dom/client'
 import PlayerDailyEfficiencyChart from '/src/pages/players/PlayerDailyEfficiencyChart.jsx'
+import AppearanceProvider, { AppearanceControls } from '/src/appearance/AppearanceProvider.jsx'
 import '/src/index.css'
 import '/src/pages/players/player-hero-analytics.css'
 import '/src/pages/players/player-measures.css'
@@ -17,9 +18,23 @@ const points = [
   ['2025-01-01', 95, 96, 14, 20],
 ]
 const state = window.salienceTest = { requests: [], selections: [] }
+const appearance = new URLSearchParams(location.search).has('appearance')
+if (appearance) history.replaceState(null, '', '/')
+window.prompt = () => 'Salience test preset'
 window.fetch = async (url, options = {}) => {
   const path = new URL(url, location.origin).pathname
   state.requests.push({ path, method: options.method || 'GET' })
+  if (appearance && (path.endsWith('/appearance') || path.endsWith('/appearance/save'))) {
+    let saved = { revision: 0, active_preset_id: null, presets: [], overrides: [],
+      ...JSON.parse(localStorage.getItem('salience-styles-fixture') || 'null') }
+    if (path.endsWith('/save') && options.method === 'POST') {
+      const payload = JSON.parse(options.body)
+      saved = { ...saved, revision: saved.revision + 1, active_preset_id: 'test',
+        presets: [{ id: 'test', name: 'Salience test preset' }], overrides: payload.overrides }
+      localStorage.setItem('salience-styles-fixture', JSON.stringify(saved))
+    }
+    return new Response(JSON.stringify({ ...saved, registry: window.salienceRegistry }), { headers: { 'Content-Type': 'application/json' } })
+  }
   if (!path.includes('/analysis/measures/daily-')) throw new Error('Unexpected request: ' + path)
   const missing = path.includes('/missing/')
   const rows = path.includes('/dense/') ? Array.from({length:3000}, (_, i) => [
@@ -33,12 +48,16 @@ window.fetch = async (url, options = {}) => {
   return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
 }
 const root = createRoot(document.getElementById('root'))
-state.show = (player = 'example') => root.render(React.createElement('main', {
+state.show = (player = 'example') => {
+  const chart = React.createElement('main', {
   style: { padding: '24px', maxWidth: '1400px', margin: 'auto' },
 }, React.createElement('h2', null, 'Position quality'), React.createElement('div', { className: 'measure-chart-card' },
   React.createElement(PlayerDailyEfficiencyChart, {
     playerName: player, availableModes: new Set(['bullet', 'blitz', 'rapid']),
     onSelectPoint: point => state.selections.push(point),
-  }))))
+  })))
+  root.render(appearance ? React.createElement(AppearanceProvider, { account: {role:'admin'}, pageKey: '/' },
+    React.createElement(AppearanceControls), chart) : chart)
+}
 state.show()
 </script></body></html>

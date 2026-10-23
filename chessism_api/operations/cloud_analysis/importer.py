@@ -1,5 +1,4 @@
 """Verified incremental imports; results, receipts, counts and leases commit together."""
-import json
 import time
 from contextlib import nullcontext
 from datetime import datetime, timezone
@@ -7,39 +6,13 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select, text, update
 
 from . import runtime  # Set up the standalone package path for the host controller.
-from stockfish_batch.checkpoints import BatchCheckpoints, digest
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
 from chessism_api.database import cloud_columns
 from chessism_api.database.cloud_codec import read_document, write_document, checksum
 from chessism_api.operations.analysis import _format_engine_results
 from chessism_api.operations.fen_results import stage_fen_results
-
-
-def validate_batch(raw, index, positions, contract, task=None):
-    if type(index) is not int or index < 0:
-        raise ValueError("Invalid checkpoint index")
-    if task and (task["start"] < 0 or task["count"] < 1 or task["start"] + task["count"] > len(positions)):
-        raise ValueError("Invalid task range")
-    if len(raw) > BatchCheckpoints.MAX_BYTES:
-        raise ValueError("Oversized checkpoint")
-    offset = task["start"] if task else 0
-    end = offset + task["count"] if task else len(positions)
-    group = positions[offset + index * 500:min(end, offset + (index + 1) * 500)]
-    if not group:
-        raise ValueError("Checkpoint index outside selected positions")
-    checkpoints = BatchCheckpoints(None, "", task["contract"] if task else contract, group, 500)
-    records = checkpoints.validate_batch(json.loads(raw), 0)
-    name = f"batches/{index:06d}.json"
-    receipt = {"sha256": digest(raw), "records": [
-        {"id": record["id"], "object": name, "sha256": record["result_sha256"]}
-        for record in records.values()
-    ]}
-    if task:
-        name = f"tasks/{task['index']:06d}/" + name
-        for record in receipt["records"]:
-            record["object"] = name
-    return name, receipt, [record["engine_result"] for record in records.values()]
+from .batch_validation import validate_batch, checked_batch
 
 
 def validate_manifest(manifest, positions, contract, receipts):
@@ -50,7 +23,7 @@ def validate_manifest(manifest, positions, contract, receipts):
         raise ValueError("Final manifest does not exactly match committed input IDs and result hashes")
 
 
-async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=None):
+async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=None, _prepared=None):
     started = time.monotonic()
     if type(index) is not int or index < 0:
         raise ValueError('Invalid checkpoint index')
@@ -82,11 +55,16 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
         if len(positions) != end - start:
             raise ValueError('Reserved input batch is missing')
         validation_started = time.monotonic()
-        _, receipt, results = validate_batch(raw, 0, positions, contract)
+        if _prepared is None:
+            _, receipt, results = validate_batch(raw, 0, positions, contract)
+            validation_seconds = time.monotonic() - validation_started
+        else:
+            receipt, results, validation_seconds = checked_batch(_prepared, raw, positions, contract)
+            # Keep the prevalidated envelope reusable for an idempotent retry.
+            receipt = {**receipt, 'records': [dict(record) for record in receipt['records']]}
         name = (f'tasks/{task_index:06d}/' if task is not None else '') + f'batches/{index:06d}.json'
         for record in receipt['records']:
             record['object'] = name
-        validation_seconds = time.monotonic() - validation_started
         key = {'run_id': run_id, 'task_index': task_index if task_index is not None else -1, 'batch_index': index}
         previous = await session.get(CloudResultBatch, key)
         if previous:

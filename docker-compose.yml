@@ -87,7 +87,6 @@ services:
     volumes:
       - ./chessism_web:/app
       - chessism_web_node_modules:/app/node_modules
-      - ./hegel_.md:/hegel_.md:ro
     networks:
       - chessism_net
     depends_on:
@@ -124,7 +123,8 @@ services:
     cap_drop: [ALL]
     cap_add: [SETUID, SETGID, KILL]
     security_opt: [no-new-privileges:true]
-    cpus: "1.0"
+    cpus: "5.0"
+    # Four bounded CPU validators plus one serialized database writer.
     # Legacy runs hold <=200k references; larger requests use bounded 50k units.
     mem_limit: 2g
     pids_limit: 128

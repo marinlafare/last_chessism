@@ -1,4 +1,4 @@
-"""Small relational style presets. Built-in Default is never a database row."""
+"""Relational style presets, including an optional promoted Default theme."""
 from sqlalchemy import Column, String, Integer, Float, ForeignKey, CheckConstraint, DateTime, func
 
 

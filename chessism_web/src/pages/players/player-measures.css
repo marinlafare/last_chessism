@@ -279,10 +279,18 @@
 }
 
 .measure-daily-efficiency-point {
-  stroke: #030609;
-  stroke-width: 1;
+  /* A small visible dot, with the old-sized pointer target kept around it. */
+  stroke: transparent;
+  stroke-width: 8;
   vector-effect: non-scaling-stroke;
   cursor: pointer;
+  transition: r 120ms ease, stroke-width 120ms ease;
+}
+
+.measure-daily-efficiency-point:is(:hover, :focus) { r: 4px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .measure-daily-efficiency-point { transition: none; }
 }
 
 .measure-daily-efficiency-point:focus,
