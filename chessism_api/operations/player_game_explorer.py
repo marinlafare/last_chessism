@@ -205,11 +205,19 @@ async def explore_player_games(
             result=result, timezone_name=timezone_name, limit=limit, cursor=cursor,
             opponent=opponent, opening=opening, color=color,
         )
-    if any(value is not None for value in (rating_from, result, opponent, opening, color)):
+    if any(value is not None for value in (rating_from, opponent, opening, color)):
         raise ValueError('Game metadata filters require a matching chart scope.')
     selection_sql, selection_params, label = _selection_clause(
         scope_kind, target_date, weekday, hour
     )
+    if result is not None:
+        if scope_kind not in {'hour', 'weekday_hour'}:
+            raise ValueError('Time-bin result filters require an hour or weekday_hour scope.')
+        result_values = {'win': 1, 'draw': 0.5, 'loss': 0}
+        if result not in result_values:
+            raise ValueError('result must be win, draw or loss.')
+        selection_sql += ' AND gp.result = :selected_result'
+        selection_params['selected_result'] = result_values[result]
     cursor_time, cursor_game_id = _decode_cursor(cursor)
     async with AsyncDBSession() as session:
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
@@ -264,7 +272,7 @@ async def explore_player_games(
             WHERE {base_where}
         """), params)
         summary = summary_result.mappings().one()
-        result = await session.execute(text(f"""
+        games_result = await session.execute(text(f"""
             SELECT
                 gp.link AS game_link, gp.color AS player_color,
                 engine.analyzed_player_moves,
@@ -290,7 +298,7 @@ async def explore_player_games(
             ORDER BY gp.played_at DESC, gp.link DESC
             LIMIT :limit
         """), params)
-        rows = result.mappings().all()
+        rows = games_result.mappings().all()
 
     has_more = len(rows) > limit
     selected = rows[:limit]
@@ -310,6 +318,7 @@ async def explore_player_games(
             "hour": hour,
             "label": label,
             "modes": selected_modes,
+            "result": result,
             "analyzed_only": analyzed_only,
             "minimum_game_moves_exclusive": minimum_game_moves_exclusive,
             "salience_min": salience_min, "salience_max": salience_max,

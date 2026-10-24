@@ -21,6 +21,86 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_all_game_review_targets_and_states_are_saveable_and_page_local(self):
+        for scope in ('home', 'games', 'scored_positions'):
+            targets = {key: value for key, value in REGISTRY['scopes'][scope]['targets'].items()
+                       if key.startswith('gameReview.')}
+            self.assertGreater(len(targets), 80)
+            for target, definition in targets.items():
+                for prop in definition['properties']:
+                    spec = REGISTRY['properties'][prop]
+                    value = '#12345680' if spec['kind'] == 'color' else spec['min'] if spec['kind'] == 'number' else spec['options'][0]
+                    validate_overrides([override(scope=scope, target=target, property=prop, value=value)])
+            with self.assertRaises(ValueError):
+                validate_overrides([override(scope=scope, target='button', property='reviewSelectedBackground')])
+
+    def test_game_review_flip_and_names_are_saveable_in_each_viewer_scope(self):
+        for scope in ('home', 'games', 'scored_positions'):
+            for target in ('gameReview.flip', 'gameReview.players', 'gameReview.player.white', 'gameReview.player.black'):
+                for prop, value in [('background', '#123456'), ('hoverBackground', '#abcdef'),
+                                    ('borderColor', '#112233'), ('hoverBorderColor', '#445566'), ('radius', 8)]:
+                    validate_overrides([override(scope=scope, target=target, property=prop, value=value)])
+
+    def test_game_explorer_result_filters_have_independent_saveable_styles(self):
+        for result in ('win', 'draw', 'loss'):
+            target = f'gameExplorer.results.{result}'
+            for prop, value in [('modeActiveBackground', '#123456'), ('modeInactiveBackground', '#abcdef'),
+                                ('hoverBackground', '#fedcba'), ('hoverBorderColor', '#112233'), ('radius', 8)]:
+                validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+            self.assertEqual(REGISTRY['scopes']['home']['targets'][target]['editorParent'], 'gameExplorer.results')
+
+    def test_behavioral_container_hover_background_is_saveable(self):
+        row = override(scope='home', target='player.analysis', property='hoverBackground', value='#12345680')
+        self.assertEqual(validate_overrides([row])[0]['color_value'], '#12345680')
+        with self.assertRaises(ValueError):
+            validate_overrides([{**row, 'scope': 'positions'}])
+
+    def test_every_editable_background_exposes_a_saveable_hover_color(self):
+        checked = 0
+        for scope, spec in REGISTRY['scopes'].items():
+            for target, definition in spec['targets'].items():
+                if 'background' not in definition['properties']:
+                    continue
+                checked += 1
+                self.assertIn('hoverBackground', definition['properties'], f'{scope}/{target}')
+                self.assertNotIn('hoverBackground', definition.get('hiddenProperties', []), f'{scope}/{target}')
+                row = override(scope=scope, target=target, property='hoverBackground', value='#12345680')
+                self.assertEqual(validate_overrides([row])[0]['color_value'], '#12345680')
+        self.assertGreater(checked, 500)
+
+    def test_new_hover_controls_do_not_seed_shared_colors_into_existing_presets(self):
+        target = REGISTRY['scopes']['home']['targets']['player.days.count']
+        self.assertIn('hoverBackground', target['properties'])
+        self.assertIn('hoverBackground', target['initialStyleExcludedProperties'])
+        # Existing intentional inheritance remains unchanged.
+        button = REGISTRY['scopes']['home']['targets']['player.analysis.toggle']
+        self.assertNotIn('hoverBackground', button.get('initialStyleExcludedProperties', []))
+
+    def test_hero_photo_and_container_hover_styles_are_saveable(self):
+        for target in ('player.hero', 'player.navigation', 'player.profile', 'player.photo',
+                       'player.profilePopup', 'player.profilePopup.field'):
+            for prop, value in [('background', '#123456'), ('hoverBackground', '#abcdef'),
+                                ('borderColor', '#112233'), ('hoverBorderColor', '#445566'),
+                                ('radius', 12), ('padding', 6)]:
+                validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+                with self.assertRaises(ValueError):
+                    validate_overrides([override(scope='positions', target=target, property=prop, value=value)])
+
+    def test_player_metadata_backgrounds_are_independent_and_saveable(self):
+        targets = REGISTRY['scopes']['home']['targets']
+        for field in ('player', 'country', 'name', 'joined', 'last-play', 'dates'):
+            target = f'player.metadata.{field}'
+            for prop, value in [('background', '#12345680'), ('hoverBackground', '#abcdef'),
+                                ('borderColor', '#112233'), ('hoverBorderColor', '#445566'),
+                                ('radius', 12), ('padding', 6)]:
+                validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+                with self.assertRaises(ValueError):
+                    validate_overrides([override(scope='positions', target=target, property=prop, value=value)])
+            if field != 'dates':
+                for part in ('label', 'value'):
+                    self.assertEqual(targets[f'{target}.{part}']['editorParent'], target)
+                    self.assertEqual(targets[f'{target}.{part}']['initialStyleFrom'], f'player.metadata.{part}')
+
     def test_independent_analysis_headings_and_controls(self):
         targets = REGISTRY['scopes']['positions']['targets']
         for target in ('cloud.heading', 'cloud.job.title', 'cloud.performance.title',
@@ -104,6 +184,7 @@ class AppearanceTests(unittest.TestCase):
     def test_independent_home_buttons_support_legacy_seed_and_scoped_writes(self):
         targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()
                    if spec.get('initialStyleFrom') == 'button']
+        targets = [target for target in targets if not target.startswith('gameReview.')]
         self.assertEqual(len(targets), 22)
         rows = [override(scope='home', target=target, property='background', value='#123456') for target in targets]
         self.assertEqual(len(validate_overrides(rows)), len(targets))

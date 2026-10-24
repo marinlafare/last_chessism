@@ -117,7 +117,10 @@
 .home-summary-pie-tooltip { white-space: pre-line; line-height: 1.4; }
 .home-summary-bar-tooltip { white-space: pre-line; line-height: 1.4; }
 
-.home-player-workspace { min-width: 0; scroll-margin-top: 18px; }
+.home-player-workspace { min-width: 0; scroll-margin-top: 18px; overflow-anchor: none; }
+/* Keep enough document height to hold the hero at the viewport top while the
+   keyed player workspace is replaced or its profile is still loading. */
+.home-player-workspace[data-player-selected="true"] { min-height: calc(100vh - 18px); min-height: calc(100dvh - 18px); }
 .home-player-workspace:focus { outline: none; }
 .home-player-workspace > .players-starting-point { margin: 0; padding: 0; }
 .home-player-empty { margin: 0; padding: 20px; color: var(--muted); text-align: center; }

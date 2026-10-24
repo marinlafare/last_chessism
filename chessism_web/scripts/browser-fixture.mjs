@@ -1,13 +1,14 @@
 // Local Vite fixtures must mock every API request before mounting components.
 import { spawn } from 'node:child_process'
-import { mkdtemp, mkdir, rm } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { once } from 'node:events'
 
-export async function browserFixture(port, run) {
+export async function browserFixture(port, run, { reducedMotion } = {}) {
   const temporary = await mkdtemp(path.join(tmpdir(), 'chessism-ui-check-')), profile = path.join(temporary, 'profile')
   await mkdir(profile)
+  if (typeof reducedMotion === 'boolean') await writeFile(path.join(profile, 'user.js'), `user_pref("ui.prefersReducedMotion", ${reducedMotion ? 1 : 0});\n`)
   const browser = spawn('firefox', ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(port)], {stdio:['ignore','pipe','pipe']})
   let socket
   try {

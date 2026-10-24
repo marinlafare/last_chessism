@@ -12,6 +12,7 @@ import { buildYearScale, yearAtX } from './dailyYearNavigation'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import PlayerResultsChart from './PlayerResultsChart'
 import PlayerRatingDistribution from './PlayerRatingDistribution'
+import './player-chart-hover.css'
 
 const WIDTH = 1200
 const RATING_SVG_HEIGHT = 156
@@ -608,11 +609,16 @@ export default function PlayerBehaviouralPanel({
                   const lossHeight = numeric(row.losses) * scale
                   const drawHeight = numeric(row.draws) * scale
                   const winHeight = numeric(row.wins) * scale
+                  const openHour = (result = null) => selectedHourModes.length && setExplorerSelection({
+                    scope: 'hour', hour, label: `${hour}:00`, modes: selectedHourModes, analyzed_only: false,
+                    result,
+                  })
                   return (
-                    <g key={`hour-bar-${hour}`}>
-                      <rect className="behavior-bar-win" x={winX} y={HOURLY_BASELINE - winHeight} width={sideBarWidth} height={winHeight} />
-                      <rect className="behavior-bar-loss" x={lossX} y={HOURLY_BASELINE - lossHeight} width={sideBarWidth} height={lossHeight} />
-                      <rect className="behavior-bar-draw" x={drawX} y={HOURLY_BASELINE - drawHeight} width={drawBarWidth} height={drawHeight} />
+                    <g className="behavior-hour-column" key={`hour-bar-${hour}`} onClick={event => {
+                      event.currentTarget.querySelector('.behavior-bar-hitbox')?.focus({ preventScroll: true })
+                      openHour()
+                    }}>
+                      <title>{hourResultTooltip(hour, row)}</title>
                       <rect
                         className="behavior-bar-hitbox"
                         x={binX}
@@ -622,28 +628,37 @@ export default function PlayerBehaviouralPanel({
                         role="button"
                         tabIndex="0"
                         aria-label={`${hour}:00. Explore games.`}
-                        onClick={() => selectedHourModes.length && setExplorerSelection({
-                          scope: 'hour',
-                          hour,
-                          label: `${hour}:00`,
-                          modes: selectedHourModes,
-                          analyzed_only: false,
-                        })}
                         onKeyDown={(event) => {
                           if (event.key === 'Enter' || event.key === ' ') {
                             event.preventDefault()
-                            if (selectedHourModes.length) setExplorerSelection({
-                              scope: 'hour',
-                              hour,
-                              label: `${hour}:00`,
-                              modes: selectedHourModes,
-                              analyzed_only: false,
-                            })
+                            openHour()
                           }
                         }}
                       >
                         <title>{hourResultTooltip(hour, row)}</title>
                       </rect>
+                      {[
+                        ['win', winX, sideBarWidth, winHeight],
+                        ['loss', lossX, sideBarWidth, lossHeight],
+                        ['draw', drawX, drawBarWidth, drawHeight],
+                      ].map(([result, x, width, height]) => <g className="behavior-hour-mark" key={result}
+                        role="button" tabIndex={height > 0 ? 0 : -1} aria-disabled={height <= 0}
+                        aria-label={`${hour}:00. Explore ${result === 'win' ? 'won' : result === 'loss' ? 'lost' : 'drawn'} games.`}
+                        onClick={event => {
+                          event.stopPropagation()
+                          if (height <= 0) return
+                          event.currentTarget.focus({ preventScroll: true })
+                          openHour(result)
+                        }} onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault(); event.stopPropagation()
+                            if (height > 0) openHour(result)
+                          }
+                        }}>
+                        {height > 0 ? <rect className="behavior-hour-mark-hit" x={x} y={HOURLY_BASELINE - height - 4}
+                          width={width} height={height + 4} /> : null}
+                        <rect className={`behavior-bar-${result}`} x={x} y={HOURLY_BASELINE - height} width={width} height={height} />
+                      </g>)}
                       <text className="graph-axis-label hourly-axis-tick" x={binX + HOUR_STEP / 2} y={HOURLY_AXIS_Y} textAnchor="middle">
                         {String(hour).padStart(2, '0')}
                       </text>
@@ -695,6 +710,7 @@ export default function PlayerBehaviouralPanel({
         <PlayerGameExplorerModal
           playerName={playerName}
           selection={explorerSelection}
+          onSelectionChange={setExplorerSelection}
           onClose={() => setExplorerSelection(null)}
           onOpenGame={setReviewGameId}
         />

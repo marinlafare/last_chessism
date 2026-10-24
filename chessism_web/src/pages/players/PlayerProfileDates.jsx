@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { fetchPlayerLatestGame } from './playerApi'
+import PlayerProfileField from './PlayerProfileField'
 
 function dateLabel(value) {
   const date = new Date(value)
@@ -10,7 +11,7 @@ function dateLabel(value) {
     : 'N/A'
 }
 
-export default function PlayerProfileDates({ profile }) {
+export default function PlayerProfileDates({ profile, onLatestChange }) {
   const [latest, setLatest] = useState(null)
   const name = profile.player_name
   useEffect(() => {
@@ -23,25 +24,22 @@ export default function PlayerProfileDates({ profile }) {
       if (controller.signal.aborted) return
       const playedAt = payload.games?.[0]?.played_at
       const day = typeof playedAt === 'string' ? playedAt.match(/^\d{4}-\d{2}-\d{2}/)?.[0] : null
-      setLatest({ name, label: day ? dateLabel(`${day}T00:00:00Z`) : 'N/A' })
+      setLatest({ name, playedAt, label: day ? dateLabel(`${day}T00:00:00Z`) : 'N/A' })
     }).catch(error => {
       if (!controller.signal.aborted) setLatest({ name, label: 'Unavailable', error: error.message })
     })
     return () => controller.abort()
   }, [profile, name])
 
+  useEffect(() => { onLatestChange?.(latest?.name === name ? latest : null) }, [latest, name, onLatestChange])
+
   const joined = Number(profile.joined) > 0 ? dateLabel(Number(profile.joined) * 1000) : 'N/A'
   const lastPlay = profile.deleted_at ? 'N/A' : latest?.name === name ? latest.label : '…'
   return (
-    <div className="profile-item players-profile-dates" aria-label="Joined and last played dates">
-      <div className="players-profile-date">
-        <span {...pageStyleTarget('player.metadata.label')}>Joined</span><strong {...pageStyleTarget('player.metadata.value')} title={joined}>{joined}</strong>
-      </div>
-      <div className="players-profile-date">
-        <span {...pageStyleTarget('player.metadata.label')}>Last play</span>
-        <strong {...pageStyleTarget('player.metadata.value')} title={latest?.name === name && latest.error
-          ? `Last stored game unavailable: ${latest.error}` : `Latest game in the database: ${lastPlay}`}>{lastPlay}</strong>
-      </div>
+    <div {...pageStyleTarget('player.metadata.dates')} className="profile-item players-profile-dates" aria-label="Joined and last played dates">
+      <PlayerProfileField field="joined" label="Joined" title={joined} date>{joined}</PlayerProfileField>
+      <PlayerProfileField field="last-play" label="Last play" date title={latest?.name === name && latest.error
+        ? `Last stored game unavailable: ${latest.error}` : `Latest game in the database: ${lastPlay}`}>{lastPlay}</PlayerProfileField>
     </div>
   )
 }

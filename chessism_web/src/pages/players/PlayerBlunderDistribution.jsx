@@ -8,6 +8,7 @@ import PlayerGameExplorerModal from './PlayerGameExplorerModal'
 import PlayerGameReviewModal from './PlayerGameReviewModal'
 import useSummaryChartWidth from './useSummaryChartWidth'
 import './player-blunder-distribution.css'
+import './player-chart-hover.css'
 
 const LEFT = 58, TOP = 12, BOTTOM = 104, HEIGHT = 144
 const tickFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
@@ -105,8 +106,8 @@ export default function PlayerBlunderDistribution({ playerName }) {
             aria-disabled={!count} aria-label={`${description}. Browse games.`} onClick={() => openBin(bin)}
             onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openBin(bin) } }}>
             <title>{description}</title>
-            {count > 0 ? <rect className="blunder-distribution-hit" x={center - slot * .46} y={Math.min(y(count), BOTTOM - 14)}
-              width={slot * .92} height={Math.max(BOTTOM - y(count), 14)} /> : null}
+            {count > 0 ? <rect className="blunder-distribution-hit" x={center - slot * .46} y={Math.min(y(count) - 4, BOTTOM - 14)}
+              width={slot * .92} height={Math.max(BOTTOM - y(count) + 4, 14)} /> : null}
             <rect className="blunder-distribution-bar" x={center - slot * .39} y={y(count)} width={slot * .78} height={BOTTOM - y(count)} rx="2" />
           </g>
         })}

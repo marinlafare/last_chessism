@@ -8,6 +8,7 @@ import PlayerScorePositions from './PlayerScorePositions'
 import useSummaryChartWidth from './useSummaryChartWidth'
 import { combineScoreModes, scoreInterval, SCORE_ENDINGS } from './scoreDistribution'
 import './player-score-distribution.css'
+import './player-chart-hover.css'
 
 const LEFT = 64, TOP = 12, BOTTOM = 104, HEIGHT = 144
 const tickFormat = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 })
@@ -117,7 +118,7 @@ export default function PlayerScoreDistribution({ playerName }) {
               if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openBin(bin) }
             }}>
             <title>{`${scoreInterval(bin)}\n${formatNumber(count)} positions`}</title>
-            {count > 0 ? <rect className="score-distribution-hit" x={center - slot * .42} y={Math.min(y(count), BOTTOM - 14)} width={slot * .84} height={Math.max(BOTTOM - y(count), 14)} /> : null}
+            {count > 0 ? <rect className="score-distribution-hit" x={center - slot * .42} y={Math.min(y(count) - 4, BOTTOM - 14)} width={slot * .84} height={Math.max(BOTTOM - y(count) + 4, 14)} /> : null}
             <rect className="score-distribution-bar" x={center - slot * .34} y={y(count)} width={slot * .68} height={BOTTOM - y(count)} rx="2" />
             <text x={center} y={BOTTOM + 16} textAnchor="middle">{bin.label}</text>
           </g>

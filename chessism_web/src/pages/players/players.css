@@ -545,8 +545,8 @@
   text-overflow: ellipsis;
 }
 
-.players-profile-metadata .profile-item > [data-style-id="player.metadata.label"],
-.players-profile-metadata .profile-item > [data-style-id="player.metadata.value"] {
+.players-profile-metadata .profile-item > .profile-item-label,
+.players-profile-metadata .profile-item > .profile-item-value {
   min-width: 0;
   width: 100%;
 }

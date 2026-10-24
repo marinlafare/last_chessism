@@ -5,6 +5,8 @@ import './players.css'
 import PlayerAnalysisWorkspace from './PlayerAnalysisWorkspace'
 import PlayerCoveragePie from './PlayerCoveragePie'
 import PlayerProfileDates from './PlayerProfileDates'
+import PlayerProfileField from './PlayerProfileField'
+import PlayerProfilePhoto from './PlayerProfilePhoto'
 import PlayerAvatar from '../../components/players/PlayerAvatar'
 import { formatNumber } from '../../utils/formatters'
 import { formatPlayerCount } from './playerSummary.js'
@@ -74,6 +76,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [profile, setProfile] = useState(null)
+  const [latestGame, setLatestGame] = useState(null)
   const [playerHours, setPlayerHours] = useState(null)
   const [playerPositionStats, setPlayerPositionStats] = useState(null)
   const [playerNeighbors, setPlayerNeighbors] = useState(null)
@@ -399,7 +402,6 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   }, [deleteJob?.jobId])
 
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
-  const profileAvatar = String(profile?.avatar || '').trim()
   const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'
   const followersDisplay = profile?.followers === null || profile?.followers === undefined
     ? 'N/A'
@@ -421,8 +423,8 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
           {message ? <p {...pageStyleTarget('text')} className="result-line">{message}</p> : null}
           {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
 
-          <section {...pageStyleTarget('panel')} className={`players-top-grid${playerMenuOpen ? ' players-menu-open' : ''}`}>
-            <div {...pageStyleTarget('player.profile')} className="games-mode-detail players-profile-navigation-section">
+          <section {...pageStyleTarget('player.hero')} className={`players-top-grid${playerMenuOpen ? ' players-menu-open' : ''}`}>
+            <div {...pageStyleTarget('player.navigation')} className="games-mode-detail players-profile-navigation-section">
               <div className="section-head">
                 <div className="players-title-navigation">
                   <button {...pageStyleTarget('player.previous')}
@@ -509,24 +511,20 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
               <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
               <div className="players-profile-layout">
-                <div className="players-profile-avatar-box">
-                  <PlayerAvatar className="players-profile-avatar" src={profileAvatar} name={profileTitle} />
-                </div>
+                <PlayerProfilePhoto profile={profile} name={profileTitle} latestGame={latestGame}
+                  positionStats={playerPositionStats} hours={playerHours} />
                 {profile ? (
                   <>
                     <div className="players-profile-details">
                       <div className="players-profile-metadata">
                         {[
-                          ['Player', profile.player_name || 'N/A'],
-                          ['Country', countryCode],
-                          ['Name', profile.name || 'N/A'],
-                        ].map(([label, value]) => (
-                          <div className="profile-item" key={label}>
-                            <span {...pageStyleTarget('player.metadata.label')}>{label}</span>
-                            <strong {...pageStyleTarget('player.metadata.value')}>{String(value)}</strong>
-                          </div>
+                          ['player', 'Player', profile.player_name || 'N/A'],
+                          ['country', 'Country', countryCode],
+                          ['name', 'Name', profile.name || 'N/A'],
+                        ].map(([field, label, value]) => (
+                          <PlayerProfileField key={field} field={field} label={label}>{String(value)}</PlayerProfileField>
                         ))}
-                        <PlayerProfileDates profile={profile} />
+                        <PlayerProfileDates profile={profile} onLatestChange={setLatestGame} />
                         <div {...pageStyleTarget('panel')} className="players-followers-card">
                           <span {...pageStyleTarget('player.followers.label')}>Followers</span>
                           <strong {...pageStyleTarget('player.followers.value')}>{followersDisplay}</strong>

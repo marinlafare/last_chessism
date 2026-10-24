@@ -24,7 +24,10 @@ function selectionTitle(selection) {
   if (selection.scope === 'opponent') return `Games against ${selection.opponent}`
   if (selection.scope === 'opening') return `${selection.label || 'Unknown opening'} · ${selection.color || 'both colors'}`
   if (selection.scope === 'date') return `Games on ${selection.date}`
-  if (selection.scope === 'hour') return `Games started at ${String(selection.hour).padStart(2, '0')}:00`
+  if (selection.scope === 'hour') {
+    const kind = { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result] || 'Games'
+    return `${kind} started at ${String(selection.hour).padStart(2, '0')}:00`
+  }
   if (selection.scope === 'weekday_hour') {
     return `${selection.label} at ${String(selection.hour).padStart(2, '0')}:00`
   }
@@ -43,7 +46,7 @@ function GameListDate({ value }) {
   </time>
 }
 
-export default function PlayerGameExplorerModal({ playerName, selection, onClose, onOpenGame }) {
+export default function PlayerGameExplorerModal({ playerName, selection, onSelectionChange, onClose, onOpenGame }) {
   const [request, setRequest] = useState(emptyRequest)
   const paginationController = useRef(null)
   const dataSource = useRef(null)
@@ -53,9 +56,10 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
   const [highlightedKey, setHighlightedKey] = useState(null)
   const paginationSentinel = useRef(null)
   const pagination = request.data?.pagination
+  const isOpen = Boolean(selection)
 
   useEffect(() => {
-    if (!selection) return undefined
+    if (!isOpen) return undefined
     const opener = document.activeElement
     setHighlightedKey(null)
     lastPointer.current = null
@@ -63,7 +67,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     return () => {
       if (opener?.isConnected) opener.focus({ preventScroll: true })
     }
-  }, [playerName, selection])
+  }, [playerName, isOpen])
 
   useEffect(() => {
     // Transfer focus only on initial arrival, not on pagination or while the
@@ -130,6 +134,9 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
     dataSource.current = null
     if (!selection || !playerName) return undefined
     const controller = new AbortController()
+    setHighlightedKey(null)
+    lastPointer.current = null
+    if (listRef.current) listRef.current.scrollTop = 0
     setRequest({ data: null, error: '', loading: true })
     explorePlayerGames({
       playerName,
@@ -244,6 +251,17 @@ export default function PlayerGameExplorerModal({ playerName, selection, onClose
           </div>
           <button {...pageStyleTarget('gameExplorer.close')} className="game-modal-icon" type="button" aria-label="Close game explorer" onClick={onClose}>×</button>
         </header>
+
+        {selection.scope === 'weekday_hour' && onSelectionChange ? <div {...pageStyleTarget('gameExplorer.results')}
+          className="game-explorer-result-filters" role="group" aria-label="Filter games by result">
+          {['win', 'draw', 'loss'].map(result => {
+            const label = { win: 'Wins', draw: 'Draws', loss: 'Losses' }[result]
+            const active = selection.result === result
+            return <button {...pageStyleTarget(`gameExplorer.results.${result}`)} key={result} type="button"
+              aria-pressed={active} title={active ? 'Show all results' : `Show only ${label.toLowerCase()}`}
+              onClick={() => onSelectionChange({ ...selection, result: active ? null : result })}>{label}</button>
+          })}
+        </div> : null}
 
         {summary ? (
           <div className="game-explorer-summary">

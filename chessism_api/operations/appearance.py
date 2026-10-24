@@ -53,6 +53,17 @@ for _target in REGISTRY['scopes']['positions']['targets'].values():
         _target['properties'] = list(dict.fromkeys([*_target['properties'],
             'hoverBackground', 'borderColor', 'hoverBorderColor', 'borderWidth', 'radius']))
 
+# Background hover is an app-wide capability, including future containers.
+# Add controls, not preset values: a newly supported hover must not silently
+# inherit a shared source's color while loading an existing preset.
+for _scope in REGISTRY['scopes'].values():
+    for _target in _scope['targets'].values():
+        if 'background' in _target['properties'] and 'hoverBackground' not in _target['properties']:
+            _target['properties'] = [*_target['properties'], 'hoverBackground']
+            if _target.get('initialStyleFrom'):
+                _target['initialStyleExcludedProperties'] = list(dict.fromkeys([
+                    *_target.get('initialStyleExcludedProperties', []), 'hoverBackground']))
+
 # Spacing and corner rounding are allowed for every registered target without
 # rewriting presets. The editor hides rounding on elements without corners or
 # a compatible layout box (SVG paths/circles and collapsed table internals).

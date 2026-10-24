@@ -86,6 +86,72 @@ test('chart palettes are scoped, validated and independent of chart data',()=>{
   assert.equal(appearanceCss(registry,[{...row,value:'url(https://invalid.test)'}]),'')
 })
 
+test('profile fields have separate backgrounds and preserve saved title/value styles',()=>{
+  const fields=['player','country','name','joined','last-play']
+  const legacy=[
+    {scope:'home',target:'player.metadata.label',property:'color',value:'#abcdef'},
+    {scope:'home',target:'player.metadata.value',property:'fontSize',value:16},
+  ]
+  const seeded=seedIndependentStyles(registry,legacy)
+  for(const field of fields){
+    const target=`player.metadata.${field}`
+    for(const property of ['background','hoverBackground']){
+      const css=appearanceCss(registry,[{scope:'home',target,property,value:'#12345680'}])
+      assert.ok(css.includes(`data-style-id="${target}"`))
+      assert.ok(css.includes('background-color:#12345680'))
+      assert.equal(css.includes(':hover'),property==='hoverBackground')
+      assert.equal(appearanceCss(registry,[{scope:'positions',target,property,value:'#12345680'}]),'')
+      for(const other of fields.filter(item=>item!==field))assert.ok(!css.includes(`data-style-id="player.metadata.${other}"`))
+    }
+    for(const part of ['label','value']){
+      assert.equal(registryTarget(registry,'home',`${target}.${part}`).editorParent,target)
+      assert.equal(seeded.find(row=>row.target===`${target}.${part}`).value,part==='label'?'#abcdef':16)
+    }
+  }
+  assert.deepEqual(seedIndependentStyles(registry,seeded),seeded)
+  assert.ok(registryTarget(registry,'home','player.metadata.dates').properties.includes('background'))
+})
+
+test('hero photo and data containers have independent hover styles without resetting saved backgrounds',()=>{
+  for(const target of ['player.hero','player.navigation','player.profile','player.photo','player.profilePopup','player.profilePopup.field']){
+    for(const [property,value] of Object.entries({background:'#123456',hoverBackground:'#654321',borderColor:'#112233',hoverBorderColor:'#445566',radius:14,padding:6})){
+      const css=appearanceCss(registry,[{scope:'home',target,property,value}])
+      assert.ok(css.includes(`data-style-id="${target}"`),`${target}/${property}`)
+      assert.equal(css.includes(':hover'),property.startsWith('hover'))
+      assert.equal(appearanceCss(registry,[{scope:'positions',target,property,value}]),'')
+    }
+  }
+  const seeded=seedIndependentStyles(registry,[
+    {scope:'home',target:'panel',property:'background',value:'#112233'},
+    {scope:'home',target:'player.profile',property:'background',value:'#123456'},
+  ])
+  assert.equal(seeded.find(row=>row.target==='player.hero').value,'#112233')
+  assert.equal(seeded.find(row=>row.target==='player.navigation').value,'#123456')
+  assert.equal(seeded.find(row=>row.target==='player.photo'),undefined)
+})
+
+test('Behavioral analysis container hover is independent of its button and other panels',()=>{
+  const css=appearanceCss(registry,[{scope:'home',target:'player.analysis',property:'hoverBackground',value:'#12345680'}])
+  assert.ok(css.includes('data-style-id="player.analysis"'))
+  assert.ok(css.includes(':hover{background-color:#12345680;}'))
+  for(const target of ['player.analysis.toggle','player.measures','player.profile'])assert.ok(!css.includes(`data-style-id="${target}"`))
+})
+
+test('new optional hover controls do not introduce inherited colors into existing presets',()=>{
+  const testRegistry=structuredClone(registry)
+  const target=testRegistry.scopes.home.targets['player.days.count']
+  target.properties.push('hoverBackground')
+  target.initialStyleExcludedProperties=['hoverBackground']
+  const old=[{scope:'home',target:'value',property:'color',value:'#abcdef'},
+    {scope:'home',target:'value',property:'hoverBackground',value:'#123456'}]
+  const seeded=seedIndependentStyles(testRegistry,old)
+  assert.ok(seeded.some(row=>row.target==='player.days.count'&&row.property==='color'))
+  assert.ok(!seeded.some(row=>row.target==='player.days.count'&&row.property==='hoverBackground'))
+  const own={scope:'home',target:'player.days.count',property:'hoverBackground',value:'#654321'}
+  assert.ok(seedIndependentStyles(testRegistry,[...old,own]).some(row=>row.target===own.target&&row.property===own.property&&row.value===own.value))
+  assert.ok(appearanceCss(testRegistry,[own]).includes(':hover{background-color:#654321;}'))
+})
+
 test('homepage charts expose colors and borders without changing other charts',()=>{
   for(const [target,property,value] of [
     ['summary.titled','fill','#ffffff'],['summary.other','fill','#112233'],
@@ -114,7 +180,7 @@ test('individual home controls seed saved shared styles once, without relinking 
   const copy=structuredClone(old), seeded=seedIndependentStyles(registry,old)
   assert.deepEqual(old,copy)
   const targets=Object.entries(registry.scopes.home.targets).filter(([,spec])=>spec.initialStyleFrom==='button').map(([id])=>id)
-  assert.equal(targets.length,22)
+  assert.equal(targets.filter(target=>!target.startsWith('gameReview.')).length,22)
   for(const target of targets){
     assert.equal(seeded.find(row=>row.scope==='home' && row.target===target).value,target==='player.name'?'#ffffff':'#123456')
     assert.ok(appearanceCss(registry,[{...legacy,target}]).includes(`data-style-id="${target}"`))
@@ -123,7 +189,8 @@ test('individual home controls seed saved shared styles once, without relinking 
   assert.deepEqual(seedIndependentStyles(registry,[]),[])
   const changed=seeded.map(row=>row.target==='button'?{...row,value:'#abcdef'}:row)
   assert.equal(changed.find(row=>row.target==='summary.games.next').value,'#123456')
-  for(const row of seeded.filter(row=>row.target!=='button'))assert.equal(row.scope,'home')
+  for(const row of seeded.filter(row=>row.target!=='button'&&!row.target.startsWith('gameReview.')))assert.equal(row.scope,'home')
+  assert.equal(seeded.find(row=>row.scope==='games'&&row.target==='gameReview.move').value,'#654321')
   const files=['PlayerAnalysisWorkspace.jsx','PlayerBehaviouralPanel.jsx','PlayerMeasuresWorkspace.jsx','PlayerMeasuresPanel.jsx']
   const buttons=files.flatMap(file=>[...fs.readFileSync(new URL(`../src/pages/players/${file}`,import.meta.url),'utf8').matchAll(/buttonTarget="([^"]+)"/g)].map(match=>match[1]))
   assert.equal(buttons.length,9)
@@ -166,6 +233,28 @@ test('list rating styles inherit saved metric settings once, then remain indepen
   assert.deepEqual(seeded.filter(row=>row.target==='value'||row.target==='characters.rating'),[shared,{...shared,target:'characters.rating'}])
   const changed=seeded.map(row=>row.target==='value'?{...row,value:'#abcdef'}:row)
   assert.deepEqual(seedIndependentStyles(registry,changed),changed)
-  assert.ok(!appearanceCss(registry,[seeded[1]]).includes('data-style-id="value"'))
-  assert.equal(appearanceCss(registry,[{...seeded[1],scope:'games'}]),'')
+  const rating=seeded.find(row=>row.target==='characters.rating')
+  assert.ok(!appearanceCss(registry,[rating]).includes('data-style-id="value"'))
+  assert.equal(appearanceCss(registry,[{...rating,scope:'games'}]),'')
+})
+
+test('game review owns its targets and preserves old styles without remaining linked',()=>{
+  for(const file of ['PlayerGameReviewModal.jsx','GameReviewBoard.jsx']){
+    const source=fs.readFileSync(new URL(`../src/pages/players/${file}`,import.meta.url),'utf8')
+    for(const [,id] of source.matchAll(/pageStyleTarget\(['"`]([^'"`]+)['"`]/g))assert.ok(id.startsWith('gameReview.'),id)
+  }
+  const sources=[['panel','background'],['title','color'],['text','color'],['value','fontSize'],['button','background']]
+  const old=sources.map(([target,property])=>({scope:'home',target,property,value:property==='fontSize'?16:'#abcdef'}))
+  const seeded=seedIndependentStyles(registry,old)
+  for(const target of ['gameReview.panel','gameReview.title','gameReview.mode','gameReview.clock.white.remaining','gameReview.move'])assert.ok(seeded.some(row=>row.target===target),target)
+  const independent=seeded.map(row=>row.target==='gameReview.title'?{...row,value:'#123456'}:row)
+  assert.deepEqual(seedIndependentStyles(registry,independent),independent)
+  assert.equal(independent.find(row=>row.target==='title').value,'#abcdef')
+  for(const [scope,spec] of Object.entries(registry.scopes))for(const [target,definition] of Object.entries(spec.targets)){
+    if(!target.startsWith('gameReview.'))continue
+    for(const property of ['background','hoverBackground','borderColor','hoverBorderColor','radius','padding'])assert.ok(definition.properties.includes(property),`${scope}/${target}/${property}`)
+  }
+  const css=appearanceCss(registry,[{scope:'home',target:'gameReview.move',property:'reviewSelectedBackground',value:'#123456'}])
+  assert.match(css,/\.active\{background-color:#123456/)
+  assert.ok(!css.includes('data-style-id="button"'))
 })

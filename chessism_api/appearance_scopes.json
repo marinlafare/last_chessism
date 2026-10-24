@@ -182,17 +182,119 @@
     },
     "gameReview.fullscreen": {
       "label": "Game viewer · fullscreen button",
-      "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","hoverBackground","hoverColor"],
+      "properties": ["background","color","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","hoverBackground","hoverColor"],
       "propertyLabels": {"color":"Icon color","fontSize":"Icon size","hoverColor":"Hover icon color"}
     },
     "gameReview.close": {
       "label": "Game viewer · close button",
-      "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"],
+      "properties": ["background","color","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"],
       "propertyLabels": {"color":"Icon color","fontSize":"Icon size","hoverColor":"Hover icon color"}
     },
     "gameReview.soundSet": {
       "label": "Game viewer · sound set dropdown",
-      "properties": ["background","color","borderColor","borderWidth","radius","fontSize","fontFamily"]
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]
+    },
+    "gameReview.backdrop": {"label":"Game review · backdrop","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.header": {"label":"Game review · header","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.heading": {"label":"Game review · heading container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.heading.meta": {"label":"Game review · date and heading row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.windowActions": {"label":"Game review · window controls container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.body": {"label":"Game review · body","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.boardColumn": {"label":"Game review · board column","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.boardHeader": {"label":"Game review · board toolbar row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.boardTools": {"label":"Game review · sound and board controls container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.boardFooter": {"label":"Game review · player names and clock row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.analysis": {"label":"Game review · analysis column","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.summary": {"label":"Game review · summary container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.current": {"label":"Game review · current position container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.moves": {"label":"Game review · move list container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.panel": {"label":"Game review · popup","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"initialStyleFrom":"panel"},
+    "gameReview.stage": {"label":"Game review · board and evaluation container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.board": {"label":"Game review · board frame","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.eyebrow": {"label":"Game review · GAME REVIEW heading","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.title": {"label":"Game review · players title","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"title"},
+    "gameReview.date": {"label":"Game review · date container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.date.unavailable": {"label":"Game review · unavailable date","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.loading": {"label":"Game review · loading message","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.error": {"label":"Game review · error message","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.soundError": {"label":"Game review · sound error message","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.missingPosition": {"label":"Game review · missing-position warning","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.mode": {"label":"Game review · game mode","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.evaluation.value": {"label":"Game review · evaluation score","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value"},
+    "gameReview.current.classification": {"label":"Game review · move classification","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value"},
+    "gameReview.current.evaluation": {"label":"Game review · current evaluation","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+    "gameReview.current.accuracy": {"label":"Game review · current move accuracy","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+    "gameReview.current.engineLine": {"label":"Game review · engine line","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+    "gameReview.move.number": {"label":"Game review · move number","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign","reviewSelectedColor"]},
+    "gameReview.move.notation": {"label":"Game review · move notation","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign","reviewSelectedColor"],"initialStyleFrom":"value"},
+    "gameReview.move.evaluation": {"label":"Game review · move evaluation","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign","reviewSelectedColor"],"initialStyleFrom":"text"},
+    "gameReview.date.year": {"label":"Game review · date · year","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.date"},
+    "gameReview.date.month": {"label":"Game review · date · month","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.date"},
+    "gameReview.date.day": {"label":"Game review · date · day","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.date"},
+    "gameReview.date.time": {"label":"Game review · date · time","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.date"},
+    "gameReview.soundToggle": {"label":"Game review · sound toggle","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign","reviewMutedColor","reviewMutedBackground"],"propertyLabels":{"color":"Sound-on icon color","hoverColor":"Hover icon color"}},
+    "gameReview.move": {"label":"Game review · move button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign","reviewSelectedBackground","reviewSelectedBorder"],"initialStyleFrom":"button"},
+    "gameReview.clock.white": {"label":"Game review · White clock","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.clock.white.marker": {"label":"Game review · White clock · color marker","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.clock.white"},
+    "gameReview.clock.white.spent": {"label":"Game review · White clock · time spent","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.clock.white"},
+    "gameReview.clock.white.remaining": {"label":"Game review · White clock · remaining time","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.clock.white"},
+    "gameReview.playerClock.white": {"label":"Game review · White rating and clock container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.rating.white": {"label":"Game review · White rating","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.playerClock.white"},
+    "gameReview.player.white.marker": {"label":"Game review · White player · marker","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.player.white"},
+    "gameReview.player.white.label": {"label":"Game review · White player · label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.player.white"},
+    "gameReview.player.white.name": {"label":"Game review · White player · name","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.player.white"},
+    "gameReview.evaluation.white": {"label":"Game review · evaluation · White fill","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.clock.black": {"label":"Game review · Black clock","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.clock.black.marker": {"label":"Game review · Black clock · color marker","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.clock.black"},
+    "gameReview.clock.black.spent": {"label":"Game review · Black clock · time spent","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.clock.black"},
+    "gameReview.clock.black.remaining": {"label":"Game review · Black clock · remaining time","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.clock.black"},
+    "gameReview.playerClock.black": {"label":"Game review · Black rating and clock container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.rating.black": {"label":"Game review · Black rating","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.playerClock.black"},
+    "gameReview.player.black.marker": {"label":"Game review · Black player · marker","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.player.black"},
+    "gameReview.player.black.label": {"label":"Game review · Black player · label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.player.black"},
+    "gameReview.player.black.name": {"label":"Game review · Black player · name","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.player.black"},
+    "gameReview.evaluation.black": {"label":"Game review · evaluation · Black fill","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.evaluation": {"label":"Game review · evaluation bar","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.evaluation.disabled": {"label":"Game review · unscored evaluation bar","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.evaluation.disabledLine": {"label":"Game review · unscored evaluation · center line","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.evaluation.disabled"},
+    "gameReview.summary.accuracy": {"label":"Game review · accuracy summary card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.summary.accuracy.label": {"label":"Game review · accuracy summary label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.summary.accuracy"},
+    "gameReview.summary.accuracy.value": {"label":"Game review · accuracy summary value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.summary.accuracy"},
+    "gameReview.summary.result": {"label":"Game review · result summary card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.summary.result.label": {"label":"Game review · result summary label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.summary.result"},
+    "gameReview.summary.result.value": {"label":"Game review · result summary value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.summary.result"},
+    "gameReview.summary.blunders": {"label":"Game review · blunders summary card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.summary.blunders.label": {"label":"Game review · blunders summary label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.summary.blunders"},
+    "gameReview.summary.blunders.value": {"label":"Game review · blunders summary value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.summary.blunders"},
+    "gameReview.summary.ending": {"label":"Game review · ending summary card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "gameReview.summary.ending.label": {"label":"Game review · ending summary label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.summary.ending"},
+    "gameReview.summary.ending.value": {"label":"Game review · ending summary value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value","editorParent":"gameReview.summary.ending"},
+    "gameReview.move.marker.blunder": {"label":"Game review · blunder symbol (??)","properties":["color","hoverColor","fontSize","fontFamily","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.move"},
+    "gameReview.move.marker.mistake": {"label":"Game review · mistake symbol (?)","properties":["color","hoverColor","fontSize","fontFamily","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.move"},
+    "gameReview.move.marker.inaccuracy": {"label":"Game review · inaccuracy symbol (?!)","properties":["color","hoverColor","fontSize","fontFamily","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.move"},
+    "gameReview.move.marker.best": {"label":"Game review · best move exclamation mark","properties":["color","hoverColor","fontSize","fontFamily","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.move"},
+    "gameReview.board.square.light": {"label":"Game review · light board squares","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.board"},
+    "gameReview.board.square.dark": {"label":"Game review · dark board squares","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"editorParent":"gameReview.board"},
+    "gameReview.board.rank": {"label":"Game review · rank coordinates","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.board"},
+    "gameReview.board.file": {"label":"Game review · file coordinates","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"],"editorParent":"gameReview.board"},
+    "gameReview.flip": {
+      "label": "Game viewer · flip board button",
+      "properties": ["background","color","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","hoverBackground","hoverColor"],
+      "propertyLabels": {"color":"Icon color","hoverColor":"Hover icon color"}
+    },
+    "gameReview.players": {
+      "label": "Game viewer · player names container",
+      "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+    },
+    "gameReview.board.piece.white": {"label":"Game review · White pieces","editorParent":"gameReview.board","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","reviewPieceOpacity","reviewPieceHoverOpacity"]},
+    "gameReview.board.piece.black": {"label":"Game review · Black pieces","editorParent":"gameReview.board","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","reviewPieceOpacity","reviewPieceHoverOpacity"]},
+    "gameReview.player.white": {
+      "label": "Game viewer · White player name", "editorParent": "gameReview.players",
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
+    },
+    "gameReview.player.black": {
+      "label": "Game viewer · Black player name", "editorParent": "gameReview.players",
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
     },
     "popup": {
       "label": "Dialogs on this page",
@@ -427,6 +529,22 @@
         "gameExplorer.more": {
           "label": "Game list · load more button",
           "properties": ["background","borderColor","borderWidth","radius","padding","color","fontSize","fontFamily","textAlign","hoverBackground","hoverColor"]
+        },
+        "gameExplorer.results": {
+          "label": "Game list · result-filter container",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "gameExplorer.results.win": {
+          "label": "Game list · Wins filter", "editorParent": "gameExplorer.results",
+          "properties": ["modeActiveBackground","modeInactiveBackground","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
+        },
+        "gameExplorer.results.draw": {
+          "label": "Game list · Draws filter", "editorParent": "gameExplorer.results",
+          "properties": ["modeActiveBackground","modeInactiveBackground","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
+        },
+        "gameExplorer.results.loss": {
+          "label": "Game list · Losses filter", "editorParent": "gameExplorer.results",
+          "properties": ["modeActiveBackground","modeInactiveBackground","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
         },
         "summary.games.previous": {
           "label": "Games chart · previous arrow",
@@ -756,19 +874,133 @@
             "padding"
           ]
         },
+        "player.hero": {
+          "label": "Hero · outer background", "initialStyleFrom": "panel",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.navigation": {
+          "label": "Hero · player navigation background", "initialStyleFrom": "player.profile",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
         "player.profile": {
           "label": "Player profile",
           "properties": [
             "background",
+            "hoverBackground",
             "borderColor",
+            "hoverBorderColor",
             "borderWidth",
             "radius",
             "padding"
           ]
         },
+        "player.photo": {
+          "label": "Hero · photo container",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.profilePopup.backdrop": {
+          "label": "Player profile popup · backdrop",
+          "properties": ["background"]
+        },
+        "player.profilePopup": {
+          "label": "Player profile popup · container",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.profilePopup.title": {
+          "label": "Player profile popup · title", "editorParent": "player.profilePopup",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.profilePopup.close": {
+          "label": "Player profile popup · close button",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily"]
+        },
+        "player.profilePopup.photo": {
+          "label": "Player profile popup · photo", "editorParent": "player.profilePopup",
+          "properties": ["borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.profilePopup.sectionTitle": {
+          "label": "Player profile popup · section headings",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.profilePopup.field": {
+          "label": "Player profile popup · data fields",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.profilePopup.label": {
+          "label": "Player profile popup · field labels", "editorParent": "player.profilePopup.field",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.profilePopup.value": {
+          "label": "Player profile popup · field values", "editorParent": "player.profilePopup.field",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
         "player.metadata.text": {
           "label": "Hero · profile cards text (shared)",
           "properties": ["color","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.player": {
+          "label": "Hero · Player field background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.player.label": {
+          "label": "Hero · Player field title", "initialStyleFrom": "player.metadata.label", "editorParent": "player.metadata.player",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.player.value": {
+          "label": "Hero · Player field value", "initialStyleFrom": "player.metadata.value", "editorParent": "player.metadata.player",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.country": {
+          "label": "Hero · Country field background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.country.label": {
+          "label": "Hero · Country field title", "initialStyleFrom": "player.metadata.label", "editorParent": "player.metadata.country",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.country.value": {
+          "label": "Hero · Country field value", "initialStyleFrom": "player.metadata.value", "editorParent": "player.metadata.country",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.name": {
+          "label": "Hero · Name field background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.name.label": {
+          "label": "Hero · Name field title", "initialStyleFrom": "player.metadata.label", "editorParent": "player.metadata.name",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.name.value": {
+          "label": "Hero · Name field value", "initialStyleFrom": "player.metadata.value", "editorParent": "player.metadata.name",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.dates": {
+          "label": "Hero · Joined and Last play container background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.joined": {
+          "label": "Hero · Joined field background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.joined.label": {
+          "label": "Hero · Joined field title", "initialStyleFrom": "player.metadata.label", "editorParent": "player.metadata.joined",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.joined.value": {
+          "label": "Hero · Joined field value", "initialStyleFrom": "player.metadata.value", "editorParent": "player.metadata.joined",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.last-play": {
+          "label": "Hero · Last play field background",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.metadata.last-play.label": {
+          "label": "Hero · Last play field title", "initialStyleFrom": "player.metadata.label", "editorParent": "player.metadata.last-play",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
+        },
+        "player.metadata.last-play.value": {
+          "label": "Hero · Last play field value", "initialStyleFrom": "player.metadata.value", "editorParent": "player.metadata.last-play",
+          "properties": ["color","hoverColor","fontSize","fontFamily","textAlign"]
         },
         "player.metadata.label": {
           "label": "Hero · profile card titles (shared)",
@@ -828,9 +1060,10 @@
           ]
         },
         "player.analysis": {
-          "label": "Player analysis",
+          "label": "Behavioral analysis container",
           "properties": [
             "background",
+            "hoverBackground",
             "borderColor",
             "borderWidth",
             "radius",

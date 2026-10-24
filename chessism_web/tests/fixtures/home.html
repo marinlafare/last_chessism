@@ -71,6 +71,7 @@ window.fetch = async (input, options = {}) => {
   if (path === '/analysis/cloud/billing') return state.failBilling ? reply({detail:'Billing temporarily unavailable'},503) : reply(state.billing)
   if (/^\/analysis\/cloud\/[^/]+\/usage$/.test(path)) return reply(state.cloudUsage[path.split('/')[3]] || {phases:[]})
   if (path === '/players/navigation') return reply({players:names})
+  if (/^\/games\/[^/]+\/recent$/.test(path)) return reply({games:[{played_at:'2026-10-23T08:00:00Z'}]})
   if (/^\/players\/[^/]+\/deletion-preview$/.test(path)) return reply({
     exclusive_games:42,shared_games:8,fen_associations:2000,analyzed_fen_associations:1500,
   })

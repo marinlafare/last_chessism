@@ -17,7 +17,8 @@
       "hover": [
         ":is(.commonness-column,.less-common-column,.home-games-player,.behavior-results-column,.score-distribution-column,.blunder-distribution-column,g[role=button]):is(:hover,:focus-visible) :is(.commonness-bar,.repetition-bar,.less-common-bar,.home-games-bar,.home-games-scored-bar,.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss,.score-distribution-bar,.blunder-distribution-bar)",
         ":is(.rating-distribution-bar,.measure-hour-bar,.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss):is(:hover,:focus-visible,.active)",
-        "g:has(> .behavior-bar-hitbox:is(:hover,:focus-visible)) > :is(.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss)"
+        ".behavior-hour-mark:hover > :is(.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss)",
+        "g:has(> .behavior-bar-hitbox:is(:hover,:focus-visible)) :is(.behavior-bar-win,.behavior-bar-draw,.behavior-bar-loss)"
       ]
     }],
     "htmlBars": [{

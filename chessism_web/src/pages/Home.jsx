@@ -38,15 +38,17 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
     window.history.pushState(null, '', `${url.pathname}${url.search}${url.hash}`)
     window.dispatchEvent(new PopStateEvent('popstate'))
   }, [selectedPlayer, titledOnly])
-  const selectPlayer = useCallback((name) => {
+  const selectPlayer = useCallback((name, { preserveScroll = false } = {}) => {
     const href = playerHomeHref(name)
+    pendingScroll.current = !preserveScroll
+    setMinimized({ summary: Boolean(normalizePlayer(name)), players: Boolean(normalizePlayer(name)) })
     if (`${window.location.pathname}${window.location.search}` !== href) {
       window.history.pushState(null, '', href)
       window.dispatchEvent(new PopStateEvent('popstate'))
     }
-    pendingScroll.current = true
     setScrollRequest(value => value + 1)
   }, [])
+  const switchPlayer = useCallback(name => selectPlayer(name, { preserveScroll: true }), [selectPlayer])
 
   useEffect(() => {
     if (!pendingScroll.current || !playerSection.current) return
@@ -90,9 +92,10 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
             </div>
           </div>
           <section {...pageStyleTarget('player.panel')} className="home-player-workspace" id="selected-player" ref={playerSection}
+            data-player-selected={Boolean(selectedPlayer)}
             tabIndex={-1} aria-label={selectedPlayer ? `Player workspace: ${selectedPlayer}` : 'Player workspace'}>
             {selectedPlayer ? <Suspense fallback={<p {...pageStyleTarget('text')} role="status">Loading player workspace…</p>}>
-              <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={selectPlayer}
+              <PlayerWorkspace key={selectedPlayer} playerName={selectedPlayer} onSelectPlayer={switchPlayer}
                 onProfileLoaded={rememberPlayerGroup} />
             </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a player to explore their profile and analysis here.</p>}
           </section>

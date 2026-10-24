@@ -1,12 +1,12 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Chessboard } from 'react-chessboard'
+import GameReviewBoard from './GameReviewBoard.jsx'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
 import useBoardSounds from '../../components/chess/useBoardSounds'
 import { useBoardSoundPreferences } from '../../components/chess/BoardSoundPreferences'
-import { BOARD_SOUND_SETS } from '../../components/chess/boardSoundSets'
+import { BOARD_SOUND_SETS, getBoardSoundSet } from '../../components/chess/boardSoundSets'
 
 const endingLabels = {
   checkmated: 'checkmate',
@@ -16,6 +16,20 @@ const endingLabels = {
   insufficient: 'insufficient material',
   timevsinsufficient: 'timeout vs insufficient material',
   '50move': 'fifty move rule',
+}
+
+const moveAnnotations = {
+  best: { symbol: '!', label: 'Very low evaluation loss' },
+  inaccuracy: { symbol: '?!', label: 'Inaccuracy' },
+  mistake: { symbol: '?', label: 'Mistake' },
+  blunder: { symbol: '??', label: 'Blunder' },
+}
+
+function MoveAnnotation({ classification }) {
+  const annotation = moveAnnotations[classification]
+  if (!annotation) return null
+  return <i {...pageStyleTarget(`gameReview.move.marker.${classification}`)} className="game-review-move-annotation"
+    role="img" aria-label={annotation.label} title={annotation.label}>{annotation.symbol}</i>
 }
 
 function recordedOutcome(game, playerColor) {
@@ -39,18 +53,18 @@ function formatClock(seconds) {
 function GameReviewDate({ value }) {
   const date = value ? new Date(value) : null
   if (!date || !Number.isFinite(date.getTime())) {
-    return <span {...pageStyleTarget('text')} className="game-review-date-badge">Date unavailable</span>
+    return <span {...pageStyleTarget('gameReview.date.unavailable')} className="game-review-date-badge">Date unavailable</span>
   }
   const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][date.getUTCMonth()]
   const day = String(date.getUTCDate()).padStart(2, '0')
   const time = `${String(date.getUTCHours()).padStart(2, '0')}:${String(date.getUTCMinutes()).padStart(2, '0')}`
   const label = `Game started: ${date.getUTCFullYear()} ${month} ${day}, ${time} UTC`
-  return <time {...pageStyleTarget('text')} className="game-review-start-date" dateTime={date.toISOString()}
+  return <time {...pageStyleTarget('gameReview.date')} className="game-review-start-date" dateTime={date.toISOString()}
     title={label} aria-label={label}>
-    <span className="game-review-date-badge">{date.getUTCFullYear()}</span>
-    <span className="game-review-date-badge">{month}</span>
-    <span className="game-review-date-badge">{day}</span>
-    <span className="game-review-date-badge">{time}</span>
+    <span {...pageStyleTarget('gameReview.date.year')} className="game-review-date-badge">{date.getUTCFullYear()}</span>
+    <span {...pageStyleTarget('gameReview.date.month')} className="game-review-date-badge">{month}</span>
+    <span {...pageStyleTarget('gameReview.date.day')} className="game-review-date-badge">{day}</span>
+    <span {...pageStyleTarget('gameReview.date.time')} className="game-review-date-badge">{time}</span>
   </time>
 }
 
@@ -83,13 +97,14 @@ function clockHistory(moves, timeControl) {
 function BoardClock({ color, clock }) {
   const remaining = formatClock(clock?.remaining)
   return (
-    <span className={`game-review-clock ${color}`} title={`${color} clock`}>
+    <span {...pageStyleTarget(`gameReview.clock.${color}`)} className={`game-review-clock ${color}`} title={`${color} clock`}>
+      <i {...pageStyleTarget(`gameReview.clock.${color}.marker`)} className="game-review-clock-marker" aria-hidden="true" />
       {clock?.spent != null ? (
-        <small className="game-review-move-time" title="Time spent on the last move by this player">
+        <small {...pageStyleTarget(`gameReview.clock.${color}.spent`)} className="game-review-move-time" title="Time spent on the last move by this player">
           {clock.spent.toFixed(1)}s
         </small>
       ) : null}
-      <strong {...pageStyleTarget('value')} aria-label={`${color} time remaining: ${remaining}`}>{remaining}</strong>
+      <strong {...pageStyleTarget(`gameReview.clock.${color}.remaining`)} aria-label={`${color} time remaining: ${remaining}`}>{remaining}</strong>
     </span>
   )
 }
@@ -114,7 +129,7 @@ function usePieceAnimationDuration() {
     preference.addEventListener('change', update)
     return () => preference.removeEventListener('change', update)
   }, [])
-  return reducedMotion ? 0 : 320
+  return reducedMotion ? 0 : 200
 }
 
 function useBoardWidth(containerRef, active, maximized) {
@@ -129,7 +144,9 @@ function useBoardWidth(containerRef, active, maximized) {
       // Measure the reserved board area, not the window or the board itself.
       // The player labels are outside this area and must never be covered.
       const availableWidth = element.clientWidth - evaluationWidth - gap
-      setWidth(Math.max(0, Math.floor(Math.min(680, availableWidth, element.clientHeight))))
+        - (parseFloat(style.paddingLeft) || 0) - (parseFloat(style.paddingRight) || 0)
+      const availableHeight = element.clientHeight - (parseFloat(style.paddingTop) || 0) - (parseFloat(style.paddingBottom) || 0)
+      setWidth(Math.max(0, Math.floor(Math.min(680, availableWidth, availableHeight))))
     }
     update()
     const observer = new ResizeObserver(update)
@@ -143,6 +160,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const [request, setRequest] = useState({ data: null, error: '', loading: false })
   const [positionIndex, setPositionIndex] = useState(0)
   const [maximized, setMaximized] = useState(false)
+  const [flipped, setFlipped] = useState(false)
   const pieceAnimationDuration = usePieceAnimationDuration()
   const { muted, toggleMuted, playMove } = useBoardSounds(gameId)
   const { soundSet, updatePreferences, saveError } = useBoardSoundPreferences()
@@ -154,6 +172,10 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   useLayoutEffect(() => {
     setMaximized(false)
   }, [gameId])
+
+  useLayoutEffect(() => {
+    setFlipped(false)
+  }, [gameId, playerName])
 
   useEffect(() => {
     if (!gameId) return undefined
@@ -183,11 +205,12 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
       (summary) => summary.player_name.toLowerCase() === String(playerName).toLowerCase()
     )
   ), [playerName, request.data])
-  const orientation = game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white'
-  const opponentColor = orientation === 'white' ? 'black' : 'white'
+  const playerColor = game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white'
+  const orientation = flipped ? (playerColor === 'white' ? 'black' : 'white') : playerColor
+  const topColor = orientation === 'white' ? 'black' : 'white'
   const clocks = useMemo(() => clockHistory(moves, game?.time_control), [moves, game?.time_control])
   const currentClocks = clocks[positionIndex] || clocks[0]
-  const outcome = recordedOutcome(game, orientation)
+  const outcome = recordedOutcome(game, playerColor)
   const currentMove = positionIndex > 0 ? moves[positionIndex - 1] : null
   const currentFen = currentMove?.fen_after || game?.initial_fen
   const evaluation = currentMove?.evaluation_after ?? null
@@ -227,17 +250,17 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   if (!gameId) return null
 
   return createPortal(
-    <div className={`game-review-backdrop${maximized ? ' maximized' : ''}`} role="presentation">
-      <section {...pageStyleTarget('panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
-        <header className="game-modal-header game-review-header">
-          <div className="game-review-heading">
-            <div className="game-review-heading-meta">
-              <p {...pageStyleTarget('text')} className="eyebrow">GAME REVIEW</p>
+    <div {...pageStyleTarget('gameReview.backdrop')} className={`game-review-backdrop${maximized ? ' maximized' : ''}`} role="presentation">
+      <section {...pageStyleTarget('gameReview.panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
+        <header {...pageStyleTarget('gameReview.header')} className="game-modal-header game-review-header">
+          <div {...pageStyleTarget('gameReview.heading')} className="game-review-heading">
+            <div {...pageStyleTarget('gameReview.heading.meta')} className="game-review-heading-meta">
+              <p {...pageStyleTarget('gameReview.eyebrow')} className="eyebrow">GAME REVIEW</p>
               {game && !request.loading ? <GameReviewDate value={game.played_at_utc} /> : null}
             </div>
-            <h2 {...pageStyleTarget('title')}>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
+            <h2 {...pageStyleTarget('gameReview.title')}>{game ? `${game.white.name} · ${game.black.name}` : `Game ${gameId}`}</h2>
           </div>
-          <div className="game-review-window-actions">
+          <div {...pageStyleTarget('gameReview.windowActions')} className="game-review-window-actions">
             <button {...pageStyleTarget('gameReview.fullscreen')} className="game-modal-icon" type="button"
               aria-label={maximized ? 'Exit fullscreen' : 'Fullscreen'} title={maximized ? 'Exit fullscreen' : 'Fullscreen'}
               aria-pressed={maximized} onClick={() => setMaximized((value) => !value)}>
@@ -249,22 +272,24 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
           </div>
         </header>
 
-        {request.loading ? <p {...pageStyleTarget('text')} className="game-modal-message">Loading move-by-move analysis…</p> : null}
-        {request.error ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
-        {saveError ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">{saveError}</p> : null}
-        {request.missingPosition ? <p {...pageStyleTarget('text')} className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
+        {request.loading ? <p {...pageStyleTarget('gameReview.loading')} className="game-modal-message">Loading move-by-move analysis…</p> : null}
+        {request.error ? <p {...pageStyleTarget('gameReview.error')} className="game-modal-message error" role="alert">{request.error}</p> : null}
+        {saveError ? <p {...pageStyleTarget('gameReview.soundError')} className="game-modal-message error" role="alert">{saveError}</p> : null}
+        {request.missingPosition ? <p {...pageStyleTarget('gameReview.missingPosition')} className="game-modal-message error" role="alert">The requested occurrence is unavailable in this game's move record. Showing the starting position.</p> : null}
         {game && !request.loading ? (
-          <div className="game-review-body">
-            <div className="game-review-board-column" style={{ '--game-review-board-size': `${boardWidth}px` }}>
-              <div className="game-review-names game-review-board-header">
-                <div className="game-review-board-tools">
-                  <select {...pageStyleTarget('gameReview.soundSet')} className="game-review-sound-set"
-                    aria-label="Board sound set" title="Board sound set" value={soundSet}
-                    onChange={event => updatePreferences({ soundSet: event.target.value })}
-                    onKeyDown={event => event.stopPropagation()}>
-                    {BOARD_SOUND_SETS.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
-                  </select>
-                  <button type="button" className="game-review-sound-toggle"
+          <div {...pageStyleTarget('gameReview.body')} className="game-review-body">
+            <div {...pageStyleTarget('gameReview.boardColumn')} className="game-review-board-column" style={{ '--game-review-board-size': `${boardWidth}px` }}>
+              <div {...pageStyleTarget('gameReview.boardHeader')} className="game-review-names game-review-board-header">
+                <div {...pageStyleTarget('gameReview.boardTools')} className="game-review-board-tools">
+                  <span {...pageStyleTarget('gameReview.soundSet')} className="game-review-sound-set"
+                    data-selected-label={getBoardSoundSet(soundSet).name}>
+                    <select aria-label="Board sound set" title="Board sound set" value={soundSet}
+                      onChange={event => updatePreferences({ soundSet: event.target.value })}
+                      onKeyDown={event => event.stopPropagation()}>
+                      {BOARD_SOUND_SETS.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
+                    </select>
+                  </span>
+                  <button {...pageStyleTarget('gameReview.soundToggle')} type="button" className="game-review-sound-toggle"
                     aria-label="Board sounds" aria-pressed={!muted}
                     title={muted ? 'Unmute board sounds' : 'Mute board sounds'} onClick={toggleMuted}>
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -275,66 +300,87 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                       </>}
                     </svg>
                   </button>
-                  <span {...pageStyleTarget('text')} className="game-review-mode" title={`Time control: ${game.time_control}`}>{game.mode}</span>
+                  <button {...pageStyleTarget('gameReview.flip')} type="button" className="game-review-flip"
+                    aria-label="Flip board" aria-pressed={orientation === 'black'}
+                    title={`Flip board · show ${topColor === 'white' ? 'White' : 'Black'} at the bottom`}
+                    onClick={() => setFlipped(value => !value)}>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M4 9a8 8 0 0 1 13-3l3 3M20 4v5h-5M20 15a8 8 0 0 1-13 3l-3-3M4 20v-5h5" />
+                    </svg>
+                  </button>
+                  <span {...pageStyleTarget('gameReview.mode')} className="game-review-mode" title={`Time control: ${game.time_control}`}>{game.mode}</span>
                 </div>
-                <div className="game-review-player-clock">
-                  <strong {...pageStyleTarget('value')}>{game[opponentColor].rating}</strong>
-                  <BoardClock color={opponentColor} clock={currentClocks[opponentColor]} />
+                <div {...pageStyleTarget(`gameReview.playerClock.${topColor}`)} className="game-review-player-clock">
+                  <strong {...pageStyleTarget(`gameReview.rating.${topColor}`)}>{game[topColor].rating}</strong>
+                  <BoardClock color={topColor} clock={currentClocks[topColor]} />
                 </div>
               </div>
-              <div className="game-review-stage" ref={boardStageRef}>
-                <div className={`game-review-eval${orientation === 'black' ? ' flipped' : ''}${hasEvaluation ? '' : ' is-unscored'}`}
+              <div {...pageStyleTarget('gameReview.stage')} className="game-review-stage" ref={boardStageRef}>
+                <div {...pageStyleTarget(hasEvaluation ? 'gameReview.evaluation' : 'gameReview.evaluation.disabled')}
+                  className={`game-review-eval${orientation === 'black' ? ' flipped' : ''}${hasEvaluation ? '' : ' is-unscored'}`}
                   style={{ '--white-eval': `${whitePercent}%` }} role="img" aria-disabled={!hasEvaluation}
                   aria-label={hasEvaluation ? `Position evaluation: ${evaluationLabel(evaluation, orientation)}` : noScoreMessage}
                   title={hasEvaluation ? undefined : noScoreMessage}>
-                  <div className="game-review-eval-black" aria-hidden="true" />
-                  <div className="game-review-eval-white" aria-hidden="true" />
-                  {hasEvaluation ? <strong {...pageStyleTarget('value')} aria-hidden="true">{evaluationLabel(evaluation, orientation)}</strong> : null}
+                  <div {...pageStyleTarget('gameReview.evaluation.black')} className="game-review-eval-black" aria-hidden="true" />
+                  <div {...pageStyleTarget('gameReview.evaluation.white')} className="game-review-eval-white" aria-hidden="true" />
+                  {hasEvaluation ? <strong {...pageStyleTarget('gameReview.evaluation.value')} aria-hidden="true">{evaluationLabel(evaluation, orientation)}</strong>
+                    : <i {...pageStyleTarget('gameReview.evaluation.disabledLine')} className="game-review-eval-disabled-line" aria-hidden="true" />}
                 </div>
-                <div className="game-review-board">
-                  {boardWidth > 0 ? <Chessboard
+                <GameReviewBoard
                     id={`review-board-${gameId}`}
                     position={currentFen}
-                    boardOrientation={orientation}
-                    boardWidth={boardWidth}
+                    orientation={orientation}
                     animationDuration={pieceAnimationDuration}
-                    arePiecesDraggable={false}
-                  /> : null}
-                </div>
+                    ply={positionIndex}
+                  />
               </div>
-              <div className="game-review-names">
-                <span>{game[orientation].name}</span>
-                <div className="game-review-player-clock">
-                  <strong {...pageStyleTarget('value')}>{game[orientation].rating}</strong>
+              <div {...pageStyleTarget('gameReview.boardFooter')} className="game-review-names game-review-board-footer">
+                <div {...pageStyleTarget('gameReview.players')} className="game-review-player-names" aria-label="Players">
+                  {[topColor, orientation].map(color => <span {...pageStyleTarget(`gameReview.player.${color}`)}
+                    key={color} className={`game-review-player-name ${color}`} data-board-side={color === orientation ? 'bottom' : 'top'}
+                    title={`${color === 'white' ? 'White' : 'Black'} · ${game[color].name} · ${color === orientation ? 'bottom' : 'top'} of board`}>
+                    <i {...pageStyleTarget(`gameReview.player.${color}.marker`)} aria-hidden="true" />
+                    <span {...pageStyleTarget(`gameReview.player.${color}.label`)} className="game-review-player-color">{color === 'white' ? 'White' : 'Black'}</span>
+                    <span {...pageStyleTarget(`gameReview.player.${color}.name`)} className="game-review-player-username">{game[color].name}</span>
+                  </span>)}
+                </div>
+                <div {...pageStyleTarget(`gameReview.playerClock.${orientation}`)} className="game-review-player-clock">
+                  <strong {...pageStyleTarget(`gameReview.rating.${orientation}`)}>{game[orientation].rating}</strong>
                   <BoardClock color={orientation} clock={currentClocks[orientation]} />
                 </div>
               </div>
             </div>
 
-            <aside className="game-review-analysis">
-              <div className="game-review-summary">
-                <div><span>Accuracy</span><strong {...pageStyleTarget('value')}>{playerSummary?.accuracy?.toFixed(2) ?? 'N/A'}</strong></div>
-                <div><span>Result</span><strong {...pageStyleTarget('value')}>{outcome.result ?? '—'}</strong></div>
-                <div><span>Blunders</span><strong {...pageStyleTarget('value')}>{playerSummary?.blunder_count ?? '—'}</strong></div>
-                <div><span>Ended by</span><strong {...pageStyleTarget('value')}>{outcome.endBy ?? '—'}</strong></div>
+            <aside {...pageStyleTarget('gameReview.analysis')} className="game-review-analysis">
+              <div {...pageStyleTarget('gameReview.summary')} className="game-review-summary">
+                {[
+                  ['accuracy', 'Accuracy', playerSummary?.accuracy?.toFixed(2) ?? 'N/A'],
+                  ['result', 'Result', outcome.result ?? '—'],
+                  ['blunders', 'Blunders', playerSummary?.blunder_count ?? '—'],
+                  ['ending', 'Ended by', outcome.endBy ?? '—'],
+                ].map(([id, label, value]) => <div {...pageStyleTarget(`gameReview.summary.${id}`)} key={id}>
+                  <span {...pageStyleTarget(`gameReview.summary.${id}.label`)}>{label}</span>
+                  <strong {...pageStyleTarget(`gameReview.summary.${id}.value`)}>{value}</strong>
+                </div>)}
               </div>
-              <div className="game-review-current">
-                <strong {...pageStyleTarget('value')}>{currentMove?.classification || 'position'}</strong>
-                <span>{hasEvaluation ? `Evaluation ${evaluationLabel(evaluation, 'white')} for White` : noScoreMessage}</span>
-                {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
-                {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('text')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
+              <div {...pageStyleTarget('gameReview.current')} className="game-review-current">
+                <strong {...pageStyleTarget('gameReview.current.classification')}>{currentMove?.classification || 'position'}</strong>
+                <span {...pageStyleTarget('gameReview.current.evaluation')}>{hasEvaluation ? `Evaluation ${evaluationLabel(evaluation, 'white')} for White` : noScoreMessage}</span>
+                {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span {...pageStyleTarget('gameReview.current.accuracy')}>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
+                {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('gameReview.current.engineLine')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
               </div>
-              <div className="game-review-moves" aria-label="Game moves">
+              <div {...pageStyleTarget('gameReview.moves')} className="game-review-moves" aria-label="Game moves">
                 {moves.map((move, index) => (
-                  <button {...pageStyleTarget('button')}
+                  <button {...pageStyleTarget('gameReview.move')}
                     type="button"
                     className={`${positionIndex === index + 1 ? 'active' : ''} ${move.classification || ''}`}
                     onClick={() => navigateTo(index + 1)}
                     key={move.ply}
                   >
-                    <span>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>
-                    <strong {...pageStyleTarget('value')}>{move.san || '—'}</strong>
-                    <small {...pageStyleTarget('text')}>{evaluationLabel(move.evaluation_after, 'white')}</small>
+                    <MoveAnnotation classification={move.classification} />
+                    <span {...pageStyleTarget('gameReview.move.number')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>
+                    <strong {...pageStyleTarget('gameReview.move.notation')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.san || '—'}</strong>
+                    <small {...pageStyleTarget('gameReview.move.evaluation')} className={positionIndex === index + 1 ? 'active' : undefined}>{evaluationLabel(move.evaluation_after, 'white')}</small>
                   </button>
                 ))}
               </div>

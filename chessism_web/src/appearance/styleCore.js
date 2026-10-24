@@ -31,6 +31,7 @@ export function seedIndependentStyles(registry, rows) {
   }
   for (const source of result) for (const { target, definition } of descendants.get(`${source.scope}@${source.target}`) || []) {
     if (!definition.properties.includes(source.property)) continue
+    if (definition.initialStyleExcludedProperties?.includes(source.property)) continue
     const row = { ...source, target }, key = overrideKey(row)
     if (!existing.has(key)) { result.push(row); existing.add(key) }
   }
