@@ -2,11 +2,11 @@ import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import GameReviewBoard from './GameReviewBoard.jsx'
+import GameReviewSoundSet from './GameReviewSoundSet.jsx'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
 import useBoardSounds from '../../components/chess/useBoardSounds'
 import { useBoardSoundPreferences } from '../../components/chess/BoardSoundPreferences'
-import { BOARD_SOUND_SETS, getBoardSoundSet } from '../../components/chess/boardSoundSets'
 
 const endingLabels = {
   checkmated: 'checkmate',
@@ -281,14 +281,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
             <div {...pageStyleTarget('gameReview.boardColumn')} className="game-review-board-column" style={{ '--game-review-board-size': `${boardWidth}px` }}>
               <div {...pageStyleTarget('gameReview.boardHeader')} className="game-review-names game-review-board-header">
                 <div {...pageStyleTarget('gameReview.boardTools')} className="game-review-board-tools">
-                  <span {...pageStyleTarget('gameReview.soundSet')} className="game-review-sound-set"
-                    data-selected-label={getBoardSoundSet(soundSet).name}>
-                    <select aria-label="Board sound set" title="Board sound set" value={soundSet}
-                      onChange={event => updatePreferences({ soundSet: event.target.value })}
-                      onKeyDown={event => event.stopPropagation()}>
-                      {BOARD_SOUND_SETS.map(set => <option key={set.id} value={set.id}>{set.name}</option>)}
-                    </select>
-                  </span>
+                  <GameReviewSoundSet value={soundSet} onChange={soundSet => updatePreferences({ soundSet })} />
                   <button {...pageStyleTarget('gameReview.soundToggle')} type="button" className="game-review-sound-toggle"
                     aria-label="Board sounds" aria-pressed={!muted}
                     title={muted ? 'Unmute board sounds' : 'Mute board sounds'} onClick={toggleMuted}>

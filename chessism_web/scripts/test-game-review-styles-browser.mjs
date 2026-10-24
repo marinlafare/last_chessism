@@ -35,12 +35,14 @@ await browserFixture(9308, async ({ send, context, evaluate, assert, waitFor }) 
   await assert(`${color('gameReview.title')}==='rgb(171, 193, 35)' && ${color('gameReview.panel','backgroundColor')}==='rgb(16, 32, 48)'`)
   // The sound dropdown follows the selected name, not the longest option.
   for (const sound of ['nes','futuristic','piano']) {
-    await evaluate(`(()=>{const select=document.querySelector('[aria-label="Board sound set"]');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(select,'${sound}');select.dispatchEvent(new Event('change',{bubbles:true}))})()`)
-    await waitFor(`${node('gameReview.soundSet')}.dataset.selectedLabel===document.querySelector('[aria-label="Board sound set"]').selectedOptions[0].textContent`)
-    await assert(`(()=>{const field=${node('gameReview.soundSet')},s=getComputedStyle(field),c=document.createElement('canvas').getContext('2d');c.font=s.font;const expected=c.measureText(field.dataset.selectedLabel).width+20+parseFloat(s.paddingLeft)+parseFloat(s.paddingRight)+parseFloat(s.borderLeftWidth)+parseFloat(s.borderRightWidth);return Math.abs(field.getBoundingClientRect().width-expected)<2})()`)
+    await evaluate(`document.querySelector('[aria-label="Board sound set"]').click()`)
+    await evaluate(`document.querySelector('[data-sound-set="${sound}"]').click()`)
+    await waitFor(`${node('gameReview.soundSet')}.dataset.selectedLabel===document.querySelector('.game-review-sound-option[aria-selected="true"]').textContent`)
+    await assert(`(()=>{const field=${node('gameReview.soundSet')},s=getComputedStyle(field),c=document.createElement('canvas').getContext('2d');c.font=s.font;const expected=c.measureText(field.dataset.selectedLabel).width+parseFloat(s.fontSize)+5+parseFloat(s.paddingLeft)+parseFloat(s.paddingRight)+parseFloat(s.borderLeftWidth)+parseFloat(s.borderRightWidth);return Math.abs(field.getBoundingClientRect().width-expected)<2})()`)
     await evaluate(`gameReviewTest['${sound}Width']=${node('gameReview.soundSet')}.getBoundingClientRect().width`)
   }
   await assert(`gameReviewTest.nesWidth<gameReviewTest.pianoWidth && gameReviewTest.pianoWidth<gameReviewTest.futuristicWidth && gameReviewTest.pianoWidth<100`)
+  await assert(`(()=>{const field=${node('gameReview.soundSet')},s=getComputedStyle(field);return field.offsetHeight<=parseFloat(s.lineHeight)+parseFloat(s.paddingTop)+parseFloat(s.paddingBottom)+parseFloat(s.borderTopWidth)+parseFloat(s.borderBottomWidth)+1 && field.offsetHeight<28})()`)
   await evaluate(`document.querySelector('.appearance-account-controls > button').click()`)
   await edit('gameReview.soundSet'); await set('fontSize',18); await close()
   await assert(`${node('gameReview.soundSet')}.getBoundingClientRect().width>gameReviewTest.pianoWidth && getComputedStyle(document.querySelector('[aria-label="Board sound set"]')).fontSize==='18px'`)

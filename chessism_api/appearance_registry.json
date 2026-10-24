@@ -3,6 +3,11 @@
   "scope": "scored_positions",
   "universalProperties": ["margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "radius"],
   "properties": {
+    "reviewSoundActiveBorderColor": {"label":"Active border color","kind":"color","css":"--review-sound-active-border-color","default":"#15c780"},
+    "reviewSoundActiveBorderWidth": {"label":"Active border width","kind":"number","min":0,"max":8,"unit":"px","css":"--review-sound-active-border-width","default":2},
+    "reviewSoundSelectedBackground": {"label":"Selected sound background","kind":"color","css":"--review-sound-selected-background","default":"#155b3c"},
+    "reviewSoundSelectedColor": {"label":"Selected sound text","kind":"color","css":"--review-sound-selected-color","default":"#ffffff"},
+    "reviewSoundSelectedBorder": {"label":"Selected sound border","kind":"color","css":"--review-sound-selected-border","default":"#15c780"},
     "reviewPieceOpacity": {"label":"Piece opacity","kind":"number","css":"opacity","min":0,"max":1,"step":0.05,"default":1},
     "reviewPieceHoverOpacity": {"label":"Hover piece opacity","kind":"number","css":"opacity","state":":hover","min":0,"max":1,"step":0.05,"default":1},
     "reviewSelectedBackground": {"label":"Selected move background","kind":"color","css":"background-color","state":".active","default":"#15c7801a"},

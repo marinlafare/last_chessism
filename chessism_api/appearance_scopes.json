@@ -192,7 +192,19 @@
     },
     "gameReview.soundSet": {
       "label": "Game viewer · sound set dropdown",
-      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign","reviewSoundActiveBorderColor","reviewSoundActiveBorderWidth"],
+      "editorRelated": ["gameReview.soundSet.list","gameReview.soundSet.option"]
+    },
+    "gameReview.soundSet.list": {
+      "label": "Game viewer · sound dropdown list",
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"],
+      "editorParent": "gameReview.soundSet"
+    },
+    "gameReview.soundSet.option": {
+      "label": "Game viewer · sound dropdown options",
+      "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign","reviewSoundSelectedBackground","reviewSoundSelectedColor","reviewSoundSelectedBorder"],
+      "hoverState": "[data-highlighted=\"true\"]",
+      "editorParent": "gameReview.soundSet.list"
     },
     "gameReview.backdrop": {"label":"Game review · backdrop","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
     "gameReview.header": {"label":"Game review · header","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},

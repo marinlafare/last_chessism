@@ -239,7 +239,7 @@ test('list rating styles inherit saved metric settings once, then remain indepen
 })
 
 test('game review owns its targets and preserves old styles without remaining linked',()=>{
-  for(const file of ['PlayerGameReviewModal.jsx','GameReviewBoard.jsx']){
+  for(const file of ['PlayerGameReviewModal.jsx','GameReviewBoard.jsx','GameReviewSoundSet.jsx']){
     const source=fs.readFileSync(new URL(`../src/pages/players/${file}`,import.meta.url),'utf8')
     for(const [,id] of source.matchAll(/pageStyleTarget\(['"`]([^'"`]+)['"`]/g))assert.ok(id.startsWith('gameReview.'),id)
   }
@@ -256,5 +256,18 @@ test('game review owns its targets and preserves old styles without remaining li
   }
   const css=appearanceCss(registry,[{scope:'home',target:'gameReview.move',property:'reviewSelectedBackground',value:'#123456'}])
   assert.match(css,/\.active\{background-color:#123456/)
+  assert.ok(!css.includes('data-style-id="button"'))
+})
+
+test('sound dropdown exposes list/options from its trigger and independent active borders',()=>{
+  const targets=registry.scopes.home.targets
+  assert.deepEqual(targets['gameReview.soundSet'].editorRelated,['gameReview.soundSet.list','gameReview.soundSet.option'])
+  for(const property of ['reviewSoundActiveBorderColor','reviewSoundActiveBorderWidth'])assert.ok(targets['gameReview.soundSet'].properties.includes(property))
+  const css=appearanceCss(registry,[
+    {scope:'home',target:'gameReview.soundSet',property:'reviewSoundActiveBorderColor',value:'#123456'},
+    {scope:'home',target:'gameReview.soundSet.option',property:'hoverBackground',value:'#abcdef'},
+  ])
+  assert.match(css,/--review-sound-active-border-color:#123456/)
+  assert.match(css,/\[data-highlighted="true"\]\{background-color:#abcdef/)
   assert.ok(!css.includes('data-style-id="button"'))
 })
