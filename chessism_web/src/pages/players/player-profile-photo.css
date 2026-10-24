@@ -1,0 +1,69 @@
+.players-profile-avatar-box {
+  appearance: none;
+  min-width: 0;
+  width: 100%;
+  padding: 8px;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: transform 180ms ease, box-shadow 180ms ease, background-color 180ms ease, border-color 180ms ease;
+}
+.players-profile-avatar-box:disabled { cursor: default; }
+.players-profile-avatar-box:not(:disabled):hover,
+.players-profile-avatar-box:not(:disabled):focus-visible {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 18px #0004;
+}
+.players-profile-avatar-box:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.player-profile-popup-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: #000b;
+}
+.player-profile-popup {
+  box-sizing: border-box;
+  width: min(720px, 100%);
+  max-height: calc(100dvh - 40px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 20px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  color: var(--text);
+  box-shadow: 0 16px 60px #0008;
+}
+.player-profile-popup-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.player-profile-popup-header h2 { min-width: 0; margin: 0; font-size: 18px; overflow-wrap: anywhere; }
+.player-profile-popup-header button {
+  flex: 0 0 auto;
+  padding: 4px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-3);
+  color: var(--text);
+  font: inherit;
+  font-size: 24px;
+  cursor: pointer;
+}
+.player-profile-popup-photo { display: block; width: 132px; height: 132px; object-fit: cover; border-radius: var(--radius); margin: 20px auto; }
+.player-profile-popup h3 { margin: 20px 0 10px; font-size: 14px; }
+.player-profile-popup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; }
+.player-profile-popup-fields > div { min-width: 0; padding: 10px 12px; border: 1px solid var(--border-soft); border-radius: 6px; background: var(--surface-3); }
+.player-profile-popup-fields dt { color: var(--muted); font-size: 12px; }
+.player-profile-popup-fields dd { margin: 4px 0 0; overflow-wrap: anywhere; font-weight: 600; }
+.player-profile-popup-fields a { color: inherit; }
+@media (max-width: 540px) {
+  .player-profile-popup-backdrop { padding: 10px; }
+  .player-profile-popup { padding: 14px; max-height: calc(100dvh - 20px); }
+  .player-profile-popup-fields { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .players-profile-avatar-box { transition: none; }
+  .players-profile-avatar-box:not(:disabled):hover,
+  .players-profile-avatar-box:not(:disabled):focus-visible { transform: none; }
+}

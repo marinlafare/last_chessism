@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 export function usePoll(fetcher, intervalMs = 8000, options = {}) {
   const { maxBackoffMs = 30000 } = options
@@ -6,7 +6,9 @@ export function usePoll(fetcher, intervalMs = 8000, options = {}) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastSuccessAt, setLastSuccessAt] = useState(null)
+  const [revision, setRevision] = useState(0)
   const abortRef = useRef(null)
+  const refresh = useCallback(() => setRevision(value => value + 1), [])
 
   useEffect(() => {
     let stopped = false
@@ -49,7 +51,7 @@ export function usePoll(fetcher, intervalMs = 8000, options = {}) {
       abortRef.current?.abort()
       if (timeoutId) clearTimeout(timeoutId)
     }
-  }, [fetcher, intervalMs, maxBackoffMs])
+  }, [fetcher, intervalMs, maxBackoffMs, revision])
 
-  return { data, loading, error, lastSuccessAt }
+  return { data, loading, error, lastSuccessAt, refresh }
 }

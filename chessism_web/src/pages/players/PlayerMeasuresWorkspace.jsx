@@ -1,0 +1,65 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
+import { useEffect, useState } from 'react'
+import PlayerMeasuresPanel from './PlayerMeasuresPanel'
+import PlayerScoreDistribution from './PlayerScoreDistribution'
+import PlayerBlunderDistribution from './PlayerBlunderDistribution'
+import PlayerUnexpectedEndings from './PlayerUnexpectedEndings'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
+import { fetchQualityCalendar } from './playerAnalysisApi'
+import './player-measures.css'
+import './player-game-explorer.css'
+
+export default function PlayerMeasuresWorkspace({ playerName, disabled = false }) {
+  return <PlayerAnalysisDisclosure label="Stockfish analysis" target="player.measures"
+    buttonTarget="player.measures.toggle" level={2} disabled={disabled}>
+    <MeasuresContent key={playerName} playerName={playerName} disabled={disabled} />
+  </PlayerAnalysisDisclosure>
+}
+
+function MeasuresContent({ playerName, disabled }) {
+  const [quality, setQuality] = useState(null)
+  const [qualityError, setQualityError] = useState('')
+  const [qualityLoading, setQualityLoading] = useState(false)
+
+  useEffect(() => {
+    if (!playerName || disabled) {
+      setQuality(null)
+      setQualityError('')
+      setQualityLoading(false)
+      return undefined
+    }
+
+    const controller = new AbortController()
+    setQualityLoading(true)
+    setQualityError('')
+    fetchQualityCalendar({ playerName, signal: controller.signal, bypassCache: true })
+      .then((payload) => {
+        if (!controller.signal.aborted) setQuality(payload)
+      })
+      .catch((requestError) => {
+        if (requestError.name !== 'AbortError') {
+          setQualityError(requestError.message || 'Unable to load Stockfish measures.')
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setQualityLoading(false)
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [playerName, disabled])
+
+  return (
+    <div className="player-analysis-chart-list">
+      <div className="player-stockfish-summary">
+        <PlayerScoreDistribution key={`scores:${playerName}`} playerName={playerName} />
+        <PlayerBlunderDistribution key={`blunders:${playerName}`} playerName={playerName} />
+      </div>
+      {qualityError ? <p {...pageStyleTarget('text')} className="player-analysis-error" role="alert">{qualityError}</p> : null}
+      <PlayerMeasuresPanel playerName={playerName} quality={quality}
+        loading={!disabled && (qualityLoading || (!quality && !qualityError))}
+        disabled={disabled || Boolean(qualityError)} />
+      <PlayerUnexpectedEndings playerName={playerName} />
+    </div>
+  )
+}

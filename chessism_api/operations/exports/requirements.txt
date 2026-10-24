@@ -1,0 +1,3 @@
+# PostgreSQL 15 parser for the Python 3.10 API/export-worker image.
+# Backup-only workers do not execute caller SQL and do not need this extension.
+pglast==5.9

@@ -1,29 +1,32 @@
+import { styleTarget } from '../../appearance/styleCore.js'
 function SideRail() {
   const path = window.location.pathname.replace(/\/+$/, '') || '/'
   const navItems = [
-    { href: '/scored_positions', label: 'Scored Positions', short: 'S' },
-    { href: '/analize_positions', label: 'Analyze Positions', short: 'F' },
-    { href: '/live_analysis', label: 'Live Analysis', short: 'L' },
-    { href: '/analyze_times', label: 'Analyze Times', short: 'T' },
-    { href: '/add_games', label: 'Add Games', short: '+' }
+    { id: 'positions', href: '/scored_positions', label: 'Positions' },
+    { id: 'analyze', href: '/analize_positions', label: 'Analyze' },
+    { id: 'research', href: '/research', label: 'Research' },
+    { id: 'database', href: '/database', label: 'Database' },
+    { id: 'live', href: '/live_analysis', label: 'Live' },
+    { id: 'backups', href: '/backups', label: 'Backups' },
+    { id: 'system', href: '/system_status', label: 'System Status' }
   ]
 
   return (
-    <aside className="left-rail" aria-label="Primary">
+    <aside {...styleTarget('sidebar', 'navigation')} className="left-rail" aria-label="Primary">
       <div className="left-rail-menu">
-        <a className="rail-brand" href="/" aria-label="Home">
+        <a {...styleTarget('link', 'navigation')} className="rail-brand" href="/" aria-label="Home">
           <img className="left-rail-icon" src="/chessism.jpg" alt="Chessism icon" />
           <span>Chessism</span>
         </a>
-        <nav className="rail-nav" aria-label="Main navigation">
+        <nav {...styleTarget('menu', 'navigation')} className="rail-nav" aria-label="Main navigation">
           {navItems.map((item) => (
-            <a
+            <a {...styleTarget(`item.${item.id}`, 'navigation')}
               key={item.href}
-              className={`rail-btn ${path === item.href ? 'active' : ''}`}
+              className={`rail-btn ${path === item.href || (item.href === '/research' && path.startsWith('/research/'))
+                || (item.href === '/system_status' && path === '/analyze_times') ? 'active' : ''}`}
               href={item.href}
               title={item.label}
             >
-              <span className="rail-btn-icon" aria-hidden="true">{item.short}</span>
               <span>{item.label}</span>
             </a>
           ))}

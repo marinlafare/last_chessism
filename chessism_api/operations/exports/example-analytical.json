@@ -1,0 +1,12 @@
+{
+  "mode": "sql",
+  "name": "Hikaru bullet games with move aggregates",
+  "sql": "WITH target AS MATERIALIZED (SELECT player_id FROM exports_data_v1.players WHERE player_name=$2), chosen AS MATERIALIZED (SELECT game_id FROM exports_data_v1.games WHERE mode=$1 AND (white_player_id=(SELECT player_id FROM target) OR black_player_id=(SELECT player_id FROM target)) ORDER BY game_id LIMIT $3) SELECT g.game_id, COUNT(m.move_number) AS played_half_moves, COUNT(m.score_cp) AS scored_half_moves, AVG(m.score_cp)::double precision AS average_white_score_cp, ROW_NUMBER() OVER (ORDER BY g.game_id) AS game_number FROM chosen g LEFT JOIN LATERAL (SELECT move_number,score_cp FROM exports_data_v1.moves WHERE game_id=g.game_id OFFSET 0) m ON TRUE GROUP BY g.game_id ORDER BY g.game_id",
+  "parameters": [
+    {"type": "string", "value": "bullet"},
+    {"type": "string", "value": "hikaru"},
+    {"type": "int64", "value": 1000}
+  ],
+  "max_result_rows": 1000,
+  "format": "parquet"
+}

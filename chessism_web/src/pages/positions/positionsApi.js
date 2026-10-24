@@ -1,0 +1,36 @@
+import { deleteJson, getJson, postJson } from '../../services/apiClient'
+
+export const fetchCoverage = () => getJson('/games/generalities')
+export const fetchGameAnalysisOverview = () => getJson('/fens/scored/games/overview')
+export const fetchAnalysisCounts = () => getJson('/fens/analysis_counts')
+export const fetchLatestIngestionTiming = () => getJson('/fens/pipeline/timings/latest')
+export const fetchAnalysisProcesses = () => getJson('/jobs/analysis')
+export const fetchAnalysisHistory = (backend, offset = 0, options) => getJson(
+  backend === 'local' ? `/jobs/analysis/history?limit=20&offset=${offset}`
+    : `/analysis/cloud/history?backend=${encodeURIComponent(backend)}&limit=20&offset=${offset}`, options)
+export const fetchCloudHistoryUsage = (id, options) => getJson(`/analysis/cloud/${encodeURIComponent(id)}/usage`, options)
+export const fetchActiveJobs = () => getJson('/jobs/active')
+export const fetchPositionJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
+export const fetchPlayerAnalysisCounts = (playerName) => (
+  getJson(`/fens/players/${encodeURIComponent(playerName)}/analysis_counts`)
+)
+export const inspectPlayerGameScope = (payload) => postJson('/analysis/player_games/scope', payload)
+export const previewPlayerGameAnalysis = (payload) => postJson('/analysis/player_games/preview', payload)
+export const queueGlobalAnalysis = (payload) => postJson('/analysis/run_job', payload)
+export const queuePlayerAnalysis = (payload) => postJson('/analysis/run_player_job', payload)
+export const queueAnalysisLoop = (payload) => postJson('/analysis/run_loop_job', payload)
+export const queuePlayerGameAnalysis = (payload) => postJson('/analysis/player_games/run_job', payload)
+export const deleteQueuedAnalysisJob = (jobId) => deleteJson(`/jobs/${encodeURIComponent(jobId)}/queued`)
+export const fetchCloudAnalysis = (options) => getJson('/analysis/cloud', options)
+export const createCloudAnalysis = (payload) => postJson('/analysis/cloud', payload)
+export const resumeCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/resume`, {})
+export const retryCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/retry-cloud`, {})
+export const stopAndCleanCloudAnalysis = (id) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/stop-and-cleanup`, {})
+export const reviseCloudVms = (id, n_vms) => postJson(`/analysis/cloud/${encodeURIComponent(id)}/vms`, { n_vms })
+const draftPath = (id) => `/analysis/cloud/drafts/${encodeURIComponent(id)}`
+export const fetchCloudDraft = (options) => getJson('/analysis/cloud/drafts/current', options)
+export const createCloudDraft = () => postJson('/analysis/cloud/drafts', {})
+export const saveCloudDraftEntry = (id, payload) => postJson(`${draftPath(id)}/entries`, payload)
+export const removeCloudDraftEntry = (id, entry, revision) => postJson(`${draftPath(id)}/entries/${encodeURIComponent(entry)}/remove`, { revision })
+export const previewCloudDraft = (id, revision) => postJson(`${draftPath(id)}/preview`, { revision })
+export const submitCloudDraft = (id, payload) => postJson(`${draftPath(id)}/submit`, payload)

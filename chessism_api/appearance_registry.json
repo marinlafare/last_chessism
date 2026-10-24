@@ -1,0 +1,541 @@
+{
+  "version": 1,
+  "scope": "scored_positions",
+  "universalProperties": ["margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "radius"],
+  "properties": {
+    "reviewSoundActiveBorderColor": {"label":"Active border color","kind":"color","css":"--review-sound-active-border-color","default":"#15c780"},
+    "reviewSoundActiveBorderWidth": {"label":"Active border width","kind":"number","min":0,"max":8,"unit":"px","css":"--review-sound-active-border-width","default":2},
+    "reviewSoundSelectedBackground": {"label":"Selected sound background","kind":"color","css":"--review-sound-selected-background","default":"#155b3c"},
+    "reviewSoundSelectedColor": {"label":"Selected sound text","kind":"color","css":"--review-sound-selected-color","default":"#ffffff"},
+    "reviewSoundSelectedBorder": {"label":"Selected sound border","kind":"color","css":"--review-sound-selected-border","default":"#15c780"},
+    "reviewPieceOpacity": {"label":"Piece opacity","kind":"number","css":"opacity","min":0,"max":1,"step":0.05,"default":1},
+    "reviewPieceHoverOpacity": {"label":"Hover piece opacity","kind":"number","css":"opacity","state":":hover","min":0,"max":1,"step":0.05,"default":1},
+    "reviewSelectedBackground": {"label":"Selected move background","kind":"color","css":"background-color","state":".active","default":"#15c7801a"},
+    "reviewSelectedBorder": {"label":"Selected move border","kind":"color","css":"border-color","state":".active","default":"#15c780"},
+    "reviewSelectedColor": {"label":"Selected move text","kind":"color","css":"color","state":".active","default":"#ffffff"},
+    "reviewMutedColor": {"label":"Muted icon color","kind":"color","css":"color","state":"[aria-pressed=\"false\"]","default":"#8da1b2"},
+    "reviewMutedBackground": {"label":"Muted background","kind":"color","css":"background-color","state":"[aria-pressed=\"false\"]","default":"#00000000"},
+    "salienceTrackHeight": {"label":"Track height (px)","kind":"number","min":80,"max":480,"unit":"px","css":"--salience-track-height","default":160},
+    "salienceRailWidth": {"label":"Rail width (px)","kind":"number","min":1,"max":12,"unit":"px","css":"--salience-rail-width","default":4},
+    "salienceKnobSize": {"label":"Knob size (px)","kind":"number","min":8,"max":24,"unit":"px","css":"--salience-knob-size","default":12},
+    "margin": {"label":"Margin · all sides (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin"},
+    "marginTop": {"label":"Margin · top (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-top"},
+    "marginRight": {"label":"Margin · right (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-right"},
+    "marginBottom": {"label":"Margin · bottom (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-bottom"},
+    "marginLeft": {"label":"Margin · left (px)","kind":"number","min":-256,"max":256,"unit":"px","css":"margin-left"},
+    "researchIntroWidth": {"label":"Width (%)","kind":"number","min":20,"max":100,"unit":"%","css":"--research-intro-width","default":50},
+    "vmSelectedBorderColor": {"label":"Selected VM border color","kind":"color","css":"--cloud-vm-selected-border-color","default":"#b194c4"},
+    "vmSelectedBorderWidth": {"label":"Selected VM border width","kind":"number","min":0,"max":8,"unit":"px","css":"--cloud-vm-selected-border-width","default":2},
+    "modeActiveBackground": {
+      "label": "Active background",
+      "kind": "color",
+      "css": "--mode-active-background",
+      "default": "#155b3c"
+    },
+    "modeInactiveBackground": {
+      "label": "Inactive background",
+      "kind": "color",
+      "css": "--mode-inactive-background",
+      "default": "#0b1117"
+    },
+    "weekdayRowBackground": {
+      "label": "Day row background",
+      "kind": "color",
+      "css": "--weekday-row-background",
+      "default": "#0b1117"
+    },
+    "summaryBarHeight": {
+      "label": "Bar height",
+      "kind": "number",
+      "min": 8,
+      "max": 40,
+      "unit": "px",
+      "css": "--summary-bar-height",
+      "default": 16
+    },
+    "cycleDividerColor": {
+      "label": "Cycle divider color",
+      "kind": "color",
+      "css": "--cloud-cycle-divider-color",
+      "default": "#5e9bce"
+    },
+    "cycleDividerHoverColor": {
+      "label": "Cycle divider hover color",
+      "kind": "color",
+      "css": "--cloud-cycle-divider-hover-color",
+      "default": "#5e9bce"
+    },
+    "cycleDividerWidth": {
+      "label": "Cycle divider thickness",
+      "kind": "number",
+      "min": 0,
+      "max": 12,
+      "unit": "px",
+      "css": "--cloud-cycle-divider-width",
+      "default": 2
+    },
+    "repeatMarkColor": {
+      "label": "Repeat symbol color",
+      "kind": "color",
+      "css": "--repeat-mark-color",
+      "default": "#020303"
+    },
+    "background": {
+      "label": "Background",
+      "kind": "color",
+      "css": "background-color"
+    },
+    "color": {
+      "label": "Text color",
+      "kind": "color",
+      "css": "color"
+    },
+    "borderColor": {
+      "label": "Border color",
+      "kind": "color",
+      "css": "border-color"
+    },
+    "borderWidth": {
+      "label": "Border width",
+      "kind": "number",
+      "min": 0,
+      "max": 8,
+      "unit": "px",
+      "css": "border-width"
+    },
+    "radius": {
+      "label": "Corner radius",
+      "kind": "number",
+      "min": 0,
+      "max": 40,
+      "unit": "px",
+      "css": "border-radius"
+    },
+    "padding": {
+      "label": "Padding",
+      "kind": "number",
+      "min": 0,
+      "max": 48,
+      "unit": "px",
+      "css": "padding"
+    },
+    "homeTopMargin": {
+      "label": "Top margin (rem)",
+      "kind": "number",
+      "min": 0,
+      "max": 12,
+      "step": 0.25,
+      "unit": "rem",
+      "css": "--home-top-gap",
+      "default": 3
+    },
+    "fontSize": {
+      "label": "Font size",
+      "kind": "number",
+      "min": 10,
+      "max": 40,
+      "unit": "px",
+      "css": "font-size"
+    },
+    "fontFamily": {
+      "label": "Font",
+      "kind": "choice",
+      "options": [
+        "Inter",
+        "IBM Plex Mono",
+        "system-ui",
+        "Audiowide",
+        "Bitcount Grid Double",
+        "Black Ops One",
+        "JetBrains Mono",
+        "Lora",
+        "Monoton",
+        "Monsieur La Doulaise",
+        "Montserrat",
+        "Nunito Sans",
+        "Open Sans",
+        "Orbitron",
+        "Oswald",
+        "Playfair Display",
+        "Roboto",
+        "Source Serif 4"
+      ],
+      "css": "font-family"
+    },
+    "textAlign": {
+      "label": "Text alignment",
+      "kind": "choice",
+      "options": [
+        "left",
+        "center",
+        "right"
+      ],
+      "css": "text-align"
+    },
+    "fill": {
+      "label": "Slice color",
+      "kind": "color",
+      "css": "fill"
+    },
+    "stroke": {
+      "label": "Border color",
+      "kind": "color",
+      "css": "--pie-outline-color",
+      "default": "#ffffff"
+    },
+    "strokeWidth": {
+      "label": "Border width",
+      "kind": "number",
+      "min": 0,
+      "max": 6,
+      "unit": "px",
+      "css": "--pie-outline-width",
+      "default": 1.5
+    },
+    "hoverBackground": {
+      "label": "Hover background",
+      "kind": "color",
+      "css": "background-color",
+      "state": ":hover"
+    },
+    "hoverColor": {
+      "label": "Hover text",
+      "kind": "color",
+      "css": "color",
+      "state": ":hover"
+    }
+  },
+  "targets": {
+    "page": {
+      "label": "Page background",
+      "properties": [
+        "background",
+        "color",
+        "fontFamily"
+      ]
+    },
+    "metrics.panel": {
+      "label": "Metrics panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "appearances.panel": {
+      "label": "FEN appearance panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "appearance.tab": {
+      "label": "Appearance tabs",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "position.button": {
+      "label": "Position thumbnails",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "hoverBackground",
+        "hoverColor"
+      ]
+    },
+    "position.rank": {
+      "label": "Position rank badges",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "unique.outline": {
+      "label": "Unique circle border",
+      "properties": [
+        "stroke",
+        "strokeWidth"
+      ]
+    },
+    "repeated.outline": {
+      "label": "Less common circle border",
+      "properties": [
+        "stroke",
+        "strokeWidth"
+      ]
+    },
+    "coverage.outline": {
+      "label": "Scored/unscored circle border",
+      "properties": ["stroke", "strokeWidth"]
+    },
+    "coverage.scored": {
+      "label": "Scored FEN slice",
+      "editorParent": "coverage.outline",
+      "properties": ["fill"]
+    },
+    "coverage.unscored": {
+      "label": "Unscored FEN slice",
+      "editorParent": "coverage.outline",
+      "properties": ["fill"]
+    },
+    "unique.slice": {
+      "label": "Unique slice",
+      "editorParent": "unique.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "nonunique.slice": {
+      "label": "Non-unique slice",
+      "editorParent": "unique.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "circle.caption": {
+      "label": "Circle captions",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "cuda.panel": {
+      "label": "Reserved CUDA panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "backup.panel": {
+      "label": "FEN backup panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "chart.disclosure": {
+      "label": "Rating groups disclosure",
+      "properties": [
+        "background",
+        "color",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "explorer.panel": {
+      "label": "Position explorer panel",
+      "properties": [
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.scored_positions": {
+      "label": "Scored positions bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
+      "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "summaryBarHeight",
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.unscored_positions": {
+      "label": "Total positions bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
+      "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "repeatMarkColor",
+        "summaryBarHeight",
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.games": {
+      "label": "Total games bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
+      "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "repeatMarkColor",
+        "summaryBarHeight",
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "metric.unscored_games": {
+      "label": "Scored games bar",
+      "propertyLabels": { "chartColor1": "Bar color", "background": "Track background" },
+      "properties": [
+        "chartColor1",
+        "barHoverColor",
+        "summaryBarHeight",
+        "background",
+        "borderColor",
+        "borderWidth",
+        "radius",
+        "padding"
+      ]
+    },
+    "slice.2": {
+      "label": "2 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.3": {
+      "label": "3 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.4": {
+      "label": "4 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.5": {
+      "label": "5 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.6": {
+      "label": "6 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.7": {
+      "label": "7 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.8": {
+      "label": "8 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.9": {
+      "label": "9 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "slice.10": {
+      "label": "10 appearances slice",
+      "editorParent": "repeated.outline",
+      "properties": [
+        "fill"
+      ]
+    },
+    "metric.title": {
+      "label": "Summary chart labels",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "metric.value": {
+      "label": "Summary chart numbers",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "position.label": {
+      "label": "position label",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "position.count": {
+      "label": "position count",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    },
+    "panel.title": {
+      "label": "panel title",
+      "properties": [
+        "color",
+        "fontSize",
+        "fontFamily",
+        "textAlign"
+      ]
+    }
+  }
+}

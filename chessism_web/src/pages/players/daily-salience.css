@@ -1,0 +1,71 @@
+.daily-salience-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 128px;
+  align-items: start;
+  gap: 12px;
+  min-width: 900px;
+}
+
+.daily-salience-plot { min-width: 0; }
+.daily-salience-plot .measure-daily-efficiency-graph { min-width: 0; }
+
+.daily-salience-control {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 10px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #0b1117;
+  color: var(--text);
+  font: 600 10px "IBM Plex Mono", monospace;
+}
+
+
+.daily-salience-track {
+  position: relative;
+  width: 86px;
+  height: var(--salience-track-height, 160px);
+  margin: 12px 0;
+  touch-action: none;
+  user-select: none;
+  cursor: pointer;
+}
+
+.daily-salience-rail,
+.daily-salience-fill {
+  position: absolute;
+  left: calc(37px - var(--salience-rail-width, 4px) / 2);
+  width: var(--salience-rail-width, 4px);
+  border-radius: 3px;
+  background: #15c780;
+  pointer-events: auto;
+}
+
+.daily-salience-rail { inset-block: 0; background: #34444f; }
+.daily-salience-tick { position: absolute; left: 60px; transform: translateY(50%); color: var(--subtle); font-size: 9px; }
+
+.daily-salience-handle {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  left: 15px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  transform: translateY(50%);
+  cursor: grab;
+  touch-action: none;
+  z-index: 1;
+}
+
+/* Offset opposite handles so a collapsed range can still be reopened by touch. */
+.daily-salience-handle[data-salience-handle="1"] { left: 31px; }
+.daily-salience-handle span { width: var(--salience-knob-size, 12px); height: var(--salience-knob-size, 12px); border: 2px solid #d9fff1; border-radius: 50%; background: #15c780; }
+.daily-salience-handle:active { cursor: grabbing; }
+.daily-salience-handle:focus-visible { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; }
+.daily-salience-track[data-disabled="true"] { opacity: 0.4; cursor: default; }
+.daily-salience-handle:disabled { cursor: default; }

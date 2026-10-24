@@ -1,11 +1,23 @@
 from typing import Any, List, Dict, TypeVar
 
-from sqlalchemy import select, Integer, func, update, bindparam, case
+from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Fen, to_dict, Game, GameFenAssociation, Player, Month
+from chessism_api.database.models import (
+    Base,
+    Fen,
+    GameFenAssociation,
+    Month,
+    NoMovesGame,
+    Player,
+    PlayerStats,
+    to_dict,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from chessism_api.database.fen_references import association_rows
+from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
 
 _ModelType = TypeVar("_ModelType", bound=Base)
 
@@ -25,6 +37,24 @@ class DBInterface:
         """
         async with AsyncDBSession() as session:
             try:
+                if compact_for(session) and self.db_class == PlayerStats:
+                    from chessism_api.operations.compact_writes import player_stats_write
+                    result = await player_stats_write(session, self.db_class, 'create', data['player_name'], data)
+                    await session.commit()
+                    return result
+                if self.db_class == GameFenAssociation:
+                    data = (await association_rows(session, [data]))[0]
+                    if compact_for(session):
+                        from chessism_api.operations.compact_writes import insert_associations
+                        await insert_associations(session, [data])
+                        table = compact_table(self.db_class, compact_for(session).core)
+                        row_id = await session.scalar(select(table.c.id).where(
+                            table.c.game_link == data['game_link'],
+                            table.c.n_move == data['n_move'],
+                            table.c.is_white == (data['move_color'] == 'white'),
+                        ))
+                        await session.commit()
+                        return {**data, 'id': row_id}
                 item: _ModelType = self.db_class(**data)
                 session.add(item)
                 await session.commit()
@@ -54,6 +84,11 @@ class DBInterface:
         """
         async with AsyncDBSession() as session:
             try:
+                if compact_for(session) and self.db_class == PlayerStats:
+                    from chessism_api.operations.compact_writes import player_stats_write
+                    result = await player_stats_write(session, self.db_class, 'update', primary_key_value, data)
+                    await session.commit()
+                    return result
                 item: _ModelType | None = await session.get(self.db_class, primary_key_value)
                 if item is None:
                     return None
@@ -73,6 +108,11 @@ class DBInterface:
         """
         async with AsyncDBSession() as session:
             try:
+                if compact_for(session) and self.db_class == PlayerStats:
+                    from chessism_api.operations.compact_writes import player_stats_write
+                    result = await player_stats_write(session, self.db_class, 'delete', primary_key_value)
+                    await session.commit()
+                    return result
                 item: _ModelType | None = await session.get(self.db_class, primary_key_value)
                 if item is None:
                     return None
@@ -120,6 +160,13 @@ class DBInterface:
             chunk = data[start:start + effective_batch_size]
             if not chunk:
                 continue
+
+            if self.db_class == GameFenAssociation:
+                chunk = await association_rows(session, chunk)
+                if compact_for(session):
+                    from chessism_api.operations.compact_writes import insert_associations
+                    await insert_associations(session, chunk)
+                    continue
             
             clean_chunk = []
             for data_dict in chunk:
@@ -133,11 +180,28 @@ class DBInterface:
                 continue 
             
             if self.db_class == Fen:
+                if compact_for(session):
+                    target = compact_table(Fen, compact_for(session).core)
+                    stmt = pg_insert(target).on_conflict_do_update(index_elements=['fen'], set_={
+                        'n_games':target.c.n_games,
+                        'piece_count':func.coalesce(target.c.piece_count, pg_insert(target).excluded.piece_count),
+                        'moves_counter':func.concat(target.c.moves_counter, case(
+                            (func.strpos(target.c.moves_counter,pg_insert(target).excluded.moves_counter)==0,
+                             pg_insert(target).excluded.moves_counter), else_=''))})
+                    await session.execute(stmt, [integer_result(row) for row in clean_chunk])
+                    continue
                 # We define the statement *without* .values()
                 stmt = pg_insert(self.db_class).on_conflict_do_update(
                     index_elements=[self.db_class.fen],
                     set_={
-                        'n_games': (self.db_class.n_games.cast(Integer) + pg_insert(self.db_class).excluded.n_games.cast(Integer)),
+                        # Game/FEN associations are the source of truth for this
+                        # counter. The extraction coordinator refreshes affected
+                        # rows after association commits, making retries safe.
+                        'n_games': self.db_class.n_games,
+                        'piece_count': func.coalesce(
+                            self.db_class.piece_count,
+                            pg_insert(self.db_class).excluded.piece_count,
+                        ),
                         
                         # --- THIS IS THE SYNTAX FIX ---
                         'moves_counter': func.concat(
@@ -158,8 +222,11 @@ class DBInterface:
             
             elif self.db_class == GameFenAssociation:
                 # We define the statement *without* .values()
-                stmt = pg_insert(self.db_class).on_conflict_do_nothing(
-                        index_elements=['game_link', 'fen_fen', 'n_move', 'move_color']
+                layout = storage_for(session)
+                target = (self.db_class.__table__.to_metadata(MetaData(), schema=layout.core)
+                          if layout else self.db_class)
+                stmt = pg_insert(target).on_conflict_do_nothing(
+                        index_elements=['game_link', 'fen_id', 'n_move', 'move_color']
                 )
                 # We pass the data as the *second argument*
                 await session.execute(stmt, clean_chunk)
@@ -172,9 +239,31 @@ class DBInterface:
                 await session.execute(stmt, clean_chunk)
 
             elif self.db_class == Month:
+                if compact_for(session):
+                    from sqlalchemy import text
+                    layout = compact_for(session)
+                    names = sorted({row['player_name'] for row in clean_chunk})
+                    owners = dict((await session.execute(text(f"SELECT player_name,id FROM {layout.table('player')} "
+                        "WHERE player_name=ANY(CAST(:names AS text[]))"), {'names':names})).all())
+                    if len(owners) != len(names):
+                        raise ValueError('Unknown month-ledger owner')
+                    rows = [{**{k:v for k,v in row.items() if k!='player_name'},
+                             'player_id':owners[row['player_name']]} for row in clean_chunk]
+                    target = compact_table(Month, layout.core)
+                    await session.execute(pg_insert(target).on_conflict_do_update(
+                        index_elements=['player_id','year','month'],
+                        set_={'n_games':pg_insert(target).excluded.n_games}), rows)
+                    continue
                 stmt = pg_insert(self.db_class).on_conflict_do_update(
                     index_elements=['player_name', 'year', 'month'],
                     set_={'n_games': pg_insert(self.db_class).excluded.n_games}
+                )
+                await session.execute(stmt, clean_chunk)
+
+            elif self.db_class == NoMovesGame:
+                stmt = pg_insert(self.db_class).on_conflict_do_update(
+                    index_elements=['game_id'],
+                    set_={'played_at': pg_insert(self.db_class).excluded.played_at}
                 )
                 await session.execute(stmt, clean_chunk)
             
@@ -186,99 +275,6 @@ class DBInterface:
     # --- END NEW METHOD ---
 
 
-    async def upsert_main_fens(self,
-                                        objects_to_insert: ListOfDataObjects,
-                                        objects_to_update: ListOfDataObjects) -> bool:
-        """
-        PERFORMANCE WARNING: The update logic (for item in objects_to_update)
-        runs session.get() inside a loop. This is an N+1 query problem
-        and will be very slow for large update lists.
-        ---
-        """
-        if not objects_to_insert and not objects_to_update:
-            return True
-
-        async with AsyncDBSession() as session:
-            try:
-                # --- Process Inserts ---
-                if objects_to_insert:
-                    # --- FIX: Pass data as second argument ---
-                    insert_stmt = pg_insert(Fen).on_conflict_do_nothing(
-                        index_elements=[Fen.fen]
-                    )
-                    await session.execute(insert_stmt, objects_to_insert)
-
-                # --- Process Updates (N+1 Query Problem) ---
-                if objects_to_update:
-                    for item_data in objects_to_update:
-                        fen_to_update = item_data['fen']
-                        new_moves_counter = item_data['moves_counter']
-                        
-                        # This session.get() is inside a loop, causing N+1 queries.
-                        db_item = await session.get(Fen, fen_to_update)
-                        
-                        if db_item:
-                            existing_moves_counter = db_item.moves_counter
-                            if new_moves_counter not in existing_moves_counter:
-                                updated_moves_counter = existing_moves_counter + new_moves_counter
-                            else:
-                                updated_moves_counter = existing_moves_counter
-                                
-                            db_item.n_games += item_data['n_games']
-                            db_item.moves_counter = updated_moves_counter
-                            db_item.next_moves = item_data['next_moves']
-                            db_item.score = item_data['score']
-
-                await session.commit()
-                return True
-            except Exception as e:
-                await session.rollback()
-                raise
-
-    # --- REMOVED: Old association functions ---
-
-    async def update_all(self, data: ListOfDataObjects) -> bool:
-        """
-        Updates multiple Game records to set 'fens_done' = True.
-        
-        Args:
-            data: A list of game links (Integers) to be updated.
-        """
-        if not data:
-            print(f"No data provided for bulk update of {self.db_class.__tablename__}.")
-            return True
-
-        primary_key_column = Game.link
-        links_to_update = data
-        BATCH_SIZE = 10000
-
-        chunks = [links_to_update[i:i + BATCH_SIZE] for i in range(0, len(links_to_update), BATCH_SIZE)]
-
-        async with AsyncDBSession() as session:
-            try:
-                total_updated_rows = 0
-                for i, chunk in enumerate(chunks):
-                    if not chunk:
-                        continue
-
-                    stmt = (
-                        update(Game)
-                        .where(primary_key_column.in_(chunk))
-                        .values(fens_done=True)
-                    )
-                    
-                    result = await session.execute(stmt)
-                    total_updated_rows += result.rowcount
-
-                await session.commit()
-                print(f"Successfully committed a total of {total_updated_rows} game updates for 'fens_done'.")
-                return True
-
-            except Exception as e:
-                await session.rollback()
-                print(f"An error occurred during bulk update of game 'fens_done': {e}")
-                raise
-                
     async def update_fen_analysis_data(self,
                                             session: AsyncSession, # <-- MODIFIED: Use existing session
                                             analysis_data: ListOfDataObjects) -> int:
@@ -300,9 +296,13 @@ class DBInterface:
         # We do not use a 'with' block here, as the session is managed by the caller
         try:
             prepared_data = []
+            layout = compact_for(session)
             for item in analysis_data:
+                if layout:
+                    item = integer_result(item)
                 prepared_data.append({
                     'p_fen': item['fen'],
+                    'p_piece_count': item.get('piece_count'),
                     'p_score': item['score'],
                     'p_next_moves': item['next_moves'],
                     'p_wdl_win': item.get('wdl_win'),
@@ -313,19 +313,28 @@ class DBInterface:
             # --- THE CORE FIX ---
             # Use self.db_class.__table__ (Core) instead of self.db_class (ORM)
             # to ensure compatibility with bulk parameter binding.
+            target = compact_table(Fen, layout.core) if layout else Fen.__table__
             stmt = (
-                update(Fen.__table__) # <-- Use Fen table
-                .where(Fen.fen == bindparam('p_fen'))
+                update(target)
+                .where(target.c.fen == bindparam('p_fen'))
                 .values(
+                    piece_count=func.coalesce(
+                        target.c.piece_count,
+                        bindparam('p_piece_count'),
+                    ),
                     score=bindparam('p_score'),
                     next_moves=bindparam('p_next_moves'),
                     wdl_win=bindparam('p_wdl_win'),
                     wdl_draw=bindparam('p_wdl_draw'),
-                    wdl_loss=bindparam('p_wdl_loss')
+                    wdl_loss=bindparam('p_wdl_loss'),
+                    analysis_source='stockfish',
+                    tablebase_wdl=None,
+                    tablebase_dtz=None,
+                    analyzed_at=func.now(),
                 )
             )
             
-            result = await session.execute(
+            await session.execute(
                 stmt,
                 prepared_data,
                 execution_options={"synchronize_session": False}
@@ -341,24 +350,4 @@ class DBInterface:
         except Exception as e:
             # DO NOT ROLL BACK HERE. The caller will roll back.
             print(f"An error occurred during bulk update of FEN analysis data: {e}", flush=True)
-            raise
-            
-async def reset_all_game_fens_done_to_false() -> int:
-    """
-    Resets the 'fens_done' column to False for all Game records where it is currently True.
-    """
-    async with AsyncDBSession() as session:
-        try:
-            stmt = (
-                update(Game)
-                .where(Game.fens_done == True)
-                .values(fens_done=False)
-            )
-            result = await session.execute(stmt)
-            await session.commit()
-            print(f"Successfully reset 'fens_done' to False for {result.rowcount} game(s).")
-            return result.rowcount
-        except Exception as e:
-            await session.rollback()
-            print(f"An error occurred while resetting 'fens_done' status: {e}")
             raise

@@ -16,7 +16,7 @@ WITH bucket_counts AS (
         COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 300 AND ABS(f.score) < 9000)::int AS decisive_positions,
         COUNT(*) FILTER (WHERE f.score IS NOT NULL AND ABS(f.score) >= 9000)::int AS mate_positions
     FROM game_fen_association gfa
-    JOIN fen f ON f.fen = gfa.fen_fen
+    JOIN fen f ON f.fen_id = gfa.fen_id
     WHERE f.score IS NOT NULL
     GROUP BY gfa.game_link
 )

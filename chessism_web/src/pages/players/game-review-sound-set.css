@@ -1,0 +1,100 @@
+.game-review-sound-set {
+  --review-sound-active-border-color: #15c780;
+  --review-sound-active-border-width: 2px;
+  position: relative;
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  padding: 2px 4px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #111a20;
+  color: var(--text);
+  font: inherit;
+  font-size: 10px;
+  line-height: 1.2;
+  text-transform: none;
+}
+.game-review-sound-set > button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  outline: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  letter-spacing: inherit;
+  text-align: inherit;
+  text-transform: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.game-review-sound-set > button > svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  flex: 0 0 auto;
+}
+.game-review-sound-set:is([data-open="true"], :focus-within) {
+  z-index: 80;
+  outline: var(--review-sound-active-border-width) solid var(--review-sound-active-border-color);
+  outline-offset: calc(-1 * var(--review-sound-active-border-width));
+}
+.game-review-sound-list {
+  position: absolute;
+  z-index: 80;
+  top: calc(100% + 4px);
+  left: 0;
+  display: grid;
+  width: max-content;
+  min-width: 100%;
+  max-width: min(18rem, 80vw);
+  max-height: min(16rem, 40dvh);
+  overflow: auto;
+  overscroll-behavior: contain;
+  box-sizing: border-box;
+  padding: 3px;
+  border: 1px solid #35434f;
+  border-radius: 5px;
+  background: #111a20;
+  color: #deebf4;
+  font: inherit;
+  text-transform: none;
+  box-shadow: 0 5px 16px #0008;
+}
+.game-review-sound-list[hidden] { display: none; }
+.game-review-sound-option {
+  --review-sound-selected-background: #155b3c;
+  --review-sound-selected-color: #ffffff;
+  --review-sound-selected-border: #15c780;
+  display: block;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+/* Keep the selected appearance separate from an edited ordinary option color.
+   Explicit hover overrides still win when the selected row is highlighted. */
+.game-review-sound-option[data-style-id][data-style-id][data-style-id][data-style-id][aria-selected="true"] {
+  background: var(--review-sound-selected-background);
+  color: var(--review-sound-selected-color);
+  border-color: var(--review-sound-selected-border);
+}
+.game-review-sound-option[data-highlighted="true"] { background: #263b48; }

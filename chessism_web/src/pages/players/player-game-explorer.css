@@ -1,0 +1,847 @@
+.game-explorer-backdrop,
+.game-review-backdrop {
+  position: fixed;
+  z-index: 1200;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 22px;
+  background: rgba(1, 4, 7, 0.86);
+  backdrop-filter: blur(5px);
+}
+
+.game-explorer-modal,
+.game-review-modal {
+  display: grid;
+  width: min(1050px, 96vw);
+  max-height: 92vh;
+  overflow: hidden;
+  border: 1px solid rgba(91, 112, 130, 0.55);
+  border-radius: 10px;
+  background: #080d12;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.72);
+  color: var(--text);
+}
+
+/* Bound the rows to the available modal height so wheel scrolling stays
+   inside the list, while the header remains visible. */
+.game-explorer-modal {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.game-explorer-modal > :not(.game-explorer-list) {
+  flex-shrink: 0;
+}
+
+.game-modal-header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--border-soft);
+  background: #0b1117;
+}
+
+.game-modal-header h2 {
+  margin: 2px 0 0;
+  font: 800 18px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-header small {
+  color: var(--subtle);
+  font: 700 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-icon {
+  display: inline-grid;
+  place-items: center;
+  min-width: 34px;
+  min-height: 34px;
+  padding: 5px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #080d12;
+  color: var(--text);
+  font: 800 14px "IBM Plex Mono", monospace;
+  cursor: pointer;
+}
+
+.game-explorer-result-filters { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; padding: 10px 18px; }
+.game-explorer-result-filters button {
+  padding: 6px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: var(--mode-inactive-background, #152029);
+  color: var(--text);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.game-explorer-result-filters button[aria-pressed="true"] { background: var(--mode-active-background, #176044); border-color: var(--accent); }
+.game-explorer-result-filters button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.game-explorer-summary,
+.game-review-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.game-explorer-summary > div,
+.game-review-summary > div {
+  display: grid;
+  justify-items: center;
+  gap: 3px;
+  padding: 8px;
+  border-radius: 6px;
+  background: #0b1117;
+  text-align: center;
+}
+
+.game-explorer-summary span,
+.game-review-summary span {
+  color: var(--subtle);
+  font: 800 8px "IBM Plex Mono", monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.game-explorer-summary strong,
+.game-review-summary strong {
+  font: 800 12px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-modal-message {
+  margin: 0;
+  padding: 34px;
+  color: var(--subtle);
+  font: 700 11px "IBM Plex Mono", monospace;
+  text-align: center;
+}
+
+.game-modal-message.error {
+  color: #f08a8a;
+}
+
+.game-explorer-list {
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  grid-auto-rows: max-content;
+  align-content: start;
+  gap: 6px;
+  padding: 12px 18px;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(21, 199, 128, 0.55) transparent;
+}
+
+/* Keep a generous draggable area, but draw a slim thumb that widens on hover
+   without resizing the list or moving the game rows. */
+@supports selector(::-webkit-scrollbar) {
+  .game-explorer-list {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+
+  .game-explorer-list::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+  }
+
+  .game-explorer-list::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .game-explorer-list::-webkit-scrollbar-thumb {
+    min-height: 28px;
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-color: rgba(21, 199, 128, 0.55);
+    background-clip: padding-box;
+  }
+
+  .game-explorer-list::-webkit-scrollbar-thumb:hover,
+  .game-explorer-list::-webkit-scrollbar-thumb:active {
+    border-width: 2px;
+    background-color: #15c780;
+  }
+
+  .game-explorer-list::-webkit-scrollbar-button {
+    display: none;
+  }
+
+  .game-explorer-list::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@supports not selector(::-webkit-scrollbar) {
+  .game-explorer-list:hover {
+    scrollbar-width: auto;
+    scrollbar-color: #15c780 transparent;
+  }
+}
+
+.game-explorer-list > button {
+  display: grid;
+  grid-template-columns: 32px max-content minmax(0, 1fr) repeat(3, minmax(70px, auto)) 22px;
+  align-items: center;
+  gap: 10px;
+  min-height: 56px;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: #0b1117;
+  color: var(--text);
+  font: 800 10px "IBM Plex Mono", monospace;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-explorer-list > button.is-highlighted {
+  border-color: rgba(21, 199, 128, 0.7);
+  background: rgba(21, 199, 128, 0.06);
+  outline: none;
+}
+
+.game-explorer-list:focus-visible { outline: 1px solid var(--accent); outline-offset: -3px; }
+.game-explorer-modal:focus { outline: none; }
+
+.game-explorer-list-compact > button {
+  grid-template-columns: 32px max-content minmax(0, 1fr) minmax(44px, auto) 22px;
+}
+
+.game-result-mark {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #d55c5c;
+  color: #05090c;
+  font: inherit;
+  font-size: 1.1em;
+  font-weight: 900;
+}
+
+.game-result-mark.win { background: #15c780; }
+.game-result-mark.draw { background: #9170ad; }
+.game-result-mark.unknown { background: #9ba8b3; }
+
+.game-list-opponent,
+.game-list-stat {
+  display: grid;
+  gap: 3px;
+}
+
+.game-list-opponent {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.game-list-date {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-list-date-badge {
+  box-sizing: content-box;
+  padding: 2px 4px;
+  border: 1px solid rgba(155, 168, 179, 0.25);
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.2);
+  text-align: center;
+  white-space: nowrap;
+}
+
+/* Stable badge widths even when the chosen font has proportional letters. */
+.game-list-date-year { width: 4ch; }
+.game-list-date-month { width: 7ch; }
+.game-list-date-time { width: 5ch; }
+
+.game-list-color {
+  width: 18px;
+  height: 18px;
+  justify-self: end;
+  border: 1px solid #9ba8b3;
+  border-radius: 2px;
+  background: #777;
+}
+
+.game-list-color.white { background: #fff; }
+.game-list-color.black { background: #000; }
+
+.game-explorer-list strong {
+  font: inherit;
+}
+
+/* One independent row target controls its letters as well as the button.
+   Relative detail sizing keeps font edits effective without shared text targets. */
+.game-explorer-list small {
+  color: inherit;
+  font: inherit;
+  font-size: 0.8em;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.game-explorer-list small {
+  opacity: 0.75;
+}
+
+.game-explorer-pagination {
+  min-height: 1px;
+  color: var(--subtle);
+  font: 700 10px "IBM Plex Mono", monospace;
+  text-align: center;
+  overflow-anchor: none;
+}
+
+.game-explorer-pagination p {
+  margin: 8px 0;
+  color: #f08a8a;
+}
+
+.game-explorer-pagination [role="status"]:not(:empty) {
+  display: block;
+  padding: 10px 0;
+}
+
+.game-explorer-retry {
+  min-height: 30px;
+  padding: 5px 12px;
+  border: 1px solid rgba(21, 199, 128, 0.6);
+  border-radius: 6px;
+  background: rgba(21, 199, 128, 0.1);
+  color: var(--text);
+  font: 800 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.game-review-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(1250px, 92vw);
+  height: min(850px, 88dvh);
+  min-height: 0;
+}
+
+.game-review-modal > :not(.game-review-body) {
+  flex-shrink: 0;
+}
+
+.game-review-backdrop.maximized {
+  padding: 0;
+}
+
+.game-review-modal.maximized {
+  width: 100vw;
+  height: 100dvh;
+  max-height: none;
+  border: 0;
+  border-radius: 0;
+}
+
+.game-review-header {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.game-review-heading {
+  min-width: 0;
+  text-align: center;
+}
+
+.game-review-heading-meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  margin-bottom: 5px;
+  text-align: left;
+}
+
+.game-review-heading-meta .eyebrow { margin: 0; }
+
+.game-review-start-date {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-review-date-badge {
+  display: inline-block;
+  padding: 3px 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 4px;
+  background: var(--surface-3);
+  color: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.game-review-window-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.game-review-window-actions .game-modal-icon svg {
+  display: block;
+  width: 1.2em;
+  height: 1.2em;
+}
+
+.game-review-body {
+  display: grid;
+  flex: 1 1 auto;
+  grid-template-columns: minmax(360px, 1.25fr) minmax(300px, 0.75fr);
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-review-board-column {
+  --game-review-eval-width: 24px;
+  --game-review-board-gap: 8px;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-items: stretch;
+  justify-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  min-height: 0;
+  padding: 12px 18px 16px;
+  border-right: 1px solid var(--border-soft);
+}
+
+.game-review-names {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  justify-self: center;
+  width: min(100%, calc(var(--game-review-board-size) + var(--game-review-eval-width) + var(--game-review-board-gap)));
+  min-height: 34px;
+  min-width: 0;
+  color: var(--subtle);
+  font: 800 9px "IBM Plex Mono", monospace;
+  text-transform: uppercase;
+}
+
+.game-review-names > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-review-names > strong {
+  flex-shrink: 0;
+}
+
+.game-review-mode {
+  text-transform: capitalize;
+}
+
+.game-review-board-tools {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.game-review-board-header {
+  flex-wrap: wrap;
+}
+
+.game-review-board-header .game-review-player-clock {
+  margin-left: auto;
+}
+
+.game-review-board-tools .game-review-mode {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-review-sound-toggle,
+.game-review-flip {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 28px;
+  height: 28px;
+  padding: 5px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--accent);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.game-review-sound-toggle[aria-pressed="false"] {
+  color: var(--subtle);
+}
+
+.game-review-sound-toggle:hover,
+.game-review-flip:hover {
+  background: var(--surface-3);
+  border-color: var(--border-soft);
+}
+
+.game-review-sound-toggle:focus-visible,
+.game-review-flip:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.game-review-sound-toggle svg,
+.game-review-flip svg {
+  display: block;
+  width: 1em;
+  height: 1em;
+}
+
+.game-review-player-names { display: grid; gap: 5px; min-width: 0; }
+.game-review-board-footer > .game-review-player-clock { align-self: flex-end; }
+.game-review-player-name { display: flex; align-items: center; gap: 6px; min-width: 0; text-transform: none; }
+.game-review-player-name > i {
+  width: 8px; height: 8px; flex: 0 0 auto;
+  border: 1px solid #8c98a2; border-radius: 2px; background: #080d12;
+}
+.game-review-player-name.white > i { background: #e9eef2; }
+.game-review-player-color { flex: 0 0 5ch; font-weight: 400; }
+.game-review-player-username { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.game-review-player-clock {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.game-review-clock {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  min-width: 108px;
+  padding: 5px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  background: #111a20;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+  text-transform: none;
+}
+
+.game-review-clock-marker {
+  width: 8px;
+  height: 8px;
+  margin-right: auto;
+  border: 1px solid #8c98a2;
+  border-radius: 2px;
+  background: #080d12;
+}
+
+.game-review-clock.white > .game-review-clock-marker {
+  background: #e9eef2;
+}
+
+.game-review-clock > strong {
+  font-size: 16px;
+  line-height: 1.25;
+}
+
+.game-review-move-time {
+  color: var(--subtle);
+  font-size: 9px;
+}
+
+.game-review-stage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--game-review-board-gap);
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-review-board {
+  flex: 0 0 auto;
+  width: var(--game-review-board-size);
+  height: var(--game-review-board-size);
+  min-width: 0;
+}
+
+.game-review-eval {
+  position: relative;
+  box-sizing: border-box;
+  flex: 0 0 var(--game-review-eval-width);
+  height: var(--game-review-board-size);
+  min-height: 0;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  background: #111;
+}
+
+.game-review-eval-black,
+.game-review-eval-white {
+  position: absolute;
+  right: 0;
+  left: 0;
+  transition:
+    top 280ms cubic-bezier(0.22, 0.61, 0.36, 1),
+    bottom 280ms cubic-bezier(0.22, 0.61, 0.36, 1);
+}
+
+.game-review-eval-black {
+  top: 0;
+  bottom: var(--white-eval);
+  background: #14191e;
+}
+
+.game-review-eval-white {
+  top: calc(100% - var(--white-eval));
+  bottom: 0;
+  background: #e9eef2;
+}
+
+.game-review-eval.flipped .game-review-eval-white {
+  top: 0;
+  bottom: calc(100% - var(--white-eval));
+}
+
+.game-review-eval.flipped .game-review-eval-black {
+  top: var(--white-eval);
+  bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .game-review-eval-black,
+  .game-review-eval-white {
+    transition: none;
+  }
+}
+
+.game-review-eval strong {
+  position: absolute;
+  z-index: 1;
+  bottom: 5px;
+  left: 50%;
+  color: #000;
+  font: 900 7px "IBM Plex Mono", monospace;
+  writing-mode: vertical-rl;
+  transform: translateX(-50%) rotate(180deg);
+}
+
+.game-review-eval.is-unscored {
+  background: #283039;
+  border-color: #46505a;
+  cursor: help;
+}
+
+.game-review-eval.is-unscored .game-review-eval-black,
+.game-review-eval.is-unscored .game-review-eval-white {
+  visibility: hidden;
+}
+
+.game-review-eval-disabled-line {
+  position: absolute;
+  top: 8px;
+  bottom: 8px;
+  left: 50%;
+  width: 1px;
+  background: #9baaba;
+  transform: translateX(-50%);
+}
+
+.game-review-analysis {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.game-review-summary {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  padding: 12px;
+}
+
+.game-review-current {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-soft);
+  font: 700 9px "IBM Plex Mono", monospace;
+}
+
+.game-review-current > strong {
+  width: 100%;
+  color: #15c780;
+  text-transform: uppercase;
+}
+
+.game-review-current > span,
+.game-review-current > small {
+  color: var(--subtle);
+}
+
+.game-review-current > small {
+  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-review-moves {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 4px;
+  padding: 10px;
+  overflow-y: auto;
+}
+
+.game-review-moves button {
+  position: relative;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 4px 6px 4px 2.5ch;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: #0b1117;
+  color: var(--text);
+  font: 700 9px "IBM Plex Mono", monospace;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-review-moves button.active {
+  border-color: #15c780;
+  background: rgba(21, 199, 128, 0.1);
+}
+
+.game-review-move-annotation {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  margin: 0;
+  color: #15c780;
+  font-style: normal;
+}
+.game-review-moves button.blunder > .game-review-move-annotation { color: #d55c5c; }
+.game-review-moves button.mistake > .game-review-move-annotation { color: #db8b45; }
+.game-review-moves button.inaccuracy > .game-review-move-annotation { color: #c9a84c; }
+
+.game-review-summary > div > span,
+.game-review-summary > div > strong { width: 100%; }
+
+.game-review-moves span,
+.game-review-moves small {
+  color: var(--subtle);
+}
+
+@media (max-width: 800px) {
+  .game-explorer-backdrop {
+    padding: 0;
+  }
+
+  .game-explorer-modal {
+    width: 100vw;
+    height: 100vh;
+    max-height: none;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .game-explorer-list > button,
+  .game-explorer-list-compact > button {
+    grid-template-columns: 28px minmax(0, 1fr) minmax(44px, auto) 22px;
+    column-gap: 6px;
+    row-gap: 5px;
+  }
+
+  .game-explorer-list .game-result-mark {
+    grid-column: 1;
+    grid-row: 1 / 3;
+  }
+
+  .game-list-date {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .game-list-opponent {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .game-list-rating {
+    grid-column: 3;
+    grid-row: 1 / 3;
+  }
+
+  .game-list-color {
+    grid-column: 4;
+    grid-row: 1 / 3;
+  }
+
+  .game-list-stat {
+    display: none;
+  }
+
+  .game-review-body {
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+
+  .game-review-board-column {
+    flex: 0 0 auto;
+    grid-template-rows: auto auto auto;
+    border-right: 0;
+    border-bottom: 1px solid var(--border-soft);
+  }
+
+  .game-review-stage {
+    height: auto;
+    aspect-ratio: 1;
+    max-height: 60dvh;
+  }
+
+  .game-review-analysis {
+    flex: 0 0 auto;
+    min-height: 420px;
+  }
+}

@@ -1,0 +1,102 @@
+.backup-volume .backup-volume-section-head { display: flex; flex-direction: row; justify-content: space-between; align-items: flex-start; gap: 12px 24px; }
+.backup-volume-section-head .backup-volume-measured { margin: 0 0 0 auto; color: var(--muted); font-size: 12px; text-align: right; }
+.backup-volume-measured time { white-space: nowrap; }
+
+.backup-volume-heading {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px 24px;
+  margin: 16px 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.backup-volume-heading strong { color: var(--text); margin-left: 8px; }
+
+.backup-volume-disk {
+  display: flex;
+  align-items: stretch;
+  min-height: 8rem;
+  padding: 8px;
+  border: 1px solid #71818f;
+  border-radius: 8px;
+  background: #080e14;
+}
+
+.backup-volume-region {
+  position: relative;
+  flex: 0 0 auto;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.backup-volume-box {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border: 1px solid #91adbf;
+  border-radius: 3px;
+  background: #182c3b;
+}
+
+.backup-volume-fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #237ac3;
+  pointer-events: auto;
+}
+
+.backup-volume-region.is-reserve .backup-volume-box { background: #393221; border-color: #aa955d; }
+.backup-volume-region.is-other .backup-volume-box, .backup-volume-region.is-other .backup-volume-fill { background: #535964; border-color: #91969e; }
+.backup-volume-region.is-free .backup-volume-box { background: #101c24; border-color: #364753; border-style: dashed; }
+
+.backup-volume-label {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px;
+  color: #fff;
+  text-shadow: 0 1px 3px #000;
+  text-align: center;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.backup-volume-label strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.backup-volume-region[data-compact="true"] .backup-volume-label { display: none; }
+.backup-volume-region[data-highlighted="true"], .backup-volume-region:focus-visible { outline: 2px solid #fff; outline-offset: -3px; }
+.backup-volume-placeholder { margin: auto; padding: 16px; color: var(--muted); }
+
+.backup-volume-chart { position: relative; }
+.backup-volume-tooltip {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  inset-inline: 0;
+  width: max-content;
+  max-width: min(28rem, 100%);
+  box-sizing: border-box;
+  margin-inline: auto;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: #111a22;
+  color: var(--text);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+  pointer-events: none;
+}
+
+@media (max-width: 600px) {
+  .backup-volume-section-head { flex-wrap: wrap; }
+  .backup-volume-measured { max-width: 100%; }
+  .backup-volume-measured time { white-space: normal; }
+  .backup-volume-disk { min-height: 5rem; padding: 4px; }
+  .backup-volume-label { display: none; }
+}

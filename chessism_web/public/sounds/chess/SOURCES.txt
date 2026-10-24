@@ -1,0 +1,24 @@
+Chessism board sounds
+
+Source: Kenney, Impact Sounds 1.0 (CC0)
+https://kenney.nl/assets/impact-sounds
+Archive retrieved 2026-10-20:
+https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip
+
+Source recordings from the archive's Audio/ directory:
+  impactWood_light_000.ogg
+  impactWood_medium_000.ogg
+  impactWood_heavy_000.ogg
+
+Adaptations: mono, 44.1 kHz, 96 kbit/s MP3; short fade-out on each
+recording. No voices, synthesized tones, or recordings from chess sites.
+
+move.mp3: light impact, faded over the last 40 ms.
+capture.mp3: medium impact, faded over the last 50 ms.
+castle.mp3: two light impacts, the second delayed 110 ms and at 85% gain.
+check.mp3: light impact at 60% gain followed by a medium impact after 75 ms.
+mate.mp3: two heavy impacts, the second delayed 140 ms and at 80% gain.
+The paired impacts use a non-normalizing mix with a peak limiter at 0.9.
+
+All adaptations retain the source's CC0 dedication. See License.txt.
+The license notice is reproduced with whitespace normalized.

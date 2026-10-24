@@ -1,0 +1,41 @@
+.cloud-bill { width: 100%; min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius); background: rgba(18, 25, 32, .92); box-shadow: var(--shadow); overflow: hidden; }
+.cloud-bill > h2 { margin: 0; }
+.cloud-bill-toggle { width: 100%; display: flex; align-items: center; justify-content: space-between; padding: 20px; border: 0; border-radius: 0; background: transparent; color: var(--text); text-align: left; font: inherit; font-size: 20px; cursor: pointer; }
+.cloud-bill-toggle:hover { background: #ffffff08; }
+.cloud-bill button:focus-visible, .cloud-bill select:focus-visible { outline: 2px solid var(--accent, #36c987); outline-offset: -3px; }
+.cloud-bill-toggle svg { width: 22px; height: 22px; fill: none; stroke: currentColor; stroke-width: 1.7; transition: transform .15s; }
+.cloud-bill.is-open .cloud-bill-toggle svg { transform: rotate(180deg); }
+.cloud-bill-content { border-top: 1px solid var(--border-soft); padding: 18px; }
+.cloud-bill-content[hidden] { display: none; }
+.cloud-bill-actions, .cloud-bill-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; margin-bottom: 18px; }
+.cloud-bill-actions p, .cloud-bill-toolbar p { margin: 0; color: var(--muted); font-size: 12px; }
+.cloud-bill-actions button, .cloud-bill select { padding: 8px 12px; background: #0c1117; border: 1px solid var(--border-soft); border-radius: 7px; color: var(--text); }
+.cloud-bill-actions button { cursor: pointer; }
+.cloud-bill-actions button:disabled { opacity: .5; cursor: wait; }
+.cloud-bill-toolbar h3 { margin: 0 0 5px; font-size: 18px; }
+.cloud-bill-toolbar label { display: flex; align-items: center; gap: 10px; font-size: 12px; }
+.cloud-bill-totals { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 12px; margin-bottom: 24px; }
+.cloud-bill-totals article { display: flex; flex-direction: column; gap: 10px; padding: 20px; background: #070b0e; border-radius: 9px; min-width: 0; }
+.cloud-bill-totals h4 { margin: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
+.cloud-bill-totals strong { font-family: "IBM Plex Mono", monospace; font-size: clamp(18px,2vw,28px); overflow-wrap: anywhere; }
+.cloud-bill-totals article:last-child strong { color: #39bb7b; }
+.cloud-bill-totals span { font-size: 11px; color: var(--muted); }
+.cloud-bill-tables { display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr); gap: 22px; }
+.cloud-bill-table-wrap { min-width: 0; overflow-x: auto; }
+.cloud-bill table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.cloud-bill caption { text-align: left; font-weight: 600; margin-bottom: 12px; }
+.cloud-bill th, .cloud-bill td { padding: 11px 7px; border-bottom: 1px solid var(--border-soft); text-align: right; white-space: nowrap; }
+.cloud-bill th:first-child { text-align: left; white-space: normal; }
+.cloud-bill thead th { color: var(--muted); font-weight: 500; }
+.cloud-bill tbody th { font-weight: 400; }
+.cloud-bill td { font-variant-numeric: tabular-nums; }
+.cloud-bill tfoot { font-weight: 600; }
+.cloud-bill-freshness { display: flex; gap: 15px 28px; flex-wrap: wrap; margin-top: 24px; font-size: 11px; }
+.cloud-bill-freshness dt { color: var(--muted); margin-bottom: 6px; }
+.cloud-bill-freshness dd { margin: 0; }
+.cloud-bill-note, .cloud-bill-empty { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.cloud-bill-note a { color: #8ce4bb; }
+.cloud-bill-warning { padding: 12px; border: 1px solid #d3b66d66; background: #d3b66d11; border-radius: 8px; color: #edcf8a; font-size: 13px; }
+@media(max-width: 900px) { .cloud-bill-tables { grid-template-columns: 1fr; } }
+@media(max-width: 600px) { .cloud-bill-totals { grid-template-columns: 1fr; } .cloud-bill-toolbar label { flex-wrap: wrap; } }
+@media(prefers-reduced-motion: reduce) { .cloud-bill-toggle svg { transition: none; } }

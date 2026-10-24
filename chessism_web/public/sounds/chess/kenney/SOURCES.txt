@@ -1,0 +1,30 @@
+Chessism board sound variations: Glass, Metal, Soft
+
+Source recordings: Kenney, Impact Sounds 1.0 (CC0)
+https://kenney.nl/assets/impact-sounds
+Archive retrieved 2026-10-20:
+https://kenney.nl/media/pages/assets/impact-sounds/87b4ddecda-1677589768/kenney_impact-sounds.zip
+
+These are Chessism adaptations of Kenney recordings, not Lichess sound themes.
+All adaptations retain the CC0 dedication. The archive's license notice is
+available at ../License.txt, alongside the previous Wooden set.
+
+Recordings in the archive's Audio/ directory, listed as move / capture / mate:
+Glass: impactGlass_light_000.ogg / impactGlass_medium_000.ogg / impactGlass_heavy_000.ogg
+Metal: impactMetal_light_000.ogg / impactMetal_medium_000.ogg / impactMetal_heavy_000.ogg
+Soft: impactSoft_medium_000.ogg / impactSoft_medium_002.ogg / impactSoft_heavy_000.ogg
+
+Adaptations made 2026-10-20 with FFmpeg:
+Each recording is trimmed or padded to 320 ms with an 80 ms fade-out starting
+at 240 ms. Output is mono, 44.1 kHz, 96 kbit/s MP3 with metadata removed.
+All outputs use a 0.9 peak limiter without automatic makeup gain.
+
+move.mp3: move recording.
+capture.mp3: capture recording.
+castle.mp3: two move recordings; the second delayed 110 ms, at 85% gain.
+check.mp3: move recording at 60% gain, then capture recording after 75 ms.
+mate.mp3: two mate recordings; the second delayed 140 ms, at 80% gain.
+Paired recordings are mixed without normalization before limiting.
+
+Original recordings remain available from the archive above. No audio from
+proprietary chess sites is included in these variations.

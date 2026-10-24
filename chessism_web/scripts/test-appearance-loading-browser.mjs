@@ -1,0 +1,65 @@
+import { browserFixture } from './browser-fixture.mjs'
+
+await browserFixture(9299, async ({ send, context, evaluate, assert, waitFor }) => {
+  await send('browsingContext.setViewport', { context, viewport: { width: 1280, height: 900 } })
+  const load = () => send('browsingContext.navigate', { context, url: 'http://localhost:6789/tests/fixtures/appearanceLoading.html', wait: 'complete' })
+  const color = "getComputedStyle(document.querySelector('#themed-page')).backgroundColor"
+  const click = text => evaluate(`[...document.querySelectorAll('button')].find(n=>n.textContent==='${text}').click()`)
+  const setRadius = async value => {
+    await evaluate(`(()=>{const n=document.querySelector('#appearance-radius');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(n,'${value}');n.dispatchEvent(new Event('input',{bubbles:true}));n.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+  }
+  await load(); await waitFor('loadingAppearanceTest.pending.length===1')
+  await assert("!document.querySelector('#themed-page') && document.querySelector('.appearance-loading')")
+  await evaluate('loadingAppearanceTest.hold=false;loadingAppearanceTest.pending.shift().finish()')
+  await waitFor("document.querySelector('#themed-page')")
+  await waitFor('loadingAppearanceTest.frames.length>=2')
+  await assert(`${color}==='rgb(18, 52, 86)' && loadingAppearanceTest.frames.every(c=>c==='rgb(18, 52, 86)')`)
+  await click('Edit appearance')
+  await waitFor("document.querySelector('[aria-label=\"Style preset\"]')")
+  await assert("[...document.querySelector('[aria-label=\"Style preset\"]').options].map(o=>o.textContent).join(',')==='Default,test_2'")
+  await assert("[...document.querySelectorAll('button')].find(n=>n.textContent==='Rename').disabled")
+  // A refresh failure cannot clear the displayed style or unmount the page.
+  await evaluate('loadingAppearanceTest.fail=true;window.dispatchEvent(new Event("focus"))')
+  await waitFor("document.querySelector('.appearance-account-error')?.textContent.includes('Temporary API outage')")
+  await assert(`${color}==='rgb(18, 52, 86)' && !document.querySelector('.appearance-loading')`)
+  await evaluate('loadingAppearanceTest.fail=false;loadingAppearanceTest.hold=true;window.dispatchEvent(new Event("focus"))')
+  await waitFor('loadingAppearanceTest.pending.length===1')
+  // Hold an old GET, edit and save Default, then deliver that stale response.
+  await evaluate("document.querySelector('#themed-page').dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:200,clientY:250}))")
+  await waitFor("document.querySelector('#appearance-radius')")
+  await setRadius(19)
+  await click('Save styles')
+  await waitFor("loadingAppearanceTest.data.overrides.some(r=>r.property==='radius' && r.value===19)")
+  await evaluate('loadingAppearanceTest.pending.shift().finish()')
+  await assert("getComputedStyle(document.querySelector('#themed-page')).borderRadius==='19px'")
+  // Two overlapping GETs must not let an older snapshot win, even with equal revisions.
+  await evaluate('window.dispatchEvent(new Event("focus"));window.dispatchEvent(new Event("focus"))')
+  await waitFor('loadingAppearanceTest.pending.length===2')
+  await evaluate(`loadingAppearanceTest.pending[0].data.overrides=[];loadingAppearanceTest.pending[1].finish();loadingAppearanceTest.pending[0].finish();loadingAppearanceTest.pending=[]`)
+  await assert(`${color}==='rgb(18, 52, 86)'`)
+  await evaluate('loadingAppearanceTest.hold=false')
+  // Metadata-only changes (such as promoting the same preset ID) may advance
+  // the revision without discarding a dirty draft or causing a false conflict.
+  await setRadius(23)
+  await evaluate('loadingAppearanceTest.data.revision++;window.dispatchEvent(new Event("focus"))')
+  await waitFor("loadingAppearanceTest.requests.filter(r=>r.method==='GET').length>=6")
+  await click('Save styles')
+  await waitFor("loadingAppearanceTest.data.overrides.some(r=>r.property==='radius' && r.value===23)")
+  await setRadius(19); await click('Save styles')
+  await waitFor("loadingAppearanceTest.data.overrides.some(r=>r.property==='radius' && r.value===19)")
+  // Selecting the archive intentionally restores the original CSS, not Default's overrides.
+  const choose = value => evaluate(`(()=>{const n=document.querySelector('[aria-label="Style preset"]');n.value='${value}';n.dispatchEvent(new Event('change',{bubbles:true}))})()`)
+  await choose('original'); await waitFor(`${color}==='rgba(0, 0, 0, 0)'`)
+  await choose('official'); await waitFor(`${color}==='rgb(18, 52, 86)'`)
+  await assert("getComputedStyle(document.querySelector('#themed-page')).borderRadius==='19px'")
+  await load(); await waitFor('loadingAppearanceTest.pending.length===1')
+  await assert("!document.querySelector('#themed-page')")
+  await evaluate('loadingAppearanceTest.hold=false;loadingAppearanceTest.pending.shift().finish(true)')
+  await waitFor("document.querySelector('.appearance-loading button')")
+  await assert("!document.querySelector('#themed-page')")
+  await click('Retry')
+  await waitFor("document.querySelector('#themed-page')")
+  await assert("getComputedStyle(document.querySelector('#themed-page')).borderRadius==='19px'")
+  await assert("loadingAppearanceTest.frames.every(c=>c==='rgb(18, 52, 86)')")
+  console.log('PASS: no unstyled first paint, refresh errors retain styles, stale reads cannot undo edits/saves, editable Default, test_2 archive, reload persistence; all requests mocked.')
+})

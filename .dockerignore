@@ -1,11 +1,15 @@
 .git
 .codex
+.local-migrations/
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
 
 backups/
+db_backup/
+illegal_fen.txt
 db_data/
+research_data/
 api_logs/
 logs/
 chessism_web/dist/
@@ -14,6 +18,7 @@ dev_tools/
 
 .env
 .venv/
+.venv-cloud/
 venv/
 env/
 *.log

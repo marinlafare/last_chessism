@@ -1,0 +1,628 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+import './players.css'
+import PlayerAnalysisWorkspace from './PlayerAnalysisWorkspace'
+import PlayerCoveragePie from './PlayerCoveragePie'
+import PlayerProfileDates from './PlayerProfileDates'
+import PlayerProfileField from './PlayerProfileField'
+import PlayerProfilePhoto from './PlayerProfilePhoto'
+import PlayerAvatar from '../../components/players/PlayerAvatar'
+import { formatNumber } from '../../utils/formatters'
+import { formatPlayerCount } from './playerSummary.js'
+import { playerHomeHref } from '../../services/navigation'
+import {
+  PLAYER_DELETE_JOB_STORAGE_KEY,
+  UPDATE_JOB_STORAGE_KEY,
+  formatStatusMessage,
+  isTerminalJobStatus,
+  loadStoredJob,
+  storeJob
+} from '../../services/gameJobService'
+import {
+  deletePlayer,
+  downloadPlayerGames,
+  fetchPlayerDeletionPreview,
+  fetchPlayerHours,
+  fetchPlayerJobStatus,
+  fetchPlayerNavigation,
+  fetchPlayerNeighbors,
+  fetchPlayerPositionStats,
+  fetchPlayerProfile,
+  updatePlayerGames,
+} from './playerApi'
+
+function PlayerMenuAvatar({ name, src }) {
+  return (
+    <span className="players-title-menu-avatar" aria-hidden="true">
+      <PlayerAvatar src={src} name={name} width="28" height="28" loading="lazy" decoding="async" />
+    </span>
+  )
+}
+
+function GameUpdateProgress({ status, message }) {
+  const progress = status?.progress
+  if (!progress) {
+    return message ? <p {...pageStyleTarget('text')} className="result-line players-update-message">{message}</p> : null
+  }
+
+  const phase = progress.phase || status?.status || 'working'
+  const total = Math.max(1, Number(progress.total || 1))
+  const processed = Math.min(total, Number(progress.processed || 0))
+  const percent = phase === 'complete'
+    ? 100
+    : Math.min(100, Math.round((processed / total) * 100))
+
+  return (
+    <div className="job-progress players-update-progress" aria-live="polite">
+      <div className="job-progress-head">
+        <strong {...pageStyleTarget('value')}>{phase}</strong>
+        <span>{percent}%</span>
+      </div>
+      <div className="job-progress-track">
+        <div
+          className={`job-progress-fill ${phase === 'failed' ? 'failed' : ''}`}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || message || `${processed} of ${total}`}</p>
+    </div>
+  )
+}
+
+function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
+  const [activePlayer, setActivePlayer] = useState(playerName)
+  const [loading, setLoading] = useState(false)
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [profile, setProfile] = useState(null)
+  const [latestGame, setLatestGame] = useState(null)
+  const [playerHours, setPlayerHours] = useState(null)
+  const [playerPositionStats, setPlayerPositionStats] = useState(null)
+  const [playerNeighbors, setPlayerNeighbors] = useState(null)
+  const [playerMenuOpen, setPlayerMenuOpen] = useState(false)
+  const [playerMenuPlayers, setPlayerMenuPlayers] = useState([])
+  const [playerMenuLoading, setPlayerMenuLoading] = useState(false)
+  const [playerMenuError, setPlayerMenuError] = useState('')
+  const [gamesUpdateLoading, setGamesUpdateLoading] = useState(false)
+  const [gamesUpdateJob, setGamesUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
+  const [gamesUpdateStatus, setGamesUpdateStatus] = useState(null)
+  const [gamesUpdateMessage, setGamesUpdateMessage] = useState('')
+  const [deletePreview, setDeletePreview] = useState(null)
+  const [deletePreviewLoading, setDeletePreviewLoading] = useState(false)
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deleteError, setDeleteError] = useState('')
+  const [deleteSubmitting, setDeleteSubmitting] = useState(false)
+  const [deleteJob, setDeleteJob] = useState(() => loadStoredJob(PLAYER_DELETE_JOB_STORAGE_KEY))
+  const [deleteStatus, setDeleteStatus] = useState(null)
+  const [deleteMessage, setDeleteMessage] = useState('')
+  const playerPickerRef = useRef(null)
+  const profileRequest = useRef(null)
+
+  useEffect(() => {
+    if (profile) onProfileLoaded?.(profile)
+  }, [profile, onProfileLoaded])
+
+  const loadPlayer = useCallback(async (requestedName) => {
+    const name = String(requestedName || '').trim().toLowerCase()
+    if (!name) {
+      setError('No player was selected.')
+      return
+    }
+
+    profileRequest.current?.abort()
+    const controller = new AbortController()
+    profileRequest.current = controller
+    const options = { signal: controller.signal }
+    setLoading(true)
+    setError('')
+    setMessage('')
+
+    try {
+      let playerProfile = await fetchPlayerProfile(name, options)
+      if (controller.signal.aborted) return
+
+      if ((playerProfile?.joined === null || playerProfile?.joined === 0) && !playerProfile?.deleted_at) {
+        const download = await downloadPlayerGames(name, options)
+        if (controller.signal.aborted) return
+        setMessage(download.message || 'Downloading games and updating profile…')
+        playerProfile = await fetchPlayerProfile(name, options)
+      }
+      if (controller.signal.aborted) return
+
+      const normalizedPlayer = String(playerProfile?.player_name || name).toLowerCase()
+      setActivePlayer(normalizedPlayer)
+      setProfile(playerProfile)
+
+      if (playerProfile?.deleted_at) {
+        setPlayerHours(null)
+        setPlayerPositionStats(null)
+        setPlayerNeighbors(null)
+        setMessage(`${normalizedPlayer} was deleted and is retained only as a shared-game shell.`)
+        return
+      }
+
+      const [hoursPayload, positionPayload, neighborPayload] = await Promise.all([
+        fetchPlayerHours(normalizedPlayer, options),
+        fetchPlayerPositionStats(normalizedPlayer, options),
+        fetchPlayerNeighbors(normalizedPlayer, options)
+      ])
+      if (controller.signal.aborted) return
+
+      setPlayerHours(hoursPayload)
+      setPlayerPositionStats(positionPayload)
+      setPlayerNeighbors(neighborPayload)
+    } catch (loadError) {
+      if (controller.signal.aborted) return
+      setError(loadError instanceof Error ? loadError.message : 'Unable to load player.')
+      setProfile(null)
+      setPlayerHours(null)
+      setPlayerPositionStats(null)
+      setPlayerNeighbors(null)
+    } finally {
+      if (!controller.signal.aborted) setLoading(false)
+    }
+  }, [])
+
+  const handleGamesUpdate = async () => {
+    if (!activePlayer || gamesUpdateLoading || gamesUpdateJob?.jobId) return
+
+    setGamesUpdateLoading(true)
+    setGamesUpdateMessage('')
+    setGamesUpdateStatus(null)
+    try {
+      const payload = await updatePlayerGames(activePlayer)
+      if (payload.job_id) {
+        const job = {
+          jobId: payload.job_id,
+          playerName: payload.player_name || activePlayer
+        }
+        storeJob(UPDATE_JOB_STORAGE_KEY, job)
+        setGamesUpdateJob(job)
+      }
+      setGamesUpdateMessage(payload.message || `Games update started for ${activePlayer}.`)
+    } catch (updateError) {
+      setGamesUpdateMessage(updateError instanceof Error ? updateError.message : 'Unable to start games update.')
+    } finally {
+      setGamesUpdateLoading(false)
+    }
+  }
+
+  const closeDeletePreview = () => {
+    if (deleteSubmitting) return
+    setDeletePreview(null)
+    setDeleteConfirmation('')
+    setDeleteError('')
+  }
+
+  const handleOpenDeletePreview = async () => {
+    if (!activePlayer || deletePreviewLoading || deleteJob?.jobId) return
+    setDeletePreviewLoading(true)
+    setDeleteError('')
+    setDeleteConfirmation('')
+    try {
+      const preview = await fetchPlayerDeletionPreview(activePlayer)
+      setDeletePreview(preview)
+    } catch (previewError) {
+      setDeleteError(previewError instanceof Error ? previewError.message : 'Unable to preview player deletion.')
+    } finally {
+      setDeletePreviewLoading(false)
+    }
+  }
+
+  const handleConfirmDeletePlayer = async () => {
+    if (!deletePreview || deleteSubmitting) return
+    setDeleteSubmitting(true)
+    setDeleteError('')
+    try {
+      const payload = await deletePlayer(activePlayer, {
+        confirmation: deleteConfirmation,
+        expected_exclusive_games: Number(deletePreview.exclusive_games || 0),
+        expected_shared_games: Number(deletePreview.shared_games || 0),
+      })
+      const redirectPlayer = [playerNeighbors?.next_player, playerNeighbors?.previous_player]
+        .find((candidate) => candidate && candidate.toLowerCase() !== activePlayer.toLowerCase()) || ''
+      const job = {
+        jobId: payload.job_id,
+        playerName: payload.player_name || activePlayer,
+        redirectPlayer
+      }
+      storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, job)
+      setDeleteJob(job)
+      setDeleteStatus(null)
+      setDeleteMessage(payload.message || `Deletion queued for ${activePlayer}.`)
+      setDeletePreview(null)
+      setDeleteConfirmation('')
+    } catch (deleteRequestError) {
+      setDeleteError(deleteRequestError instanceof Error ? deleteRequestError.message : 'Unable to queue player deletion.')
+    } finally {
+      setDeleteSubmitting(false)
+    }
+  }
+
+  const navigateToPlayer = (playerName) => {
+    const nextPlayer = String(playerName || '').trim().toLowerCase()
+    if (!nextPlayer || nextPlayer === activePlayer.toLowerCase()) return
+
+    setPlayerMenuOpen(false)
+    if (onSelectPlayer) { onSelectPlayer(nextPlayer); return }
+    const nextUrl = playerHomeHref(nextPlayer)
+    window.history.pushState(null, '', nextUrl)
+    window.dispatchEvent(new PopStateEvent('popstate'))
+  }
+
+  const togglePlayerMenu = () => setPlayerMenuOpen(open => !open)
+
+  useEffect(() => {
+    if (!playerMenuOpen || !activePlayer || loading) return undefined
+    const controller = new AbortController()
+    setPlayerMenuPlayers([])
+    setPlayerMenuLoading(true)
+    setPlayerMenuError('')
+    fetchPlayerNavigation(activePlayer, { signal: controller.signal })
+      .then(payload => {
+        if (controller.signal.aborted) return
+        setPlayerMenuPlayers(
+          (Array.isArray(payload?.players) ? payload.players : [])
+            .map(name => String(name || '').trim().toLowerCase())
+            .filter(name => name && name !== activePlayer.toLowerCase())
+            .sort((left, right) => left.localeCompare(right))
+            .map(name => ({ name, avatar: String(payload?.avatars?.[name] || '').trim() }))
+        )
+      })
+      .catch(navigationError => {
+        if (controller.signal.aborted) return
+        setPlayerMenuError(
+          navigationError instanceof Error ? navigationError.message : 'Unable to load players.'
+        )
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setPlayerMenuLoading(false)
+      })
+    return () => controller.abort()
+  }, [playerMenuOpen, activePlayer, loading])
+
+  useEffect(() => {
+    setPlayerMenuOpen(false)
+    loadPlayer(playerName)
+    return () => profileRequest.current?.abort()
+  }, [playerName, loadPlayer])
+
+  useEffect(() => {
+    if (!playerMenuOpen) return undefined
+
+    const closeOnOutsideClick = (event) => {
+      if (!playerPickerRef.current?.contains(event.target)) setPlayerMenuOpen(false)
+    }
+    const closeOnEscape = (event) => {
+      if (event.key === 'Escape') setPlayerMenuOpen(false)
+    }
+    document.addEventListener('pointerdown', closeOnOutsideClick)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsideClick)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [playerMenuOpen])
+
+  useEffect(() => {
+    const job = gamesUpdateJob
+    if (!job?.jobId) return undefined
+
+    let cancelled = false
+    let timerId
+
+    const poll = async () => {
+      try {
+        const status = await fetchPlayerJobStatus(job.jobId)
+        if (cancelled) return
+        setGamesUpdateStatus(status)
+
+        if (isTerminalJobStatus(status)) {
+          const failed = status.progress?.phase === 'failed' || status.result?.success === false
+          const resultMessage = formatStatusMessage(
+            status.progress?.result || status.progress?.detail || status.result?.result
+          )
+          setGamesUpdateMessage(resultMessage || (failed ? 'Games update failed.' : 'Games update finished.'))
+          storeJob(UPDATE_JOB_STORAGE_KEY, null)
+          setGamesUpdateJob(null)
+
+          if (!failed && activePlayer.toLowerCase() === String(job.playerName || '').toLowerCase()) {
+            await loadPlayer(job.playerName)
+          }
+          return
+        }
+
+        timerId = window.setTimeout(poll, 1500)
+      } catch (pollError) {
+        if (cancelled) return
+        const detail = pollError instanceof Error ? pollError.message : 'Unable to read update status.'
+        setGamesUpdateStatus({ status: 'not_found', progress: { phase: 'failed', detail } })
+        setGamesUpdateMessage(detail)
+        storeJob(UPDATE_JOB_STORAGE_KEY, null)
+        setGamesUpdateJob(null)
+      }
+    }
+
+    poll()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+    }
+  }, [gamesUpdateJob?.jobId, activePlayer])
+
+  useEffect(() => {
+    const job = deleteJob
+    if (!job?.jobId) return undefined
+
+    let cancelled = false
+    let timerId
+
+    const poll = async () => {
+      try {
+        const status = await fetchPlayerJobStatus(job.jobId)
+        if (cancelled) return
+        setDeleteStatus(status)
+        if (isTerminalJobStatus(status)) {
+          const failed = status.progress?.phase === 'failed' || status.result?.success === false
+          const resultMessage = formatStatusMessage(
+            status.progress?.result || status.progress?.detail || status.result?.result
+          )
+          setDeleteMessage(resultMessage || (failed ? 'Player deletion failed.' : 'Player deletion finished.'))
+          storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null)
+          setDeleteJob(null)
+          if (!failed) {
+            if (job.redirectPlayer) {
+              navigateToPlayer(job.redirectPlayer)
+            } else if (onSelectPlayer) {
+              onSelectPlayer('')
+            } else {
+              window.history.pushState(null, '', '/main_characters')
+              window.dispatchEvent(new PopStateEvent('popstate'))
+            }
+          }
+          return
+        }
+        timerId = window.setTimeout(poll, 1500)
+      } catch (pollError) {
+        if (cancelled) return
+        const detail = pollError instanceof Error ? pollError.message : 'Unable to read deletion status.'
+        setDeleteStatus({ status: 'not_found', progress: { phase: 'failed', detail } })
+        setDeleteMessage(detail)
+        storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null)
+        setDeleteJob(null)
+      }
+    }
+
+    poll()
+    return () => {
+      cancelled = true
+      window.clearTimeout(timerId)
+    }
+  }, [deleteJob?.jobId])
+
+  const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
+  const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'
+  const followersDisplay = profile?.followers === null || profile?.followers === undefined
+    ? 'N/A'
+    : formatPlayerCount(profile.followers)
+  const totalPlayerGames = Number(playerPositionStats?.total_games || 0)
+  const analyzedPlayerGames = Number(playerPositionStats?.analyzed_games || 0)
+  const totalPlayerFens = Number(playerPositionStats?.total_fens ?? playerPositionStats?.total_positions ?? 0)
+  const analyzedPlayerFens = Number(playerPositionStats?.analyzed_fens ?? playerPositionStats?.analyzed_positions ?? 0)
+  const gamesUpdateActive = Boolean(gamesUpdateJob?.jobId && !isTerminalJobStatus(gamesUpdateStatus))
+  const deleteActive = Boolean(deleteJob?.jobId && !isTerminalJobStatus(deleteStatus))
+  const deleteConfirmationMatches = deleteConfirmation.trim().toLowerCase() === activePlayer.toLowerCase()
+  const modeActivity = ['bullet', 'blitz', 'rapid'].map((mode) => ({
+    mode,
+    games: Number(playerHours?.[`${mode}_games`] || 0),
+    hours: Math.round(Number(playerHours?.[`${mode}_hours`] || 0)),
+  }))
+  return (
+        <div className="games-main players-starting-point">
+          {message ? <p {...pageStyleTarget('text')} className="result-line">{message}</p> : null}
+          {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
+
+          <section {...pageStyleTarget('player.hero')} className={`players-top-grid${playerMenuOpen ? ' players-menu-open' : ''}`}>
+            <div {...pageStyleTarget('player.navigation')} className="games-mode-detail players-profile-navigation-section">
+              <div className="section-head">
+                <div className="players-title-navigation">
+                  <button {...pageStyleTarget('player.previous')}
+                    className="players-title-arrow"
+                    type="button"
+                    aria-label={`Previous player${playerNeighbors?.previous_player ? `: ${playerNeighbors.previous_player}` : ''}`}
+                    title={playerNeighbors?.previous_player || 'Previous player'}
+                    disabled={!playerNeighbors?.previous_player || loading}
+                    onClick={() => navigateToPlayer(playerNeighbors?.previous_player)}
+                  >
+                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="M12.5 4.5 7 10l5.5 5.5" />
+                    </svg>
+                  </button>
+                  <div className="players-title-picker" ref={playerPickerRef}>
+                    <button {...pageStyleTarget('player.name')}
+                      className="games-action-title players-title-select"
+                      type="button"
+                      aria-haspopup="menu"
+                      aria-expanded={playerMenuOpen}
+                      aria-controls="player-navigation-menu"
+                      disabled={loading}
+                      onClick={togglePlayerMenu}
+                    >
+                      <span>{profileTitle}</span>
+                    </button>
+                    {playerMenuOpen ? (
+                      <div className="players-title-menu" id="player-navigation-menu" role="menu">
+                        {playerMenuLoading ? <p {...pageStyleTarget('text')}>Loading players…</p> : null}
+                        {playerMenuError ? <p {...pageStyleTarget('text')} className="error">{playerMenuError}</p> : null}
+                        {!playerMenuLoading && !playerMenuError ? playerMenuPlayers.map(({ name, avatar }) => (
+                            <button {...pageStyleTarget('button')}
+                              type="button"
+                              role="menuitem"
+                              key={name}
+                              onClick={() => navigateToPlayer(name)}
+                            >
+                              <PlayerMenuAvatar name={name} src={avatar} />
+                              <span className="players-title-menu-name">{name}</span>
+                            </button>
+                          )) : null}
+                        {!playerMenuLoading && !playerMenuError && !playerMenuPlayers.length ? (
+                          <p {...pageStyleTarget('text')}>No other players available.</p>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button {...pageStyleTarget('player.next')}
+                    className="players-title-arrow"
+                    type="button"
+                    aria-label={`Next player${playerNeighbors?.next_player ? `: ${playerNeighbors.next_player}` : ''}`}
+                    title={playerNeighbors?.next_player || 'Next player'}
+                    disabled={!playerNeighbors?.next_player || loading}
+                    onClick={() => navigateToPlayer(playerNeighbors?.next_player)}
+                  >
+                    <svg viewBox="0 0 20 20" aria-hidden="true">
+                      <path d="m7.5 4.5 5.5 5.5-5.5 5.5" />
+                    </svg>
+                  </button>
+                </div>
+                <div className="players-profile-actions">
+                  <button {...pageStyleTarget('player.update')}
+                    className="btn btn-primary btn-inline players-update-button"
+                    type="button"
+                    title="Fetch games from the player's latest saved month through the current month"
+                    disabled={!activePlayer || loading || gamesUpdateLoading || gamesUpdateActive || deleteActive}
+                    onClick={handleGamesUpdate}
+                  >
+                    {gamesUpdateLoading ? 'queueing…' : gamesUpdateActive ? 'updating…' : 'update'}
+                  </button>
+                  <button {...pageStyleTarget('player.delete')}
+                    className="btn btn-danger btn-inline players-delete-button"
+                    type="button"
+                    disabled={!activePlayer || loading || deletePreviewLoading || deleteActive || gamesUpdateActive || Boolean(profile?.deleted_at)}
+                    onClick={handleOpenDeletePreview}
+                  >
+                    {deletePreviewLoading ? 'checking…' : deleteActive ? 'deleting…' : 'delete'}
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div {...pageStyleTarget('player.profile')} className="games-mode-detail players-profile-section">
+              <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
+              <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
+              <div className="players-profile-layout">
+                <PlayerProfilePhoto profile={profile} name={profileTitle} latestGame={latestGame}
+                  positionStats={playerPositionStats} hours={playerHours} />
+                {profile ? (
+                  <>
+                    <div className="players-profile-details">
+                      <div className="players-profile-metadata">
+                        {[
+                          ['player', 'Player', profile.player_name || 'N/A'],
+                          ['country', 'Country', countryCode],
+                          ['name', 'Name', profile.name || 'N/A'],
+                        ].map(([field, label, value]) => (
+                          <PlayerProfileField key={field} field={field} label={label}>{String(value)}</PlayerProfileField>
+                        ))}
+                        <PlayerProfileDates profile={profile} onLatestChange={setLatestGame} />
+                        <div {...pageStyleTarget('panel')} className="players-followers-card">
+                          <span {...pageStyleTarget('player.followers.label')}>Followers</span>
+                          <strong {...pageStyleTarget('player.followers.value')}>{followersDisplay}</strong>
+                        </div>
+                        <div className="players-mode-activity-row">
+                          {modeActivity.map(({ mode, games, hours }) => (
+                            <p {...pageStyleTarget('text')} className="players-mode-activity" key={mode}>
+                              <strong {...pageStyleTarget('value')}>{mode}:</strong> {formatPlayerCount(games)} | {formatPlayerCount(hours)} hrs
+                            </p>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div {...pageStyleTarget('chart.coverage')} className="players-position-summary" aria-label="Player game and FEN analysis coverage">
+                      <PlayerCoveragePie kind="games" total={totalPlayerGames} scored={analyzedPlayerGames}
+                        ready={!loading && Boolean(playerPositionStats)} />
+                      <PlayerCoveragePie kind="positions" total={totalPlayerFens} scored={analyzedPlayerFens}
+                        ready={!loading && Boolean(playerPositionStats)} />
+                    </div>
+                  </>
+                ) : (
+                  <p {...pageStyleTarget('text')} className="result-line">{loading ? 'Loading profile…' : 'No profile loaded.'}</p>
+                )}
+              </div>
+            </div>
+
+          </section>
+
+          <PlayerAnalysisWorkspace
+            playerName={activePlayer}
+            disabled={!profile || loading || Boolean(profile?.deleted_at)}
+          />
+          {/* Escape the route animation's transformed fixed-position container. */}
+          {deletePreview ? createPortal(
+            <div className="player-delete-backdrop" onClick={closeDeletePreview}>
+              <div {...pageStyleTarget('popup')}
+                className="player-delete-dialog"
+                role="alertdialog"
+                aria-modal="true"
+                aria-labelledby="player-delete-title"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <div className="player-delete-heading">
+                  <div>
+                    <span>Permanent database operation</span>
+                    <h2 {...pageStyleTarget('title')} id="player-delete-title">Delete {activePlayer}?</h2>
+                  </div>
+                  <button {...pageStyleTarget('button')} className="btn btn-secondary btn-inline" type="button" onClick={closeDeletePreview}>Cancel</button>
+                </div>
+                <div className="player-delete-preview-grid">
+                  <div className="danger">
+                    <span>Games deleted</span>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.exclusive_games)}</strong>
+                  </div>
+                  <div>
+                    <span>Shared games kept</span>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.shared_games)}</strong>
+                  </div>
+                  <div>
+                    <span>Game/FEN links removed</span>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.fen_associations)}</strong>
+                  </div>
+                  <div>
+                    <span>Analyzed links affected</span>
+                    <strong {...pageStyleTarget('value')}>{formatNumber(deletePreview.analyzed_fen_associations)}</strong>
+                  </div>
+                </div>
+                <div className="player-delete-preservation">
+                  <strong {...pageStyleTarget('value')}>FEN rows and engine analysis deleted: 0</strong>
+                  <span>Scores, WDL, PVs, continuations and tablebase results remain stored.</span>
+                </div>
+                <label {...pageStyleTarget('label')} className="player-delete-confirm-field">
+                  <span>Type <strong {...pageStyleTarget('value')}>{activePlayer}</strong> to confirm</span>
+                  <input {...pageStyleTarget('field')}
+                    className="text-input"
+                    value={deleteConfirmation}
+                    onChange={(event) => setDeleteConfirmation(event.target.value)}
+                    autoComplete="off"
+                    spellCheck="false"
+                  />
+                </label>
+                {deleteError ? <p {...pageStyleTarget('text')} className="player-delete-error">{deleteError}</p> : null}
+                <div className="player-delete-actions">
+                  <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" onClick={closeDeletePreview} disabled={deleteSubmitting}>Cancel</button>
+                  <button {...pageStyleTarget('button')}
+                    className="btn btn-danger"
+                    type="button"
+                    disabled={!deleteConfirmationMatches || deleteSubmitting}
+                    onClick={handleConfirmDeletePlayer}
+                  >
+                    {deleteSubmitting ? 'Queueing deletion…' : `Delete ${formatNumber(deletePreview.exclusive_games)} games`}
+                  </button>
+                </div>
+              </div>
+            </div>, document.body
+          ) : null}
+        </div>
+  )
+}
+
+export default PlayerWorkspace

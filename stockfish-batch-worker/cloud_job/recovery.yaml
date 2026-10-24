@@ -1,0 +1,736 @@
+# Server-side supervisor. No FEN contents or credentials enter workflow arguments.
+# Batch native retries are disabled: the two counters below must not be shared.
+main:
+  params: [args]
+  steps:
+    - route:
+        switch:
+          - condition: '${map.get(args, "mode") == "sequence_v2"}'
+            steps:
+              - sequence:
+                  call: cloud_sequence
+                  args: {args: '${args}'}
+                  result: result
+              - sequence_done:
+                  return: '${result}'
+    - legacy:
+        call: recover_batch
+        args: {args: '${args}'}
+        result: result
+    - done:
+        return: '${result}'
+
+recover_batch:
+  params: [args]
+  steps:
+    - test_mode:
+        switch:
+          - condition: '${map.get(args, "mode") == "access_test"}'
+            steps:
+              - access_check:
+                  call: access_test
+                  result: tested_access
+              - access_return:
+                  return: '${tested_access}'
+          - condition: '${map.get(args, "mode") == "policy_test"}'
+            steps:
+              - test:
+                  call: policy_test
+                  args:
+                    codes: '${args.codes}'
+                  result: tested
+              - test_return:
+                  return: '${tested}'
+    - validate:
+        switch:
+          - condition: '${not(text.match_regex(args.run_id, "^[a-f0-9]{32}$")) or args.session < 1 or args.session > 3}'
+            raise: "Invalid recovery identity"
+          - condition: '${len(args.spec.taskGroups) != 1 or args.spec.taskGroups[0].taskCount != "1" or args.spec.taskGroups[0].taskSpec.maxRetryCount != 0}'
+            raise: "Recovery requires one task with native retries disabled"
+          - condition: '${args.spec.allocationPolicy.serviceAccount.email != "chessism-batch-worker@chessism-production.iam.gserviceaccount.com"}'
+            raise: "Unexpected worker service account"
+    - initialize:
+        assign:
+          - bucket: "chessism-batch-276704059200-us-central1"
+          - parent: "projects/chessism-production/locations/us-central1"
+          - control: '${"inputs/ui-" + args.run_id + "/recovery-" + string(args.session) + "/"}'
+          - execution: '${"projects/chessism-production/locations/us-central1/workflows/chessism-batch-recovery/executions/" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}'
+          - state:
+              version: 1
+              run_id: '${args.run_id}'
+              session: '${args.session}'
+              execution: '${execution}'
+              spec_hash: '${args.spec_hash}'
+              status: "STARTING"
+              jobs: '${args.prior_jobs}'
+              uids: '${args.prior_uids}'
+              current_job: null
+              application_failures: 0
+              preemptions: 0
+              last_exit_code: null
+    - claim:
+        try:
+          call: http.post
+          args:
+            url: '${"https://storage.googleapis.com/upload/storage/v1/b/" + bucket + "/o"}'
+            query:
+              uploadType: "media"
+              name: '${control + "owner.json"}'
+              ifGenerationMatch: "0"
+            auth:
+              type: OAuth2
+            headers:
+              Content-Type: "application/json"
+            body:
+              execution: '${execution}'
+              spec_hash: '${args.spec_hash}'
+          result: claimed
+        except:
+          as: error
+          steps:
+            - owner_read:
+                call: read_object
+                args:
+                  bucket: '${bucket}'
+                  name: '${control + "owner.json"}'
+                result: owner
+            - owner_check:
+                switch:
+                  - condition: '${owner != null and owner.spec_hash == args.spec_hash and owner.execution != execution}'
+                    return:
+                      status: "DUPLICATE"
+                      owner: '${owner.execution}'
+                  - condition: '${owner != null and owner.spec_hash == args.spec_hash and owner.execution == execution}'
+                    next: store_initial
+            - claim_failed:
+                raise: '${error}'
+    - store_initial:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - check_cancel:
+        call: sequence_cancel
+        args: {bucket: '${bucket}', args: '${args}'}
+        result: sequence_cancellation
+    - read_local_cancel:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
+        result: cancellation
+    - cancel_before_launch:
+        switch:
+          - condition: '${cancellation != null or sequence_cancellation != null}'
+            next: cancelled
+          - condition: '${map.get(args, "mode") == "control_test"}'
+            raise: "Control test must never launch a Batch job"
+    - next_attempt:
+        assign:
+          - job_id: '${"chessism-ui-" + args.run_id + "-" + string(len(state.jobs) + 1)}'
+          - job_url: '${"https://batch.googleapis.com/v1/" + parent + "/jobs/" + job_id}'
+    - submit:
+        call: create_job
+        args: {parent: '${parent}', job_id: '${job_id}', spec: '${args.spec}'}
+        result: job
+    - remember:
+        assign:
+          - state.jobs: '${list.concat(state.jobs, job_id)}'
+          - state.uids[job_id]: '${job.uid}'
+          - state.current_job: '${job_id}'
+          - state.status: "RUNNING"
+    - store_running:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - cancel_poll:
+        call: sequence_cancel
+        args: {bucket: '${bucket}', args: '${args}'}
+        result: sequence_cancellation
+    - local_cancel_poll:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
+        result: cancellation
+    - read_job:
+        call: request
+        args: {method: "GET", url: '${job_url}'}
+        result: response
+    - verify_uid:
+        switch:
+          - condition: '${response.body.uid != state.uids[job_id]}'
+            raise: "Batch job was replaced; refusing recovery"
+    - inspect:
+        switch:
+          - condition: '${response.body.status.state == "SUCCEEDED"}'
+            next: succeeded
+          - condition: '${response.body.status.state == "CANCELLED"}'
+            next: cancelled
+          - condition: '${(cancellation != null or sequence_cancellation != null) and response.body.status.state == "FAILED"}'
+            next: cancelled
+          - condition: '${(cancellation != null or sequence_cancellation != null) and not(response.body.status.state in ["CANCELLATION_IN_PROGRESS", "CANCELLING"])}'
+            next: cancel_job
+          - condition: '${response.body.status.state == "FAILED"}'
+            next: task_failure
+    - wait:
+        call: sys.sleep
+        args: {seconds: 60}
+        next: cancel_poll
+    - cancel_job:
+        try:
+          call: request
+          args: {method: "POST", url: '${job_url + ":cancel"}', body: {}}
+        except:
+          as: cancel_error
+          steps:
+            # The local priority dispatcher may have cancelled this exact job
+            # after read_job. Only accept that race after rechecking its UID.
+            - read_cancel_race:
+                call: request
+                args: {method: "GET", url: '${job_url}'}
+                result: cancel_response
+            - accept_cancel_race:
+                switch:
+                  - condition: '${cancel_response.body.uid == state.uids[job_id] and cancel_response.body.status.state in ["CANCELLATION_IN_PROGRESS", "CANCELLING", "CANCELLED", "SUCCEEDED", "FAILED"]}'
+                    next: wait
+            - cancel_failed:
+                raise: '${cancel_error}'
+        next: wait
+    - task_failure:
+        call: read_task_code
+        args: {url: '${job_url + "/taskGroups/group0/tasks/0"}'}
+        result: code
+    - decide:
+        call: recovery_decision
+        args:
+          code: '${code}'
+          application_failures: '${state.application_failures}'
+          preemptions: '${state.preemptions}'
+        result: decision
+    - record_decision:
+        assign:
+          - state.application_failures: '${decision.application_failures}'
+          - state.preemptions: '${decision.preemptions}'
+          - state.last_exit_code: '${code}'
+          - state.status: '${decision.status}'
+    - store_decision:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - retry_or_stop:
+        switch:
+          - condition: '${decision.status == "FAILED"}'
+            return: '${state}'
+    - backoff:
+        call: sys.sleep
+        args: {seconds: 60}
+        next: check_cancel
+    - cancelled:
+        assign:
+          - state.status: "CANCELLED"
+        next: store_final
+    - succeeded:
+        assign:
+          - state.status: "SUCCEEDED"
+    - store_final:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - done:
+        return: '${state}'
+
+recovery_decision:
+  params: [code, application_failures, preemptions]
+  steps:
+    - classify:
+        switch:
+          - condition: '${code == 50001}'
+            return:
+              status: "RETRYING"
+              application_failures: '${application_failures}'
+              preemptions: '${preemptions + 1}'
+          - condition: '${code == 0}'
+            return:
+              status: "SUCCEEDED"
+              application_failures: '${application_failures}'
+              preemptions: '${preemptions}'
+    - count_application_failure:
+        assign:
+          - application_failures: '${application_failures + 1}'
+    - exhausted:
+        switch:
+          - condition: '${application_failures >= 2}'
+            return: {status: "FAILED", application_failures: '${application_failures}', preemptions: '${preemptions}'}
+    - retry:
+        return: {status: "RETRYING", application_failures: '${application_failures}', preemptions: '${preemptions}'}
+
+read_task_code:
+  params: [url]
+  steps:
+    - load:
+        try:
+          call: request
+          args: {method: "GET", url: '${url}'}
+          result: task
+        except:
+          as: error
+          steps:
+            - missing:
+                switch:
+                  - condition: '${map.get(error, "code") == 404}'
+                    return: null
+            - failed:
+                raise: '${error}'
+    - require_failed:
+        switch:
+          - condition: '${task.body.status.state != "FAILED"}'
+            return: null
+    - initialize:
+        assign:
+          - code: null
+    - events:
+        for:
+          value: event
+          in: '${default(map.get(task.body.status, "statusEvents"), [])}'
+          steps:
+            - execution_code:
+                switch:
+                  - condition: '${map.get(event, ["taskExecution", "exitCode"]) != null and event.taskExecution.exitCode != 0}'
+                    assign:
+                      - code: '${event.taskExecution.exitCode}'
+    - done:
+        return: '${code}'
+
+create_job:
+  params: [parent, job_id, spec]
+  steps:
+    - create:
+        try:
+          call: request
+          args:
+            method: "POST"
+            url: '${"https://batch.googleapis.com/v1/" + parent + "/jobs"}'
+            query: {jobId: '${job_id}'}
+            body: '${spec}'
+          result: response
+        except:
+          as: error
+          steps:
+            - collision:
+                switch:
+                  - condition: '${map.get(error, "code") == 409}'
+                    steps:
+                      - existing:
+                          call: request
+                          args: {method: "GET", url: '${"https://batch.googleapis.com/v1/" + parent + "/jobs/" + job_id}'}
+                          result: response
+                      - verify:
+                          switch:
+                            - condition: '${response.body.taskGroups[0].taskSpec.runnables != spec.taskGroups[0].taskSpec.runnables}'
+                              raise: "Existing job has a different worker contract"
+                      - adopt:
+                          return: '${response.body}'
+            - failed:
+                raise: '${error}'
+    - done:
+        return: '${response.body}'
+
+read_object:
+  params: [bucket, name]
+  steps:
+    - read:
+        try:
+          call: request
+          args:
+            method: "GET"
+            url: '${"https://storage.googleapis.com/storage/v1/b/" + bucket + "/o/" + text.url_encode(name)}'
+            query: {alt: "media"}
+          result: response
+        except:
+          as: error
+          steps:
+            - missing:
+                switch:
+                  - condition: '${map.get(error, "code") == 404}'
+                    return: null
+            - failed:
+                raise: '${error}'
+    - done:
+        return: '${response.body}'
+
+write_state:
+  params: [bucket, control, state]
+  steps:
+    - write:
+        call: request
+        args:
+          method: "POST"
+          url: '${"https://storage.googleapis.com/upload/storage/v1/b/" + bucket + "/o"}'
+          query: {uploadType: "media", name: '${control + "state.json"}'}
+          body: '${state}'
+
+request:
+  params: [method, url, {query: null}, {body: null}]
+  steps:
+    - defaults:
+        assign:
+          - empty_query: {}
+          - query: '${default(query, empty_query)}'
+          - headers: {}
+    - body_headers:
+        switch:
+          - condition: '${body != null}'
+            assign:
+              - headers: {Content-Type: "application/json"}
+    - send:
+        try:
+          call: http.request
+          args:
+            method: '${method}'
+            url: '${url}'
+            query: '${query}'
+            body: '${body}'
+            timeout: 60
+            headers: '${headers}'
+            auth: {type: OAuth2}
+          result: response
+        retry:
+          predicate: '${http.default_retry_predicate}'
+          max_retries: 5
+          backoff: {initial_delay: 2, max_delay: 60, multiplier: 2}
+    - done:
+        return: '${response}'
+
+# Deployment verification invokes only this branch: no Batch jobs, GCS writes,
+# VMs, Stockfish searches or IAM mutations. It exercises the actual policy above.
+policy_test:
+  params: [codes]
+  steps:
+    - initialize:
+        assign:
+          - decision: {status: "RETRYING", application_failures: 0, preemptions: 0}
+    - attempts:
+        for:
+          value: code
+          in: '${codes}'
+          steps:
+            - decide:
+                call: recovery_decision
+                args:
+                  code: '${code}'
+                  application_failures: '${decision.application_failures}'
+                  preemptions: '${decision.preemptions}'
+                result: decision
+            - terminal:
+                switch:
+                  - condition: '${decision.status != "RETRYING"}'
+                    return: '${decision}'
+    - done:
+        return: '${decision}'
+
+# Read-only permission probe. The cancellation request is sent ONLY after a
+# successful authenticated GET proves the reserved diagnostic job does not exist.
+# No code path creates this job or a VM. This exposes cancellation permission
+# errors without risking an existing analysis.
+access_test:
+  steps:
+    - initialize:
+        assign:
+          - url: "https://batch.googleapis.com/v1/projects/chessism-production/locations/us-central1/jobs/chessism-recovery-permission-probe-no-such-job"
+    - check_absent:
+        try:
+          call: request
+          args: {method: "GET", url: '${url}'}
+        except:
+          as: error
+          steps:
+            - absent:
+                switch:
+                  - condition: '${map.get(error, "code") == 404}'
+                    next: probe_cancel
+            - failed:
+                raise: '${error}'
+    - unexpected_job:
+        raise: "Diagnostic job exists; no cancellation attempted"
+    - probe_cancel:
+        try:
+          call: request
+          args: {method: "POST", url: '${url + ":cancel"}', body: {}}
+        except:
+          as: error
+          steps:
+            - report:
+                return:
+                  code: '${map.get(error, "code")}'
+                  body: '${map.get(error, "body")}'
+    - unexpected_success:
+        raise: "Unexpected cancellation success for absent diagnostic job"
+
+# A single durable execution advances all cycles. Recovery remains a subworkflow
+# in this execution, so no new Workflows-invoker or Compute IAM grant is needed.
+cloud_sequence:
+  params: [args]
+  steps:
+    - validate:
+        switch:
+          - condition: '${not(text.match_regex(args.run_id, "^[a-f0-9]{32}$")) or args.session < 1 or args.session > 3 or not(text.match_regex(args.plan_hash, "^[a-f0-9]{64}$"))}'
+            raise: "Invalid sequence identity"
+    - initialize:
+        assign:
+          - bucket: "chessism-batch-276704059200-us-central1"
+          - control: '${"inputs/ui-" + args.run_id + "/sequence-" + string(args.session) + "/"}'
+          - execution: '${"projects/chessism-production/locations/us-central1/workflows/chessism-batch-recovery/executions/" + sys.get_env("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")}'
+    - read_plan:
+        call: read_sealed
+        args: {bucket: '${bucket}', name: '${control + "plan.json"}', checksum: '${args.plan_checksum}'}
+        result: plan
+    - validate_plan:
+        switch:
+          - condition: '${plan.version != 2 or plan.control_id != args.run_id or plan.session != args.session or len(plan.cycles) < 1 or len(plan.cycles) > 20 or plan.n_vms < 1 or plan.n_vms > 10}'
+            raise: "Invalid sequence plan"
+    - claim:
+        try:
+          call: http.post
+          args:
+            url: '${"https://storage.googleapis.com/upload/storage/v1/b/" + bucket + "/o"}'
+            query: {uploadType: "media", name: '${control + "owner.json"}', ifGenerationMatch: "0"}
+            auth: {type: OAuth2}
+            headers: {Content-Type: "application/json"}
+            body: {execution: '${execution}', plan_hash: '${args.plan_hash}'}
+        except:
+          as: error
+          steps:
+            - read_owner:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "owner.json"}'}
+                result: owner
+            - already_owned:
+                switch:
+                  - condition: '${owner != null and owner.plan_hash == args.plan_hash and owner.execution != execution}'
+                    return: {status: "DUPLICATE", owner: '${owner.execution}'}
+                  - condition: '${owner != null and owner.plan_hash == args.plan_hash and owner.execution == execution}'
+                    next: initialize_state
+            - claim_failed:
+                raise: '${error}'
+    - initialize_state:
+        assign:
+          - state:
+              version: 2
+              run_id: '${args.run_id}'
+              session: '${args.session}'
+              execution: '${execution}'
+              plan_hash: '${args.plan_hash}'
+              status: "RUNNING"
+              completed_cycles: 0
+              total_cycles: '${len(plan.cycles)}'
+              stop_acknowledged: false
+    - accepted:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - cycles:
+        for:
+          value: descriptor
+          index: index
+          in: '${plan.cycles}'
+          steps:
+            - read_cancel:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "cancel.json"}'}
+                result: cancellation
+            - read_stop:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${control + "stop.json"}'}
+                result: stop
+            - obey_signals:
+                switch:
+                  - condition: '${cancellation != null}'
+                    assign:
+                      - state.status: "CANCELLED"
+                      - state.stop_acknowledged: true
+                    next: break
+                  - condition: '${stop != null}'
+                    assign:
+                      - state.status: "STOPPED"
+                      - state.stop_acknowledged: true
+                    next: break
+            - load_cycle:
+                call: read_sealed
+                args: {bucket: '${bucket}', name: '${control + "cycle-" + string(index) + ".json"}', checksum: '${descriptor.checksum}'}
+                result: cycle
+            - validate_cycle:
+                switch:
+                  - condition: '${cycle.run_id != descriptor.run_id or cycle.count != descriptor.count or cycle.count < 1 or cycle.count > 1000000 * plan.n_vms or len(cycle.tasks) < 1 or len(cycle.tasks) > plan.n_vms}'
+                    raise: "Invalid bounded cycle"
+            - task_results:
+                assign:
+                  - outcomes: []
+            - workers:
+                parallel:
+                  shared: [outcomes]
+                  concurrency_limit: '${plan.n_vms}'
+                  for:
+                    value: task
+                    index: task_index
+                    in: '${cycle.tasks}'
+                    steps:
+                      - load_task:
+                          call: sequence_task_definition
+                          args: {task: '${task}', bucket: '${bucket}', name: '${control + "task-" + string(index) + "-" + string(task_index) + ".json"}'}
+                          result: definition
+                      - run_task:
+                          call: sequence_task
+                          args: {task: '${definition}', bucket: '${bucket}', control: '${control}'}
+                          result: outcome
+                      - remember_outcome:
+                          assign:
+                            - outcomes: '${list.concat(outcomes, outcome)}'
+            - check_results:
+                for:
+                  value: outcome
+                  in: '${outcomes}'
+                  steps:
+                    - unsuccessful:
+                        switch:
+                          - condition: '${outcome != "SUCCEEDED"}'
+                            assign:
+                              - state.status: '${if(outcome == "CANCELLED", "CANCELLED", "FAILED")}'
+                            next: break
+            - check_cycle_terminal:
+                switch:
+                  - condition: '${state.status != "RUNNING"}'
+                    next: break
+            - advance:
+                assign:
+                  - state.completed_cycles: '${index + 1}'
+                  - cycle: null
+            - save_progress:
+                call: write_state
+                args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+            - release_interval:
+                switch:
+                  - condition: '${index + 1 < len(plan.cycles)}'
+                    steps:
+                      - let_batch_release_compute:
+                          call: sys.sleep
+                          args: {seconds: 60}
+    - succeeded:
+        switch:
+          - condition: '${state.status == "RUNNING"}'
+            assign:
+              - state.status: "SUCCEEDED"
+    - save_terminal:
+        call: write_state
+        args: {bucket: '${bucket}', control: '${control}', state: '${state}'}
+    - done:
+        return: '${state}'
+
+# New plans reference per-VM definitions; previously saved inline plans remain
+# valid for explicit recovery without changing their frozen FEN memberships.
+sequence_task_definition:
+  params: [task, bucket, name]
+  steps:
+    - legacy:
+        switch:
+          - condition: '${map.get(task, "spec") != null}'
+            return: '${task}'
+    - load:
+        call: read_sealed
+        args: {bucket: '${bucket}', name: '${name}', checksum: '${task.checksum}'}
+        result: definition
+    - identity:
+        switch:
+          - condition: '${definition.run_id != task.run_id}'
+            raise: "VM definition identity changed"
+    - done:
+        return: '${definition}'
+
+sequence_task:
+  params: [task, bucket, control]
+  steps:
+    - bounded_units:
+        switch:
+          - condition: '${len(task.checks) < 1 or len(task.checks) > 20 or len(task.spec.taskGroups[0].taskSpec.runnables) != len(task.checks)}'
+            raise: "Invalid bounded VM work units"
+    - validate_unit_sizes:
+        for:
+          value: check
+          in: '${task.checks}'
+          steps:
+            - size:
+                switch:
+                  - condition: '${check.count < 1 or check.count > 50000}'
+                    raise: "Invalid bounded VM work unit size"
+    - recover:
+        switch:
+          - condition: '${not(task.skip)}'
+            steps:
+              - args:
+                  assign:
+                    - task.sequence_control: '${control}'
+              - run:
+                  call: recover_batch
+                  args: {args: '${task}'}
+                  result: result
+              - failure:
+                  switch:
+                    - condition: '${result.status != "SUCCEEDED"}'
+                      return: '${result.status}'
+    # Do not load multi-megabyte FEN manifests into Workflows. The successful
+    # worker writes its manifest before its small performance/contract proof.
+    # Full receipt/hash verification remains mandatory locally before deletion.
+    - verify_units:
+        for:
+          value: check
+          in: '${task.checks}'
+          steps:
+            - path:
+                switch:
+                  - condition: '${not(text.match_regex(check.output, "^gs://chessism-batch-276704059200-us-central1/results/ui-[a-f0-9]{32}$"))}'
+                    raise: "Invalid result prefix"
+            - result_name:
+                assign:
+                  - name: '${text.substring(check.output, len("gs://") + len(bucket) + 1, len(check.output))}'
+            - contract:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${name + "/contract.json"}'}
+                result: contract
+            - report:
+                call: read_object
+                args: {bucket: '${bucket}', name: '${name + "/performance.json"}'}
+                result: report
+            - validate:
+                switch:
+                  - condition: '${contract == null or report == null or contract.fingerprint != check.fingerprint or report.fingerprint != check.fingerprint or report.position_count != check.count or contract.position_count != check.count or report.analyzed_this_attempt + report.resumed != check.count}'
+                    raise: "Successful task lacks matching completion proof"
+            - manifest:
+                call: request
+                args:
+                  method: "GET"
+                  url: '${"https://storage.googleapis.com/storage/v1/b/" + bucket + "/o/" + text.url_encode(name + "/manifest.json")}'
+                result: metadata
+            - manifest_nonempty:
+                switch:
+                  - condition: '${int(metadata.body.size) <= 0}'
+                    raise: "Empty completion manifest"
+    - done:
+        return: "SUCCEEDED"
+
+sequence_cancel:
+  params: [bucket, args]
+  steps:
+    - legacy:
+        switch:
+          - condition: '${map.get(args, "sequence_control") == null}'
+            return: null
+    - read:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${args.sequence_control + "cancel.json"}'}
+        result: cancellation
+    - done:
+        return: '${cancellation}'
+
+read_sealed:
+  params: [bucket, name, checksum]
+  steps:
+    - load:
+        call: read_object
+        args: {bucket: '${bucket}', name: '${name}'}
+        result: envelope
+    - validate:
+        switch:
+          - condition: '${envelope == null or base64.encode(hash.compute_checksum(text.encode(envelope.payload), "SHA256")) != checksum}'
+            raise: "Uploaded sequence plan changed; refusing submission"
+    - done:
+        return: '${json.decode(envelope.payload)}'

@@ -1,0 +1,12 @@
+{
+  "mode": "move_matrix",
+  "name": "Hikaru bullet scores, moves 1-40",
+  "player": "hikaru",
+  "game_mode": "bullet",
+  "max_games": 1000,
+  "players": "requested",
+  "first_move": 1,
+  "last_move": 40,
+  "score_perspective": "player",
+  "format": "parquet"
+}

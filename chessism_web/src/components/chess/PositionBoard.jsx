@@ -1,0 +1,7 @@
+import { useId } from 'react'
+import { Chessboard } from 'react-chessboard'
+export default function PositionBoard({ fen, width=160, showNotation=true }) {
+  const id=useId()
+  return <Chessboard id={`position-preview-${id}`} position={fen} boardWidth={width}
+    arePiecesDraggable={false} areArrowsAllowed={false} animationDuration={0} showBoardNotation={showNotation}/>
+}

@@ -1,0 +1,23 @@
+.player-stockfish-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 8px; min-width: 0; }
+.player-stockfish-summary > section { display: flex; flex-direction: column; min-width: 0; min-height: 250px; }
+.stockfish-summary-title { display: block; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+.player-blunder-distribution { --chart-color-1: #15c780; padding: 12px; background: #0b1117; border-radius: 6px; }
+.blunder-distribution-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.blunder-distribution-heading .behavior-mode-controls { justify-content: flex-start; }
+.blunder-distribution-plot { margin-top: auto; min-width: 0; }
+.blunder-distribution-plot svg { width: 100%; height: auto; display: block; }
+.blunder-distribution-plot text { fill: var(--muted); font-size: 10px; }
+.blunder-distribution-total { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+.blunder-distribution-grid line { stroke: var(--border-soft); }
+.blunder-distribution-column { outline: none; }
+.blunder-distribution-column[aria-disabled="false"] { cursor: pointer; }
+.blunder-distribution-bar { fill: var(--chart-color-1); }
+.blunder-distribution-hit { fill: transparent; }
+.blunder-distribution-column[aria-disabled="false"]:hover .blunder-distribution-bar,
+.blunder-distribution-column:focus-visible .blunder-distribution-bar { filter: brightness(1.2); stroke: var(--text); stroke-width: 1.5; }
+.blunder-distribution-message { min-height: 120px; display: grid; place-items: center; color: var(--muted); font-size: 12px; }
+.blunder-distribution-error { font-size: 12px; color: var(--muted); }
+.blunder-distribution-error button { background: var(--surface-3); color: var(--text); border: 1px solid var(--border-soft); border-radius: 4px; padding: 4px 8px; cursor: pointer; }
+@media (max-width: 760px) {
+  .player-stockfish-summary { grid-template-columns: minmax(0, 1fr); }
+}
