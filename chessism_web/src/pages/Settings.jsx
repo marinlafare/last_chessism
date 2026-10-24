@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import SideRail from '../components/layout/SideRail'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import { pageStyleTarget } from '../appearance/styleCore'
 import { useBoardSoundPreferences } from '../components/chess/BoardSoundPreferences'
 import { BOARD_SOUND_SETS, getBoardSoundSet } from '../components/chess/boardSoundSets'
@@ -85,7 +84,6 @@ export default function Settings() {
             </details>
           </section>
         </main>
-        <Footer />
       </div>
     </div>
   )

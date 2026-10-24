@@ -36,7 +36,6 @@ const apiBoundaryFiles = [
   'pages/download-new-games/downloadNewGamesApi.js',
   'pages/main-characters/mainCharactersApi.js',
   'pages/positions/positionsApi.js',
-  'pages/live-analysis/liveAnalysisApi.js',
   'pages/scored-positions/scoredPositionsApi.js',
   'pages/analyze-times/analyzeTimesApi.js',
   'pages/research/coefficientResearchApi.js',

@@ -717,6 +717,16 @@
           "label": "Score positions · pagination buttons",
           "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
         },
+        "player.days.palette": {
+          "label": "Days · balance palette and chart container", "initialStyleFrom": "panel",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","chartColor1","chartColor2","chartColor3"],
+          "opaqueColors": ["chartColor1","chartColor2","chartColor3"],
+          "propertyLabels": {"chartColor1":"Positive balance base color","chartColor2":"Negative balance base color","chartColor3":"Balanced base color"}
+        },
+        "player.days.bin": {
+          "label": "Days · hour bins (intensity calculated from results)", "editorParent": "player.days.palette",
+          "properties": ["borderColor","borderWidth","radius"]
+        },
         "player.days.row": {
           "label": "Days · row background",
           "properties": ["weekdayRowBackground","borderColor","borderWidth","radius"]

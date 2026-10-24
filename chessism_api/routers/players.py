@@ -794,6 +794,14 @@ async def api_get_mode_chart(
     )
     return JSONResponse(content=payload)
 
+@router.get("/{player_name}/hero")
+async def api_get_eligible_player_hero(player_name: str) -> JSONResponse:
+    player = await read_player(player_name.strip().lower())
+    if not player or not player.get('joined') or player['joined'] <= 0 or player.get('deleted_at'):
+        raise HTTPException(status_code=404, detail='This player does not have an eligible main-page profile.')
+    return JSONResponse(content=player)
+
+
 @router.get("/{player_name}")
 async def api_get_player_profile(player_name: str) -> JSONResponse:
     """

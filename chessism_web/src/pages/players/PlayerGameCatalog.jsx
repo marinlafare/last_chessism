@@ -12,7 +12,7 @@ const ratingModeLabels = { bullet: 'Bu', blitz: 'Bl', rapid: 'Ra' }
 const results = [['wins', 'Wins'], ['draws', 'Draws'], ['losses', 'Losses'], ['unknown', 'Unknown']]
 const openingLabel = key => key ? key.replaceAll('-', ' ') : 'Unknown opening'
 
-export default function PlayerGameCatalog({ playerName, kind }) {
+export default function PlayerGameCatalog({ playerName, kind, summaryRevision }) {
   const visible = useAnalysisVisible()
   const openings = kind === 'openings'
   const target = `player.${kind}`
@@ -37,6 +37,8 @@ export default function PlayerGameCatalog({ playerName, kind }) {
   const pagination = data?.pagination
 
   useEffect(() => { setHighlightedKey(null) }, [requestKey])
+
+  useEffect(() => { cache.current.clear(); setRetry(value => value + 1) }, [summaryRevision])
 
   useEffect(() => {
     const list = listRef.current
@@ -124,7 +126,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
     fetchPlayerGameCatalog({ playerName, kind, ...filters, signal: controller.signal })
       .then(payload => {
         if (controller.signal.aborted) return
-        cache.current.set(requestKey, { data: payload, until: Date.now() + 60000 })
+        cache.current.set(requestKey, { data: payload, until: Date.now() + 1000 * (payload.max_age_seconds ?? 60) })
         if (cache.current.size > 20) cache.current.delete(cache.current.keys().next().value)
         dataSource.current = requestKey
         setRequest({ key: requestKey, data: payload, error: '', loading: false })
@@ -159,7 +161,12 @@ export default function PlayerGameCatalog({ playerName, kind }) {
       const next = cached && cached.until > Date.now() ? cached.data
         : await fetchPlayerGameCatalog({ playerName, kind, ...filters, page, signal: controller.signal })
       if (controller.signal.aborted) return
-      cache.current.set(nextKey, { data: next, until: Date.now() + 60000 })
+      if (next.summary_revision != null && next.summary_revision !== data?.summary_revision) {
+        cache.current.clear()
+        setRetry(value => value + 1)
+        return
+      }
+      cache.current.set(nextKey, { data: next, until: Date.now() + 1000 * (next.max_age_seconds ?? 60) })
       if (cache.current.size > 20) cache.current.delete(cache.current.keys().next().value)
       setRequest(current => current.key !== requestKey ? current : ({
         ...current,
@@ -178,7 +185,7 @@ export default function PlayerGameCatalog({ playerName, kind }) {
       window.clearTimeout(timeout)
       if (paginationController.current === controller) paginationController.current = null
     }
-  }, [visible, loading, pagination, request.loadingMore, requestKey, playerName, kind, filters, selection, reviewGameId])
+  }, [visible, loading, pagination, request.loadingMore, requestKey, playerName, kind, filters, selection, reviewGameId, data?.summary_revision])
 
   useEffect(() => {
     const list = listRef.current

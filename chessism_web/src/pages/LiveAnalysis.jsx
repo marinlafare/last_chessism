@@ -3,15 +3,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import './live-analysis/liveAnalysis.css'
 import { Chess } from 'chess.js'
 import { Chessboard } from 'react-chessboard'
-import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
-import { analyzeLiveFen as requestLiveAnalysis } from './live-analysis/liveAnalysisApi'
+import { useBrowserAnalysis } from './live-analysis/useBrowserAnalysis'
+import { ENGINE_ASSETS } from './live-analysis/browserStockfish'
 
 const START_FEN = new Chess().fen()
-const LIVE_ANALYSIS_NODES = 250_000
-const LIVE_ANALYSIS_MULTIPV = 3
 
 const getAnalysisLines = (result) => {
   const analysis = result?.analysis
@@ -20,6 +17,7 @@ const getAnalysisLines = (result) => {
 }
 
 const getScoreLabel = (score) => {
+  if (score == null) return '--'
   const numeric = Number(score)
   if (!Number.isFinite(numeric)) return '--'
 
@@ -60,17 +58,18 @@ const moveToSan = (fen, move) => {
 function LiveAnalysis() {
   const [fen, setFen] = useState(START_FEN)
   const [engineOn, setEngineOn] = useState(false)
-  const [analysis, setAnalysis] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [boardWidth, setBoardWidth] = useState(540)
+  const { analysis, evaluation, status, error } = useBrowserAnalysis(fen, engineOn)
+  const [boardWidth, setBoardWidth] = useState(280)
   const [selectedSquare, setSelectedSquare] = useState('')
-  const boardWrapRef = useRef(null)
+  const stageRef = useRef(null)
 
   const game = useMemo(() => new Chess(fen), [fen])
   const analysisLines = useMemo(() => getAnalysisLines(analysis), [analysis])
   const bestLine = analysisLines[0]
-  const whiteScorePercent = getWhiteScorePercent(bestLine?.score)
+  const whiteScorePercent = getWhiteScorePercent(evaluation?.score)
+  const evaluationNote = !evaluation ? 'Enable the engine to evaluate this position'
+    : !engineOn ? 'Last evaluation — engine off'
+      : evaluation.fen !== fen ? 'Previous position evaluation — waiting for the new score' : 'Evaluation from White’s perspective'
   const turnLabel = game.turn() === 'b' ? 'Black' : 'White'
   const legalTargets = useMemo(() => {
     if (!selectedSquare) return []
@@ -97,11 +96,15 @@ function LiveAnalysis() {
   }, [legalTargets, selectedSquare])
 
   useEffect(() => {
-    const node = boardWrapRef.current
+    const node = stageRef.current
     if (!node) return undefined
 
     const updateWidth = () => {
-      setBoardWidth(Math.max(280, Math.min(540, Math.floor(node.clientWidth))))
+      const narrow = window.matchMedia('(max-width: 720px)').matches
+      const { width, height } = node.getBoundingClientRect()
+      const availableWidth = width - (narrow ? 0 : 44) - 2
+      const availableHeight = height - (narrow ? 40 : 0) - 2
+      setBoardWidth(Math.max(1, Math.floor(Math.min(availableWidth, availableHeight))))
     }
 
     updateWidth()
@@ -110,45 +113,7 @@ function LiveAnalysis() {
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    if (!engineOn) {
-      setLoading(false)
-      setError('')
-      return undefined
-    }
-
-    const controller = new AbortController()
-    const timer = window.setTimeout(async () => {
-      setLoading(true)
-      setError('')
-      try {
-        const payload = await requestLiveAnalysis(
-          fen,
-          LIVE_ANALYSIS_NODES,
-          LIVE_ANALYSIS_MULTIPV,
-          { signal: controller.signal },
-        )
-        setAnalysis(payload)
-      } catch (err) {
-        if (err?.name !== 'AbortError') {
-          setError(err instanceof Error ? err.message : 'Analysis failed')
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
-      }
-    }, 180)
-
-    return () => {
-      window.clearTimeout(timer)
-      controller.abort()
-    }
-  }, [engineOn, fen])
-
   const makeMove = (sourceSquare, targetSquare, piece) => {
-    if (!engineOn) return false
-
     const nextGame = new Chess(fen)
     const movingPiece = piece || nextGame.get(sourceSquare)
     const pieceType = typeof movingPiece === 'string' ? movingPiece[1]?.toLowerCase() : movingPiece?.type
@@ -176,8 +141,6 @@ function LiveAnalysis() {
   }
 
   const handleSquareClick = (square) => {
-    if (!engineOn) return
-
     const clickedPiece = game.get(square)
     if (selectedSquare && makeMove(selectedSquare, square)) return
 
@@ -191,51 +154,53 @@ function LiveAnalysis() {
 
   const resetBoard = () => {
     setFen(START_FEN)
-    setAnalysis(null)
-    setError('')
     setSelectedSquare('')
   }
 
   return (
-    <div {...pageStyleTarget('page')} className="page-frame">
+    <div {...pageStyleTarget('page')} className="page-frame live-page">
       <SideRail />
-      <div className="home-shell">
-        <Header />
         <main className="live-analysis-main">
           <section {...pageStyleTarget('analysis.panel')} className="live-analysis-panel">
             <div className="live-analysis-toolbar">
-              <p {...pageStyleTarget('text')} className="eyebrow">LIVE ANALYSIS</p>
+              <h1 {...pageStyleTarget('heading')}>Chessism</h1>
               <button {...pageStyleTarget('button')}
                 className={`btn btn-secondary btn-inline live-stockfish-toggle ${engineOn ? 'active' : ''}`}
                 type="button"
+                aria-pressed={engineOn}
+                aria-label={engineOn ? 'Stop engine' : 'Start engine'}
+                title={engineOn ? 'Turn off Stockfish Lite' : 'Turn on Stockfish Lite — runs in your browser'}
                 onClick={() => setEngineOn((current) => !current)}
               >
-                Stockfish {engineOn ? 'On' : 'Off'}
+                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                  <path d="M9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3M18 9h3m-3 6h3M13 9l-3 4h4l-3 3" />
+                </svg>
               </button>
             </div>
 
-            <div className="live-analysis-stage">
+            <div className="live-analysis-stage" ref={stageRef} style={{ '--live-board-size': `${boardWidth}px` }}>
               <div
                 className="live-score-bar"
                 style={{
-                  '--black-score-percent': `${100 - whiteScorePercent}%`,
-                  '--white-score-percent': `${whiteScorePercent}%`
+                  '--white-score-fraction': whiteScorePercent / 100,
                 }}
-                aria-label="Engine score"
+                title={evaluationNote}
+                aria-label={`Engine score: ${getScoreLabel(evaluation?.score)}. ${evaluationNote}`}
               >
                 <div className="live-score-black" />
                 <div className="live-score-white" />
-                <span>{getScoreLabel(bestLine?.score)}</span>
+                <span>{getScoreLabel(evaluation?.score)}</span>
               </div>
 
-              <div className="live-board-shell" ref={boardWrapRef}>
+              <div className="live-board-shell">
                 <Chessboard
                   id="live-analysis-board"
                   position={fen}
                   boardWidth={boardWidth}
                   animationDuration={0}
-                  arePiecesDraggable={engineOn}
-                  arePremovesAllowed={engineOn}
+                  arePiecesDraggable
+                  arePremovesAllowed={false}
                   autoPromoteToQueen
                   customSquareStyles={customSquareStyles}
                   onPieceDrop={handlePieceDrop}
@@ -246,19 +211,18 @@ function LiveAnalysis() {
 
             <div className="live-analysis-footer">
               <span className="stat-chip">{turnLabel} to move</span>
-              <span className="stat-chip">{engineOn ? (loading ? 'Analyzing' : getScoreLabel(bestLine?.score)) : 'Stockfish off'}</span>
+              <span className="stat-chip" role="status" aria-live="polite">{!engineOn ? 'Stockfish off' : ({ loading: 'Loading engine…', analyzing: 'Analyzing', paused: 'Paused', error: 'Engine unavailable' }[status] || getScoreLabel(bestLine?.score))}</span>
               <span className="stat-chip">Depth {formatNumber(bestLine?.depth)}</span>
               <span className="stat-chip">Best {moveToSan(fen, bestLine?.pv?.[0])}</span>
               <button {...pageStyleTarget('button')} className="btn btn-secondary btn-inline" type="button" onClick={resetBoard}>
                 Reset
               </button>
+              <a {...pageStyleTarget('link')} className="live-engine-credit" href={`${ENGINE_ASSETS}NOTICES.txt`} target="_blank" rel="noopener noreferrer" title="Engine license and source code">Stockfish Lite · Browser</a>
             </div>
 
-            {error ? <div className="status-banner warn">{error}</div> : null}
+            {error ? <div className="status-banner warn" role="alert">{error}</div> : null}
           </section>
         </main>
-        <Footer />
-      </div>
     </div>
   )
 }

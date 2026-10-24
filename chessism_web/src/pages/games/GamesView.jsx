@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { Chessboard } from 'react-chessboard'
 import Header from '../../components/layout/Header'
-import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
 import {
   ClusterSelect, CompactBarChart, HeatStrip, OPENINGS_BOARD_WIDTH,
@@ -691,7 +690,6 @@ export default function GamesView({ page }) {
             </section>
           ) : null}
         </main>
-        <Footer />
       </div>
     </div>
   )

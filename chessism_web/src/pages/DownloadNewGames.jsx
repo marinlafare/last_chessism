@@ -2,7 +2,6 @@ import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useState } from 'react'
 import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import AutomaticIngestionPanel from './scored-positions/AutomaticIngestionPanel'
 import {
@@ -204,7 +203,6 @@ function DownloadNewGames() {
           </section>
           <AutomaticIngestionPanel />
         </main>
-        <Footer />
       </div>
     </div>
   )

@@ -1,6 +1,5 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import './research/researchHub.css'
 
@@ -62,7 +61,6 @@ export default function Research() {
             ))}
           </section>
         </main>
-        <Footer />
       </div>
     </div>
   )

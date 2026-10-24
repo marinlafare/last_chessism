@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import './home/home.css'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MainCharactersCarousel from './home/MainCharactersCarousel'
 import { DashboardSummaryPanel } from './home/Hero'
@@ -100,7 +99,6 @@ function Home({ locationKey = `${window.location.pathname}${window.location.sear
             </Suspense> : <p {...pageStyleTarget('text')} className="home-player-empty">Select a player to explore their profile and analysis here.</p>}
           </section>
         </main>
-        <Footer />
       </div>
     </div>
   )

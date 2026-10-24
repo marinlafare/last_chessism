@@ -94,6 +94,7 @@ async def _analytics_scope(
         FROM player
         WHERE player_name = :player
           AND deleted_at IS NULL
+          AND joined > 0
     """), {"player": player})
     player_row = result.mappings().first()
     if not player_row:
@@ -170,8 +171,18 @@ async def get_player_behavioural_activity(
             session, player_name, mode, date_from, date_to
         )
         from chessism_api.database.relational_reads import player_rows_sql
-        result = await session.execute(player_rows_sql(session,query,('mode','played_at','result')), scope.params())
-        rows = result.mappings().all()
+        from .player_analytics_summary import read_snapshot
+        mode = scope.mode
+        saved = await read_snapshot(session, scope.player, 'activity_daily' if date_from or date_to else 'activity')
+        if saved and saved.get('time_context') != scope.timezone.payload():
+            saved = None
+        if saved is not None:
+            rows = [row for row in saved['rows'] if (mode == 'all' or row['mode'] == mode)
+                    and (not date_from or row['date'] >= date_from.isoformat())
+                    and (not date_to or row['date'] <= date_to.isoformat())]
+        else:
+            result = await session.execute(player_rows_sql(session,query,('mode','played_at','result')), scope.params())
+            rows = result.mappings().all()
 
     aggregate = _summarize_activity_rows(rows)
     by_mode = {
@@ -185,6 +196,7 @@ async def get_player_behavioural_activity(
         **scope.response_base(),
         **aggregate,
         "by_mode": by_mode,
+        **({key: saved[key] for key in ('summary_revision', 'summary_stale')} if saved else {}),
     }
 
 
@@ -223,6 +235,25 @@ async def get_player_behavioural_ratings(
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
+        from .player_analytics_summary import read_snapshot
+        mode = scope.mode
+        saved = await read_snapshot(session, scope.player, 'ratings')
+        if saved and saved.get('time_context') != scope.timezone.payload():
+            saved = None
+        if saved is not None:
+            rows = [row for row in saved['rows'] if (mode == 'all' or row['mode'] == mode)
+                    and (not date_from or row['date'] >= date_from.isoformat())
+                    and (not date_to or row['date'] <= date_to.isoformat())]
+            dates = [row['date'] for row in rows]
+            return {**scope.response_base(),
+                'date_from': date_from.isoformat() if date_from else min(dates, default=None),
+                'date_to': date_to.isoformat() if date_to else max(dates, default=None),
+                'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale'],
+                'series': [{'mode': selected, 'points': [
+                    {'date': row['date'], 'last_rating': row['rating'], 'game_id': row['link'],
+                     'played_at_utc': row['played_at'], 'played_at_local': row['played_at_local']}
+                    for row in rows if row['mode'] == selected]}
+                    for selected in ([mode] if mode != 'all' else CHART_MODES)]}
         from chessism_api.database.relational_reads import player_ratings_sql
         result = await session.execute(
             player_ratings_sql(session, query, local_timestamp_sql=player_local_timestamp_sql('g')),
@@ -244,7 +275,7 @@ async def get_player_behavioural_ratings(
             local_played = scope.timezone.local_datetime(row["played_at"]) if row else None
             points.append({
                 "date": current.isoformat(),
-                "last_rating": int(row["rating"]) if row else None,
+                "last_rating": int(row["rating"]) if row and row['rating'] is not None else None,
                 "game_id": int(row["link"]) if row else None,
                 "played_at_utc": row["played_at"].isoformat() if row else None,
                 "played_at_local": local_played.isoformat() if local_played else None,

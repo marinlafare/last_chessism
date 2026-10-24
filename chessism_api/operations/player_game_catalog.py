@@ -114,6 +114,11 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
         await session.execute(text('SET TRANSACTION READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='8s'"))
         scope = await _analytics_scope(session, player_name, mode)
+        from .player_catalog_snapshot import catalog_snapshot_page
+        saved = await catalog_snapshot_page(session, redis, scope, kind=kind, mode=scope.mode,
+                                            color=color, search=search, page=page, limit=limit)
+        if saved is not None:
+            return saved
     key = 'chessism:player-game-catalog:v3:' + hashlib.sha256(json.dumps(
         [scope.player, kind, scope.mode, color, page, limit, search]).encode()).hexdigest()
     cached = await cached_page(redis, key)

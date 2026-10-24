@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useRef } from 'react'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import MatrixDataFrameModal from './research/matrices/MatrixDataFrameModal'
 import AlgorithmForm from './research/algorithms/AlgorithmForm'
@@ -41,7 +40,7 @@ export default function Algorithms() {
       <AlgorithmForm model={model} />
       <AlgorithmHistory model={model} />
       {model.result && <div ref={resultsRef} tabIndex="-1"><AlgorithmResults run={model.result} onClose={() => model.setResult(null)} /></div>}
-    </main><Footer /></div>
+    </main></div>
     {model.preview && <MatrixDataFrameModal artifact={model.preview} onClose={() => model.setPreview(null)} />}
   </div>
 }

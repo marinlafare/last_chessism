@@ -21,6 +21,15 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_days_palette_keeps_user_hue_but_not_user_opacity(self):
+        for color in ('chartColor1', 'chartColor2', 'chartColor3'):
+            row = override(scope='home', target='player.days.palette', property=color, value='#12345620')
+            self.assertEqual(validate_overrides([row])[0]['color_value'], '#123456')
+        background = override(scope='home', target='player.days.palette', property='background', value='#12345620')
+        self.assertEqual(validate_overrides([background])[0]['color_value'], '#12345620')
+        with self.assertRaises(ValueError):
+            validate_overrides([override(scope='home', target='player.days.bin', property='opacity', value=0.5)])
+
     def test_all_game_review_targets_and_states_are_saveable_and_page_local(self):
         for scope in ('home', 'games', 'scored_positions'):
             targets = {key: value for key, value in REGISTRY['scopes'][scope]['targets'].items()

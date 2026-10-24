@@ -1,6 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import Header from '../../components/layout/Header'
-import Footer from '../../components/layout/Footer'
 import SideRail from '../../components/layout/SideRail'
 import CloudAnalysisSection from './CloudAnalysisSection'
 import LocalAnalysisSection from './LocalAnalysisSection'
@@ -54,7 +53,6 @@ export default function PositionsView({ page }) {
             <CloudAnalysisSection collapsible onProgress={page.refreshCloudProgress} />
           </AnalysisDisclosureGroup>
         </main>
-        <Footer />
       </div>
     </div>
   )

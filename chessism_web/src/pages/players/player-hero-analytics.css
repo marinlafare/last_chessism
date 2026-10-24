@@ -181,7 +181,7 @@
   height: 7px;
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 999px;
-  background: linear-gradient(90deg, #d55c5c 0%, #8d6bb4 50%, #15c780 100%);
+  background: linear-gradient(90deg, var(--chart-color-2, #d55c5c) 0%, var(--chart-color-3, #8d6bb4) 50%, var(--chart-color-1, #15c780) 100%);
 }
 
 .behavior-weekday-rows {
@@ -344,6 +344,14 @@
   border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 2px;
 }
+
+.behavior-balance-fill { opacity: 1; background: color-mix(in srgb, var(--balance-base) var(--balance-intensity), black); }
+.behavior-balance-fill[data-balance="positive"] { --balance-base: var(--chart-color-1, #15c780); }
+.behavior-balance-fill[data-balance="negative"] { --balance-base: var(--chart-color-2, #d55c5c); }
+.behavior-balance-fill[data-balance="balanced"] { --balance-base: var(--chart-color-3, #8d6bb4); }
+.behavior-balance-fill[data-balance="empty"] { background: transparent; border-color: transparent; visibility: hidden; }
+.behavior-weekday-hour[data-balance="empty"] { visibility: hidden; }
+.behavior-weekday-wide-bar[data-balance="empty"] { background: transparent; }
 
 .behavior-weekday-note {
   position: absolute;

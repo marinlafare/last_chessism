@@ -5,12 +5,12 @@ import DatabaseTablePreview from './DatabaseTablePreview'
 import DatabaseRelationships from './DatabaseRelationships'
 import DatabaseRegions from './DatabaseRegions'
 import { useDatabaseLayout } from './useDatabaseLayout'
-import { centerTable, fitBounds, fitTables, inViewport, normalizeLayout, relatedTables, relationshipPath, searchTables, workspaceBounds, zoomAt } from './workspaceGeometry'
-import { buildDatabaseHierarchy, regionsForPositions, tableGroup, TABLE_GROUPS } from './workspaceHierarchy'
+import { centerTable, fitBounds, fitTables, inViewport, relatedTables, relationshipPath, searchTables, workspaceBounds, zoomAt } from './workspaceGeometry'
+import { buildDatabaseHierarchy, regionsForPositions, tableGroup } from './workspaceHierarchy'
 
 export default function DatabaseWorkspace({ catalog, accountId, heading }) {
   const { tables, relationships } = catalog
-  const { layout, setLayout, storageError, notice, hasSavedLayout, saveLayout, loadLayout } = useDatabaseLayout(tables, accountId)
+  const { layout, setLayout } = useDatabaseLayout(tables, accountId)
   const [selected, setSelected] = useState(null), [query, setQuery] = useState(''), [searchOpen, setSearchOpen] = useState(false)
   const [size, setSize] = useState({ width: 1000, height: 600, measured: false }), [dragging, setDragging] = useState(false)
   const [preview, setPreview] = useState(null)
@@ -33,6 +33,7 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
     const observer = new ResizeObserver(([entry]) => setSize({ width: entry.contentRect.width, height: entry.contentRect.height, measured: true }))
     observer.observe(node)
     const wheel = event => {
+      if (event.target.closest?.('.database-canvas-controls')) return
       if (gesture.current) { event.preventDefault(); return }
       event.preventDefault()
       const rect = node.getBoundingClientRect()
@@ -63,13 +64,6 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
   const changeZoom = factor => setLayout(current => ({ ...current,
     view: zoomAt(current.view, current.view.zoom * factor, { x: size.width / 2, y: size.height / 2 }) }))
   const fit = () => setLayout(current => ({ ...current, view: fitTables(current.positions, size, current.expanded) }))
-  const focusGroup = id => {
-    const positions = Object.fromEntries(tables.filter(table => groups.get(table.id).id === id && layout.positions[table.id])
-      .map(table => [table.id, layout.positions[table.id]]))
-    setSelected(null); setSearchOpen(false)
-    setLayout(current => ({ ...current, view: fitTables(positions, size, current.expanded) }))
-    canvas.current?.focus({ preventScroll: true })
-  }
   const toggleTable = useCallback(id => setLayout(current => ({ ...current,
     expanded: current.expanded.includes(id) ? current.expanded.filter(value => value !== id) : [...current.expanded, id],
   })), [setLayout])
@@ -113,11 +107,9 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
     return () => window.removeEventListener('blur', blur)
   }, [finish])
 
-  const controls = <>
-    <div {...pageStyleTarget('toolbar')} className="database-tools">
-      <div className="database-search">
-        <label htmlFor="database-search">Find a table or column</label>
+  const searchControl = <div {...pageStyleTarget('toolbar')} className="database-search">
         <input {...pageStyleTarget('field')} id="database-search" type="search" autoComplete="off" value={query}
+          aria-label="Find a table or column" placeholder="Find a table or column"
           onClick={() => setSearchOpen(true)}
           onChange={event => { setQuery(event.target.value); setSearchOpen(true) }} onFocus={() => setSearchOpen(true)}
           onKeyDown={event => { if (event.key === 'Escape') setSearchOpen(false); if (event.key === 'Enter' && matches[0]) focusTable(matches[0].id) }} />
@@ -127,37 +119,14 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
           {matches.length > 30 && <small>Refine your search to see more.</small>}
         </div>}
       </div>
-      <div className="database-zoom" aria-label="Canvas controls">
-        <select {...pageStyleTarget('field')} aria-label="Go to table group" value="" onChange={event => focusGroup(event.target.value)}>
-          <option value="">Go to group…</option>
-          {TABLE_GROUPS.filter(group => Object.values(hierarchy.tableGroups).includes(group.id)).map(group => <option key={group.id} value={group.id}>{group.label}</option>)}
-        </select>
-        <button {...pageStyleTarget('button')} type="button" aria-label="Zoom out" onClick={() => changeZoom(1 / 1.2)}>−</button>
-        <output aria-label="Canvas zoom">{Number((layout.view.zoom * 100).toFixed(layout.view.zoom < 0.01 ? 1 : 0))}%</output>
-        <button {...pageStyleTarget('button')} type="button" aria-label="Zoom in" onClick={() => changeZoom(1.2)}>+</button>
-        <button {...pageStyleTarget('button')} type="button" onClick={fit}>Fit all</button>
-        <button {...pageStyleTarget('button')} type="button" onClick={() => setLayout(current => ({ ...current, view: fitBounds(field, size) }))}>Fit field</button>
-        <button {...pageStyleTarget('button')} type="button" onClick={saveLayout}>Save layout</button>
-        <button {...pageStyleTarget('button')} type="button" disabled={!hasSavedLayout} onClick={() => {
-          if (loadLayout()) { setSelected(null); setSearchOpen(false) }
-        }}>Load saved layout</button>
-        <button {...pageStyleTarget('button')} type="button" onClick={() => {
-          if (!window.confirm('Return to the game-centered default? Unsaved adjustments will be discarded. Your saved layout will stay available.')) return
-          const fresh = normalizeLayout(null, tables)
-          setSelected(null); setSearchOpen(false)
-          setLayout({ ...fresh, autoFrame: false, view: hierarchy.overviewBounds ? fitBounds(hierarchy.overviewBounds, size) : fitTables(fresh.positions, size) })
-        }}>Reset to default</button>
-      </div>
-    </div>
-    <p {...pageStyleTarget('text')} className="database-hint">Left-drag a title to move its table · double-click or Enter to expand · hold the mouse wheel and drag to pan · wheel or + / − to zoom · Shift + wheel to scroll columns.</p>
-  </>
   return <>
     <div {...pageStyleTarget('canvas')} className={`database-canvas${dragging ? ' dragging' : ''}`} ref={canvas} tabIndex={0}
       role="region" aria-label="Database table canvas"
-      onPointerDownCapture={event => { if (event.button === 1) start(event) }}
-      onMouseDownCapture={event => { if (event.button === 1) event.preventDefault() }}
-      onAuxClick={event => { if (event.button === 1) event.preventDefault() }}
+      onPointerDownCapture={event => { if (event.button === 1 && !event.target.closest('.database-canvas-controls')) start(event) }}
+      onMouseDownCapture={event => { if (event.button === 1 && !event.target.closest('.database-canvas-controls')) event.preventDefault() }}
+      onAuxClick={event => { if (event.button === 1 && !event.target.closest('.database-canvas-controls')) event.preventDefault() }}
       onPointerDown={event => {
+        if (event.target.closest('.database-canvas-controls')) return
         setSearchOpen(false)
         if (!event.target.closest('.database-table')) start(event)
       }} onPointerMove={move}
@@ -165,6 +134,7 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
       onPointerCancel={event => { if (gesture.current?.pointerId === event.pointerId) finish(true) }}
       onLostPointerCapture={event => { if (gesture.current?.pointerId === event.pointerId) finish() }}
       onKeyDown={event => {
+        if (event.target.closest('.database-canvas-controls')) return
         if (event.key === 'Escape') { finish(true); setSelected(null); setSearchOpen(false); return }
         if (event.ctrlKey || event.metaKey || event.altKey || gesture.current) return
         if (event.target.closest('input, textarea, select, [contenteditable="true"]')) return
@@ -174,6 +144,10 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
         if (shift) { event.preventDefault(); setLayout(current => ({ ...current, view: { ...current.view, x: current.view.x + shift[0], y: current.view.y + shift[1] } })) }
         if (event.key === 'Home') { event.preventDefault(); fit() }
       }}>
+      <div className="database-canvas-controls">
+        {heading}
+        {searchControl}
+      </div>
       <div className="database-world" style={{ transform: `translate(${layout.view.x}px, ${layout.view.y}px) scale(${layout.view.zoom})` }}>
         <div className="database-field" aria-hidden="true" style={{ left: field.left, top: field.top, width: field.width, height: field.height }} />
         <DatabaseRegions regions={regions} />
@@ -189,11 +163,6 @@ export default function DatabaseWorkspace({ catalog, accountId, heading }) {
       </div>
       {!tables.length && <p className="database-empty">No accessible application tables or views found.</p>}
     </div>
-    <section className="database-bottom-controls" aria-label="Database information and controls">
-      {heading}
-      {controls}
-    </section>
-    <p {...pageStyleTarget('text')} className="database-hint" role="status">{storageError || notice || 'The default hierarchy opens every time. Adjustments are temporary until you choose Save layout; use Load saved layout to reopen your personal arrangement.'}</p>
     {tableIndex.has(selected) && <DatabaseRelationships table={tableIndex.get(selected)} relationships={links} onSelect={focusTable} onClose={() => setSelected(null)} />}
     {preview && <DatabaseTablePreview key={preview.id} table={preview} onClose={() => setPreview(null)} />}
   </>

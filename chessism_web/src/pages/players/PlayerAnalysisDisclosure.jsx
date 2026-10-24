@@ -5,7 +5,7 @@ import './player-analysis-disclosure.css'
 const AnalysisVisible = createContext(true)
 export const useAnalysisVisible = () => useContext(AnalysisVisible)
 
-export default function PlayerAnalysisDisclosure({ label, children, buttonTarget, target = 'card', level = 3, disabled = false, loading = false }) {
+export default function PlayerAnalysisDisclosure({ label, children, buttonTarget, target = 'card', level = 3, disabled = false, loading = false, onOpen }) {
   const [open, setOpen] = useState(false)
   const [visited, setVisited] = useState(false)
   const parentVisible = useAnalysisVisible()
@@ -17,7 +17,7 @@ export default function PlayerAnalysisDisclosure({ label, children, buttonTarget
         <button {...pageStyleTarget(buttonTarget)} type="button" className="player-analysis-disclosure-toggle"
           id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} disabled={disabled || loading}
           aria-busy={loading || undefined}
-          onClick={event => { event.currentTarget.focus({ preventScroll: true }); setVisited(true); setOpen(value => !value) }}
+          onClick={event => { event.currentTarget.focus({ preventScroll: true }); setVisited(true); if (!open) onOpen?.(); setOpen(value => !value) }}
           onKeyDown={event => {
             if (!open || !['player.opponents.toggle', 'player.openings.toggle'].includes(buttonTarget)
               || !['ArrowUp', 'ArrowDown'].includes(event.key)) return

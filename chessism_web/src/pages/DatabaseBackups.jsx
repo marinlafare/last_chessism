@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import BackupVolume from './backups/BackupVolume.jsx'
 import FenBackupPanel from './backups/FenBackupPanel.jsx'
@@ -411,7 +410,6 @@ export default function DatabaseBackups() {
             <FenBackupPanel />
           </section>
         </main>
-        <Footer />
       </div>
     </div>
   )

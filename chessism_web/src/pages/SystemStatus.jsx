@@ -2,7 +2,6 @@ import { pageStyleTarget } from '../appearance/styleCore.js'
 import { lazy, Suspense, useCallback, useState } from 'react'
 import './system-status/systemStatus.css'
 import SideRail from '../components/layout/SideRail'
-import Footer from '../components/layout/Footer'
 import StatusPanel from './system-status/StatusPanel'
 import CloudStatusPanel from './system-status/CloudStatusPanel'
 import CloudBillingPanel from './system-status/CloudBillingPanel'
@@ -35,7 +34,6 @@ export default function SystemStatus({ initialTimesOpen = false }) {
         </section>
         <CloudBillingPanel />
       </main>
-      <Footer />
     </div>
   </div>
 }

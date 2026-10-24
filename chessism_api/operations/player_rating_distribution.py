@@ -97,7 +97,13 @@ async def get_player_rating_distribution(player_name, mode, redis):
         await session.execute(text('SET TRANSACTION READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout = '8s'"))
         exists = await session.scalar(text('''SELECT player_name FROM player
-            WHERE player_name=:player AND deleted_at IS NULL'''), {'player': player})
+            WHERE player_name=:player AND deleted_at IS NULL AND joined>0'''), {'player': player})
+        if exists:
+            from .player_analytics_summary import read_snapshot
+            saved = await read_snapshot(session, player, 'distribution')
+            if saved is not None:
+                return {**percentage_distribution(player, mode, saved, cache_hit=True),
+                        'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale']}
     if not exists:
         raise LookupError(f'Player {player!r} was not found.')
     snapshot = await _cached_snapshot(redis, key)

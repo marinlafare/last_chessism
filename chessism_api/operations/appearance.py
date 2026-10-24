@@ -110,6 +110,8 @@ def validate_overrides(rows):
             if not isinstance(value, str) or not re.fullmatch(r'#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?', value):
                 raise ValueError('Colors must be #RRGGBB or #RRGGBBAA.')
             value, column = value.lower(), 'color_value'
+            if prop in REGISTRY['scopes'][scope]['targets'][target].get('opaqueColors', []):
+                value = value[:7]
         elif spec['kind'] == 'number':
             if type(value) not in (int, float) or not math.isfinite(value) or not spec['min'] <= value <= spec['max']:
                 raise ValueError('Appearance size is outside its allowed range.')

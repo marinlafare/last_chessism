@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import Footer from '../components/layout/Footer'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
 import {
@@ -134,7 +133,6 @@ export default function SalienceResearch() {
             </div>
           </section>
         </main>
-        <Footer />
       </div>
     </div>
   )

@@ -16,19 +16,22 @@ export default function PlayerProfileDates({ profile, onLatestChange }) {
   const name = profile.player_name
   useEffect(() => {
     const controller = new AbortController()
+    let timer
     setLatest(null)
     if (!name || profile.deleted_at) return () => controller.abort()
     // Fetch only the most recent stored game; Chess.com's last-online date
     // does not tell us when this player's latest game in our DB was played.
-    fetchPlayerLatestGame(name, { signal: controller.signal }).then(payload => {
+    const load = () => fetchPlayerLatestGame(name, { signal: controller.signal }).then(payload => {
       if (controller.signal.aborted) return
-      const playedAt = payload.games?.[0]?.played_at
+      const playedAt = payload.played_at
       const day = typeof playedAt === 'string' ? playedAt.match(/^\d{4}-\d{2}-\d{2}/)?.[0] : null
       setLatest({ name, playedAt, label: day ? dateLabel(`${day}T00:00:00Z`) : 'N/A' })
+      if (payload.summary_stale) timer = window.setTimeout(load, 2000)
     }).catch(error => {
       if (!controller.signal.aborted) setLatest({ name, label: 'Unavailable', error: error.message })
     })
-    return () => controller.abort()
+    load()
+    return () => { controller.abort(); window.clearTimeout(timer) }
   }, [profile, name])
 
   useEffect(() => { onLatestChange?.(latest?.name === name ? latest : null) }, [latest, name, onLatestChange])

@@ -5,13 +5,15 @@ import { formatNumber } from '../../utils/formatters'
 import { ratingDistributionPlot } from './ratingDistribution.js'
 import useSummaryChartWidth from './useSummaryChartWidth'
 import { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
+import { useAnalysisVisible } from './PlayerAnalysisDisclosure'
 import './player-rating-distribution.css'
 
 const LEFT = 46, TOP = 12, BOTTOM = 94
 const SHORT_BAR_HEIGHT = 14, ZOOM_BINS = 5, ZOOM_WIDTH = 300
 const percentage = new Intl.NumberFormat('en-US', { maximumFractionDigits: 4 })
 
-export default function PlayerRatingDistribution({ playerName, onExplore }) {
+export default function PlayerRatingDistribution({ playerName, onExplore, summaryRevision }) {
+  const visible = useAnalysisVisible()
   const [mode, setMode] = useState('all')
   const [retry, setRetry] = useState(0)
   const [request, setRequest] = useState({ loading: true, data: null, error: '' })
@@ -21,6 +23,7 @@ export default function PlayerRatingDistribution({ playerName, onExplore }) {
   const chart = useSummaryChartWidth()
   const right = Math.max(LEFT + 1, chart.width - 20)
   useEffect(() => {
+    if (!visible) return undefined
     const controller = new AbortController()
     setRequest({ loading: true, data: null, error: '' })
     setFocusedBin(null)
@@ -31,7 +34,7 @@ export default function PlayerRatingDistribution({ playerName, onExplore }) {
       if (!controller.signal.aborted) setRequest({ loading: false, data: null, error: error.message || 'Unable to load ratings.' })
     })
     return () => controller.abort()
-  }, [playerName, mode, retry])
+  }, [playerName, mode, retry, visible, summaryRevision])
   useEffect(() => { setZoomIndex(null) }, [chart.width])
   const zoomOpen = zoomIndex !== null
   useEffect(() => {

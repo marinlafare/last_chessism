@@ -1641,6 +1641,7 @@ async def get_top_main_characters_by_time_control(
         LEFT JOIN player p ON p.player_name = s.player_name
         WHERE s.mode = :mode
           AND p.deleted_at IS NULL
+          AND p.joined > 0
           AND (:title_status = 'all'
             OR (:title_status = 'titled' AND UPPER(TRIM(COALESCE(p.title, ''))) = ANY(:titles))
             OR (:title_status = 'untitled' AND NOT (UPPER(TRIM(COALESCE(p.title, ''))) = ANY(:titles))))
@@ -4013,14 +4014,14 @@ async def get_player_neighbors(player_name: str) -> Dict[str, Optional[str]]:
                 (
                     SELECT player_name
                     FROM player
-                    WHERE joined != 0 AND player_name < :player
+                    WHERE joined > 0 AND deleted_at IS NULL AND player_name < :player
                     ORDER BY player_name DESC
                     LIMIT 1
                 ),
                 (
                     SELECT player_name
                     FROM player
-                    WHERE joined != 0
+                    WHERE joined > 0 AND deleted_at IS NULL
                     ORDER BY player_name DESC
                     LIMIT 1
                 )
@@ -4029,14 +4030,14 @@ async def get_player_neighbors(player_name: str) -> Dict[str, Optional[str]]:
                 (
                     SELECT player_name
                     FROM player
-                    WHERE joined != 0 AND player_name > :player
+                    WHERE joined > 0 AND deleted_at IS NULL AND player_name > :player
                     ORDER BY player_name ASC
                     LIMIT 1
                 ),
                 (
                     SELECT player_name
                     FROM player
-                    WHERE joined != 0
+                    WHERE joined > 0 AND deleted_at IS NULL
                     ORDER BY player_name ASC
                     LIMIT 1
                 )
@@ -4059,7 +4060,7 @@ async def get_tracked_player_navigation(same_group_as: Optional[str] = None) -> 
     query = """
         SELECT player_name, avatar
         FROM player
-        WHERE joined != 0
+        WHERE joined > 0
           AND deleted_at IS NULL
           AND (
             CAST(:same_group_as AS text) IS NULL
@@ -4398,6 +4399,16 @@ async def get_player_hours_played(player_name: str) -> Dict[str, Any]:
     Returns total played hours and played hours split by normalized time control mode.
     Uses game.time_elapsed (seconds).
     """
+    from chessism_api.operations.player_analytics_summary import read_snapshot, played_hours
+    async with AsyncDBSession() as session:
+        saved = await read_snapshot(session, player_name, 'hours')
+    if saved is not None:
+        modes = saved['modes']
+        return {'player_name': player_name,
+                'total_hours': played_hours(sum(row['seconds'] for row in modes.values())),
+                **{f'{mode}_games': modes.get(mode, {}).get('games', 0) for mode in ('bullet','blitz','rapid')},
+                **{f'{mode}_hours': played_hours(modes.get(mode, {}).get('seconds', 0)) for mode in ('bullet','blitz','rapid')},
+                'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale']}
     query = """
         SELECT
             ROUND((COALESCE(SUM(time_elapsed), 0) / 3600.0)::numeric, 2) AS total_hours,

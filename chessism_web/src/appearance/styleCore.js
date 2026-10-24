@@ -64,7 +64,7 @@ export function appearanceCss(registry, rows) {
     if (!target?.properties.includes(row.property) || !spec || !validValue(spec,row.value)) return []
     // IDs, property names and suffixes come from the server-owned registry only.
     if (!/^[\w.-]+$/.test(row.target) || !/^[\w-]+$/.test(row.scope)) return []
-    const value = spec.kind === 'number' ? `${row.value}${spec.unit || ''}` : spec.kind === 'choice' && row.property === 'fontFamily' ? fontFamilyCss(row.value) : row.value
+    const value = spec.kind === 'number' ? `${row.value}${spec.unit || ''}` : spec.kind === 'choice' && row.property === 'fontFamily' ? fontFamilyCss(row.value) : target.opaqueColors?.includes(row.property) ? row.value.slice(0, 7) : row.value
     const selector = `[data-style-scope="${row.scope}"][data-style-id="${row.target}"][data-style-id][data-style-id][data-style-id]`
     // Only opted-in toggles retain their hover colors while pressed. A
     // fixed attribute selector also keeps the rule independent of row order.

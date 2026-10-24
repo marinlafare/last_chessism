@@ -2,7 +2,6 @@ import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import './main-characters/mainCharacters.css'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import PlayerAvatar from '../components/players/PlayerAvatar'
 import { formatNumber } from '../utils/formatters'
@@ -777,7 +776,6 @@ function MainCharacters() {
             </section>
           ) : null}
         </main>
-        <Footer />
       </div>
     </div>
   )

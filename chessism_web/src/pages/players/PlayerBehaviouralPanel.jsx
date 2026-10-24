@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import { balanceScale, balanceDescription, volumeOpacityScale } from './activityBalance.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { formatNumber } from '../../utils/formatters'
 import PlayerModeToggles, {
@@ -30,9 +31,6 @@ const HOURLY_BASELINE = HOURLY_TOP + HOURLY_HEIGHT
 const HOURLY_AXIS_Y = 168
 const HOURLY_AXIS_TITLE_Y = 201
 const RESULT_FIELDS = ['games', 'wins', 'draws', 'losses']
-const LOSS_COLOR = [213, 92, 92]
-const DRAW_COLOR = [141, 107, 180]
-const WIN_COLOR = [21, 199, 128]
 const WEEKDAY_CURTAIN_DURATION_MS = 480
 const WEEKDAY_BIN_UNLOCK_DELAY_MS = 3000
 
@@ -47,19 +45,6 @@ function hourResultTooltip(hour, row = {}) {
     `${formatNumber(numeric(row.draws))} draws`,
     `${formatNumber(numeric(row.losses))} losses`,
   ].join('\n')
-}
-
-function scoreColor(row = {}) {
-  const games = numeric(row.games)
-  if (!games) return '#172029'
-  const score = Math.min(1, Math.max(0, (numeric(row.wins) + numeric(row.draws) * 0.5) / games))
-  const start = score <= 0.5 ? LOSS_COLOR : DRAW_COLOR
-  const end = score <= 0.5 ? DRAW_COLOR : WIN_COLOR
-  const segmentPosition = score <= 0.5 ? score * 2 : (score - 0.5) * 2
-  const channels = start.map((channel, index) => (
-    Math.round(channel + (end[index] - channel) * segmentPosition)
-  ))
-  return `rgb(${channels.join(', ')})`
 }
 
 function resultTotals(rows = []) {
@@ -185,6 +170,8 @@ function WeekdayStartChart({
   const [interactiveWeekdays, setInteractiveWeekdays] = useState(() => new Set())
   const weekdayUnlockTimers = useRef(new Map())
   const timezoneLabel = timeContext?.timezone || 'UTC'
+  const colorFor = useMemo(() => balanceScale(weekdayHours), [weekdayHours])
+  const dayColorFor = useMemo(() => balanceScale(weekdays), [weekdays])
   const cellsByWeekday = useMemo(() => {
     const grouped = new Map()
     weekdayHours.forEach((cell) => {
@@ -249,13 +236,13 @@ function WeekdayStartChart({
   }
 
   return (
-    <section {...pageStyleTarget('panel')} className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
+    <section {...pageStyleTarget('player.days.palette')} className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
       <div className="behavior-subchart-heading">
         <div>
           <strong {...pageStyleTarget('value')}>Days</strong>
         </div>
-        <div className="behavior-score-scale" aria-label="Performance color scale from loss through draw to win">
-          <div><span>Loss</span><span>Draw</span><span>Win</span></div>
+        <div className="behavior-score-scale" aria-label="Dynamic win–loss balance scale" title="Color intensity reflects win–loss balance. Purple means equal wins and losses. Hour-bin opacity is proportional to games relative to that day's busiest hour in the selected modes.">
+          <div><span>More losses</span><span>Balanced</span><span>More wins</span></div>
           <i />
         </div>
         <PlayerModeToggles
@@ -270,12 +257,12 @@ function WeekdayStartChart({
         <div className="behavior-weekday-plot-canvas">
           <div className="behavior-weekday-rows">
             {weekdays.map((weekday) => {
+              const dayPaint = dayColorFor(weekday)
               const isExpanded = expandedWeekdays.has(weekday.weekday)
               const binsAreInteractive = interactiveWeekdays.has(weekday.weekday)
               const cells = cellsByWeekday.get(weekday.weekday) || []
+              const opacityFor = volumeOpacityScale(cells)
               const cellMap = new Map(cells.map((cell) => [numeric(cell.hour), cell]))
-              const counts = Array.from({ length: 24 }, (_, hour) => numeric(cellMap.get(hour)?.games))
-              const leastGames = Math.min(...counts), mostGames = Math.max(...counts)
               const noteId = `weekday-usage-note-${weekday.weekday}`
               return (
                 <div {...pageStyleTarget('player.days.row')} className={`behavior-weekday-row ${isExpanded ? 'expanded' : ''}`} key={weekday.weekday}>
@@ -308,16 +295,14 @@ function WeekdayStartChart({
                       <span className="behavior-weekday-hours" aria-hidden={!isExpanded}>
                         {Array.from({ length: 24 }, (_, hour) => {
                           const cell = cellMap.get(hour) || {}
-                          const alpha = mostGames > leastGames
-                            ? 0.1 + 0.9 * (counts[hour] - leastGames) / (mostGames - leastGames)
-                            : mostGames > 0 ? 1 : 0.1
+                          const paint = colorFor(cell)
                           return (
-                            <button
+                            <button {...pageStyleTarget('player.days.bin')} data-balance={paint.kind}
                               className="behavior-weekday-hour"
                               type="button"
-                              disabled={!isExpanded || !binsAreInteractive || !selectedModes.length}
+                              disabled={!isExpanded || !binsAreInteractive || !selectedModes.length || paint.kind === 'empty'}
                               key={hour}
-                              title={hourResultTooltip(hour, cell)}
+                              title={`${hourResultTooltip(hour, cell)}\n${balanceDescription(cell)}`}
                               aria-label={`${weekday.label} at ${hour}:00. Explore games.`}
                               onClick={() => onExplore({
                                 scope: 'weekday_hour',
@@ -328,7 +313,8 @@ function WeekdayStartChart({
                                 analyzed_only: false,
                               })}
                             >
-                              <i style={{ backgroundColor: scoreColor(cell), opacity: alpha }} />
+                              <i className="behavior-balance-fill" data-balance={paint.kind}
+                                style={{ '--balance-intensity': `${paint.intensity * 100}%`, opacity: opacityFor(cell) }} />
                             </button>
                           )
                         })}
@@ -336,18 +322,19 @@ function WeekdayStartChart({
                       <button
                         className="behavior-weekday-curtain"
                         type="button"
-                        disabled={isExpanded || !selectedModes.length}
+                        disabled={isExpanded || !selectedModes.length || dayPaint.kind === 'empty'}
                         aria-label={`${weekday.label}. Expand hourly bins.`}
                         onClick={() => expandWeekday(weekday.weekday)}
                       >
-                        <span className="behavior-weekday-wide-bar">
-                          <i style={{ backgroundColor: scoreColor(weekday) }} />
+                        <span className="behavior-weekday-wide-bar" data-balance={dayPaint.kind}>
+                          <i className="behavior-balance-fill" data-balance={dayPaint.kind}
+                            style={{ '--balance-intensity': `${dayPaint.intensity * 100}%` }} />
                         </span>
                       </button>
                     </span>
                   </div>
                   <span className="behavior-weekday-note" id={noteId} role="tooltip">
-                    {formatNumber(weekday.games)} games · {formatNumber(weekday.wins)}W, {formatNumber(weekday.draws)}D, {formatNumber(weekday.losses)}L · {(numeric(weekday.proportion) * 100).toFixed(1)}%
+                    {formatNumber(weekday.games)} games · {formatNumber(weekday.wins)}W, {formatNumber(weekday.draws)}D, {formatNumber(weekday.losses)}L · {balanceDescription(weekday)}
                   </span>
                 </div>
               )
@@ -375,6 +362,9 @@ export default function PlayerBehaviouralPanel({
   ratings,
   pending = false,
   error = '',
+  onRatingOpen,
+  ratingLoading = false,
+  ratingError = '',
 }) {
   const [resultMode, setResultMode] = useState('all')
   const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
@@ -451,12 +441,12 @@ export default function PlayerBehaviouralPanel({
     setSelectedRatingYear('all')
     setHoveredRatingYear(null)
     setFocusedRatingYear(null)
-  }, [ratings])
+  }, [playerName])
 
   useEffect(() => {
     setVisibleHourModes(new Set(PLAYER_ANALYSIS_MODES))
     setVisibleDayModes(new Set(PLAYER_ANALYSIS_MODES))
-  }, [activity])
+  }, [playerName])
 
   useEffect(() => {
     setExplorerSelection(null)
@@ -485,11 +475,13 @@ export default function PlayerBehaviouralPanel({
             scope: 'result', result, analyzed_only: false,
             modes: resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode],
           })} />}
-        <PlayerRatingDistribution key={playerName} playerName={playerName} onExplore={setExplorerSelection} />
+        <PlayerRatingDistribution key={playerName} playerName={playerName} summaryRevision={activity?.summary_revision} onExplore={setExplorerSelection} />
       </div>
 
       <div className="player-analysis-chart-list">
-        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle" disabled={pending}>
+        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle" disabled={pending}
+          onOpen={onRatingOpen} loading={ratingLoading}>
+        {ratingError ? <p role="alert">{ratingError}</p> : null}
         <div className="behavior-graph-scroll">
           <div className="behavior-graph-canvas">
             <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">

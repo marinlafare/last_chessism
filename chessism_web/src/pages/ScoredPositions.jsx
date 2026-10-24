@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react'
 import './scored-positions/scoredPositions.css'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import AppearanceChartPanel from './scored-positions/AppearanceChartPanel'
 import ScoredOverviewChart from './scored-positions/ScoredOverviewChart'
@@ -84,7 +83,6 @@ function ScoredPositions() {
           <RatingChartDisclosure />
 
         </main>
-        <Footer />
       </div>
     </div>
   )

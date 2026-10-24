@@ -112,7 +112,7 @@ async def get_current_players_with_games_in_db() -> List[Dict[str, Any]]:
     """
     query = """
     SELECT * FROM player
-    WHERE joined != 0;
+    WHERE joined > 0 AND deleted_at IS NULL;
     """
     players = await open_async_request(query, fetch_as_dict=True)
     return players

@@ -1,12 +1,15 @@
 services:
   chessism-api:
     build: .
-    image: chessism-api:latest
+    # Keep API-only releases persistent across ordinary Compose restarts.
+    # Workers retain their own image; deploy the API to this tag, not a temporary override.
+    image: chessism-api:runtime
     ports:
       - "8003:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - CHESSISM_PLAYER_SUMMARIES=${CHESSISM_PLAYER_SUMMARIES:-0}
       - REDIS_HOST=${REDIS_HOST}
       - SUPERADMIN_GATE_CODE=${SUPERADMIN_GATE_CODE}
       - AUTH_COOKIE_NAME=${AUTH_COOKIE_NAME}
@@ -45,6 +48,25 @@ services:
       - ./research_data:/research-data
       - ./api_logs:/app/logs
       - /main-monitor-db-backups:/backup-volume
+
+  worker-player-summaries:
+    image: chessism-api:runtime
+    command: python -m chessism_api.operations.player_analytics_worker
+    restart: unless-stopped
+    init: true
+    cpus: "1.0"
+    mem_limit: 1g
+    stop_grace_period: 15s
+    profiles: [player-summaries]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - CHESSISM_PLAYER_SUMMARIES=1
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
 
   worker-exports:
     build: .

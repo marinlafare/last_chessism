@@ -16,6 +16,7 @@ export default function AppearancePropertyFields({ editable, related = false, id
     const spec = saved.registry.properties[property]
     const override = draft.find(row => matches(row) && row.property === property)
     const label = target.propertyLabels?.[property] || spec.label
+    const opaqueColor = target.opaqueColors?.includes(property)
     const computed = (property === 'radius' ? computedCornerRadius(element, computedStyle)
       : computedStyle.getPropertyValue(spec.css)).trim() || String(spec.default ?? '')
     const value = override?.value ?? (spec.kind === 'color' ? normalizeColor(computed)
@@ -28,12 +29,12 @@ export default function AppearancePropertyFields({ editable, related = false, id
     return <fieldset className="appearance-property" key={property} disabled={ctx.busy}>
       <label htmlFor={inputId}>{label}</label>
       {spec.kind === 'color' ? <>
-        <input id={inputId} type="color" value={normalizeColor(value).slice(0, 7)} onChange={e => set(property, replaceRgb(value, e.target.value))} />
-        <label className="appearance-opacity">Opacity {Math.round(parseInt(normalizeColor(value).slice(7), 16) / 255 * 100)}%
+        <input id={inputId} type="color" value={normalizeColor(value).slice(0, 7)} onChange={e => set(property, opaqueColor ? e.target.value : replaceRgb(value, e.target.value))} />
+        {!opaqueColor && <label className="appearance-opacity">Opacity {Math.round(parseInt(normalizeColor(value).slice(7), 16) / 255 * 100)}%
           <input aria-label={`${label} opacity`} type="range" min="0" max="100"
             value={Math.round(parseInt(normalizeColor(value).slice(7), 16) / 255 * 100)}
             onChange={e => set(property, normalizeColor(value).slice(0, 7) + Math.round(Number(e.target.value) * 2.55).toString(16).padStart(2, '0'))} />
-        </label>
+        </label>}
       </> : spec.kind === 'number' ? <input id={inputId} type="number" min={spec.min} max={spec.max} step={spec.step ?? 1} value={value} placeholder={property === 'radius' ? 'Mixed / relative' : 'Mixed / auto'}
         onChange={e => { const number = Number(e.target.value); if (validValue(spec, number)) set(property, number) }} />
         : <select id={inputId} value={spec.options.includes(value) ? value : ''} onChange={e => set(property, e.target.value)}>

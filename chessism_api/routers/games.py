@@ -363,6 +363,12 @@ async def api_get_player_game_count(player_name: str) -> JSONResponse:
     })
 
 
+@router.get("/{player_name}/latest")
+async def api_get_latest_player_game(player_name: str) -> JSONResponse:
+    from chessism_api.operations.player_analytics_summary import get_latest_game
+    return JSONResponse(content=await get_latest_game(player_name.strip().lower()))
+
+
 @router.get("/{player_name}/recent")
 async def api_get_recent_player_games(
     player_name: str,

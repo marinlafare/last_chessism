@@ -58,7 +58,7 @@ async function cachedRequest(path, options = {}) {
 
 export function fetchBehaviouralActivity({ playerName, signal, ...filters }) {
   const search = analyticsSearch(filters)
-  return cachedRequest(
+  return requestJson(
     `/players/${playerPath(playerName)}/analysis/behavioural/activity?${search}`,
     { signal }
   )
@@ -66,7 +66,7 @@ export function fetchBehaviouralActivity({ playerName, signal, ...filters }) {
 
 export function fetchBehaviouralRatings({ playerName, signal, ...filters }) {
   const search = analyticsSearch(filters)
-  return cachedRequest(
+  return requestJson(
     `/players/${playerPath(playerName)}/analysis/behavioural/ratings?${search}`,
     { signal }
   )

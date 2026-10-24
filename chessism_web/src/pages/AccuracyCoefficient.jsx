@@ -1,7 +1,6 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useState } from 'react'
 import Header from '../components/layout/Header'
-import Footer from '../components/layout/Footer'
 import SideRail from '../components/layout/SideRail'
 import { formatNumber } from '../utils/formatters'
 import {
@@ -402,7 +401,6 @@ export default function AccuracyCoefficient() {
             </section>
           ) : null}
         </main>
-        <Footer />
       </div>
     </div>
   )

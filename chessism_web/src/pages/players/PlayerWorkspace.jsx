@@ -21,7 +21,6 @@ import {
 } from '../../services/gameJobService'
 import {
   deletePlayer,
-  downloadPlayerGames,
   fetchPlayerDeletionPreview,
   fetchPlayerHours,
   fetchPlayerJobStatus,
@@ -100,6 +99,17 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const profileRequest = useRef(null)
 
   useEffect(() => {
+    if (!activePlayer || !playerHours?.summary_stale) return undefined
+    const controller = new AbortController()
+    const timer = window.setTimeout(() => {
+      fetchPlayerHours(activePlayer, { signal: controller.signal }).then(payload => {
+        if (!controller.signal.aborted) setPlayerHours(payload)
+      }).catch(() => {})
+    }, 2000)
+    return () => { window.clearTimeout(timer); controller.abort() }
+  }, [activePlayer, playerHours])
+
+  useEffect(() => {
     if (profile) onProfileLoaded?.(profile)
   }, [profile, onProfileLoaded])
 
@@ -119,28 +129,17 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     setMessage('')
 
     try {
-      let playerProfile = await fetchPlayerProfile(name, options)
+      const playerProfile = await fetchPlayerProfile(name, options)
       if (controller.signal.aborted) return
 
-      if ((playerProfile?.joined === null || playerProfile?.joined === 0) && !playerProfile?.deleted_at) {
-        const download = await downloadPlayerGames(name, options)
-        if (controller.signal.aborted) return
-        setMessage(download.message || 'Downloading games and updating profile…')
-        playerProfile = await fetchPlayerProfile(name, options)
+      if (!Number.isFinite(Number(playerProfile?.joined)) || Number(playerProfile?.joined) <= 0 || playerProfile?.deleted_at) {
+        throw new Error('This player does not have an eligible main-page profile.')
       }
       if (controller.signal.aborted) return
 
       const normalizedPlayer = String(playerProfile?.player_name || name).toLowerCase()
       setActivePlayer(normalizedPlayer)
       setProfile(playerProfile)
-
-      if (playerProfile?.deleted_at) {
-        setPlayerHours(null)
-        setPlayerPositionStats(null)
-        setPlayerNeighbors(null)
-        setMessage(`${normalizedPlayer} was deleted and is retained only as a shared-game shell.`)
-        return
-      }
 
       const [hoursPayload, positionPayload, neighborPayload] = await Promise.all([
         fetchPlayerHours(normalizedPlayer, options),
@@ -400,6 +399,12 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
       window.clearTimeout(timerId)
     }
   }, [deleteJob?.jobId])
+
+  if (!loading && !profile && error) {
+    return <div className="games-main players-starting-point">
+      <p {...pageStyleTarget('text')} className="result-line" role="alert">{error}</p>
+    </div>
+  }
 
   const profileTitle = loading && !profile ? 'Loading player…' : activePlayer || 'Player profile'
   const countryCode = String(profile?.country || '').trim().toUpperCase() || 'N/A'

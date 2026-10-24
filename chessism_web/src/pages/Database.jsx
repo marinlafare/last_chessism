@@ -21,8 +21,7 @@ export default function Database({ account }) {
     return () => controller.abort()
   }, [allowed, revision])
   const heading = <header className="database-heading"><h1 {...pageStyleTarget('heading')}>Database</h1>
-        {allowed && <><span {...pageStyleTarget('text')}>{catalog ? `${catalog.tables.length} tables / views · ${catalog.relationships.length} foreign keys` : 'Read-only workspace'}</span>
-          <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>{loading ? 'Loading structure…' : 'Refresh structure'}</button></>}
+        {allowed && <button {...pageStyleTarget('button')} className="btn btn-secondary" type="button" disabled={loading} onClick={() => setRevision(value => value + 1)}>{loading ? 'Loading structure…' : 'Refresh structure'}</button>}
       </header>
   return <div {...pageStyleTarget('page')} className="page-frame database-page">
     <SideRail />
