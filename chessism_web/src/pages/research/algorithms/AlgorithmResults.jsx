@@ -1,7 +1,17 @@
 import { pageStyleTarget } from '../../../appearance/styleCore.js'
 import RelationshipScatter from './RelationshipScatter'
 import BuilderResults from './BuilderResults'
+import CudaReport from './CudaReport'
+import { BlunderTrainingReport } from './BlunderTraining'
+import { BlunderValidationReport } from './BlunderValidation'
+import { BlunderV2Report } from './BlunderV2'
+import BlunderShadowReport from './BlunderShadowReport'
+import BlunderThresholdReport from './BlunderThresholdReport'
+import BlunderCohortReport from './BlunderCohortReport'
+import BlunderStrengthReport from './BlunderStrengthReport'
+import BlunderFullDevelopmentReport from './BlunderFullDevelopmentReport'
 import { duration, number } from './algorithmForm'
+import CanonicalTimingReport from './CanonicalTimingReport'
 
 function color(value) {
   if (value == null) return '#171e24'
@@ -62,7 +72,58 @@ function CorrelationTable({ result }) {
 
 export default function AlgorithmResults({ run, onClose }) {
   const result = run.result
+  if (result?.format === 'chessism_canonical_blunder_timing_v1') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <CanonicalTimingReport report={result} />
+  </section>
+  if (['chessism_blunder_full_development_reservation_v1', 'chessism_blunder_full_development_v1'].includes(result?.format)) return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    {run.error && <p {...pageStyleTarget('text')} role="alert">{run.error}</p>}
+    <BlunderFullDevelopmentReport report={result} />
+  </section>
+  if (['chessism_blunder_strength_reservation_v1', 'chessism_blunder_strength_comparison_v1'].includes(result?.format)) return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    {run.error && <p {...pageStyleTarget('text')} role="alert">{run.error}</p>}
+    <BlunderStrengthReport report={result} />
+  </section>
+  if (['chessism_blunder_cohort_checkpoint_v1', 'chessism_blunder_cohort_report_v1'].includes(result?.format)) return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    {run.error && <p {...pageStyleTarget('text')} role="alert">{run.error}</p>}
+    <BlunderCohortReport report={result} />
+  </section>
+  if (result?.format === 'chessism_blunder_threshold_comparison_v1') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <BlunderThresholdReport report={result} />
+  </section>
+  if (['chessism_blunder_shadow_checkpoint_v1', 'chessism_blunder_shadow_pilot_v1'].includes(result?.format)) return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    {run.error && <p {...pageStyleTarget('text')} role="alert">{run.error}</p>}
+    <BlunderShadowReport report={result} />
+  </section>
+  if (['chessism_blunder_source_reservation_v1', 'chessism_blunder_final_evaluation_reservation_v1'].includes(result?.format)) return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    {run.error && <p {...pageStyleTarget('text')} role="alert">{run.error}</p>}
+    <p {...pageStyleTarget('text')}>{result.final_evaluation
+      ? 'Frozen final evaluation started; no completed report yet. This test remains consumed even if the run fails or is cancelled. Live summaries are unchanged.'
+      : 'Source identities reserved; no completed model report. These games remain protected from future test reuse even if this run fails or is cancelled. Live summaries are unchanged.'}</p>
+  </section>
+  if (result?.format === 'chessism_rating_blunder_candidate_v2') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <BlunderV2Report report={result} />
+  </section>
+  if (result?.format === 'chessism_fixed_blunder_validation_v1') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <BlunderValidationReport report={result} />
+  </section>
+  if (result?.format === 'chessism_rating_blunder_candidate_v1') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <BlunderTrainingReport report={result} />
+  </section>
   if (result?.format === 'algorithm_builder_v2') return <BuilderResults run={run} onClose={onClose} />
+  if (result?.format === 'chessism_cuda_comparison_v2') return <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
+    <div className="algorithm-heading"><h2 {...pageStyleTarget('title')}>{run.name}</h2><button {...pageStyleTarget('button')} type="button" onClick={onClose}>Close results</button></div>
+    <CudaReport report={result} />
+  </section>
   return (
     <section {...pageStyleTarget('panel')} className="algorithm-panel algorithm-results" aria-label="Algorithm results">
       <div className="algorithm-heading">

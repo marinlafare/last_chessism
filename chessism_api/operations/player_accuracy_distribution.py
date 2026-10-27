@@ -69,10 +69,11 @@ def summary_rows_sql(session, metric):
     accuracy = 'CASE WHEN engine.game_efficiency BETWEEN 0 AND 100 THEN engine.game_efficiency END'
     layout = storage_for(session)
     if layout:
+        from .canonical_blunders.readers import engine_table
         return f"""SELECT gp.game_link, CASE WHEN gp.is_white THEN 'white' ELSE 'black' END AS player_color,
             g.played_at, m.name AS mode, {accuracy} AS accuracy, engine.blunder_count
             FROM {layout.table('game_player')} gp
-            JOIN {layout.table('game_player_engine_summary')} engine ON engine.game_player_id=gp.id
+            JOIN {engine_table(layout)} engine ON engine.game_player_id=gp.id
             JOIN {layout.table('game')} g ON g.link=gp.game_link
             JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
             JOIN {layout.table('game_analysis_coverage')} coverage ON coverage.link=gp.game_link
@@ -132,6 +133,16 @@ async def get_accuracy_distribution(player_name, redis):
 
 
 async def get_blunder_distribution(player_name, redis):
+    from .canonical_blunders import readers
+    if readers.enabled():
+        async with AsyncDBSession() as session:
+            await prepare(session)
+            saved=await readers.saved(session,str(player_name or '').strip().lower())
+            control=await readers.current(session)
+        if saved is not None: return saved
+        result=await get_summary_distribution(player_name,redis,metric='blunders')
+        return {**result,'canonical_pending':bool(control and control['target_model']),
+            'target_model_id':control['target_model'] if control else None,'model_id':'legacy_cpu_v1'}
     return await get_summary_distribution(player_name, redis, metric='blunders')
 
 
@@ -189,7 +200,10 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
     async with read_slot(), AsyncDBSession() as session:
         await prepare(session)
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
-        fingerprint = hashlib.sha256(json.dumps([scope.player, metric, sorted(set(modes)), bin_id]).encode()).hexdigest()
+        from .canonical_blunders.readers import current
+        canonical=await current(session)
+        fingerprint = hashlib.sha256(json.dumps([scope.player, metric, sorted(set(modes)), bin_id,
+            canonical['active_model'] if canonical else None]).encode()).hexdigest()
         cursor_time, cursor_id, cursor_color = decode_cursor(cursor, fingerprint)
         layout = storage_for(session)
         game_table = layout.table('game') if layout else 'game'

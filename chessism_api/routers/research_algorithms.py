@@ -26,6 +26,27 @@ router = APIRouter()
 QUEUE_LOCK = 731_946_225
 
 
+@router.get('/canonical-blunders')
+async def canonical_blunders_status():
+    from chessism_api.operations.canonical_blunders.registry import status
+    async with AsyncDBSession() as session:
+        await session.execute(text('SET TRANSACTION READ ONLY'))
+        await session.execute(text("SET LOCAL statement_timeout='5s'"))
+        return await status(session)
+
+
+@router.post('/canonical-blunders/benchmark', status_code=202)
+async def benchmark_canonical_blunders(account: Account = Depends(get_current_account),
+        redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.canonical_blunders.benchmark_job import current_configuration
+    try:
+        config = await current_configuration()
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Blunder reader comparison · 100,000 games · RTX 4060', config))
+
+
 class AlgorithmRequest(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     matrix_definition_id: uuid.UUID
@@ -60,6 +81,224 @@ class MatrixInputRequest(BaseModel):
     matrix_definition_id: uuid.UUID | None = None
     builtin_matrix_key: str | None = Field(None, max_length=100)
     matrix_parameters: MatrixParameters
+
+
+class CudaValidationRequest(BaseModel):
+    player: str = Field(min_length=1, max_length=128)
+    benchmark: bool = False
+
+
+class BlunderTrainingRequest(BaseModel):
+    games_per_group: int = Field(1000, ge=100, le=3000, strict=True)
+
+
+class FixedBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    player: str = Field(min_length=1, max_length=128)
+
+
+class SmoothBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    games_per_group: int = Field(1000, ge=100, le=3000, strict=True)
+    sampling: Literal['legacy','balanced_v1','development_reuse_v1'] = 'legacy'
+    refinement: Literal['none', 'calibration_v1'] = 'none'
+
+
+class FinalBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    acknowledgement: Literal['rapid_provisional_evaluation_v1']
+
+
+class ShadowBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    players: list[str] = Field(min_length=6, max_length=6)
+    acknowledgement: Literal['sampled_shadow_only_no_live_changes']
+
+
+class ThresholdBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    acknowledgement: Literal['compare_thresholds_only_no_live_changes']
+
+
+class CohortBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    resume_run_id: uuid.UUID | None = None
+    acknowledgement: Literal['all_player_shadow_summaries_no_live_changes']
+
+
+class StrengthBlunderRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    acknowledgement: Literal['compare_rating_strengths_only_no_live_changes']
+
+
+class FullDevelopmentRequest(BaseModel):
+    model_config = {'extra': 'forbid'}
+    parent_run_id: uuid.UUID
+    acknowledgement: Literal['large_cuda_development_only_keep_tests_untouched']
+
+
+@router.post('/blunder-full-development', status_code=202)
+async def start_full_blunder_development(request: FullDevelopmentRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_full_job import configuration
+    from chessism_api.operations.research_algorithms import blunder_development_reuse as history
+    class ReadOnlyReporter:
+        async def check(self): pass
+        async def progress(self, *args, **kwargs):
+            raise ValueError('Large development requires verified identity manifests, not historical position replay in the API.')
+    try:
+        async with AsyncDBSession() as session:
+            await session.execute(text('SET TRANSACTION READ ONLY'))
+            await session.execute(text("SET LOCAL statement_timeout='10s'"))
+            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            policy = await history.reference_plan(session)
+            roles, _, _ = await history.history(session, policy, ReadOnlyReporter())
+            config = configuration(request.parent_run_id, row, policy, roles)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · CP-balanced diagnostics · RTX 4060', config))
+
+
+@router.post('/blunder-strength-comparison', status_code=202)
+async def start_blunder_strength_comparison(request: StrengthBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_strength_job import configuration
+    from chessism_api.operations.research_algorithms.blunder_development_reuse import reference_plan
+    try:
+        async with AsyncDBSession() as session:
+            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            config = configuration(request.parent_run_id, row, await reference_plan(session))
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · weaker adjustments · shared GPU sample', config))
+
+
+@router.post('/blunder-cohort-summaries', status_code=202)
+async def start_blunder_cohort_summaries(request: CohortBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_cohort_job import configuration
+    try:
+        async with AsyncDBSession() as session:
+            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            config = configuration(request.parent_run_id, row, request.resume_run_id)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · all-player GPU 0.15 shadow summaries', config))
+
+
+@router.post('/blunder-threshold-comparison', status_code=202)
+async def start_blunder_threshold_comparison(request: ThresholdBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_threshold_compare import configuration
+    try:
+        async with AsyncDBSession() as session:
+            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            config = configuration(request.parent_run_id, row)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · 0.15 versus 0.20 · same 6,000 games', config))
+
+
+@router.post('/blunder-shadow-pilot', status_code=202)
+async def start_shadow_blunder_pilot(request: ShadowBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_shadow_job import configuration
+    try:
+        async with AsyncDBSession() as session:
+            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            config = configuration(request.parent_run_id, row, request.players)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · 500 → 6,000-game shadow pilot', config))
+
+
+@router.post('/blunder-final-evaluation', status_code=202)
+async def start_final_blunder_evaluation(request: FinalBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_final_evaluation import configuration
+    try:
+        async with AsyncDBSession() as session:
+            row = (await session.execute(text('SELECT status,config,result FROM algorithm_run WHERE id=:id'),
+                {'id': str(request.parent_run_id)})).mappings().one_or_none()
+            config = configuration(request.parent_run_id, row)
+    except ValueError as error:
+        raise HTTPException(409, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · frozen final evaluation · rapid provisional', config))
+
+
+@router.post('/blunder-training-v2', status_code=202)
+async def start_smooth_blunder_training(request: SmoothBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_v2_job import configuration
+    if request.refinement != 'none' and request.sampling not in ('balanced_v1', 'development_reuse_v1'):
+        raise HTTPException(422, 'Calibration refinement requires balanced sampling with verified prior-game exclusion.')
+    if request.sampling == 'development_reuse_v1' and request.refinement != 'calibration_v1':
+        raise HTTPException(422, 'Development reuse requires calibration refinement.')
+    plan=None
+    if request.sampling in ('balanced_v1', 'development_reuse_v1'):
+        from chessism_api.operations.research_algorithms.blunder_balanced_source import reference_plan
+        if request.sampling == 'development_reuse_v1':
+            from chessism_api.operations.research_algorithms.blunder_development_reuse import reference_plan
+        try:
+            async with AsyncDBSession() as session:
+                plan=await reference_plan(session)
+        except ValueError as error:
+            raise HTTPException(409,str(error)) from error
+    from chessism_api.operations.research_algorithms.blunder_refinement import policy
+    refinement = policy() if request.refinement == 'calibration_v1' else None
+    name = 'Rating-aware blunders · calibration refinement v1' if refinement else f'Rating-aware blunders v2 · {"balanced v1" if plan else "legacy sample"}'
+    if request.sampling == 'development_reuse_v1':
+        name += ' · development reuse'
+    return await enqueue_run(None, account, redis,
+        draft=(name, configuration(request.games_per_group, plan, refinement)))
+
+
+@router.post('/blunder-validation', status_code=202)
+async def start_blunder_validation(request: FixedBlunderRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_validation_job import configuration
+    try:
+        config = configuration(request.player)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=(f"Fixed-coefficient blunders · CUDA validation · {config['player']}"[:100], config))
+
+
+@router.post('/blunder-training', status_code=202)
+async def start_blunder_training(request: BlunderTrainingRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.blunder_training import configuration
+    return await enqueue_run(None, account, redis,
+        draft=('Rating-aware blunders · CUDA candidate', configuration(request.games_per_group)))
+
+
+@router.post('/cuda-validation', status_code=202)
+async def start_cuda_validation(request: CudaValidationRequest,
+        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
+    from chessism_api.operations.research_algorithms.score_validation_job import configuration
+    try:
+        config = configuration(request.player, benchmark=request.benchmark)
+    except ValueError as error:
+        raise HTTPException(422, str(error)) from error
+    return await enqueue_run(None, account, redis,
+        draft=(f"Score distribution · CUDA validation · {config['player']}"[:100], config))
 
 
 async def load_input_formula(request, session):
@@ -218,7 +457,8 @@ async def enqueue_run(definition_id, account, redis, *, draft=None):
                            created_by=account.id, status="queued", progress={"phase": "queued", "detail": "Waiting for the dedicated algorithm worker."})
         session.add(row)
     try:
-        job = await redis.enqueue_job("run_algorithm_job", run_id=run_id, _queue_name=QUEUE, _job_id=f"algorithm-{run_id}")
+        function = 'run_large_algorithm_job' if config.get('operation') == 'full_development_rating_blunder_v1' else 'run_algorithm_job'
+        job = await redis.enqueue_job(function, run_id=run_id, _queue_name=QUEUE, _job_id=f"algorithm-{run_id}")
         if job is None:
             raise RuntimeError("Unable to register algorithm job.")
     except Exception as error:

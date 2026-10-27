@@ -77,6 +77,10 @@ def matrix_sql(config: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
         from .move_scores import score_matrix_sql
         return score_matrix_sql(config)
     row_type = ROW_TYPES[config["row_type"]]
+    if row_type.key in {'score_distribution', 'blunder_moves'}:
+        from .summary_inputs import summary_input_sql
+        where_parts, params = _where_parts(row_type, config)
+        return summary_input_sql(config, row_type, where_parts, params)
     selected = [*config["feature_columns"], *config["label_columns"]]
     expressions = [
         f'{row_type.columns_by_key[key].expression} AS "{key}"'

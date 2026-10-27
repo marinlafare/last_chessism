@@ -102,7 +102,7 @@ def positions_sql(session, *, selected_games=None):
             SELECT g.mode, g.is_white, a.fen_id
             FROM selected_games g JOIN {association} a ON a.game_link=g.game_link
         ), scored AS (
-            SELECT o.*, CASE WHEN o.is_white THEN f.score ELSE -f.score END AS player_score,
+            SELECT o.*, f.analysis_source, CASE WHEN o.is_white THEN f.score ELSE -f.score END AS player_score,
                 CASE WHEN f.score IS NULL THEN 'unscored'
                      WHEN f.analysis_source='tablebase' THEN 'tablebase'
                      WHEN ABS(f.score)>=9000 THEN 'mate' ELSE 'cp' END AS score_kind
@@ -275,6 +275,22 @@ def histogram_is_fresh(payload, snapshot):
 
 async def get_distribution(player_name, redis, *, refresh=False):
     player, modes = normalize(player_name)
+    from .player_stockfish_summary import enabled, read_saved
+    if enabled():
+        async with AsyncDBSession() as session:
+            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+            await session.execute(text("SET LOCAL statement_timeout='5s'"))
+            if not await session.scalar(text('SELECT 1 FROM player WHERE player_name=:player AND joined>0 AND deleted_at IS NULL'), {'player': player}):
+                raise LookupError('Player was not found.')
+            saved = await read_saved(session, player)
+        if saved['summary_pending']:
+            # Preserve a previously viewed chart during the one-time backfill.
+            # Missing snapshots never start the old expensive calculation.
+            cached = await read_cache(redis, key_for('histogram', player))
+            if cached:
+                return {**cached, 'summary_managed': True, 'summary_pending': False,
+                        'stale': True, 'mate_distances_pending': True}
+        return saved
     async with AsyncDBSession() as session:
         await prepare(session)
         snapshot = await source_state(session, player)

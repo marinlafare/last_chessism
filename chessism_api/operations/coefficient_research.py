@@ -90,6 +90,9 @@ def _common_game_filters() -> str:
         AND game.avg_elo IS NOT NULL
         AND game.white_elo > 0
         AND game.black_elo > 0
+        AND game.white_result IN (0, 0.5, 1)
+        AND game.black_result IN (0, 0.5, 1)
+        AND game.white_result + game.black_result = 1
         AND ABS(game.white_elo - game.black_elo) <= :max_rating_gap
         AND game.mode = ANY(CAST(:modes AS text[]))
         AND game.n_moves > :opening_moves_excluded
@@ -454,6 +457,8 @@ async def run_chessism_coefficient_experiment(
         fits = build_fit_results(rows, config)
         result = {
             "lichess_coefficient": LICHESS_COEFFICIENT,
+            "source_contract_version": 2,
+            "source_note": "Only complementary game outcomes (1/0, 0.5/0.5, 0/1) are training labels; missing or inconsistent outcomes are excluded.",
             "fits": fits,
             "fitted_at": utc_now().isoformat(),
             "production_changed": False,

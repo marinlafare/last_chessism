@@ -18,7 +18,8 @@ class MatrixConstructorTests(unittest.TestCase):
         keys = {item["key"] for item in catalog["row_types"]}
         self.assertEqual(
             keys,
-            {"game", "game_player", "move", "position", "game_position", "player_period"},
+            {"game", "game_player", "move", "position", "game_position", "player_period",
+             "move_scores", "score_distribution", "blunder_moves"},
         )
         self.assertTrue(all(item["columns"] for item in catalog["row_types"]))
 

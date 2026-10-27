@@ -87,6 +87,8 @@ export default function PlayerBlunderDistribution({ playerName }) {
     </div>
     {request.loading && !request.data ? <p className="blunder-distribution-message" role="status">Loading saved blunders…</p> : null}
     {request.loading && request.data ? <small role="status">Updating…</small> : null}
+    {request.data?.canonical_pending && <small role="status">Preparing rating-aware GPU summaries; showing the previous calculation.</small>}
+    {request.data?.source === 'canonical_cuda_blunders' && <small {...pageStyleTarget('text')} title="Adopted provisionally; rapid calibration and independent model-quality checks have not passed.">Rating-aware · provisional{request.data.stale ? ' · update pending' : ''}</small>}
     {request.error ? <p className="blunder-distribution-error" role="alert">{request.error}{' '}
       <button {...pageStyleTarget(`${STYLE}.action`)} type="button" onClick={() => setRetry(value => value + 1)}>Retry</button>
     </p> : null}

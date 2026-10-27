@@ -10,14 +10,39 @@ import '/src/index.css'
 import '/src/pages/scored-positions/scoredPositions.css'
 import '/src/pages/players/player-game-explorer.css'
 
+const sortingFixture = new URLSearchParams(location.search).has('sorting')
 history.replaceState(null, '', '/')
-const state = window.catalogRegression = { unexpected: [], selections: [], errors: [], gamePages: [], openedGames: [] }
+const state = window.catalogRegression = { unexpected: [], selections: [], errors: [], gamePages: [], openedGames: [], catalogPages: [] }
+state.catalogRows = ['wins', 'losses', 'draws'].flatMap((outcome, outcomeIndex) =>
+  Array.from({ length: 11 }, (_, rate) => Array.from({ length: 12 }, (_, sample) => {
+    const row = { key: `${outcome}-${rate}-${sample}`, games: 100 * (sample + 1), wins: 0, losses: 0, draws: 0 }
+    row[outcome] = rate * 10 * (sample + 1)
+    row[['losses', 'draws', 'wins'][outcomeIndex]] = row.games - row[outcome]
+    return row
+  })).flat())
+state.catalogRows.push({ key: 'single-game', games: 1, wins: 1, losses: 0, draws: 0 })
 window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
 window.fetch = async (input, options = {}) => {
   const url = new URL(input, location.href)
   const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
   if (url.pathname.endsWith('/analysis/behavioural/catalog')) {
+    if (sortingFixture) {
+      const params = Object.fromEntries(url.searchParams)
+      state.catalogPages.push(params)
+      await new Promise(resolve => setTimeout(resolve, params.sort_by === 'losses' ? 200 : 50))
+      const sort = params.sort_by || 'games', page = Number(params.page), limit = Number(params.limit)
+      const bin = params.ratio_bin == null ? 9 : Number(params.ratio_bin)
+      const ranked = state.catalogRows.filter(row => row.games >= 2 && (sort === 'games' || Math.min(9, Math.floor(10 * row[sort] / row.games)) === bin))
+        .sort((a, b) => (sort === 'games' ? 0 : b[sort] / b.games - a[sort] / a.games)
+          || b.games - a.games || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+        .map((row, index) => ({ ...row, rank: index + 1, unknown: row.games - row.wins - row.losses - row.draws,
+          ...(params.kind === 'opponents' ? { latest_ratings: { bullet: 2401, blitz: 2502, rapid: 2603 } } : {}) }))
+        .filter(row => row.key.includes(params.search))
+      return reply({ sort_by: sort, summary_revision: 1, max_age_seconds: 0,
+        rows: ranked.slice((page - 1) * limit, page * limit), total_games: ranked.reduce((sum, row) => sum + row.games, 0),
+        pagination: { page, limit, total_groups: ranked.length, has_more: page * limit < ranked.length } })
+    }
     await new Promise(resolve => setTimeout(resolve, 50))
     return reply({ rows: Array.from({ length: 20 }, (_, index) => ({ key: `sample-${index}`, rank: index + 1,
       games: 100, wins: 50, draws: 20, losses: 30, unknown: 0 })), total_games: 2000,

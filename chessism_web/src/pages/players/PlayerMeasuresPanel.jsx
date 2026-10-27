@@ -15,7 +15,7 @@ export default function PlayerMeasuresPanel({ playerName, quality, loading = fal
   useEffect(() => {
     setExplorerSelection(null)
     setReviewGameId(null)
-  }, [quality, playerName])
+  }, [playerName])
 
   return (
     <>

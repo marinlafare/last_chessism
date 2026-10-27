@@ -7,10 +7,17 @@ from chessism_api.operations.coefficient_research import (
     fit_coefficient,
     normalized_config,
     weighted_error,
+    _common_game_filters,
 )
 
 
 class CoefficientResearchTests(unittest.TestCase):
+    def test_training_and_overview_require_valid_complementary_outcomes(self):
+        query = _common_game_filters()
+        self.assertIn('game.white_result IN (0, 0.5, 1)', query)
+        self.assertIn('game.black_result IN (0, 0.5, 1)', query)
+        self.assertIn('game.white_result + game.black_result = 1', query)
+
     def test_rating_bins_cover_below_1200_and_above_2600(self):
         self.assertEqual(RATING_BINS[0]["key"], "under-1200")
         self.assertIsNone(RATING_BINS[0]["lower"])

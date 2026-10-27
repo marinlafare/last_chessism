@@ -688,6 +688,30 @@
           "label": "Score distribution · retry button",
           "properties": ["background","color","borderColor","borderWidth","radius","padding","fontSize","fontFamily","hoverBackground","hoverColor"]
         },
+        "player.scores.status": {
+          "label": "Score distribution · summary status",
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
+        },
+        "player.scores.mates": {
+          "label": "Score distribution · mate counters container",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.scores.mates.row": {
+          "label": "Score distribution · mate counter row",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.scores.mates.label": {
+          "label": "Score distribution · mate counter labels",
+          "properties": ["background","hoverBackground","color","hoverColor","radius","padding","fontSize","fontFamily","textAlign"]
+        },
+        "player.scores.mates.for": {
+          "label": "Score distribution · mates for player",
+          "properties": ["background","hoverBackground","color","hoverColor","radius","padding","fontSize","fontFamily","textAlign"]
+        },
+        "player.scores.mates.against": {
+          "label": "Score distribution · mates against player",
+          "properties": ["background","hoverBackground","color","hoverColor","radius","padding","fontSize","fontFamily","textAlign"]
+        },
         "player.accuracyDistribution.chart": {
           "label": "Blunders per game · chart",
           "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1"],
@@ -772,6 +796,22 @@
           "label": "Opponents · game-count badge",
           "properties": ["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding"]
         },
+        "player.opponents.sort": {"label":"Opponents · outcome filters","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "player.opponents.sort.games": {"label":"Opponents · By games","editorParent":"player.opponents.sort","pressedUsesHoverBackground":true,"pressedUsesHoverColor":true,"properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}},
+        "player.opponents.sort.wins": {"label":"Opponents · By wins","editorParent":"player.opponents.sort","pressedUsesHoverBackground":true,"pressedUsesHoverColor":true,"properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}},
+        "player.opponents.sort.losses": {"label":"Opponents · By losses","editorParent":"player.opponents.sort","pressedUsesHoverBackground":true,"pressedUsesHoverColor":true,"properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}},
+        "player.opponents.sort.draws": {"label":"Opponents · By draws","editorParent":"player.opponents.sort","pressedUsesHoverBackground":true,"pressedUsesHoverColor":true,"properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}},
+        "player.opponents.bins": {"label":"Opponents · percentage-bin row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "player.opponents.bin.9": {"label":"Opponents · 100–90% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.8": {"label":"Opponents · 90–80% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.7": {"label":"Opponents · 80–70% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.6": {"label":"Opponents · 70–60% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.5": {"label":"Opponents · 60–50% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.4": {"label":"Opponents · 50–40% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.3": {"label":"Opponents · 40–30% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.2": {"label":"Opponents · 30–20% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.1": {"label":"Opponents · 20–10% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.opponents.bin.0": {"label":"Opponents · 10–0% bin","editorParent":"player.opponents.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
         "player.opponents.paging": {
           "label": "Opponents · pagination and retry",
           "properties": ["background","color","fontSize","fontFamily","borderColor","radius","hoverBackground","hoverColor"]
@@ -822,6 +862,45 @@
           "label": "Opening repertoire · pagination and retry",
           "properties": ["background","color","fontSize","fontFamily","borderColor","radius","hoverBackground","hoverColor"]
         },
+        "player.openings.sort": {
+          "label": "Opening repertoire · outcome filters",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.openings.sort.games": {
+          "label": "Opening repertoire · By games", "editorParent": "player.openings.sort",
+          "pressedUsesHoverBackground": true, "pressedUsesHoverColor": true,
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],
+          "propertyLabels": {"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}
+        },
+        "player.openings.sort.wins": {
+          "label": "Opening repertoire · By wins", "editorParent": "player.openings.sort",
+          "pressedUsesHoverBackground": true, "pressedUsesHoverColor": true,
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],
+          "propertyLabels": {"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}
+        },
+        "player.openings.sort.losses": {
+          "label": "Opening repertoire · By losses", "editorParent": "player.openings.sort",
+          "pressedUsesHoverBackground": true, "pressedUsesHoverColor": true,
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],
+          "propertyLabels": {"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}
+        },
+        "player.openings.sort.draws": {
+          "label": "Opening repertoire · By draws", "editorParent": "player.openings.sort",
+          "pressedUsesHoverBackground": true, "pressedUsesHoverColor": true,
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],
+          "propertyLabels": {"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text"}
+        },
+        "player.openings.bins": {"label":"Opening repertoire · percentage-bin row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "player.openings.bin.9": {"label":"Opening repertoire · 100–90% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.8": {"label":"Opening repertoire · 90–80% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.7": {"label":"Opening repertoire · 80–70% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.6": {"label":"Opening repertoire · 70–60% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.5": {"label":"Opening repertoire · 60–50% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.4": {"label":"Opening repertoire · 50–40% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.3": {"label":"Opening repertoire · 40–30% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.2": {"label":"Opening repertoire · 30–20% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.1": {"label":"Opening repertoire · 20–10% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
+        "player.openings.bin.0": {"label":"Opening repertoire · 10–0% bin","editorParent":"player.openings.bins","hoverState":":is(:hover, [aria-pressed=\"true\"])","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"],"propertyLabels":{"background":"Inactive background","hoverBackground":"Active / hover background","hoverColor":"Active / hover text","hoverBorderColor":"Active / hover border"}},
         "player.activityHours.toggle": {
           "label": "Behavioral analysis · Hours button",
           "initialStyleFrom": "button",
@@ -918,6 +997,10 @@
         },
         "player.photo": {
           "label": "Hero · photo container",
+          "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
+        "player.photo.pinned": {
+          "label": "Hero · pinned player photo",
           "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
         "player.profilePopup.backdrop": {
@@ -2749,6 +2832,7 @@
         "/research/matrices"
       ],
       "targets": {
+        "defaults.panel": {"label":"Default matrices container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
         "definitions.panel": {
           "label": "Saved matrices",
           "properties": [
@@ -2788,6 +2872,16 @@
         "/research/matrices/collection"
       ],
       "targets": {
+        "row": {"label":"Algorithm report rows","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "input": {"label":"Algorithm research input fields","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.v2.panel": {"label":"Rating-aware v2 candidate container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.v2.report": {"label":"Rating-aware v2 report container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.fixed.panel": {"label":"Fixed-coefficient blunder validation container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.fixed.report": {"label":"Fixed-coefficient blunder report","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.training.panel": {"label":"Rating-aware model training container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "blunder.training.report": {"label":"Rating-aware model report","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "cuda.validation.panel": {"label":"CUDA validation container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "cuda.validation.result": {"label":"CUDA comparison report","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
         "definition.panel": {
           "label": "Algorithm definition",
           "properties": [

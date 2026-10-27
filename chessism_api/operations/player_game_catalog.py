@@ -12,6 +12,7 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.relational_reads import player_rows_sql
 from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_hero_analytics import _analytics_scope
+from chessism_api.operations.player_catalog_snapshot import CATALOG_MIN_GAMES, catalog_ratio_bin, catalog_snapshot_page
 
 CACHE_SECONDS = 60
 READ_SLOTS = asyncio.Semaphore(2)
@@ -99,11 +100,12 @@ async def _latest_opponent_ratings(session, opponents, mode):
     return ratings
 
 
-async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color='all', page=1, limit=10, search=''):
+async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color='all', page=1, limit=10, search='', sort_by='games', ratio_bin=None):
     if kind not in ('opponents', 'openings'):
         raise ValueError('Choose opponents or openings.')
     if color not in ('all', 'white', 'black'):
         raise ValueError('Color must be all, white or black.')
+    ratio_bin = catalog_ratio_bin(sort_by, ratio_bin)
     if not 1 <= page <= 100000 or not 1 <= limit <= 50:
         raise ValueError('Invalid catalog page or page size.')
     if not isinstance(search, str) or len(search) > 128:
@@ -114,13 +116,12 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
         await session.execute(text('SET TRANSACTION READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='8s'"))
         scope = await _analytics_scope(session, player_name, mode)
-        from .player_catalog_snapshot import catalog_snapshot_page
         saved = await catalog_snapshot_page(session, redis, scope, kind=kind, mode=scope.mode,
-                                            color=color, search=search, page=page, limit=limit)
+                                            color=color, search=search, page=page, limit=limit, sort_by=sort_by, ratio_bin=ratio_bin)
         if saved is not None:
             return saved
-    key = 'chessism:player-game-catalog:v3:' + hashlib.sha256(json.dumps(
-        [scope.player, kind, scope.mode, color, page, limit, search]).encode()).hexdigest()
+    key = 'chessism:player-game-catalog:v9:' + hashlib.sha256(json.dumps(
+        [scope.player, kind, scope.mode, color, page, limit, search, sort_by, ratio_bin]).encode()).hexdigest()
     cached = await cached_page(redis, key)
     if cached is not None:
         return cached
@@ -136,6 +137,12 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
         entry = "COALESCE(gp.opponent_name, '')" if kind == 'opponents' else OPENING_KEY_SQL
         search_label = ("COALESCE(NULLIF(REPLACE(entry_key, '-', ' '), ''), 'Unknown opening')"
                         if kind == 'openings' else "COALESCE(NULLIF(entry_key, ''), 'Unknown opponent')")
+        # sort_by is a validated column name. Bin bounds stay bound parameters.
+        bin_filter = ('' if ratio_bin is None else
+                      f'WHERE {sort_by} * 10 >= :ratio_bin * games '
+                      f'AND (:ratio_bin = 9 OR {sort_by} * 10 < (:ratio_bin + 1) * games)')
+        order_by = ('games DESC, entry_key' if sort_by == 'games' else
+                    f'{sort_by}::numeric / NULLIF(games, 0) DESC NULLS LAST, games DESC, entry_key')
         async with AsyncDBSession() as session:
             await session.execute(text('SET TRANSACTION READ ONLY'))
             await session.execute(text("SET LOCAL statement_timeout='8s'"))
@@ -151,9 +158,10 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
                         AND (:mode='all' OR gp.mode=:mode)
                         AND (:color='all' OR gp.color=:color)
                     GROUP BY {entry}
+                    HAVING COUNT(*) >= :min_games
                 ), ranked AS (
-                    SELECT *, ROW_NUMBER() OVER (ORDER BY games DESC, entry_key) AS rank
-                    FROM buckets
+                    SELECT *, ROW_NUMBER() OVER (ORDER BY {order_by}) AS rank
+                    FROM buckets {bin_filter}
                 ), matching AS MATERIALIZED (
                     SELECT * FROM ranked
                     WHERE :search='' OR STRPOS(LOWER(entry_key), :search)>0
@@ -169,6 +177,8 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
             """, ('mode', 'color', 'result', field))
             records = (await session.execute(query, {
                 'player': scope.player, 'mode': scope.mode, 'color': color,
+                'min_games': CATALOG_MIN_GAMES,
+                'ratio_bin': ratio_bin,
                 'limit': limit, 'offset': (page - 1) * limit, 'search': search,
             })).mappings().all()
             latest_ratings = await _latest_opponent_ratings(
@@ -188,7 +198,7 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
             rows.append(row)
         groups = int(records[0]['groups'])
         payload = {
-            'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search,
+            'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search, 'sort_by': sort_by, 'ratio_bin': ratio_bin,
             'rows': rows, 'total_games': int(records[0]['total_games']),
             'max_age_seconds': CACHE_SECONDS,
             'pagination': {'page': page, 'limit': limit, 'total_groups': groups,

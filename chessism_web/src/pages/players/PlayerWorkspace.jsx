@@ -96,6 +96,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const [deleteStatus, setDeleteStatus] = useState(null)
   const [deleteMessage, setDeleteMessage] = useState('')
   const playerPickerRef = useRef(null)
+  const workspaceRef = useRef(null)
   const profileRequest = useRef(null)
 
   useEffect(() => {
@@ -424,7 +425,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     hours: Math.round(Number(playerHours?.[`${mode}_hours`] || 0)),
   }))
   return (
-        <div className="games-main players-starting-point">
+        <div className="games-main players-starting-point" ref={workspaceRef}>
           {message ? <p {...pageStyleTarget('text')} className="result-line">{message}</p> : null}
           {error ? <p {...pageStyleTarget('text')} className="result-line">{error}</p> : null}
 
@@ -516,7 +517,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
               <GameUpdateProgress status={gamesUpdateStatus} message={gamesUpdateMessage} />
               <GameUpdateProgress status={deleteStatus} message={deleteMessage || deleteError} />
               <div className="players-profile-layout">
-                <PlayerProfilePhoto profile={profile} name={profileTitle} latestGame={latestGame}
+                <PlayerProfilePhoto workspaceRef={workspaceRef} profile={profile} name={profileTitle} latestGame={latestGame}
                   positionStats={playerPositionStats} hours={playerHours} />
                 {profile ? (
                   <>

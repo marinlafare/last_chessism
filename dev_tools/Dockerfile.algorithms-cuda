@@ -1,0 +1,7 @@
+# Optional CUDA dependency layer, built with Dockerfile.cuda-validation first.
+# Isolated research image: no host driver installation or cloud-worker changes.
+FROM chessism-cuda-validation:20261025
+COPY chessism_api/ /app/chessism_api/
+WORKDIR /app
+ENTRYPOINT []
+CMD ["arq", "chessism_api.operations.research_algorithms.worker.WorkerSettings"]

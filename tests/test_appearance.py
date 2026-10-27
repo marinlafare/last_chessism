@@ -21,6 +21,27 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_catalog_percentage_bins_have_independent_saveable_styles(self):
+        for kind in ('openings', 'opponents'):
+            for bin_index in range(10):
+                target = f'player.{kind}.bin.{bin_index}'
+                for prop, value in [('background', '#12345680'), ('hoverBackground', '#abcdef'),
+                                    ('color', '#fedcba'), ('hoverColor', '#ffffff'), ('borderWidth', 2),
+                                    ('hoverBorderColor', '#654321'), ('radius', 4), ('padding', 2)]:
+                    validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+                spec = REGISTRY['scopes']['home']['targets'][target]
+                self.assertEqual(spec['editorParent'], f'player.{kind}.bins')
+                self.assertIn('aria-pressed', spec['hoverState'])
+
+    def test_catalog_sort_buttons_have_independent_saveable_styles(self):
+        for kind in ('openings', 'opponents'):
+            for sort in ('games', 'wins', 'losses', 'draws'):
+                target = f'player.{kind}.sort.{sort}'
+                for prop, value in [('background', '#12345680'), ('hoverBackground', '#abcdef'),
+                                    ('hoverBorderColor', '#654321'), ('radius', 8)]:
+                    validate_overrides([override(scope='home', target=target, property=prop, value=value)])
+                self.assertEqual(REGISTRY['scopes']['home']['targets'][target]['editorParent'], f'player.{kind}.sort')
+
     def test_days_palette_keeps_user_hue_but_not_user_opacity(self):
         for color in ('chartColor1', 'chartColor2', 'chartColor3'):
             row = override(scope='home', target='player.days.palette', property=color, value='#12345620')
@@ -86,7 +107,7 @@ class AppearanceTests(unittest.TestCase):
         self.assertNotIn('hoverBackground', button.get('initialStyleExcludedProperties', []))
 
     def test_hero_photo_and_container_hover_styles_are_saveable(self):
-        for target in ('player.hero', 'player.navigation', 'player.profile', 'player.photo',
+        for target in ('player.hero', 'player.navigation', 'player.profile', 'player.photo', 'player.photo.pinned',
                        'player.profilePopup', 'player.profilePopup.field'):
             for prop, value in [('background', '#123456'), ('hoverBackground', '#abcdef'),
                                 ('borderColor', '#112233'), ('hoverBorderColor', '#445566'),

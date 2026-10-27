@@ -1,6 +1,7 @@
 import { pageStyleTarget } from '../../../appearance/styleCore.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { activeRun, duration, number } from './algorithmForm'
+import AlgorithmResults from './AlgorithmResults'
 
 function RunCard({ run, clock, model }) {
   const active = activeRun(run)
@@ -47,7 +48,7 @@ function RunCard({ run, clock, model }) {
   )
 }
 
-function SavedAlgorithms({ model }) {
+export function SavedAlgorithms({ model }) {
   return (
     <section {...pageStyleTarget('panel')} className="algorithm-panel">
       <h2 {...pageStyleTarget('title')}>Saved algorithms</h2>
@@ -86,34 +87,58 @@ function SavedAlgorithms({ model }) {
   )
 }
 
-export default function AlgorithmHistory({ model }) {
+export function ActiveAlgorithmRuns({ model }) {
   const [clock, setClock] = useState(Date.now())
-  const hasActive = model.runs.some(activeRun)
+  const runs = (model.activeRuns || model.runs).filter(activeRun)
+  const hasActive = runs.length > 0
   useEffect(() => {
     if (!hasActive) return undefined
     const timer = setInterval(() => setClock(Date.now()), 1000)
     return () => clearInterval(timer)
   }, [hasActive])
+  if (!hasActive) return null
+  return <section {...pageStyleTarget('panel')} className="algorithm-panel" aria-label="Active algorithm runs">
+    <div className="algorithm-heading">
+      <h2 {...pageStyleTarget('title')}>Active runs</h2>
+      <button {...pageStyleTarget('button')} type="button" onClick={model.refresh}>Refresh</button>
+    </div>
+    {runs.map(run => <RunCard key={run.id} run={run} clock={clock} model={model} />)}
+  </section>
+}
+
+export default function AlgorithmHistory({ model }) {
+  const [open, setOpen] = useState(false)
+  const id = useId()
+  const resultsRef = useRef(null)
+  const runs = model.runs.filter(run => !activeRun(run))
+  useEffect(() => { if (model.result) setOpen(true) }, [model.result?.id])
+  useEffect(() => {
+    if (open && model.result && resultsRef.current) {
+      resultsRef.current.scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' })
+      resultsRef.current.focus({ preventScroll: true })
+    }
+  }, [open, model.result?.id])
   return (
-    <>
-      <SavedAlgorithms model={model} />
-      <section {...pageStyleTarget('panel')} className="algorithm-panel" aria-label="Algorithm runs">
+    <section {...pageStyleTarget('history.panel')} className="algorithm-panel algorithm-history" aria-label="Algorithm history">
+      <button {...pageStyleTarget('button')} className="algorithm-history-toggle" type="button"
+        id={`${id}-toggle`} aria-expanded={open} aria-controls={`${id}-content`} onClick={() => setOpen(value => !value)}>
+        <span>History</span><svg viewBox="0 0 20 20" aria-hidden="true"><path d="m5 7.5 5 5 5-5" /></svg>
+      </button>
+      <div id={`${id}-content`} className="algorithm-history-content" hidden={!open}
+        role="region" aria-labelledby={`${id}-toggle`}>
         <div className="algorithm-heading">
-          <h2 {...pageStyleTarget('title')}>Runs</h2><button {...pageStyleTarget('button')} type="button" onClick={model.refresh}>Refresh</button>
+          <h2 {...pageStyleTarget('title')}>Previous runs</h2><button {...pageStyleTarget('button')} type="button" onClick={model.refresh}>Refresh history</button>
         </div>
-        <p {...pageStyleTarget('text')}>
-          Progress is recorded by the worker. Closing this page does not stop a run.
-          Time estimates apply only to a phase with a known total.
-        </p>
-        {!model.runs.length && <p {...pageStyleTarget('text')}>No runs on this page.</p>}
-        {model.runs.map((run) => <RunCard key={run.id} run={run} clock={clock} model={model} />)}
+        {!runs.length && <p {...pageStyleTarget('text')}>No previous runs on this page.</p>}
+        {runs.map(run => <RunCard key={run.id} run={run} clock={Date.now()} model={model} />)}
         <div className="algorithm-actions">
           <button {...pageStyleTarget('button')} type="button" disabled={model.runOffset === 0}
             onClick={() => model.setRunOffset(Math.max(0, model.runOffset - 30))}>Newer</button>
           <button {...pageStyleTarget('button')} type="button" disabled={!model.runMore}
             onClick={() => model.setRunOffset(model.runOffset + 30)}>Older</button>
         </div>
-      </section>
-    </>
+        {model.result && <div ref={resultsRef} tabIndex="-1"><AlgorithmResults run={model.result} onClose={() => model.setResult(null)} /></div>}
+      </div>
+    </section>
   )
 }

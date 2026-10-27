@@ -1,8 +1,9 @@
-import { useEffect, useId, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import PlayerAvatar from '../../components/players/PlayerAvatar'
 import { playerProfileSections } from './playerProfileDetails.js'
+import usePinnedPlayerPhoto from './usePinnedPlayerPhoto.js'
 import './player-profile-photo.css'
 
 function ProfilePopup({ profile, latestGame, positionStats, hours, onClose }) {
@@ -56,14 +57,37 @@ function ProfilePopup({ profile, latestGame, positionStats, hours, onClose }) {
   </div>, document.body)
 }
 
-export default function PlayerProfilePhoto({ profile, name, latestGame, positionStats, hours }) {
+function PinnedPhoto({ position, originalButton, profile, onClick }) {
+  const button = useRef(null)
+  useLayoutEffect(() => {
+    const pinned = button.current, original = originalButton.current
+    if (document.activeElement === original) pinned?.focus({ preventScroll: true })
+    return () => {
+      if (document.activeElement === pinned && original?.isConnected) original.focus({ preventScroll: true })
+    }
+  }, [originalButton])
+  return createPortal(<div className="player-profile-photo-pin" style={position}>
+    <button {...pageStyleTarget('player.photo.pinned')} ref={button} className="player-profile-pinned-photo"
+      type="button" aria-label={`Open full profile for ${profile.player_name}`} aria-haspopup="dialog" onClick={onClick}>
+      <PlayerAvatar src={profile.avatar} name={profile.player_name} />
+    </button>
+  </div>, document.body)
+}
+
+export default function PlayerProfilePhoto({ profile, name, latestGame, positionStats, hours, workspaceRef }) {
   const [open, setOpen] = useState(false)
+  const anchor = useRef(null), button = useRef(null)
+  const pinned = usePinnedPlayerPhoto(anchor, workspaceRef, Boolean(profile))
   return <>
-    <button {...pageStyleTarget('player.photo')} className="players-profile-avatar-box" type="button"
+    <button {...pageStyleTarget('player.photo')} ref={button} className="players-profile-avatar-box" type="button"
+      aria-hidden={pinned ? true : undefined} tabIndex={pinned ? -1 : undefined}
       disabled={!profile} aria-label={`Open full profile for ${profile?.player_name || name || 'player'}`}
       aria-haspopup="dialog" onClick={() => setOpen(true)}>
-      <PlayerAvatar className="players-profile-avatar" src={profile?.avatar} name={profile?.player_name || name} />
+      <span ref={anchor} className="players-profile-photo-anchor" data-pinned={Boolean(pinned)}>
+        <PlayerAvatar className="players-profile-avatar" src={profile?.avatar} name={profile?.player_name || name} />
+      </span>
     </button>
+    {pinned && profile ? <PinnedPhoto position={pinned} originalButton={button} profile={profile} onClick={() => setOpen(true)} /> : null}
     {open && profile ? <ProfilePopup key={profile.player_name} profile={profile} latestGame={latestGame}
       positionStats={positionStats} hours={hours} onClose={() => setOpen(false)} /> : null}
   </>

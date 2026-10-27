@@ -1,5 +1,6 @@
 """Versioned catalog ranking over precomputed counts, never over game history."""
 from collections import defaultdict
+from fractions import Fraction
 import hashlib
 import json
 
@@ -10,20 +11,54 @@ from chessism_api.database.player_analytics_schema import analytics_table
 from chessism_api.database.relational_storage import storage_for
 from .player_analytics_summary import enabled, read_snapshot, counts
 
+CATALOG_SORTS = ('games', 'wins', 'losses', 'draws')
+CATALOG_MIN_GAMES = 2
 
-def rank_catalog(rows, mode, color):
+
+def catalog_ratio_bin(sort_by, ratio_bin):
+    if sort_by not in CATALOG_SORTS:
+        raise ValueError('Choose games, wins, losses or draws.')
+    if sort_by == 'games':
+        if ratio_bin is not None:
+            raise ValueError('Percentage bins require wins, losses or draws.')
+        return None
+    if ratio_bin is None:
+        return 9
+    if type(ratio_bin) is not int or not 0 <= ratio_bin <= 9:
+        raise ValueError('Percentage bin must be an integer from 0 to 9.')
+    return ratio_bin
+
+
+def filter_catalog_bin(ranked, sort_by='games', ratio_bin=None):
+    ratio_bin = catalog_ratio_bin(sort_by, ratio_bin)
+    if ratio_bin is None:
+        return ranked
+    # Integer arithmetic keeps exact boundaries unambiguous: [0,10), ...,
+    # [80,90), [90,100]. Re-rank the filtered list before search/pagination.
+    matching = (row for row in ranked if min(9, 10 * row[sort_by] // row['games']) == ratio_bin)
+    ordered = sorted(matching, key=lambda row: (-Fraction(row[sort_by], row['games']), -row['games'], row['key']))
+    return [{**row, 'rank': index + 1} for index, row in enumerate(ordered)]
+
+
+def rank_catalog(rows, mode, color, sort_by='games', *, min_games=1, ratio_bin=None):
+    ratio_bin = catalog_ratio_bin(sort_by, ratio_bin)
     grouped = defaultdict(counts)
     for row in rows:
         if (mode != 'all' and row['mode'] != mode) or (color != 'all' and row['color'] != color):
             continue
         for field in grouped[row['key']]:
             grouped[row['key']][field] += row[field]
-    return [{'key': key, 'rank': index + 1, **value,
+    # Apply the minimum after pooling the selected modes/colors, but before
+    # assigning ranks, searching, or paginating.
+    eligible = ((key, value) for key, value in grouped.items() if value['games'] >= min_games)
+    ranked = [{'key': key, 'rank': index + 1, **value,
              'unknown': value['games'] - value['wins'] - value['draws'] - value['losses']}
-            for index, (key, value) in enumerate(sorted(grouped.items(), key=lambda item: (-item[1]['games'], item[0])))]
+            for index, (key, value) in enumerate(sorted(eligible, key=lambda item: (-item[1]['games'], item[0])))]
+    return filter_catalog_bin(ranked, sort_by, ratio_bin)
 
 
-async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, search, page, limit):
+async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, search, page, limit, sort_by='games', ratio_bin=None):
+    ratio_bin = catalog_ratio_bin(sort_by, ratio_bin)
     if not enabled():
         return None
     meta = (await session.execute(text(f'''SELECT revision,generated_at FROM
@@ -31,8 +66,9 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         {'player': scope.player, 'kind': kind})).mappings().first()
     if not meta:
         return None
+    # Reuse the saved counts across outcomes; filter and rank before paging.
     identity = [scope.player, kind, mode, color, meta['revision']]
-    key = 'chessism:catalog-ranking:v1:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+    key = 'chessism:catalog-ranking:v6:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     ranked = None
     try:
         raw = await redis.get(key)
@@ -43,7 +79,7 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         saved = await read_snapshot(session, scope.player, kind)
         if not saved:
             return None
-        ranked = rank_catalog(saved['rows'], mode, color)
+        ranked = rank_catalog(saved['rows'], mode, color, min_games=CATALOG_MIN_GAMES)
         # A refresh between reads must not cache a new ranking under an old key.
         if saved['summary_revision'] == meta['revision']:
             try:
@@ -54,7 +90,7 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
     def matches(row):
         label = (row['key'].replace('-', ' ') or 'Unknown opening') if kind == 'openings' else (row['key'] or 'Unknown opponent')
         return not search or search in row['key'].lower() or search in label.lower()
-    matching = [row for row in ranked if matches(row)]
+    matching = [row for row in filter_catalog_bin(ranked, sort_by, ratio_bin) if matches(row)]
     rows = [dict(row) for row in matching[(page - 1) * limit:page * limit]]
     if kind == 'opponents':
         from .player_game_catalog import _latest_opponent_ratings, RATING_MODES
@@ -62,7 +98,7 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         for row in rows:
             row['latest_ratings'] = ratings.get(row['key'], dict.fromkeys(RATING_MODES if mode == 'all' else [mode]))
     total = len(matching)
-    return {'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search,
+    return {'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search, 'sort_by': sort_by, 'ratio_bin': ratio_bin,
             'rows': rows, 'total_games': sum(row['games'] for row in matching), 'summary_revision': meta['revision'],
             'max_age_seconds': 0, 'pagination': {'page': page, 'limit': limit, 'total_groups': total,
                 'total_pages': (total + limit - 1) // limit, 'has_more': page * limit < total}}

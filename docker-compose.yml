@@ -10,6 +10,8 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_PLAYER_SUMMARIES=${CHESSISM_PLAYER_SUMMARIES:-0}
+      - CHESSISM_STOCKFISH_SUMMARIES=${CHESSISM_STOCKFISH_SUMMARIES:-0}
+      - CHESSISM_CANONICAL_BLUNDERS=${CHESSISM_CANONICAL_BLUNDERS:-0}
       - REDIS_HOST=${REDIS_HOST}
       - SUPERADMIN_GATE_CODE=${SUPERADMIN_GATE_CODE}
       - AUTH_COOKIE_NAME=${AUTH_COOKIE_NAME}
@@ -62,6 +64,25 @@ services:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_PLAYER_SUMMARIES=1
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker-stockfish-summaries:
+    image: chessism-api:runtime
+    command: python -m chessism_api.operations.player_stockfish_worker
+    restart: unless-stopped
+    init: true
+    cpus: "1.0"
+    mem_limit: 1g
+    stop_grace_period: 15s
+    profiles: [stockfish-summaries]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - CHESSISM_STOCKFISH_SUMMARIES=1
     networks:
       - chessism_net
     depends_on:
@@ -376,7 +397,8 @@ services:
 
   worker-research:
     build: .
-    image: chessism-api:latest
+    # Coefficient-only research releases must not replace ingestion/FEN images.
+    image: chessism-research:runtime
     command: arq worker.WorkerSettings
     cpus: "1.00"
     environment:
@@ -404,11 +426,21 @@ services:
         condition: service_healthy
 
   worker-algorithms:
-    build: .
-    image: chessism-api:latest
+    build:
+      context: .
+      dockerfile: dev_tools/Dockerfile.algorithms-cuda
+    # Research releases are independent of the ingestion/FEN worker image.
+    image: chessism-algorithms:runtime
     command: arq chessism_api.operations.research_algorithms.worker.WorkerSettings
     cpus: "1.00"
-    mem_limit: 1g
+    mem_limit: 2g
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${CHESSISM_ALGORITHMS_GPU_DEVICE:-1}"]
+              capabilities: [gpu]
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}

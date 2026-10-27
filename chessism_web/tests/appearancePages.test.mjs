@@ -10,6 +10,21 @@ const extra=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_sc
 const charts=JSON.parse(fs.readFileSync(new URL('../../chessism_api/appearance_charts.json',import.meta.url)))
 const registry={...legacy,properties:{...legacy.properties,...charts.properties},scopes:Object.fromEntries(Object.entries(extra.scopes).map(([id,spec])=>[id,{...spec,targets:{...extra.common_targets,...charts.targets,...spec.targets,...(id===legacy.scope?legacy.targets:{})}}]))}
 
+test('catalog bins keep active/hover styles independent from sibling bins, catalogs and pages',()=>{
+  for(const kind of ['openings','opponents']) for(let bin=0;bin<10;bin++){
+    const target=`player.${kind}.bin.${bin}`
+    for(const [property,cssProperty] of [['hoverBackground','background-color'],['hoverColor','color'],['hoverBorderColor','border-color']]){
+      const row={scope:'home',target,property,value:'#abcdef'}
+      const css=appearanceCss(registry,[row])
+      assert.ok(css.includes(`data-style-id="${target}"`))
+      assert.ok(css.includes(`:is(:hover, [aria-pressed="true"]){${cssProperty}:#abcdef`))
+      assert.ok(!css.includes(`data-style-id="player.${kind}.bin.${(bin+1)%10}"`))
+      assert.ok(!css.includes(`data-style-id="player.${kind==='openings'?'opponents':'openings'}.bin.${bin}"`))
+      assert.equal(appearanceCss(registry,[{...row,scope:'positions'}]),'')
+    }
+  }
+})
+
 test('each normal and cancellation step exposes an independent progress-bar style', () => {
   const normal = cloudJobProgress({ status: 'queued', runs: [] }).steps
   const stopping = cloudJobProgress({ status: 'running', runs: [], stop_cleanup: { phase: 'stopping' } }).steps
@@ -60,6 +75,7 @@ test('registered target annotations stay in their owning page scopes',()=>{
     const dirs={home:'home',games:'games',positions:'positions','system-status':'system_status'}
     if(dirs[file.split('/')[0]])return [dirs[file.split('/')[0]]]
     if(file.startsWith('research/algorithms/'))return ['algorithms']
+    if(file==='research/matrices/DefaultMatrices.jsx')return ['matrices']
     if(file.startsWith('research/matrices/'))return ['matrices','algorithms']
     return [{Home:'home',Games:'games',SystemStatus:'system_status',DownloadNewGames:'download_games',MainCharacters:'main_characters',SecondaryCharacter:'secondary_character',Positions:'positions',LiveAnalysis:'live_analysis',ScoredPositions:'scored_positions',AnalyzeTimes:'analyze_times',Research:'research',AccuracyCoefficient:'accuracy_coefficient',MatricesConstructor:'matrices',Algorithms:'algorithms',SalienceResearch:'salience',DatabaseBackups:'backups'}[file.replace('.jsx','')]].filter(Boolean)
   }
@@ -113,7 +129,7 @@ test('profile fields have separate backgrounds and preserve saved title/value st
 })
 
 test('hero photo and data containers have independent hover styles without resetting saved backgrounds',()=>{
-  for(const target of ['player.hero','player.navigation','player.profile','player.photo','player.profilePopup','player.profilePopup.field']){
+  for(const target of ['player.hero','player.navigation','player.profile','player.photo','player.photo.pinned','player.profilePopup','player.profilePopup.field']){
     for(const [property,value] of Object.entries({background:'#123456',hoverBackground:'#654321',borderColor:'#112233',hoverBorderColor:'#445566',radius:14,padding:6})){
       const css=appearanceCss(registry,[{scope:'home',target,property,value}])
       assert.ok(css.includes(`data-style-id="${target}"`),`${target}/${property}`)

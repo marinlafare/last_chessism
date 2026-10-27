@@ -357,6 +357,11 @@ ROW_TYPES: dict[str, MatrixRowType] = {
 }
 
 
+from .summary_inputs import row_types as summary_row_types
+
+ROW_TYPES.update(summary_row_types(MatrixColumn, MatrixRowType))
+
+
 def matrix_catalog() -> dict[str, Any]:
     return {
         "version": 2,

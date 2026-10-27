@@ -3,6 +3,8 @@
 import os
 
 from arq.worker import func
+from arq import cron
+from ..canonical_blunders import scheduler as canonical
 from sqlalchemy import select, update
 
 from chessism_api.database.engine import AsyncDBSession
@@ -25,11 +27,14 @@ async def startup(ctx):
             await session.execute(update(AlgorithmRun).where(AlgorithmRun.status == "running").values(
                 status="failed", finished_at=now(), error="Worker was interrupted. Temporary inputs were cleaned; run again manually.",
                 progress={"phase": "interrupted", "detail": "Worker restarted; temporary data removed."}))
-            queued = list((await session.scalars(select(AlgorithmRun.id).where(AlgorithmRun.status == "queued"))))
+            queued = list((await session.execute(select(AlgorithmRun.id, AlgorithmRun.config).where(AlgorithmRun.status == "queued"))))
+        from ..canonical_blunders.benchmark_store import recover_interrupted
+        await recover_interrupted()
         # Recover only durable requests previously submitted by a user. ARQ's
         # stable IDs prevent duplicates when Redis already has the request.
-        for run_id in queued:
-            await ctx["redis"].enqueue_job("run_algorithm_job", run_id=run_id, _queue_name=QUEUE, _job_id=f"algorithm-{run_id}")
+        for run_id, config in queued:
+            function = 'run_large_algorithm_job' if config.get('operation') == 'full_development_rating_blunder_v1' else 'run_algorithm_job'
+            await ctx["redis"].enqueue_job(function, run_id=run_id, _queue_name=QUEUE, _job_id=f"algorithm-{run_id}")
         print(f"Algorithm worker ready; removed {len(removed)} interrupted workspaces; {len(queued)} pending requests.", flush=True)
     except BaseException:
         handle.close()
@@ -43,7 +48,12 @@ async def shutdown(ctx):
 
 
 class WorkerSettings:
-    functions = [func(run_algorithm_job, timeout=3600, max_tries=1)]
+    functions = [func(run_algorithm_job, timeout=3600, max_tries=1),
+                 func(run_algorithm_job, name='run_large_algorithm_job', timeout=21600, max_tries=1),
+                 func(canonical.run_batch,name='canonical_blunder_batch',timeout=600,max_tries=1,keep_result=0)]
+    cron_jobs = [cron(canonical.schedule,name='cron:canonical_tick',second=0, run_at_startup=True,
+        job_id='canonical-blunder-refresh', timeout=600, keep_result=0)]
+    after_job_end = canonical.after_job_end
     redis_settings = redis_settings
     queue_name = QUEUE
     max_jobs = 1

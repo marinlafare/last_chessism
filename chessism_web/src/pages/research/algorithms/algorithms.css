@@ -48,3 +48,17 @@
 .algorithm-main pre { overflow: auto; max-height: 380px; background: #080e12; padding: 16px; }
 .algorithm-scalar { display: block; text-align: center; font: bold 32px monospace; padding: 24px; }
 @media (max-width: 700px) { .algorithm-main { padding: 12px; }.algorithm-panel { padding: 15px; } }
+.algorithm-validation-timings { display: flex; flex-wrap: wrap; gap: 1rem 2rem; }
+.algorithm-validation-timings dd { margin: .25rem 0; }
+.algorithm-validation-digest { overflow-wrap: anywhere; }
+.algorithm-canonical-progress .algorithm-heading h2 { margin-bottom: 0; }
+.algorithm-canonical-progress .algorithm-actions { margin-top: 0; }
+.algorithm-progress-track { height: 16px; overflow: hidden; border-radius: 8px; background: #080e12; margin: 18px 0 10px; }
+.algorithm-progress-fill { display: block; height: 100%; color: #10b981; background: currentColor; border-radius: inherit; transition: width .35s ease; }
+.algorithm-progress-counts { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; font-variant-numeric: tabular-nums; }
+.algorithm-history-toggle { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; }
+.algorithm-history-toggle svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; transition: transform .2s ease; }
+.algorithm-history-toggle[aria-expanded=true] svg { transform: rotate(180deg); }
+.algorithm-history-content { padding-top: 18px; }
+.algorithm-history-content[hidden] { display: none; }
+@media (prefers-reduced-motion: reduce) { .algorithm-progress-fill, .algorithm-history-toggle svg { transition: none; } }

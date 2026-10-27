@@ -1,6 +1,8 @@
 import { deleteJson, getJson, postJson } from '../../../services/apiClient'
 
 const base = '/research/algorithms'
+export const fetchCanonicalBlunders = options => getJson(`${base}/canonical-blunders`, options)
+export const benchmarkCanonical = () => postJson(`${base}/canonical-blunders/benchmark`, {})
 export const fetchAlgorithmCatalog = (options) => getJson(`${base}/catalog`, options)
 export const fetchInputCatalog = (options) => getJson('/research/matrices/catalog', options)
 export const fetchInputs = (offset = 0, options) => getJson(`/research/matrices?limit=100&offset=${offset}`, options)
@@ -18,3 +20,7 @@ export const runAlgorithm = (id) => postJson(`${base}/definitions/${encodeURICom
 export const cancelAlgorithm = (id) => postJson(`${base}/runs/${encodeURIComponent(id)}/cancel`, {})
 export const validateAlgorithm = (form) => postJson(`${base}/validate`, form)
 export const sampleAlgorithm = (form) => postJson(`${base}/sample`, form)
+export const runCudaValidation = (player, { benchmark = false } = {}) => postJson(`${base}/cuda-validation`, { player, benchmark })
+export const trainBlunderModel = games_per_group => postJson(`${base}/blunder-training`, { games_per_group })
+export const validateFixedBlunders = player => postJson(`${base}/blunder-validation`, { player })
+export const trainBlunderV2 = (games_per_group, sampling = 'legacy', refinement = 'none') => postJson(`${base}/blunder-training-v2`, { games_per_group, sampling, refinement })

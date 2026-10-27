@@ -34,11 +34,12 @@ class MatrixRequest(BaseModel):
     name: str = Field("", max_length=100)
     collection: Literal['custom', 'foreign'] = 'custom'
     definition_kind: Literal['scoped', 'template'] = 'scoped'
-    row_type: Literal["game", "game_player", "move", "position", "game_position", "player_period", "move_scores"]
+    row_type: Literal["game", "game_player", "move", "position", "game_position", "player_period", "move_scores", "score_distribution", "blunder_moves"]
     feature_columns: list[str] = Field(min_length=1, max_length=MOVE_SCORE_MAX_COLUMNS)
     label_columns: list[str] = Field(default_factory=list, max_length=16)
     filters: MatrixFilters = Field(default_factory=MatrixFilters)
     move_scores: MoveScoreOptions | None = None
+    summary_input_version: Literal[1, 2] | None = None
 
 
 class MatrixParameters(BaseModel):

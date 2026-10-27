@@ -13,7 +13,8 @@ export function scoreInterval(bin) {
 }
 
 export function combineScoreModes(data, modes) {
-  const result = { counts: (data?.bins || []).map(() => 0), endings: {}, cp: 0, unscored: 0, mates: 0, tablebases: 0 }
+  const result = { counts: (data?.bins || []).map(() => 0), endings: {}, cp: 0, unscored: 0, mates: 0, tablebases: 0, mateDistances: [] }
+  const distances = new Map()
   for (const mode of modes) {
     const row = data?.by_mode?.[mode]
     if (!row) continue
@@ -23,6 +24,12 @@ export function combineScoreModes(data, modes) {
     result.unscored += row.unscored_positions
     result.mates += row.mate_positions
     result.tablebases += row.tablebase_positions
+    for (const mate of row.mates || []) {
+      const entry = distances.get(mate.moves) || { moves: mate.moves, for: 0, against: 0 }
+      entry[mate.side] += Number(mate.positions)
+      distances.set(mate.moves, entry)
+    }
   }
+  result.mateDistances = [...distances.values()].sort((a, b) => (a.moves ?? Infinity) - (b.moves ?? Infinity))
   return result
 }

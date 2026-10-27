@@ -9,6 +9,9 @@
 .matrix-defaults > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 6px; }
 .matrix-defaults-content { display: grid; gap: 14px; padding-top: 14px; }
 .matrix-artifact.matrix-default-formula { grid-template-columns: minmax(0, 1fr) auto; align-items: start; gap: 12px; }
+.matrix-default-name, .matrix-default-description { grid-column: 1 / -1; }
+.matrix-default-description { margin: 0; overflow-wrap: anywhere; }
+.matrix-default-formula .matrix-score-schema { min-width: 0; overflow-wrap: anywhere; white-space: normal; }
 .matrix-formula-choice { cursor: pointer; text-align: left; background: transparent; }
 .matrix-formula-choice[aria-pressed="true"] { border-color: var(--accent); }
 .matrix-formula-choice:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }

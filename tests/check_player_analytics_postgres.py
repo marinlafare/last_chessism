@@ -3,6 +3,7 @@ import asyncio
 import faulthandler
 from contextlib import suppress
 from datetime import date
+from fractions import Fraction
 import os
 from pathlib import Path
 import tempfile
@@ -46,7 +47,46 @@ async def main():
             INSERT INTO game_player SELECT g.link,gp.color,'alice','alice',gp.result,gp.rating,gp.opponent_rating,
                 g.mode,g.played_at,g.eco,g.n_moves,g.time_elapsed,g.avg_elo
                 FROM game g CROSS JOIN game_player gp WHERE g.link IN(5,6,7) AND gp.link=1;''')
+        await conn.execute('''INSERT INTO player(player_name,joined) VALUES('one-off',0);
+            INSERT INTO game SELECT (jsonb_populate_record(NULL::game,to_json(game)::jsonb ||
+            jsonb_build_object('link',v.id,'played_at','2025-03-09T07:10:00Z','white','alice','black',CASE WHEN v.id=128 THEN 'one-off' ELSE 'bob' END,
+                'mode','blitz','eco','https://www.chess.com/openings/' || CASE WHEN v.id<110 THEN 'Frequent' WHEN v.id<118 THEN 'Winning'
+                    WHEN v.id<125 THEN 'Drawing' WHEN v.id<128 THEN 'Perfect-rate' ELSE 'Single-game' END,
+                'white_result',v.result,'black_result',1-v.result))).* FROM game
+            CROSS JOIN (SELECT id,CASE WHEN id<105 OR id BETWEEN 110 AND 116 OR id=118 OR id>=125 THEN 1.0
+                WHEN id BETWEEN 119 AND 124 THEN 0.5 ELSE 0.0 END AS result FROM generate_series(100,128) id) v
+            WHERE game.link=1;
+            INSERT INTO game_player SELECT g.link,side.color,
+                CASE WHEN side.color='white' THEN g.white ELSE g.black END,
+                CASE WHEN side.color='white' THEN g.black ELSE g.white END,
+                CASE WHEN side.color='white' THEN g.white_result ELSE g.black_result END,
+                CASE WHEN side.color='white' THEN g.white_elo ELSE g.black_elo END,
+                CASE WHEN side.color='white' THEN g.black_elo ELSE g.white_elo END,
+                g.mode,g.played_at,g.eco,g.n_moves,g.time_elapsed,g.avg_elo
+            FROM game g CROSS JOIN (VALUES('white'),('black')) side(color) WHERE g.link BETWEEN 100 AND 128;''')
         async def publish(*args, **kwargs): pass
+        # Every exact 10% boundary for all three outcomes in both catalogs.
+        await conn.execute('''INSERT INTO player(player_name,joined)
+            SELECT 'boundary-' || family || '-' || bin,0 FROM (VALUES('wins'),('losses'),('draws')) f(family)
+            CROSS JOIN generate_series(0,10) bin;
+            INSERT INTO game SELECT (jsonb_populate_record(NULL::game,to_json(game)::jsonb ||
+            jsonb_build_object('link',v.id,'played_at','2025-03-09T07:10:00Z','white','alice','black',lower(v.opening),
+                'mode','blitz','eco','https://www.chess.com/openings/' || v.opening,
+                'white_result',v.result,'black_result',1-v.result))).* FROM game
+            CROSS JOIN (SELECT family.id*1000 + bin*20 + n AS id,
+                'Boundary-' || family.name || '-' || bin AS opening,
+                CASE WHEN n<=bin*2 THEN family.result WHEN family.result=0 THEN 1.0 ELSE 0.0 END AS result
+                FROM (VALUES (1,'wins',1.0),(2,'losses',0.0),(3,'draws',0.5)) family(id,name,result)
+                CROSS JOIN generate_series(0,10) bin CROSS JOIN generate_series(1,20) n) v
+            WHERE game.link=1;
+            INSERT INTO game_player SELECT g.link,side.color,
+                CASE WHEN side.color='white' THEN g.white ELSE g.black END,
+                CASE WHEN side.color='white' THEN g.black ELSE g.white END,
+                CASE WHEN side.color='white' THEN g.white_result ELSE g.black_result END,
+                CASE WHEN side.color='white' THEN g.white_elo ELSE g.black_elo END,
+                CASE WHEN side.color='white' THEN g.black_elo ELSE g.white_elo END,
+                g.mode,g.played_at,g.eco,g.n_moves,g.time_elapsed,g.avg_elo
+            FROM game g CROSS JOIN (VALUES('white'),('black')) side(color) WHERE g.link>=1000;''')
         await prepare_reference(conn, root / 'pgdata')
         await build_candidate(conn, root / 'pgdata', publish)
 
@@ -81,6 +121,7 @@ async def main():
             with patch.object(hero,'AsyncDBSession',factory), patch.object(ask_db,'AsyncDBSession',factory), \
                  patch.object(histogram,'AsyncDBSession',factory), patch.object(catalog,'AsyncDBSession',factory), \
                  patch.object(summaries,'AsyncDBSession',factory):
+                legacy_cache, summary_cache = Redis(), Redis()
                 for player in ('alice','bob','empty'):
                     for mode in ('all','bullet','blitz','rapid',' ALL ',' BLITZ '):
                         for start,end in ((None,None),(date(2025,3,9),date(2025,3,9))):
@@ -102,13 +143,15 @@ async def main():
                             for color in ('all','white','black'):
                                 for search in ('','bo','Test'):
                                     for page in (1,2):
-                                        kwargs=dict(kind=kind,mode=mode,color=color,search=search,page=page,limit=1)
-                                        os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
-                                        expected=await catalog.get_player_game_catalog(player,Redis(),**kwargs)
-                                        os.environ['CHESSISM_PLAYER_SUMMARIES']='1'
-                                        actual=await catalog.get_player_game_catalog(player,Redis(),**kwargs)
-                                        assert clean(actual)==clean(expected),(normalized,player,kwargs,actual,expected)
-                                        checks += 1
+                                        for sort_by in ('games','wins','losses','draws'):
+                                            kwargs=dict(kind=kind,mode=mode,color=color,search=search,page=page,limit=1,sort_by=sort_by)
+                                            os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
+                                            expected=await catalog.get_player_game_catalog(player,legacy_cache,**kwargs)
+                                            os.environ['CHESSISM_PLAYER_SUMMARIES']='1'
+                                            actual=await catalog.get_player_game_catalog(player,summary_cache,**kwargs)
+                                            assert clean(actual)==clean(expected),(normalized,player,kwargs,actual,expected)
+                                            assert all(row['games'] >= 2 for row in actual['rows'])
+                                            checks += 1
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
                     expected=await ask_db.get_player_hours_played(player)
                     recent=await ask_db.get_player_games_page(player,page=1,page_size=1)
@@ -117,6 +160,76 @@ async def main():
                     latest=await summaries.get_latest_game(player)
                     # Unlike the old query, NULL dates never displace a real last-play date.
                     assert latest['played_at'] is None or 'T' in latest['played_at']
+                # One-off openings disappear before ranking/totals/pagination,
+                # including searches and cached reads, in both read paths.
+                for enabled in ('0', '1'):
+                    os.environ['CHESSISM_PLAYER_SUMMARIES'] = enabled
+                    for sort in ('games', 'wins', 'losses', 'draws'):
+                        kwargs = dict(kind='openings', color='white', limit=50, sort_by=sort,
+                                      ratio_bin=None if sort == 'games' else 9 if sort == 'wins' else 0)
+                        cache = Redis()
+                        for _ in range(2):
+                            data = await catalog.get_player_game_catalog('alice', cache, **kwargs)
+                            assert data['rows'] and all(row['games'] >= 2 for row in data['rows'])
+                            assert 'Perfect-rate' in {row['key'] for row in data['rows']}
+                            assert 'Single-game' not in {row['key'] for row in data['rows']}
+                            assert data['total_games'] == sum(row['games'] for row in data['rows'])
+                            assert data['pagination']['total_groups'] == len(data['rows'])
+                            assert [row['rank'] for row in data['rows']] == list(range(1, len(data['rows']) + 1))
+                            empty = await catalog.get_player_game_catalog('alice', cache, search='Single-game', **kwargs)
+                            assert empty['rows'] == [] and empty['total_games'] == 0
+                            assert empty['pagination']['total_groups'] == empty['pagination']['total_pages'] == 0
+                            assert not empty['pagination']['has_more']
+                            checks += 2
+                # The minimum is applied after mode selection; ratings remain
+                # present only on eligible opponents, never one-off encounters.
+                for enabled in ('0', '1'):
+                    os.environ['CHESSISM_PLAYER_SUMMARIES'] = enabled
+                    cache = Redis()
+                    for search in ('one-off', 'carol'):
+                        data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search=search)
+                        assert data['rows'] == [] and data['pagination']['total_groups'] == data['total_games'] == 0
+                    data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search='bob')
+                    assert len(data['rows']) == 1 and data['rows'][0]['games'] >= 2
+                    assert data['rows'][0]['latest_ratings']['blitz'] == 2300
+                    data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search='bob', mode='rapid')
+                    assert data['rows'] == []
+                    checks += 4
+                # Every bin matches between SQL and saved summaries, including
+                # exact boundaries, totals, caches, search and paginated order.
+                for kind in ('openings', 'opponents'):
+                    for outcome in ('wins', 'losses', 'draws'):
+                        seen = []
+                        for ratio_bin in range(10):
+                            kwargs = dict(kind=kind, color='white', limit=50, sort_by=outcome, ratio_bin=ratio_bin)
+                            os.environ['CHESSISM_PLAYER_SUMMARIES'] = '0'
+                            expected = await catalog.get_player_game_catalog('alice', legacy_cache, **kwargs)
+                            os.environ['CHESSISM_PLAYER_SUMMARIES'] = '1'
+                            actual = await catalog.get_player_game_catalog('alice', summary_cache, **kwargs)
+                            assert clean(actual) == clean(expected), (outcome, ratio_bin, actual, expected)
+                            rows = actual['rows']
+                            assert all(min(9, 10 * r[outcome] // r['games']) == ratio_bin for r in rows)
+                            assert rows == sorted(rows, key=lambda r: (-Fraction(r[outcome], r['games']), -r['games'], r['key']))
+                            assert actual['total_games'] == sum(r['games'] for r in rows)
+                            assert actual['pagination']['total_groups'] == len(rows)
+                            prefix = 'Boundary' if kind == 'openings' else 'boundary'
+                            boundary_keys = {r['key'] for r in rows if r['key'].startswith(f'{prefix}-{outcome}-')}
+                            assert boundary_keys == {f'{prefix}-{outcome}-{i}' for i in ([9,10] if ratio_bin == 9 else [ratio_bin])}
+                            seen.extend(r['key'] for r in rows)
+                            for enabled, cache in (('0', legacy_cache), ('1', summary_cache)):
+                                os.environ['CHESSISM_PLAYER_SUMMARIES'] = enabled
+                                assert clean(await catalog.get_player_game_catalog('alice', cache, **kwargs)) == clean(actual)
+                                for page in (1,2):
+                                    paged = await catalog.get_player_game_catalog('alice', cache, **{**kwargs, 'limit': 1, 'page': page})
+                                    assert paged['rows'] == rows[page-1:page]
+                                    assert paged['pagination']['has_more'] == (page < len(rows))
+                                searched = await catalog.get_player_game_catalog('alice', cache, search='Boundary', **kwargs)
+                                assert searched['rows'] == [r for r in rows if 'boundary' in r['key'].lower()]
+                                checks += 4
+                            checks += 1
+                        baseline = await catalog.get_player_game_catalog('alice', summary_cache, kind=kind, color='white', limit=50)
+                        assert sorted(seen) == sorted(r['key'] for r in baseline['rows'])
+                os.environ['CHESSISM_PLAYER_SUMMARIES'] = '1'
                 # Source corrections, deletions, and timezone changes invalidate
                 # committed snapshots. Rollbacks do not, and retries are no-ops.
                 table=lambda name: analytics_table(layout,name)

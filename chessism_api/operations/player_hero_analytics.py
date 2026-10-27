@@ -612,7 +612,7 @@ async def get_player_range_game_scores(
                 round(float(row["median_win_percent_loss"]), 4)
                 if row.get("median_win_percent_loss") is not None else None
             ),
-            "blunder_count": int(row["blunder_count"] or 0),
+            "blunder_count": int(row["blunder_count"]) if row["blunder_count"] is not None else None,
             "mate_for_positions": int(row["mate_for_positions"] or 0),
             "mate_against_positions": int(row["mate_against_positions"] or 0),
             "final_player_cp": (

@@ -362,9 +362,11 @@ def _evaluation(
 ) -> dict[str, Any] | None:
     if score is None:
         return None
+    from .mate_distance import mate_distance
     win, draw, loss = wdl or (None, None, None)
     return {
         "kind": _score_kind(score, source),
+        "mate_moves": mate_distance(score, source) if _score_kind(score, source) == 'mate' else None,
         "white_cp": round(float(score), 2),
         "white_win_percent": round(lichess_win_percent(float(score)), 4),
         "white_wdl": {
@@ -381,12 +383,15 @@ def _classification(
     after: float | None,
     before_kind: str | None,
     after_kind: str | None,
+    blunder_override='legacy',
 ) -> tuple[str | None, float | None, float | None]:
     if before is None or after is None or before_kind is None or after_kind is None:
         return None, None, None
     loss = max(0.0, lichess_win_percent(before) - lichess_win_percent(after))
     accuracy = lichess_move_accuracy(before, after)
-    if is_lichess_blunder(before, after, before_kind, after_kind):
+    if blunder_override == -1:
+        return None, round(loss,4), round(accuracy,2)
+    if (is_lichess_blunder(before, after, before_kind, after_kind) if blunder_override == 'legacy' else blunder_override == 1):
         label = "blunder"
     elif loss >= 10:
         label = "mistake"
@@ -422,7 +427,7 @@ def _complete_fen(fen: str, ply: int) -> str:
     return " ".join(fields)
 
 
-def _format_moves(rows: list[Any]) -> list[dict[str, Any]]:
+def _format_moves(rows: list[Any], canonical_flags=None) -> list[dict[str, Any]]:
     moves: list[dict[str, Any]] = []
     uci_moves = _uci_moves(rows)
     previous_fen = chess.STARTING_FEN
@@ -439,9 +444,11 @@ def _format_moves(rows: list[Any]) -> list[dict[str, Any]]:
         multiplier = 1 if move_color == "white" else -1
         mover_before = previous_score * multiplier if previous_score is not None else None
         mover_after = score * multiplier if score is not None else None
-        label, loss, accuracy = _classification(
-            mover_before, mover_after, previous_kind, kind
-        )
+        override='legacy'
+        if canonical_flags is not None:
+            override=(-1 if canonical_flags['pending'] or int(row['ply']) in canonical_flags['unassessed']
+                else int(int(row['ply']) in canonical_flags['blunders']))
+        label, loss, accuracy = _classification(mover_before, mover_after, previous_kind, kind, override)
         fen_after = _complete_fen(row["fen"], int(row["ply"]))
         moves.append({
             "ply": int(row["ply"]),
@@ -528,9 +535,13 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
                      CASE WHEN association.move_color = 'white' THEN 0 ELSE 1 END
         """), {"game_id": game_id})
         rows = move_result.mappings().all()
+        from .canonical_blunders.readers import game_flags
+        canonical_flags=await game_flags(session,game_id)
 
-    moves = _format_moves(rows)
+    moves = _format_moves(rows,canonical_flags)
     return {
+        'blunder_model':canonical_flags['model_id'] if canonical_flags else 'legacy_cpu_v1',
+        'blunder_annotations_pending':bool(canonical_flags and canonical_flags['pending']),
         "game": {
             "game_id": int(game["link"]),
             "played_at_utc": (
@@ -565,7 +576,7 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
                 "analyzed_player_moves": int(row["analyzed_player_moves"] or 0),
                 "cp_gain": round(float(row["own_move_cp_gain"] or 0), 2),
                 "cp_loss": round(float(row["own_move_cp_loss"] or 0), 2),
-                "blunder_count": int(row["blunder_count"] or 0),
+                "blunder_count": int(row["blunder_count"]) if row["blunder_count"] is not None else None,
                 "final_player_cp": (
                     round(float(row["final_player_cp"]), 2)
                     if row["final_player_cp"] is not None else None

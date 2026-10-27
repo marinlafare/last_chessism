@@ -47,6 +47,7 @@ from chessism_api.operations.player_hero_analytics import (
     get_player_range_game_scores,
 )
 from chessism_api.operations.player_hero_efficiency import get_player_daily_efficiency
+from chessism_api.operations.player_stockfish_summary import get_readiness
 from chessism_api.operations.player_game_explorer import explore_player_games
 from chessism_api.operations.player_salience import get_player_daily_salience_accuracy
 from chessism_api.operations.player_move_salience import get_player_game_salience
@@ -358,6 +359,14 @@ async def api_get_player_behavioural_day(
     )
 
 
+@router.get("/{player_name}/analysis/measures/readiness")
+async def api_get_player_measure_readiness(player_name: str) -> JSONResponse:
+    """Saved coverage only: opening the analysis tab never repairs game metrics."""
+    response = await _hero_analytics_response(get_readiness, player_name)
+    response.headers['Cache-Control'] = 'private, no-store'
+    return response
+
+
 @router.get("/{player_name}/analysis/measures/quality-calendar")
 async def api_get_player_quality_calendar(
     player_name: str,
@@ -424,13 +433,19 @@ async def api_get_player_game_catalog(
     page: int = Query(1, ge=1, le=100000),
     limit: int = Query(10, ge=1, le=50),
     search: str = Query("", max_length=128),
+    sort_by: str = Query("games", pattern="^(games|wins|losses|draws)$"),
+    ratio_bin: int | None = Query(None, ge=0, le=9),
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> JSONResponse:
-    """Frequency-ranked opponent/opening groups using recorded game metadata."""
+    """Groups ranked by games, or by outcome percentage within ten-point bins.
+
+    Bin 0 is [0,10), bin 8 is [80,90), and bin 9 is [90,100].
+    Outcomes default to bin 9. Opening and opponent groups need at least two games.
+    """
     try:
         response = await _hero_analytics_response(
             get_player_game_catalog, player_name, redis,
-            kind=kind, mode=mode, color=color, page=page, limit=limit, search=search)
+            kind=kind, mode=mode, color=color, page=page, limit=limit, search=search, sort_by=sort_by, ratio_bin=ratio_bin)
     except GameCatalogBusy as error:
         raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
     response.headers['Cache-Control'] = 'private, no-store'

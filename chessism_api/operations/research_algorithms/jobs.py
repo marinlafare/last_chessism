@@ -81,6 +81,70 @@ async def run_algorithm_job(ctx, *, run_id):
     reporter = Reporter(run_id)
     started = time.monotonic()
     try:
+        from ..canonical_blunders.benchmark_job import OPERATION as CANONICAL_TIMING, execute as time_canonical
+        if config.get('operation') == CANONICAL_TIMING:
+            result = await time_canonical(config, reporter)
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'comparison_status': result['status']}
+        from .blunder_full_job import OPERATION as FULL_DEVELOPMENT, execute as train_full_development
+        if config.get('operation') == FULL_DEVELOPMENT:
+            result = await train_full_development(config, reporter)
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
+        from .blunder_strength_job import OPERATION as STRENGTH_COMPARISON, execute as compare_strengths
+        if config.get('operation') == STRENGTH_COMPARISON:
+            result = await compare_strengths(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'comparison_status': result['status']}
+        from .blunder_cohort_job import OPERATION as COHORT_BLUNDERS, execute as summarize_blunder_cohort
+        if config.get('operation') == COHORT_BLUNDERS:
+            result = await summarize_blunder_cohort(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'cohort_status': result['status']}
+        from .blunder_threshold_compare import OPERATION as THRESHOLD_COMPARISON, execute as compare_thresholds
+        if config.get('operation') == THRESHOLD_COMPARISON:
+            result = await compare_thresholds(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'comparison_status': result['status']}
+        from .blunder_shadow_job import OPERATION as SHADOW_BLUNDERS, execute as shadow_blunders
+        if config.get('operation') == SHADOW_BLUNDERS:
+            result = await shadow_blunders(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'shadow_status': result['status']}
+        from .blunder_final_evaluation import OPERATION as FINAL_BLUNDERS, execute as evaluate_final_blunders
+        if config.get('operation') == FINAL_BLUNDERS:
+            result = await evaluate_final_blunders(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
+        from .blunder_v2_job import OPERATION as SMOOTH_BLUNDERS, execute as train_smooth_blunders
+        if config.get('operation') == SMOOTH_BLUNDERS:
+            result = await train_smooth_blunders(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
+        from .blunder_validation_job import OPERATION as FIXED_BLUNDERS, execute as validate_blunders
+        if config.get('operation') == FIXED_BLUNDERS:
+            result = await validate_blunders(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'validation': result['status']}
+        from .blunder_training import OPERATION as BLUNDER_TRAINING, execute as train_blunders
+        if config.get('operation') == BLUNDER_TRAINING:
+            result = await train_blunders(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
+        from .score_validation_job import OPERATION as CUDA_VALIDATION, execute as validate_cuda
+        if config.get('operation') == CUDA_VALIDATION:
+            result = await validate_cuda(config, reporter)
+            result['timings']['total_compute_seconds'] = time.monotonic() - started
+            await publish(run_id, result, reporter)
+            return {'run_id': run_id, 'status': 'complete', 'validation': result['status']}
         expected = 2 if config.get('operation') == 'pipeline' else VERSION
         if config.get("implementation_version") != expected:
             raise ValueError("This algorithm implementation version is no longer supported.")
@@ -105,7 +169,7 @@ async def run_algorithm_job(ctx, *, run_id):
         await terminal(run_id, "cancelled", str(error))
         return {"run_id": run_id, "status": "cancelled"}
     except asyncio.CancelledError:
-        await asyncio.shield(terminal(run_id, "failed", "Worker stopped or the one-hour run timeout was reached. Temporary inputs were removed."))
+        await asyncio.shield(terminal(run_id, "failed", "Worker stopped or the configured run timeout was reached. Temporary inputs were removed."))
         raise
     except Exception as error:
         await terminal(run_id, "failed", str(error)[:2000])

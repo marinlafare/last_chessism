@@ -13,6 +13,7 @@ export default function useAlgorithms() {
   const [definitions, setDefinitions] = useState([])
   const [definitionMore, setDefinitionMore] = useState(false)
   const [runs, setRuns] = useState([])
+  const [latestRuns, setLatestRuns] = useState([])
   const [runOffset, setRunOffset] = useState(0)
   const [runMore, setRunMore] = useState(false)
   const [form, setForm] = useState(null)
@@ -44,6 +45,9 @@ export default function useAlgorithms() {
         setInputOffset(matrices.definitions.length)
         setDefinitions(saved.definitions)
         setDefinitionMore(saved.has_more)
+        const inputId = new URLSearchParams(window.location.search).get('input')
+        const requestedInput = available.find((item) => item.id === inputId)
+        if (requestedInput) setForm(blankBuilder(requestedInput, columns))
         // Old collection deep links still open only a preview, never select or run.
         const previewId = new URLSearchParams(window.location.search).get('preview')
         if (previewId) {
@@ -61,8 +65,14 @@ export default function useAlgorithms() {
     let timer
     const load = async () => {
       try {
-        const payload = await api.fetchRuns(runOffset, { signal: controller.signal })
-        if (!controller.signal.aborted) { setRuns(payload.runs); setRunMore(payload.has_more) }
+        const options = { signal: controller.signal }
+        const [latest, older] = await Promise.all([api.fetchRuns(0, options),
+          runOffset ? api.fetchRuns(runOffset, options) : Promise.resolve(null)])
+        const payload = older || latest
+        if (!controller.signal.aborted) {
+          setRuns(payload.runs); setRunMore(payload.has_more)
+          setLatestRuns(latest.runs)
+        }
       } catch (failure) { if (!controller.signal.aborted) setError(failure.message) }
       if (!controller.signal.aborted) timer = setTimeout(load, 5000)
     }
@@ -175,9 +185,39 @@ export default function useAlgorithms() {
     setWatchedRun(payload.id)
     setNotice('Run queued. You can close this page; the dedicated worker continues in the background.')
   })
+  const runCuda = (player, options) => act('queueing CUDA validation', async () => {
+    const payload = await api.runCudaValidation(player, options)
+    if (!mounted.current) return
+    setRunOffset(0); setRevision((current) => current + 1); setWatchedRun(payload.id)
+    setNotice('One-player GPU validation queued. The report will open when it finishes; live summaries stay unchanged.')
+  })
+  const benchmarkCanonical = () => act('queueing pipeline timing', async () => {
+    const payload = await api.benchmarkCanonical()
+    if (!mounted.current) return
+    setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
+    setNotice('100,000-game timing run queued. Published summaries remain unchanged; follow it in Active runs.')
+  })
   const cancel = (item) => act('cancelling', async () => {
     const reply = await api.cancelAlgorithm(item.id)
     if (mounted.current) { setNotice(reply.message); setRevision((current) => current + 1) }
+  })
+  const trainBlunders = games => act('queueing rating-aware model', async () => {
+    const payload = await api.trainBlunderModel(games)
+    if (!mounted.current) return
+    setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
+    setNotice('Rating-aware CUDA candidate queued. Its report will open when ready; live summaries stay unchanged.')
+  })
+  const trainBlundersV2 = (games, sampling, refinement) => act('queueing rating-aware v2', async () => {
+    const payload = await api.trainBlunderV2(games, sampling, refinement)
+    if (!mounted.current) return
+    setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
+    setNotice('Smooth rating-aware v2 queued. Validation gates will be reported; nothing is automatically promoted.')
+  })
+  const validateBlunders = player => act('queueing fixed-coefficient validation', async () => {
+    const payload = await api.validateFixedBlunders(player)
+    if (!mounted.current) return
+    setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
+    setNotice('Fixed-coefficient GPU validation queued. Live blunder counts and coefficients stay unchanged.')
   })
   const remove = (definition) => {
     if (!window.confirm(`Delete “${definition.name}” instructions? Existing runs and results will remain.`)) return
@@ -197,13 +237,13 @@ export default function useAlgorithms() {
     } catch (failure) { if (!controller.signal.aborted) setError(failure.message) }
   }, [])
   useEffect(() => {
-    const watched = runs.find((item) => item.id === watchedRun)
+    const watched = latestRuns.find((item) => item.id === watchedRun)
     if (watched && ['complete', 'failed', 'cancelled'].includes(watched.status)) {
       setWatchedRun(null)
       setNotice(watched.status === 'complete' ? 'Calculation complete. Results are shown below.' : 'Run finished; see its details below.')
       inspect(watched.id)
     }
-  }, [runs, watchedRun, inspect])
+  }, [latestRuns, watchedRun, inspect])
   const moreInputs = () => act('loading inputs', async () => {
     const payload = await api.fetchInputs(inputOffset)
     if (mounted.current) {
@@ -225,9 +265,10 @@ export default function useAlgorithms() {
     const payload = await api.fetchDefinitions(definitions.length)
     if (mounted.current) { setDefinitions((current) => [...current, ...payload.definitions]); setDefinitionMore(payload.has_more) }
   })
-  return { catalog, algorithmCatalog, inputs: availableInputs, inputMore, definitions, definitionMore, runs, runOffset, runMore, form, estimate, preview, result,
+  return { catalog, algorithmCatalog, inputs: availableInputs, inputMore, definitions, definitionMore, runs,
+    activeRuns: latestRuns.filter(run => ['queued', 'running'].includes(run.status)), runOffset, runMore, form, estimate, preview, result,
     matrix, sourceMatrix, formulaInputs: inputs, inputRevision, schemas, validation, validate, sample, reset, template, openDefinition,
-    applyInput, dirtyInput, previewInput, removeInput,
+    applyInput, dirtyInput, previewInput, removeInput, runCuda, trainBlunders, trainBlundersV2, validateBlunders, benchmarkCanonical,
     error, notice, working, update, selectInput, save, preflight, run, cancel, remove, inspect, moreInputs, moreDefinitions,
     setPreview, setResult, setRunOffset, refresh: () => setRevision((current) => current + 1) }
 }

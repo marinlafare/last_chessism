@@ -16,6 +16,9 @@
     "test:live:layout": "node scripts/test-live-layout-browser.mjs",
     "test:player-summaries": "node --test tests/activityBalance.test.mjs",
     "test:player-summaries:browser": "node scripts/test-player-summaries-browser.mjs",
+    "test:openings:browser": "node scripts/test-opening-sort-browser.mjs",
+    "test:opponents:browser": "node scripts/test-opening-sort-browser.mjs opponents",
+    "test:player-photo:browser": "node scripts/test-player-pinned-photo-browser.mjs",
     "build": "npm run check:architecture && npm run check:source-size && vite build",
     "preview": "vite preview --host 0.0.0.0 --port 6789 --strictPort"
   },

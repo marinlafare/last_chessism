@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useRef, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import AppearanceProvider, { AppearanceControls } from '/src/appearance/AppearanceProvider.jsx'
 import PlayerProfileField from '/src/pages/players/PlayerProfileField.jsx'
@@ -26,14 +26,15 @@ window.fetch=async(input,options={})=>{
     if(payload.preset_id!=='official'||payload.revision!==saved.revision)throw Error('Unexpected style save')
     saved={...saved,revision:saved.revision+1,overrides:payload.overrides}
     localStorage.setItem(key,JSON.stringify(saved))
-  }else if(method==='GET'&&path.endsWith('/games/example/recent')){
-    return response({games:[{played_at:'2026-10-23T08:00:00Z'}]})
+  }else if(method==='GET'&&path.endsWith('/games/example/latest')){
+    return response({played_at:'2026-10-23T08:00:00Z',summary_stale:false})
   }else if(method!=='GET'||!path.endsWith('/appearance'))throw Error('No live API access: '+path)
   return response({...saved,registry:window.profileStylesRegistry})
 }
 function ProfileFixture(){
   const [latestGame,setLatestGame]=useState(null)
-  return <main style={{padding:24,maxWidth:800}}>
+  const workspaceRef=useRef(null)
+  return <main ref={workspaceRef} style={{padding:24,maxWidth:800}}>
     <section {...pageStyleTarget('player.hero')}>
     <div {...pageStyleTarget('player.profile')}>
     <div className="players-profile-metadata">
@@ -42,7 +43,7 @@ function ProfileFixture(){
       <PlayerProfileField field="name" label="Name">Example Player</PlayerProfileField>
       <PlayerProfileDates profile={profile} onLatestChange={setLatestGame} />
     </div>
-    <div style={{maxWidth:180}}><PlayerProfilePhoto profile={profile} latestGame={latestGame}
+    <div style={{maxWidth:180}}><PlayerProfilePhoto workspaceRef={workspaceRef} profile={profile} latestGame={latestGame}
       positionStats={{total_games:1000,analyzed_games:700,total_fens:10000,analyzed_fens:7000}}
       hours={{bullet_games:800,bullet_hours:20,blitz_games:200,blitz_hours:18,rapid_games:0,rapid_hours:0}} /></div>
     </div>

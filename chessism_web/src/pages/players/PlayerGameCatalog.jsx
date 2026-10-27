@@ -10,13 +10,17 @@ import './player-game-catalog.css'
 const modes = ['bullet', 'blitz', 'rapid']
 const ratingModeLabels = { bullet: 'Bu', blitz: 'Bl', rapid: 'Ra' }
 const results = [['wins', 'Wins'], ['draws', 'Draws'], ['losses', 'Losses'], ['unknown', 'Unknown']]
+const catalogSorts = [['games', 'By games'], ['wins', 'By wins'], ['losses', 'By losses'], ['draws', 'By draws']]
+const ratioBins = Array.from({ length: 10 }, (_, index) => 9 - index)
+const orderVersion = 'catalog-outcome-bins-v6'
 const openingLabel = key => key ? key.replaceAll('-', ' ') : 'Unknown opening'
 
 export default function PlayerGameCatalog({ playerName, kind, summaryRevision }) {
   const visible = useAnalysisVisible()
   const openings = kind === 'openings'
   const target = `player.${kind}`
-  const [filters, setFilters] = useState({ mode: 'all', color: openings ? 'white' : 'all', page: 1, search: '' })
+  const [filters, setFilters] = useState({ mode: 'all', color: openings ? 'white' : 'all', page: 1, search: '', sort_by: 'games', ratio_bin: null })
+  const selectedBin = filters.ratio_bin ?? 9
   const [searchText, setSearchText] = useState('')
   const [request, setRequest] = useState({ key: '', data: null, error: '', loading: false })
   const [retry, setRetry] = useState(0)
@@ -29,7 +33,7 @@ export default function PlayerGameCatalog({ playerName, kind, summaryRevision })
   const paginationController = useRef(null)
   const dataSource = useRef(null)
   const lastPointer = useRef(null)
-  const requestKey = JSON.stringify([playerName, kind, filters])
+  const requestKey = JSON.stringify([orderVersion, playerName, kind, filters])
   const data = request.key === requestKey ? request.data : null
   const error = request.key === requestKey ? request.error : ''
   const searchPending = searchText.trim() !== filters.search
@@ -144,7 +148,7 @@ export default function PlayerGameCatalog({ playerName, kind, summaryRevision })
     if (!visible || loading || !pagination?.has_more || request.loadingMore
       || paginationController.current || dataSource.current !== requestKey || selection || reviewGameId) return
     const page = pagination.page + 1
-    const nextKey = JSON.stringify([playerName, kind, { ...filters, page }])
+    const nextKey = JSON.stringify([orderVersion, playerName, kind, { ...filters, page }])
     const controller = new AbortController()
     // Lock synchronously: several observer notifications must request just one page.
     paginationController.current = controller
@@ -247,6 +251,26 @@ export default function PlayerGameCatalog({ playerName, kind, summaryRevision })
         </select>
       </div>
     </div>
+    <div className="player-game-catalog-body">
+      <div {...pageStyleTarget(`${target}.sort`)} className="player-game-catalog-sort" role="group" aria-label={`Filter ${kind}`}>
+        {catalogSorts.map(([sort, label]) => <button {...pageStyleTarget(`${target}.sort.${sort}`)}
+          key={sort} type="button" aria-pressed={filters.sort_by === sort}
+          title={sort === 'games' ? `All ${kind}, most games first` : `Filter by ${sort} as a percentage of games ${openings ? 'with this opening' : 'against this opponent'}`}
+          onClick={() => changeFilter({ sort_by: sort, ratio_bin: sort === 'games' ? null : selectedBin })}>{label}</button>)}
+      </div>
+    <div className="player-game-catalog-content">
+    {filters.sort_by !== 'games' ? <div {...pageStyleTarget(`${target}.bins`)}
+      className="player-game-catalog-bins" role="group" aria-label={`${filters.sort_by} percentage bins`}>
+      {ratioBins.map(bin => {
+        const lower = bin * 10, upper = lower + 10
+        const detail = `${filters.sort_by}: ${lower}% to ${bin === 9 ? '' : 'less than '}${upper}%; highest percentage first`
+        return <button {...pageStyleTarget(`${target}.bin.${bin}`)} key={bin} type="button"
+          className="player-game-catalog-bin" aria-pressed={selectedBin === bin} aria-label={detail} title={detail}
+          onClick={() => changeFilter({ ratio_bin: bin })}>
+          <span aria-hidden="true">{upper}–{lower}</span><small aria-hidden="true">%</small>
+        </button>
+      })}
+    </div> : null}
     {error ? <p role="alert" className="player-game-catalog-message">{error}{' '}
       <button {...pageStyleTarget(`${target}.paging`)} type="button" onClick={refresh}>Retry</button>
     </p> : null}
@@ -271,7 +295,7 @@ export default function PlayerGameCatalog({ playerName, kind, summaryRevision })
           onClick={() => openGames(row)} aria-label={`${description}. Browse games.`}>
           <span {...pageStyleTarget(`${target}.row`)} data-active={highlighted ? 'true' : undefined} className={`player-game-catalog-identity${showRatings ? ' has-ratings' : ''}`}>
             <span {...pageStyleTarget(`${target}.rank`)} className="player-game-catalog-rank"
-              title="Rank by games in the selected mode and color">#{formatNumber(row.rank)}</span>
+              title={`Rank by ${filters.sort_by === 'games' ? 'total games' : `${filters.sort_by} percentage`} in the current selection`}>#{formatNumber(row.rank)}</span>
             <span className="player-game-catalog-name" title={label}>{label}</span>
             {showRatings ? <span className="player-game-catalog-ratings">
               {(filters.mode === 'all' ? modes : [filters.mode]).map(mode => {
@@ -309,6 +333,8 @@ export default function PlayerGameCatalog({ playerName, kind, summaryRevision })
         </p> : <span role="status">{request.loadingMore ? `Loading more ${kind}…` : ''}</span>}
       </div>
     </div> : null}
+    </div>
+    </div>
     {!reviewGameId && selection ? <PlayerGameExplorerModal playerName={playerName} selection={selection}
       onClose={() => setSelection(null)} onOpenGame={setReviewGameId} /> : null}
     <PlayerGameReviewModal gameId={reviewGameId} playerName={playerName}

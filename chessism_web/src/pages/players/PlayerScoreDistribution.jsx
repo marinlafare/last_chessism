@@ -30,8 +30,9 @@ export default function PlayerScoreDistribution({ playerName }) {
 
   useEffect(() => {
     if (!visible) return undefined
-    if (completed.current?.key === `${playerName}:${retry}` && Date.now() - completed.current.at < 120000) return undefined
+    if (!completed.current?.managed && completed.current?.key === `${playerName}:${retry}` && Date.now() - completed.current.at < 120000) return undefined
     const controller = new AbortController()
+    let pollTimer
     setProgress(null)
     setRequest(current => ({ ...current, loading: true, error: '' }))
     const timeout = window.setTimeout(() => {
@@ -42,20 +43,21 @@ export default function PlayerScoreDistribution({ playerName }) {
       onProgress: value => { if (!controller.signal.aborted) setProgress(value) } }
     fetchPlayerScoreDistribution(options).then(async data => {
       if (controller.signal.aborted) return
-      if (data.stale) {
+      if (data.stale && !data.summary_managed) {
         // Keep the previous complete histogram interactive while its
         // replacement is calculated. Never blank the chart during refresh.
         setRequest({ data, loading: true, error: '' })
         data = await fetchPlayerScoreDistribution({ ...options, refresh: true })
         if (controller.signal.aborted) return
       }
-      completed.current = { key: `${playerName}:${retry}`, at: Date.now() }
+      completed.current = { key: `${playerName}:${retry}`, at: Date.now(), managed: data.summary_managed }
       setProgress(null)
       setRequest({ data, loading: false, error: '' })
+      if (data.summary_managed) pollTimer = window.setTimeout(() => setRetry(value => value + 1), 30000)
     }).catch(error => {
       if (!controller.signal.aborted) setRequest(current => ({ ...current, loading: false, error: error.message || 'Unable to load score distribution.' }))
     }).finally(() => window.clearTimeout(timeout))
-    return () => { window.clearTimeout(timeout); controller.abort() }
+    return () => { window.clearTimeout(timeout); window.clearTimeout(pollTimer); controller.abort() }
   }, [playerName, retry, visible])
 
   useEffect(() => { if (!visible) setSelection(null) }, [visible])
@@ -93,15 +95,16 @@ export default function PlayerScoreDistribution({ playerName }) {
           label="Score distribution game modes" styleId="player.scores.modes" onToggle={toggleMode} />
       </div>
       {request.loading && request.data ? <small className="score-distribution-refresh" role="status">Updating… {progressText}</small> : null}
-      {request.data ? <div className="score-distribution-endings" title={endingDescription}>
+      {request.data && !request.data.summary_pending ? <div className="score-distribution-endings" title={endingDescription}>
         {SCORE_ENDINGS.map(([key, label]) => <div key={key}>
           <span>{label}</span><strong>{formatNumber(totals.endings[key] || 0)}</strong>
         </div>)}
       </div> : null}
     </div>
     {request.loading && !request.data ? <p className="score-distribution-message" role="status">Calculating scored positions… {progressText}</p> : null}
+    {request.data?.summary_pending ? <p {...pageStyleTarget('player.scores.status')} role="status">Summary queued. It will appear here automatically after background preparation.</p> : request.data?.summary_managed && request.data.stale ? <p {...pageStyleTarget('player.scores.status')} role="status">Showing the last complete summary; an update is queued.</p> : null}
     {request.error ? <p role="alert">{request.error}{' '}<button {...pageStyleTarget('player.scores.action')} type="button" onClick={refresh}>Retry</button></p> : null}
-    {request.data ? <div className="score-distribution-scroll"><div className="score-distribution-canvas">
+    {request.data && !request.data.summary_pending ? <div className="score-distribution-scroll"><div className="score-distribution-canvas">
       <svg ref={chart.ref} viewBox={`0 0 ${chart.width} ${HEIGHT}`} role="group" aria-label="Scored position occurrences by player-perspective centipawn score">
         <desc>Each repeated position counts again. Positive favors {playerName}. {formatNumber(totals.cp)} centipawn occurrences plotted; {formatNumber(totals.unscored)} unscored, {formatNumber(totals.mates)} mate evaluations and {formatNumber(totals.tablebases)} tablebase evaluations excluded. Select a bar to browse positions.</desc>
         {ticks.map(tick => <g key={tick} className="score-distribution-grid" aria-hidden="true">
@@ -127,6 +130,19 @@ export default function PlayerScoreDistribution({ playerName }) {
         <text x={(LEFT + right) / 2} y={HEIGHT - 4} textAnchor="middle">Score (centipawns)</text>
       </svg>
     </div></div> : null}
+    {request.data?.summary_managed && !request.data.summary_pending && !request.data.mate_distances_pending ? <div {...pageStyleTarget('player.scores.mates')} className="score-mate-summary" aria-label="Mate evaluations by distance">
+      <div {...pageStyleTarget('player.scores.mates.row')} className="score-mate-row">
+        <span {...pageStyleTarget('player.scores.mates.label')}>Mate distance</span>
+        <span {...pageStyleTarget('player.scores.mates.label')}>For {playerName}</span>
+        <span {...pageStyleTarget('player.scores.mates.label')}>Against {playerName}</span>
+      </div>
+      {totals.mateDistances.map(row => <div {...pageStyleTarget('player.scores.mates.row')} className="score-mate-row" key={row.moves ?? 'unknown'}>
+        <span {...pageStyleTarget('player.scores.mates.label')}>{row.moves === null ? 'Distance unavailable' : row.moves === 0 ? 'Checkmate' : `Mate in ${row.moves}`}</span>
+        <strong {...pageStyleTarget('player.scores.mates.for')}>{formatNumber(row.for)}</strong>
+        <strong {...pageStyleTarget('player.scores.mates.against')}>{formatNumber(row.against)}</strong>
+      </div>)}
+      <small {...pageStyleTarget('player.scores.status')}>Position occurrences · {formatNumber(totals.unscored)} unscored · {formatNumber(totals.tablebases)} tablebase</small>
+    </div> : null}
     {selection ? <PlayerScorePositions key={JSON.stringify(selection)} playerName={playerName} selection={selection}
       onClose={() => setSelection(null)} /> : null}
   </section>

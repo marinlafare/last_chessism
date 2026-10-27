@@ -7,6 +7,7 @@ import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
 import useBoardSounds from '../../components/chess/useBoardSounds'
 import { useBoardSoundPreferences } from '../../components/chess/BoardSoundPreferences'
+import { evaluationLabel, evaluationDescription } from './gameEvaluationLabel'
 
 const endingLabels = {
   checkmated: 'checkmate',
@@ -107,14 +108,6 @@ function BoardClock({ color, clock }) {
       <strong {...pageStyleTarget(`gameReview.clock.${color}.remaining`)} aria-label={`${color} time remaining: ${remaining}`}>{remaining}</strong>
     </span>
   )
-}
-
-function evaluationLabel(evaluation, orientation = 'white') {
-  if (!Number.isFinite(evaluation?.white_cp)) return 'N/A'
-  const score = evaluation.white_cp * (orientation === 'black' ? -1 : 1)
-  if (evaluation.kind === 'mate') return score > 0 ? 'MATE +' : 'MATE −'
-  if (evaluation.kind === 'tablebase') return score > 0 ? 'TB WIN' : score < 0 ? 'TB LOSS' : 'TB DRAW'
-  return `${score >= 0 ? '+' : ''}${(score / 100).toFixed(2)}`
 }
 
 function usePieceAnimationDuration() {
@@ -312,11 +305,11 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                 <div {...pageStyleTarget(hasEvaluation ? 'gameReview.evaluation' : 'gameReview.evaluation.disabled')}
                   className={`game-review-eval${orientation === 'black' ? ' flipped' : ''}${hasEvaluation ? '' : ' is-unscored'}`}
                   style={{ '--white-eval': `${whitePercent}%` }} role="img" aria-disabled={!hasEvaluation}
-                  aria-label={hasEvaluation ? `Position evaluation: ${evaluationLabel(evaluation, orientation)}` : noScoreMessage}
+                  aria-label={hasEvaluation ? `Position evaluation: ${evaluationDescription(evaluation, orientation)}` : noScoreMessage}
                   title={hasEvaluation ? undefined : noScoreMessage}>
                   <div {...pageStyleTarget('gameReview.evaluation.black')} className="game-review-eval-black" aria-hidden="true" />
                   <div {...pageStyleTarget('gameReview.evaluation.white')} className="game-review-eval-white" aria-hidden="true" />
-                  {hasEvaluation ? <strong {...pageStyleTarget('gameReview.evaluation.value')} aria-hidden="true">{evaluationLabel(evaluation, orientation)}</strong>
+                  {hasEvaluation ? <strong {...pageStyleTarget('gameReview.evaluation.value')} title={evaluationDescription(evaluation, orientation)} aria-hidden="true">{evaluationLabel(evaluation, orientation)}</strong>
                     : <i {...pageStyleTarget('gameReview.evaluation.disabledLine')} className="game-review-eval-disabled-line" aria-hidden="true" />}
                 </div>
                 <GameReviewBoard
@@ -373,7 +366,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     <MoveAnnotation classification={move.classification} />
                     <span {...pageStyleTarget('gameReview.move.number')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>
                     <strong {...pageStyleTarget('gameReview.move.notation')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.san || '—'}</strong>
-                    <small {...pageStyleTarget('gameReview.move.evaluation')} className={positionIndex === index + 1 ? 'active' : undefined}>{evaluationLabel(move.evaluation_after, 'white')}</small>
+                    <small {...pageStyleTarget('gameReview.move.evaluation')} title={evaluationDescription(move.evaluation_after, 'white')} className={positionIndex === index + 1 ? 'active' : undefined}>{evaluationLabel(move.evaluation_after, 'white')}</small>
                   </button>
                 ))}
               </div>

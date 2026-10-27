@@ -71,6 +71,7 @@ window.fetch = async (input, options = {}) => {
   if (path === '/analysis/cloud/billing') return state.failBilling ? reply({detail:'Billing temporarily unavailable'},503) : reply(state.billing)
   if (/^\/analysis\/cloud\/[^/]+\/usage$/.test(path)) return reply(state.cloudUsage[path.split('/')[3]] || {phases:[]})
   if (path === '/players/navigation') return reply({players:names})
+  if (/^\/games\/[^/]+\/latest$/.test(path)) return reply({played_at:'2026-10-23T08:00:00Z',summary_stale:false})
   if (/^\/games\/[^/]+\/recent$/.test(path)) return reply({games:[{played_at:'2026-10-23T08:00:00Z'}]})
   if (/^\/players\/[^/]+\/deletion-preview$/.test(path)) return reply({
     exclusive_games:42,shared_games:8,fen_associations:2000,analyzed_fen_associations:1500,
@@ -87,8 +88,9 @@ window.fetch = async (input, options = {}) => {
   ]})
   if (path.includes('/analysis/behavioural/')) return reply({weekdays:[],hours:[],weekday_hours:[]})
   if (path.endsWith('/analysis/measures/quality-calendar')) return reply({coverage:{total_games:60,eligible_games:50},weekdays:[],hours:[],weekday_hours:[]})
+  if (path.endsWith('/analysis/measures/readiness')) return reply({summary_pending:false,by_mode:Object.fromEntries(['bullet','blitz','rapid'].map(mode=>[mode,{coverage:{eligible_games:50}}]))})
   if (path.includes('/analysis/measures/daily-')) return reply({points:[['2025-01-01',82,81,4,10]],salience:{status:'ready'}})
-  if (/^\/players\/[^/]+$/.test(path)) {
+  if (/^\/players\/[^/]+(?:\/hero)?$/.test(path)) {
     const player = decodeURIComponent(path.split('/')[2])
     if (player === state.slowPlayer) await new Promise((resolve,reject) => {
       const abort = () => { clearTimeout(timer); state.aborted.push(player); reject(new DOMException('Aborted','AbortError')) }

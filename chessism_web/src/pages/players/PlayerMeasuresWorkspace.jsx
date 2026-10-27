@@ -4,8 +4,8 @@ import PlayerMeasuresPanel from './PlayerMeasuresPanel'
 import PlayerScoreDistribution from './PlayerScoreDistribution'
 import PlayerBlunderDistribution from './PlayerBlunderDistribution'
 import PlayerUnexpectedEndings from './PlayerUnexpectedEndings'
-import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
-import { fetchQualityCalendar } from './playerAnalysisApi'
+import PlayerAnalysisDisclosure, { useAnalysisVisible } from './PlayerAnalysisDisclosure'
+import { fetchStockfishReadiness } from './playerAnalysisApi'
 import './player-measures.css'
 import './player-game-explorer.css'
 
@@ -17,11 +17,13 @@ export default function PlayerMeasuresWorkspace({ playerName, disabled = false }
 }
 
 function MeasuresContent({ playerName, disabled }) {
+  const visible = useAnalysisVisible()
   const [quality, setQuality] = useState(null)
   const [qualityError, setQualityError] = useState('')
   const [qualityLoading, setQualityLoading] = useState(false)
 
   useEffect(() => {
+    if (!visible) return undefined
     if (!playerName || disabled) {
       setQuality(null)
       setQualityError('')
@@ -32,22 +34,29 @@ function MeasuresContent({ playerName, disabled }) {
     const controller = new AbortController()
     setQualityLoading(true)
     setQualityError('')
-    fetchQualityCalendar({ playerName, signal: controller.signal, bypassCache: true })
-      .then((payload) => {
-        if (!controller.signal.aborted) setQuality(payload)
-      })
-      .catch((requestError) => {
-        if (requestError.name !== 'AbortError') {
-          setQualityError(requestError.message || 'Unable to load Stockfish measures.')
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setQualityLoading(false)
-      })
+    let timer
+    const load = async () => {
+      try {
+        const payload = await fetchStockfishReadiness({ playerName, signal: controller.signal })
+        if (controller.signal.aborted) return
+        setQuality(current => JSON.stringify(current) === JSON.stringify(payload) ? current : payload)
+        setQualityError('')
+        setQualityLoading(Boolean(payload.summary_pending))
+        // Small saved counters only; no calendar calculations or repairs.
+        timer = window.setTimeout(load, 30000)
+      } catch (requestError) {
+        if (controller.signal.aborted) return
+        setQualityError(requestError.message || 'Unable to load Stockfish measures.')
+        setQualityLoading(false)
+        timer = window.setTimeout(load, 30000)
+      }
+    }
+    load()
     return () => {
+      window.clearTimeout(timer)
       controller.abort()
     }
-  }, [playerName, disabled])
+  }, [playerName, disabled, visible])
 
   return (
     <div className="player-analysis-chart-list">

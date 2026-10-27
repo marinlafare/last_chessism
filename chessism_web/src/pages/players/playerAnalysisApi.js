@@ -6,8 +6,9 @@ const RESPONSE_CACHE_LIMIT = 32
 
 const playerPath = (playerName) => encodeURIComponent(playerName)
 
-export function fetchPlayerGameCatalog({ playerName, kind, mode = 'all', color = 'all', page = 1, search = '', signal }) {
-  const params = new URLSearchParams({ kind, mode, color, page: String(page), limit: '10', search })
+export function fetchPlayerGameCatalog({ playerName, kind, mode = 'all', color = 'all', page = 1, search = '', sort_by = 'games', ratio_bin, signal }) {
+  const params = new URLSearchParams({ kind, mode, color, page: String(page), limit: '10', search, sort_by })
+  if (sort_by !== 'games') params.set('ratio_bin', String(ratio_bin ?? 9))
   return requestJson(`/players/${playerPath(playerName)}/analysis/behavioural/catalog?${params}`, { signal })
 }
 
@@ -25,6 +26,10 @@ export function fetchPlayerScoreDistribution({ playerName, signal, refresh = fal
 
 export function fetchPlayerScorePositions({ playerName, selection, signal }) {
   return postJson(`/players/${playerPath(playerName)}/analysis/measures/score-distribution/positions`, selection, { signal })
+}
+
+export function fetchStockfishReadiness({ playerName, signal }) {
+  return requestJson(`/players/${playerPath(playerName)}/analysis/measures/readiness`, { signal })
 }
 
 export function fetchPlayerBlunderDistribution({ playerName, signal }) {

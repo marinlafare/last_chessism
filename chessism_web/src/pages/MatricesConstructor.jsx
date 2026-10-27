@@ -2,6 +2,7 @@ import { pageStyleTarget } from '../appearance/styleCore.js'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
 import MatrixDefinitionForm from './research/matrices/MatrixDefinitionForm'
+import DefaultMatrices from './research/matrices/DefaultMatrices'
 import useMatrixConstructor from './research/matrices/useMatrixConstructor'
 import './research/matrices/matricesConstructor.css'
 
@@ -17,6 +18,7 @@ export default function MatricesConstructor() {
           {error ? <div className="status-banner warn" role="alert">{error}</div> : null}
           {notice ? <div className="status-banner" role="status">{notice} {savedDefinition ? <a {...pageStyleTarget('link')} className="matrix-back" href={`/research/algorithms?preview=${encodeURIComponent(savedDefinition.id)}`}>Review saved formula →</a> : null}</div> : null}
           <MatrixDefinitionForm model={model} />
+          <DefaultMatrices />
         </main>
       </div>
     </div>

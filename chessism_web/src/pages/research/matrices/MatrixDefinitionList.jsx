@@ -12,6 +12,7 @@ export default function MatrixDefinitionList({ definitions, onPreview, onUse, on
     const dynamicMoves = config.move_scores?.all_moves
     const filters = config.filters || {}
     if (builtin) return <article {...pageStyleTarget('card')} className="matrix-artifact matrix-default-formula" aria-label={definition.name} key={definition.id}>
+      <strong {...pageStyleTarget('value')} className="matrix-default-name">{definition.name}</strong>
       {onSelect ? <button {...pageStyleTarget('button')} type="button" className="matrix-score-schema matrix-formula-choice"
         disabled={disabled} aria-pressed={selectedId === definition.id} aria-label={`Select ${definition.name}`}
         onClick={() => onSelect(definition)}>
@@ -20,6 +21,8 @@ export default function MatrixDefinitionList({ definitions, onPreview, onUse, on
         <code>{[...config.feature_columns, ...config.label_columns].join(' | ')}</code>
       </div>}
       <MatrixPreviewButton name={definition.name} live disabled={disabled} onClick={() => onPreview(definition)} />
+      {definition.row_type === 'blunder_moves' ? <p {...pageStyleTarget('text')} className="matrix-default-description">Fully analyzed games · before/after evaluations · game-time ratings. Initial prior: 1 means the first White move uses an assumed +15 CP before-evaluation; otherwise 0. Game outcomes belong to a separate training dataset. The rating-aware model is not fitted or active.</p> : null}
+      {definition.row_type === 'score_distribution' ? <p {...pageStyleTarget('text')} className="matrix-default-description">Scored positions only · both colors’ moves from each player’s perspective · repeated occurrences retained · centipawn, mate and tablebase evaluations kept separate.</p> : null}
     </article>
     return <article {...pageStyleTarget('card')} className="matrix-artifact" key={definition.id}>
       <div className="matrix-artifact-head">
