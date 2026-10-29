@@ -6,6 +6,7 @@ import numpy as np
 from tests.test_canonical_blunders import fixture,report
 from chessism_api.operations.canonical_blunders import compute,registry,benchmark_compute as measured
 from chessism_api.operations.canonical_blunders import benchmark_job as job,benchmark_source as source
+from chessism_api.operations.canonical_blunders.assessment import empty_mode
 
 
 def cuda_check():
@@ -58,12 +59,15 @@ class BenchmarkTests(unittest.TestCase):
             self.assertEqual(recovered.tobytes(),rows.tobytes()); self.assertEqual(data['games'],games)
 
     def test_histograms_include_both_owners_unknown_and_zero(self):
-        hist={p:{m:{'counts':[0]*7,'games_count':0} for m in ('bullet','blitz','rapid')} for p in ('a','b','zero')}
-        job.add_histograms(hist,[{'mode':'blitz','white_owner':'a','black_owner':'b','white_count':9,'black_count':0},
-            {'mode':'rapid','white_owner':'a','white_count':None}])
+        hist={p:{m:empty_mode() for m in ('bullet','blitz','rapid')} for p in ('a','b','zero')}
+        job.add_histograms(hist,[{'mode':'blitz','status':'assessed','flags':{'unassessed':[]},
+            'white_owner':'a','black_owner':'b','white_count':9,'black_count':0,'white_assessed':10,'black_assessed':10},
+            {'mode':'rapid','status':'assessed','white_owner':'a','white_count':None,
+             'white_assessed':0,'black_assessed':0,'flags':{'unassessed':[1,2]}}])
         self.assertEqual(hist['a']['blitz']['counts'],[0]*6+[1])
         self.assertEqual(hist['b']['blitz']['counts'],[1]+[0]*6)
         self.assertEqual(hist['zero']['bullet']['games_count'],0)
+        self.assertEqual(hist['a']['rapid']['unassessed_games'],1)
 
 
 if __name__=='__main__':unittest.main()

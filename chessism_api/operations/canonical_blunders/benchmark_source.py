@@ -31,7 +31,8 @@ async def guard(session):
     row=(await session.execute(text(f'SELECT * FROM {table(layout,"control")}'))).mappings().one()
     if row['status']!='ready' or not row['active_model'] or row['active_model']!=row['target_model']:
         raise ValueError('Wait for canonical summary publication before benchmarking.')
-    if await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM {table(layout,"dirty")})')):
+    if await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {table(layout,"dirty")}) OR
+        EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')})''')):
         raise ValueError('Canonical updates are pending; benchmark refused.')
     return row
 

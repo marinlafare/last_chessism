@@ -9,11 +9,12 @@ export const cloudDefaults = {
 export const cloudRunDefaults = { ...cloudDefaults, backend: 'cloud_run' }
 
 export const MAX_CLOUD_FENS = 500000
+export const MAX_CLOUD_RUN_FENS = 6000000
 export const MAX_BATCH_FENS_PER_VM = 1000000
 export const batchCycleCapacity = nVms => MAX_BATCH_FENS_PER_VM * Number(nVms)
-export const cloudLimit = (backend) => backend === 'cloud_run' ? 200000 : MAX_CLOUD_FENS * MAX_BATCH_REPEATS
+export const cloudLimit = (backend) => backend === 'cloud_run' ? MAX_CLOUD_RUN_FENS : MAX_CLOUD_FENS * MAX_BATCH_REPEATS
 export const MAX_CLOUD_RUNS = MAX_CLOUD_FENS * 20 / 1000
-export const MAX_CLOUD_RUN_CPUS = 100
+export const MAX_CLOUD_RUN_CPUS = 200
 export const MAX_BATCH_VMS = 10
 export const MAX_BATCH_REPEATS = 20
 // Display-only mirror of the server policy; never included in job requests.

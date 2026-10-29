@@ -1,7 +1,7 @@
 import asyncio
 import json
 import os
-import time
+import sys
 from typing import Any, Sequence
 
 import chess
@@ -12,7 +12,6 @@ from sqlalchemy import bindparam, func, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.ask_db import (
-    increment_database_summary_fen_counts,
     increment_game_analysis_summary_for_scored_fens,
     increment_scored_position_summary_for_scored_fens,
     refresh_database_summary_fen_counts,
@@ -25,7 +24,14 @@ from chessism_api.operations.player_salience import enqueue_stale_player_salienc
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import Fen
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter
+from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
+from chessism_api.operations.redis_ownership import release_owned
 from chessism_api.operations.tablebase_batches import CandidateSpool, save_compact_batch
+from chessism_api.operations.tablebase_probe import (
+    TABLEBASE_MAX_PIECES, _best_tablebase_move, _move_rank, _tablebase_score_payload,
+    _probe_batch_sync as probe_batch,
+)
+from chessism_api.operations.tablebase_parallel import TablebaseProber
 from chessism_api.operations.ingestion_pipeline import TABLEBASE_MARKING
 from chessism_api.operations.ingestion_pipeline.timing import (
     fail_running_ingestion_stages,
@@ -36,11 +42,9 @@ from chessism_api.operations.ingestion_pipeline.timing import (
 
 
 TABLEBASE_PATH = os.getenv("STOCKFISH_SYZYGY_PATH", "/syzygy")
-TABLEBASE_MAX_PIECES = 5
 TABLEBASE_BATCH_SIZE = 1_000
 TABLEBASE_PROGRESS_KIND = "tablebase_analysis"
 TABLEBASE_COORDINATION_KEY = "chessism:automatic_tablebase_analysis"
-PROGRESS_TTL_SECONDS = 60 * 60 * 24
 COORDINATION_TTL_SECONDS = 60 * 60 * 24
 RESERVATION_TTL_SECONDS = 60
 ACTIVE_JOB_STATUSES = {
@@ -80,21 +84,10 @@ async def _write_progress(
 ) -> None:
     if redis is None:
         return
-    payload = {
-        "job_id": job_id,
-        "kind": TABLEBASE_PROGRESS_KIND,
-        "ingestion_run_id": ingestion_run_id,
-        "total": max(0, int(total)),
-        "processed": max(0, int(processed)),
-        "failed": max(0, int(failed)),
-        "phase": phase,
-        "detail": detail,
-        "updated_at": time.time(),
-    }
-    await redis.set(
-        f"chessism:job_progress:{job_id}",
-        json.dumps(payload),
-        ex=PROGRESS_TTL_SECONDS,
+    await write_job_progress(
+        redis, job_id, kind=TABLEBASE_PROGRESS_KIND,
+        ingestion_run_id=ingestion_run_id, total=total, processed=processed,
+        failed=failed, phase=phase, detail=detail,
     )
 
 
@@ -139,6 +132,27 @@ async def count_tablebase_candidates(game_links: Sequence[int] | None = None) ->
 
     async with AsyncDBSession() as session:
         return int(await session.scalar(text(query), params) or 0)
+
+
+async def has_tablebase_candidates(game_links=None):
+    """Cheap admission check; the worker's single discovery determines the count."""
+    clean_links = _clean_game_links(game_links)
+    if game_links is not None and not clean_links: return False
+    scope = ('JOIN game_fen_association a ON a.fen_id=f.fen_id '
+             'WHERE a.game_link=ANY(CAST(:links AS bigint[])) AND ') if clean_links else 'WHERE '
+    async with AsyncDBSession() as session:
+        return bool(await session.scalar(text(
+            f'SELECT EXISTS(SELECT 1 FROM fen f {scope} {TABLEBASE_CANDIDATE_SQL})'), {'links':clean_links}))
+
+
+async def _read_tablebase_batch(identifiers):
+    """Close the read transaction before probing. Publication rechecks under locks."""
+    async with AsyncDBSession() as session:
+        await session.execute(text('SET TRANSACTION READ ONLY'))
+        rows = (await session.execute(text(f'''SELECT f.fen,{PIECE_COUNT_SQL}::smallint AS piece_count
+            FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[])) AND {TABLEBASE_CANDIDATE_SQL}
+            ORDER BY f.fen'''), {'ids':identifiers})).mappings().all()
+        return [dict(row) for row in rows]
 
 
 async def _lease_tablebase_batch(
@@ -197,96 +211,15 @@ async def _lease_tablebase_batch(
             await session.close()
             return None, []
         return session, rows
-    except Exception:
+    except BaseException:
         await session.rollback()
         await session.close()
         raise
 
 
-def _move_rank(
-    outcome: int,
-    child_dtz: int | None,
-) -> tuple[int, int]:
-    distance = abs(int(child_dtz or 0))
-    if outcome > 0:
-        return outcome, -distance
-    if outcome < 0:
-        return outcome, distance
-    return outcome, 0
-
-
-def _best_tablebase_move(
-    tablebase: chess.syzygy.Tablebase,
-    board: chess.Board,
-) -> str | None:
-    best_move = None
-    best_rank = None
-    for move in sorted(board.legal_moves, key=lambda candidate: candidate.uci()):
-        child = board.copy(stack=False)
-        child.push(move)
-        child_wdl = tablebase.get_wdl(child)
-        if child_wdl is None:
-            continue
-        rank = _move_rank(-int(child_wdl), tablebase.get_dtz(child))
-        if best_rank is None or rank > best_rank:
-            best_rank = rank
-            best_move = move.uci()
-    return best_move
-
-
-def _tablebase_score_payload(board: chess.Board, raw_wdl: int) -> dict[str, Any]:
-    white_wdl = int(raw_wdl) if board.turn == chess.WHITE else -int(raw_wdl)
-    if white_wdl == 2:
-        return {
-            "score": 1_000.0,
-            "wdl_win": 1_000.0,
-            "wdl_draw": 0.0,
-            "wdl_loss": 0.0,
-        }
-    if white_wdl == -2:
-        return {
-            "score": -1_000.0,
-            "wdl_win": 0.0,
-            "wdl_draw": 0.0,
-            "wdl_loss": 1_000.0,
-        }
-    # Cursed wins and blessed losses are draws under the fifty-move rule.
-    return {
-        "score": 0.0,
-        "wdl_win": 0.0,
-        "wdl_draw": 1_000.0,
-        "wdl_loss": 0.0,
-    }
-
-
-def _probe_batch_sync(
-    tablebase: chess.syzygy.Tablebase,
-    rows: list[dict[str, Any]],
-) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    solved = []
-    unavailable = []
-    for row in rows:
-        fen = str(row["fen"])
-        piece_count = int(row.get("piece_count") or 0)
-        try:
-            board = chess.Board(fen)
-            if piece_count > TABLEBASE_MAX_PIECES or board.castling_rights:
-                raise KeyError("Position is not compatible with the installed tablebases")
-            raw_wdl = tablebase.get_wdl(board)
-            raw_dtz = tablebase.get_dtz(board)
-            if raw_wdl is None or raw_dtz is None:
-                raise KeyError("Position is missing from the installed tablebases")
-            solved.append({
-                "fen": fen,
-                "piece_count": piece_count,
-                "tablebase_wdl": int(raw_wdl),
-                "tablebase_dtz": int(raw_dtz),
-                "next_moves": _best_tablebase_move(tablebase, board),
-                **_tablebase_score_payload(board, int(raw_wdl)),
-            })
-        except (ValueError, KeyError, chess.syzygy.MissingTableError):
-            unavailable.append({"fen": fen, "piece_count": piece_count})
-    return solved, unavailable
+def _probe_batch_sync(tablebase, rows):
+    # Preserve this shared entry point for callers and selection parity tests.
+    return probe_batch(tablebase, rows, best_move=_best_tablebase_move)
 
 
 async def _save_tablebase_batch(
@@ -294,15 +227,15 @@ async def _save_tablebase_batch(
     solved: list[dict[str, Any]],
     unavailable: list[dict[str, Any]],
 ) -> None:
-    from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
+    from chessism_api.evaluations import validate_batch
+    validate_batch(solved, source='tablebase')
+    from chessism_api.database.compact_storage import compact_for
     layout = compact_for(session)
     if layout:
         await save_compact_batch(session, solved, unavailable)
         return
-    target = compact_table(Fen, layout.core) if layout else Fen.__table__
+    target = Fen.__table__
     if solved:
-        if layout:
-            solved = [integer_result(row) for row in solved]
         prepared = [{
             "p_fen": item["fen"],
             "p_piece_count": item["piece_count"],
@@ -374,46 +307,49 @@ async def _analyze_tablebase_positions(
 
     redis = ctx.get("redis")
     job_id = str(progress_job_id or ctx.get("job_id") or "tablebase-analysis")
-    available = (
-        max(0, int(candidate_count))
-        if candidate_count is not None
-        else await count_tablebase_candidates(game_links)
-    )
-    target = min(available, max(0, int(max_positions))) if max_positions is not None else available
-    if target <= 0:
-        return {"processed": 0, "solved": 0, "unavailable": 0, "target": 0}
-
-    progress_total = target + (1 if refresh_projections else 0)
-
+    # candidate_count is a stale compatibility hint, not a cap on discovery.
+    target = 0
     await _write_progress(
         redis,
         job_id,
-        total=progress_total,
+        total=0,
         processed=0,
         failed=0,
-        phase="tablebase",
-        detail=f"Probing {target} positions directly with Syzygy.",
+        phase="discovering_tablebase",
+        detail="Finding eligible Syzygy positions; count not known yet.",
         ingestion_run_id=ingestion_run_id,
     )
 
     processed = solved_total = unavailable_total = skipped_total = 0
     safe_batch_size = max(1, min(int(batch_size), 5_000))
-    tablebase = chess.syzygy.open_tablebase(TABLEBASE_PATH)
+    prober = TablebaseProber(TABLEBASE_PATH)
     candidates = CandidateSpool()
     try:
         async with reporter.step("discover_endgames", None, "positions"):
-            await candidates.discover(game_links, target, TABLEBASE_CANDIDATE_SQL, reporter)
+            limit = max(0, int(max_positions)) if max_positions is not None else None
+            await candidates.discover(game_links, limit, TABLEBASE_CANDIDATE_SQL, reporter)
         target = candidates.count
         reporter.goal("claim_endgames", target)
         reporter.goal("probe_endgames", target)
         reporter.goal("save_endgames", target)
         progress_total = target + (1 if refresh_projections else 0)
+        await _write_progress(redis, job_id, total=progress_total, processed=0, failed=0,
+            phase="tablebase", detail=f"Probing {target} positions with {prober.workers} Syzygy processes.",
+            ingestion_run_id=ingestion_run_id)
         while identifiers := candidates.read(safe_batch_size):
+            rows = await _read_tablebase_batch(identifiers)
+            async with reporter.step("probe_endgames", len(rows), "positions"):
+                solved, unavailable_rows = await prober.probe(rows)
+            # No locks or database connection were held during CPU/file work.
+            # A cloud claim or score that arrived meanwhile wins; never overwrite.
             async with reporter.step("claim_endgames", len(identifiers), "positions"):
-                session, rows = await _lease_tablebase_batch(
+                session, eligible = await _lease_tablebase_batch(
                     game_links, len(identifiers), candidate_ids=identifiers,
-                )
-            skipped_total += len(identifiers) - len(rows)
+                ) if rows else (None, [])
+            allowed = {row['fen'] for row in eligible}
+            solved = [row for row in solved if row['fen'] in allowed]
+            unavailable_rows = [row for row in unavailable_rows if row['fen'] in allowed]
+            skipped_total += len(identifiers) - len(solved) - len(unavailable_rows)
             if session is None:
                 processed += len(identifiers)
                 await _write_progress(redis, job_id, total=progress_total, processed=processed,
@@ -421,17 +357,13 @@ async def _analyze_tablebase_positions(
                     detail=f"Solved {solved_total}; {skipped_total} already scored or reserved.",
                     ingestion_run_id=ingestion_run_id)
                 continue
-            if not rows:
-                break
             try:
-                async with reporter.step("probe_endgames", len(rows), "positions"):
-                    solved, unavailable_rows = await asyncio.to_thread(
-                        _probe_batch_sync, tablebase, rows,
-                    )
-                async with reporter.step("save_endgames", len(rows), "positions"):
+                async with reporter.step("save_endgames", len(solved)+len(unavailable_rows), "positions"):
                     await _save_tablebase_batch(session, solved, unavailable_rows)
+                    from chessism_api.operations.fen_results import increment_new_fen_counts
+                    await increment_new_fen_counts(session, solved)
                     await session.commit()
-            except Exception:
+            except BaseException:
                 await session.rollback()
                 raise
             finally:
@@ -440,12 +372,6 @@ async def _analyze_tablebase_positions(
             if solved:
                 try:
                     async with reporter.step("endgame_summaries", len(solved), "positions"):
-                        await increment_database_summary_fen_counts(
-                            analyzed_delta=len(solved),
-                            nonzero_scored_delta=sum(
-                                1 for item in solved if float(item.get("score") or 0) != 0.0
-                            ),
-                        )
                         await increment_scored_position_summary_for_scored_fens(solved)
                         await increment_game_analysis_summary_for_scored_fens(solved)
                 except Exception:
@@ -474,8 +400,10 @@ async def _analyze_tablebase_positions(
                 ingestion_run_id=ingestion_run_id,
             )
     finally:
-        tablebase.close()
-        candidates.close()
+        # Terminating an unfinished read-only probe is safe; no partial result
+        # was published. The next run rediscovers only still-unscored positions.
+        try: await prober.close(abort=sys.exc_info()[0] is not None)
+        finally: candidates.close()
 
     # A scoped automatic run follows freshly inserted game associations. Those
     # associations change rating projections even when every endgame probe is
@@ -519,8 +447,7 @@ async def analyze_tablebase_positions(ctx, **kwargs):
 
 
 async def _release_coordination(redis: ArqRedis, job_id: str) -> None:
-    if _redis_text(await redis.get(TABLEBASE_COORDINATION_KEY)) == job_id:
-        await redis.delete(TABLEBASE_COORDINATION_KEY)
+    await release_owned(redis, TABLEBASE_COORDINATION_KEY, job_id)
 
 
 async def ensure_tablebase_analysis_enqueued(
@@ -540,18 +467,19 @@ async def ensure_tablebase_analysis_enqueued(
         ).status()
         if status in ACTIVE_JOB_STATUSES:
             return {"status": "already_active", "job_id": current_job_id, "pending": None}
-        await redis.delete(TABLEBASE_COORDINATION_KEY)
+        await _release_coordination(redis, current_job_id)
     elif current_job_id == "reserving":
         return {"status": "already_active", "job_id": None, "pending": None}
 
     clean_links = _clean_game_links(game_links)
-    pending = await count_tablebase_candidates(
+    has_work = await has_tablebase_candidates(
         clean_links if game_links is not None else None
     )
-    if pending <= 0:
+    if not has_work:
         if game_links is None:
             await refresh_fen_pipeline_summary(mark_tablebase_current=True)
         return {"status": "up_to_date", "job_id": None, "pending": 0}
+    pending = None  # Exact count comes from discovery, not a second whole scan.
 
     reserved = await redis.set(
         TABLEBASE_COORDINATION_KEY,
@@ -580,11 +508,10 @@ async def ensure_tablebase_analysis_enqueued(
             job_id,
             ex=COORDINATION_TTL_SECONDS,
         )
-        target = min(pending, int(max_positions)) if max_positions is not None else pending
         await _write_progress(
             redis,
             job_id,
-            total=target + 1,
+            total=0,
             processed=0,
             failed=0,
             phase="queued",
@@ -593,8 +520,7 @@ async def ensure_tablebase_analysis_enqueued(
         )
         return {"status": "queued", "job_id": job_id, "pending": pending}
     except Exception:
-        if _redis_text(await redis.get(TABLEBASE_COORDINATION_KEY)) == "reserving":
-            await redis.delete(TABLEBASE_COORDINATION_KEY)
+        await _release_coordination(redis, "reserving")
         raise
 
 
@@ -624,7 +550,7 @@ async def run_tablebase_analysis_job(
             progress_job_id=job_id,
             ingestion_run_id=ingestion_run_id,
         )
-        if game_links is None and await count_tablebase_candidates() <= 0:
+        if game_links is None and not await has_tablebase_candidates():
             await refresh_fen_pipeline_summary(mark_tablebase_current=True)
         await _write_progress(
             redis,

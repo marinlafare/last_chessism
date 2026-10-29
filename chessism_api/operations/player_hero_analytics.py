@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.operations.player_game_scores import (
-    is_lichess_blunder,
     lichess_winning_chances,
     refresh_game_player_engine_summaries,
 )
@@ -175,7 +174,7 @@ async def get_player_behavioural_activity(
         mode = scope.mode
         saved = await read_snapshot(session, scope.player, 'activity_daily' if date_from or date_to else 'activity')
         if saved and saved.get('time_context') != scope.timezone.payload():
-            saved = None
+            saved = {**saved,'rows':[],'summary_pending':True,'summary_stale':True} if saved.get('manual') else None
         if saved is not None:
             rows = [row for row in saved['rows'] if (mode == 'all' or row['mode'] == mode)
                     and (not date_from or row['date'] >= date_from.isoformat())
@@ -196,7 +195,7 @@ async def get_player_behavioural_activity(
         **scope.response_base(),
         **aggregate,
         "by_mode": by_mode,
-        **({key: saved[key] for key in ('summary_revision', 'summary_stale')} if saved else {}),
+        **({key: saved[key] for key in ('summary_revision', 'summary_stale','summary_pending','manual') if key in saved} if saved else {}),
     }
 
 
@@ -239,7 +238,7 @@ async def get_player_behavioural_ratings(
         mode = scope.mode
         saved = await read_snapshot(session, scope.player, 'ratings')
         if saved and saved.get('time_context') != scope.timezone.payload():
-            saved = None
+            saved = {**saved,'rows':[],'summary_pending':True,'summary_stale':True} if saved.get('manual') else None
         if saved is not None:
             rows = [row for row in saved['rows'] if (mode == 'all' or row['mode'] == mode)
                     and (not date_from or row['date'] >= date_from.isoformat())
@@ -249,6 +248,7 @@ async def get_player_behavioural_ratings(
                 'date_from': date_from.isoformat() if date_from else min(dates, default=None),
                 'date_to': date_to.isoformat() if date_to else max(dates, default=None),
                 'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale'],
+                **({key:saved[key] for key in ('manual','summary_pending') if key in saved}),
                 'series': [{'mode': selected, 'points': [
                     {'date': row['date'], 'last_rating': row['rating'], 'game_id': row['link'],
                      'played_at_utc': row['played_at'], 'played_at_local': row['played_at_local']}

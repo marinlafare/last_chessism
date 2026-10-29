@@ -101,6 +101,12 @@ export function fetchDailyEfficiency({ playerName, signal, bypassCache = false, 
   )
 }
 
+export function fetchDailyAccuracyBands({ playerName, signal, bypassCache = false, ...filters }) {
+  const search = analyticsSearch(filters)
+  return cachedRequest(`/players/${playerPath(playerName)}/analysis/measures/daily-accuracy-bands?${search}`,
+    { signal, bypassCache })
+}
+
 export function fetchDailySalienceAccuracy({ playerName, signal, bypassCache = false, ...filters }) {
   const search = analyticsSearch(filters)
   return cachedRequest(

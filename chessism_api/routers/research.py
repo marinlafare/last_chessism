@@ -31,11 +31,13 @@ from chessism_api.operations.research_resources import analysis_jobs_active
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.routers.research_matrices import router as matrices_router
 from chessism_api.routers.research_algorithms import router as algorithms_router
+from chessism_api.routers.salience_comparison import router as salience_comparison_router
 
 
 router = APIRouter()
 router.include_router(matrices_router, prefix="/matrices", tags=["Research matrices"])
 router.include_router(algorithms_router, prefix="/algorithms", tags=["Research algorithms"])
+router.include_router(salience_comparison_router, prefix="/salience-comparisons", tags=["Salience comparison"])
 class CoefficientExperimentConfig(BaseModel):
     modes: list[Literal["bullet", "blitz", "rapid"]] = Field(
         default_factory=lambda: ["bullet", "blitz", "rapid"]

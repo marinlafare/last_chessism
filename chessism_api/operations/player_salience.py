@@ -178,6 +178,9 @@ async def enqueue_player_salience(
     """Queue one corpus refresh while preventing duplicate player jobs."""
     player = str(player_name).strip().lower()
     async with AsyncDBSession() as session:
+        from .cuda_summaries.salience_store import enabled
+        if await enabled(session):
+            return {'status':'pending_cuda','player_name':player,'job_id':None}
         exists = await session.scalar(text("""
             SELECT EXISTS (
                 SELECT 1 FROM player
@@ -274,6 +277,18 @@ async def run_player_salience_job(
     redis: ArqRedis = ctx["redis"]
     job_id = str(ctx.get("job_id") or f"player-salience-{player_name}")
     player = str(player_name).strip().lower()
+    async with AsyncDBSession() as session:
+        from .cuda_summaries.salience_store import enabled
+        if await enabled(session):
+            # Older producers may still send a queue wake-up. It must never
+            # become a CPU calculation or an implicit manual CUDA request.
+            await session.execute(text(f"""UPDATE {storage_for(session).table('player_salience_summary')}
+                SET status='stale' WHERE player_id=(SELECT id FROM player WHERE player_name=:player)
+                AND status IN ('queued','running')"""), {'player':player})
+            await session.commit()
+            await _write_progress(redis,job_id,player_name=player,phase='complete',total=1,processed=1,
+                detail='Salience is pending the next manual Run CUDA summaries request.')
+            return {'status':'pending_cuda','player_name':player,'job_id':None}
     await _write_progress(
         redis,
         job_id,

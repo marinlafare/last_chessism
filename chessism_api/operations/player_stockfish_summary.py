@@ -68,6 +68,16 @@ async def read_saved(session, player):
 
 
 async def get_readiness(player_name):
+    payload = await _get_readiness(player_name)
+    from .cuda_summaries.runs import status
+    async with AsyncDBSession() as session:
+        await session.execute(text('SET TRANSACTION READ ONLY'))
+        await session.execute(text("SET LOCAL statement_timeout='5s'"))
+        payload['cuda_summaries'] = await status(session, player=str(player_name).strip().lower())
+    return payload
+
+
+async def _get_readiness(player_name):
     player = str(player_name or '').strip().lower()
     async with AsyncDBSession() as session:
         await session.execute(text('SET TRANSACTION READ ONLY'))
@@ -162,6 +172,10 @@ async def calculate_day(session, player, day):
 async def refresh_player(player, *, batch_days=32, session_factory=None):
     factory = session_factory or AsyncDBSession
     async with factory() as session:
+        from .cuda_summaries.schema import enabled as manual_summaries
+        if await manual_summaries(session):
+            return {'status': 'awaiting_cuda_migration'}
+        await session.rollback()
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
         await session.execute(text("SET LOCAL statement_timeout='25s'"))
         await session.execute(text("SET LOCAL lock_timeout='1s'"))
@@ -222,6 +236,9 @@ async def refresh_player(player, *, batch_days=32, session_factory=None):
 
 async def refresh_pending():
     async with AsyncDBSession() as session:
+        from .cuda_summaries.schema import enabled as manual_summaries
+        if await manual_summaries(session):
+            return None
         table = summary_table(storage_for(session), 'state')
         player = await session.scalar(text(f'''SELECT player_name FROM {table}
             WHERE revision<>published_revision AND (error IS NULL OR attempted_at<now()-interval '60 seconds')

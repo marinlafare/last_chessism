@@ -15,14 +15,21 @@ window.fetch = async (input, options={}) => {
   if ((options.method||'GET')!=='GET') throw Error('No writes permitted')
   if (path.endsWith('/readiness')) return reply({summary_pending:!state.ready,
     by_mode:Object.fromEntries(modes.map(mode=>[mode,{coverage:{eligible_games:state.ready?5:0}}]))})
-  if (path.endsWith('/blunder-distribution')) return reply({bins:[],by_mode:{}})
+  if (path.endsWith('/blunder-distribution')) return reply({source:'canonical_cuda_blunders',
+    assessment_policy:'complete_player_moves_v1',quality_status:'provisional',
+    bins:Array.from({length:7},(_,id)=>({id,label:id===6?'6+':String(id)})),
+    by_mode:Object.fromEntries(modes.map(mode=>[mode,{
+      counts:[10,8,5,3,2,1,1],games_count:30,partial_games:5774,unassessed_games:9,
+    }]))})
   if (path.endsWith('/score-distribution') && !url.search) return reply({summary_managed:true,
     summary_pending:state.pending,stale:state.stale,snapshot:'fixture',
     bins:Array.from({length:13},(_,id)=>({id,label:String(id),lower:0,upper:100})),
     by_mode:Object.fromEntries(modes.map(mode=>[mode,{
-      counts:Array.from({length:13},(_,id)=>id===6?3:0),endings:{games:3},cp_positions:3,
+      counts:Array.from({length:13},(_,id)=>id===6?3:0),
+      endings:{games:3,checkmates_for:2,checkmates_against:1,stalemates_by_player:1,other_draws:1},cp_positions:3,
       mate_positions:mode==='blitz'?3:0,tablebase_positions:1,unscored_positions:2,
-      mates:mode==='blitz'?[{moves:2,side:'for',positions:2},{moves:null,side:'against',positions:1}]:[]
+      mates:mode==='blitz'?(state.longMates ? Array.from({length:80},(_,moves)=>({moves,side:'for',positions:moves+1}))
+        : [{moves:2,side:'for',positions:2},{moves:null,side:'against',positions:1}]):[]
     }]))})
   state.unexpected.push(path+url.search)
   throw Error('No live access: '+path)

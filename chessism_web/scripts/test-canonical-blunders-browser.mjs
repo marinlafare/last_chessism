@@ -3,6 +3,7 @@ await browserFixture(9277,async({send,context,evaluate,assert,waitFor})=>{
   await send('browsingContext.navigate',{context,url:'http://localhost:6789/tests/fixtures/canonicalBlunders.html',wait:'complete'})
   await waitFor("document.body.textContent.includes('Initial rebuild')")
   await assert("document.body.textContent.includes('provisional user approval') && document.body.textContent.includes('1,000 games pending')")
+  await assert("document.body.textContent.includes('Preparing game coverage before CUDA: 12 pending.') && document.body.textContent.includes('Failed refresh requests are retained')")
   await assert("document.querySelector('[aria-label=\"Blunder summary rebuild\"]').getAttribute('aria-valuenow')==='89.1'")
   await assert("document.querySelector('[aria-label=\"Canonical GPU blunders\"]').getBoundingClientRect().top < document.querySelector('#matrix-formulas').getBoundingClientRect().top")
   await waitFor("document.querySelector('[aria-label=\"Active algorithm runs\"]')?.textContent.includes('Current research run')")

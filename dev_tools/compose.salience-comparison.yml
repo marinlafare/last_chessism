@@ -1,0 +1,17 @@
+# Explicit one-shot research task. Does not start/restart API, workers or GPU.
+# docker compose -f docker-compose.yml -f dev_tools/compose.salience-comparison.yml run --no-deps salience-comparison
+services:
+  salience-comparison:
+    image: chessism-api:salience-comparison-20261029
+    entrypoint: python
+    command: [-u, -m, chessism_api.operations.salience_comparison.build, --player, lafareto]
+    cpus: "2.0"
+    mem_limit: 3g
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - SALIENCE_COMPARISON_DIR=/research-data/salience-comparisons
+    volumes:
+      - ./research_data:/research-data
+    networks:
+      - chessism_net

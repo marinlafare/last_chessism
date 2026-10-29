@@ -18,13 +18,13 @@ test('Batch VM count and Cloud Run CPU count are independent and bounded', () =>
   for (const n_vms of [0, 11, 1.5, '', 'no']) {
     assert.throws(() => cloudPayload('all', { ...cloudDefaults, n_vms }))
   }
-  for (const cpus of [1, 4, 64, 65, 100]) {
+  for (const cpus of [1, 4, 64, 65, 100, 101, 200]) {
     const form = { ...cloudDefaults, backend: 'cloud_run', n_cpus: String(cpus) }
     assert.equal(cloudPayload('all', form).n_cpus, cpus)
     assert.equal(Object.hasOwn(cloudPayload('all', form), 'n_vms'), false)
     assert.match(cloudBound('all', form), /Cloud Run/)
   }
-  for (const n_cpus of [0, 101, 1.5, 'no', '']) {
+  for (const n_cpus of [0, 201, 1.5, 'no', '']) {
     assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'cloud_run', n_cpus }))
   }
   assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'unknown' }))
@@ -112,9 +112,21 @@ test('cloud jobs keep the total selection bound across a VM fleet', () => {
   assert.equal(cloudPayload('loop', loop).runs, 200)
   assert.match(cloudBound('loop', loop), /fixed set of up to 200,000 unscored FENs/)
   assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 10000001 }), /10,000,000-FEN/)
-  assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 200001 }, 'cloud_run'), /200,000-FEN/)
-  assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'cloud_run', total: 500000 }), /200,000/)
+  assert.match(cloudGameSelectionError({ plan_id: 'a'.repeat(32), fens_to_analyze: 6000001 }, 'cloud_run'), /6,000,000-FEN/)
+  assert.throws(() => cloudPayload('all', { ...cloudDefaults, backend: 'cloud_run', total: 6000001 }), /6,000,000/)
   assert.match(cloudBound('games', cloudDefaults, { plan_id: 'a'.repeat(32), fens_to_analyze: 2082 }), /fixed set of up to 2,082 unscored FENs/)
+})
+
+test('Cloud Run accepts up to six million FENs in single and game selections', () => {
+  for (const total of [200001, 3700000, 6000000]) {
+    const form = { ...cloudRunDefaults, player: 'example', total }
+    const preview = { plan_id: 'a'.repeat(32), fens_to_analyze: total }
+    for (const mode of ['all', 'player']) assert.equal(cloudPayload(mode, form).total_fens, total)
+    assert.equal(cloudGameSelectionError(preview, 'cloud_run'), '')
+    assert.equal(cloudPayload('games', form, preview).plan_id, preview.plan_id)
+  }
+  assert.equal(cloudPayload('loop', { ...cloudRunDefaults, positions: 1000, runs: 6000 }).runs, 6000)
+  assert.throws(() => cloudPayload('loop', { ...cloudRunDefaults, positions: 1000, runs: 6001 }), /6,000,000/)
 })
 
 test('global scope cannot accidentally inherit a player filter', () => {

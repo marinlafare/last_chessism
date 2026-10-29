@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { EstimatedTime } from './JobStatus'
 import AnalysisHistory from './AnalysisHistory'
 import { formatNumber } from './positionPageSupport'
@@ -40,9 +41,9 @@ export default function LocalAnalysisActivity({ page }) {
                 <span>{formatNumber(process.processed)} / {formatNumber(process.total)}</span>
                 <strong {...pageStyleTarget('local.activity.percent')}>{process.percent}%</strong>
               </div>
-              <div {...pageStyleTarget('local.activity.track')} className="job-progress-track">
-                <div className="job-progress-fill" style={{ width: `${process.percent}%` }} />
-              </div>
+              <ProgressMeter {...pageStyleTarget('local.activity.track')} className="job-progress-track"
+                fillClassName="job-progress-fill" value={process.percent} aria-label={process.scopeLabel}
+                aria-valuetext={`${formatNumber(process.processed)} of ${formatNumber(process.total)}, ${process.percent}%`} />
               {process.progress?.detail ? <small {...pageStyleTarget('local.activity.detail')}>{process.progress.detail}</small> : null}
               <EstimatedTime
                 jobId={process.job_id}

@@ -1,5 +1,6 @@
 // Compute success and 100% imported are not workflow completion: cleanup and
 // the final database-summary refresh must also finish.
+import { uploadStepProgress } from './cloudUploadProgress.js'
 export function cloudJobDone(job) {
   return ['complete', 'limit_reached'].includes(job.status)
     && Array.isArray(job.runs) && job.runs.every((run) => run.status === 'complete')
@@ -92,6 +93,16 @@ export function cloudJobProgress(job) {
   // The sequence remains "running" while its final run is being verified.
   // Use explicit run states, never infer completion from a 100% import bar.
   const selectedRuns = runs.filter(run => run.positions > 0)
+  const awaitingVerification = run => run?.status === 'running' && run.cloud_state === 'SUCCEEDED'
+    && Number.isSafeInteger(run.positions) && run.positions > 0
+    && Number.isSafeInteger(run.imported) && run.imported === run.positions
+  // The controller keeps status="running" until the verification proof is
+  // committed. Confirmed cloud success + all imports means verification is
+  // CURRENT, not complete; cleanup and Done must remain pending.
+  if (phase === 'running' && !job.sequence?.automatic && awaitingVerification(active)) phase = 'finalizing'
+  if (job.sequence?.automatic && phase === 'running' && job.sequence.cloud_status === 'SUCCEEDED'
+    && selectedRuns.length && selectedRuns.every(run =>
+      ['finalizing', 'complete'].includes(run.status) || awaitingVerification(run))) phase = 'finalizing'
   if (job.sequence?.automatic && phase === 'running' && selectedRuns.length
     && selectedRuns.every(run => ['finalizing', 'complete'].includes(run.status))) phase = 'finalizing'
   const step = done ? 9 : phase ? (phaseSteps[phase] ?? 0) : runs.length ? 8 : 0
@@ -111,8 +122,28 @@ export function cloudJobProgress(job) {
 }
 
 export function cloudStepProgress(job, step) {
+  const upload = uploadStepProgress(job, step)
+  if (upload) return upload
   if (step.state === 'complete') return { value: 100, detail: 'Complete' }
   if (step.state === 'pending') return { value: 0, detail: 'Pending' }
+  // Batch's eligible-log phases follow object/image cleanup. Do not leave its
+  // previous image label visible while the separate log controller is working.
+  const phase = job.sequence?.phase || cloudActiveRun(job)?.status
+  if (step.id === 'cleanup' && ['log_planning', 'log_cleaning'].includes(phase)) {
+    return { value: null, detail: phase === 'log_planning'
+      ? 'Checking eligible logs' : 'Cleaning up eligible logs', showDetail: true }
+  }
+  if (['cleanup', 'stop-cleaning'].includes(step.id) && job.cleanup_progress) {
+    const { phase, total, removed } = job.cleanup_progress
+    if (phase === 'objects' && Number.isSafeInteger(total) && total > 0
+      && Number.isSafeInteger(removed) && removed >= 0 && removed <= total) {
+      const value = removed / total * 100
+      return { value, detail: `${removed.toLocaleString()} / ${total.toLocaleString()} files removed · ${Math.floor(value)}%` }
+    }
+    const labels = { compute: 'Waiting for cloud resources to stop', objects: 'Checking remaining files',
+      image: 'Removing worker image', logs: 'Cleaning up eligible logs' }
+    if (labels[phase]) return { value: null, detail: labels[phase], showDetail: true }
+  }
   let completed, total, unit
   if (step.id === 'reserve' && job.sequence) {
     completed = job.sequence.reserved
@@ -131,7 +162,7 @@ export function cloudStepProgress(job, step) {
     // Do not round 99.9% to 100%, nor infer workflow completion from counts.
     return { value, detail: `${completed.toLocaleString()} / ${total.toLocaleString()} ${unit} · ${Math.floor(value)}%` }
   }
-  // Publishing, quota checks and cleanup do not expose work counters. An
+  // Stages without observed work counters retain an indeterminate meter. An
   // animated activity bar is honest; elapsed time is not a completion estimate.
   return { value: null, detail: step.state === 'attention' ? 'Needs attention' : 'In progress — percentage unavailable' }
 }

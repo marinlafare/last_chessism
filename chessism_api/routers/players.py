@@ -405,6 +405,18 @@ async def api_get_player_daily_game_cp(
     )
 
 
+@router.get("/{player_name}/analysis/measures/daily-accuracy-bands")
+async def api_get_player_daily_accuracy_bands(
+    player_name: str,
+    mode: str = Query("all", min_length=1, max_length=32),
+    date_from: date | None = Query(None),
+    date_to: date | None = Query(None),
+    timezone: str | None = Query(None, min_length=1, max_length=64),
+) -> JSONResponse:
+    from chessism_api.operations.cuda_summaries.accuracy_reader import daily_chart
+    return await _hero_analytics_response(daily_chart, player_name, mode, date_from, date_to, timezone)
+
+
 @router.get("/{player_name}/analysis/measures/daily-efficiency")
 async def api_get_player_daily_efficiency(
     player_name: str,

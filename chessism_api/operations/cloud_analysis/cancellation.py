@@ -131,7 +131,8 @@ async def tick(controller, job, cancellation):
     # Each row measures actual work in one phase attempt, not time left paused
     # awaiting recovery. Substep rows overlap this parent; do not sum both.
     # Persist even when cleanup fails, without making metrics a safety gate.
-    timings = StageTimings()
+    from .cleanup_progress import bind
+    timings = bind(StageTimings(), job.id)
     try:
         with timings.measure('cancel_' + cancellation.phase):
             try:
@@ -266,7 +267,7 @@ async def advance(controller, job, cancellation, timings):
             return  # Metadata deletion alone is not proof that VM/disk cleanup finished.
         if cancellation.artifact_plan:
             with timings.measure('cancel_leftover_artifacts'):
-                if not await asyncio.to_thread(cancelled_artifacts.apply, cloud, cancellation.artifact_plan, all_ids):
+                if not await asyncio.to_thread(cancelled_artifacts.apply, cloud, cancellation.artifact_plan, all_ids, timings=timings):
                     return
         await save(job.id, phase='logs')
     elif phase == 'logs':

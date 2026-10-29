@@ -5,17 +5,23 @@ import math
 from cleaning_job.cloud import PROJECT, REGION, CleanupError
 from cleaning_job.images import validate_uri
 from stockfish_core import NODES, THREADS, HASH_MIB, MULTIPV, PROFILE_ID
+from stockfish_batch.cloud_run_limits import MAX_SELECTION_FENS, MAX_TASK_FENS, MAX_TASK_COUNT
 from .launch import configuration
 
 PARENT = f"projects/{PROJECT}/locations/{REGION}"
 TASK_SECONDS = 604800  # Platform ceiling, NOT a per-FEN search budget.
+MAX_PARALLEL_CPUS = 200
 
 
 def partitions(count, cpus):
-    if type(cpus) is not int or not 1 <= cpus <= 100 or not 1 <= count <= 200000:
-        raise ValueError("Cloud Run requires 1–100 CPUs and 1–200,000 FENs")
-    size = min(5000, max(500, math.ceil(count / (cpus * 4 * 500)) * 500))
-    return [(start, min(size, count - start)) for start in range(0, count, size)]
+    if (type(cpus) is not int or not 1 <= cpus <= MAX_PARALLEL_CPUS
+            or type(count) is not int or not 1 <= count <= MAX_SELECTION_FENS):
+        raise ValueError(f"Cloud Run requires 1–{MAX_PARALLEL_CPUS} CPUs and 1–{MAX_SELECTION_FENS:,} FENs")
+    size = min(MAX_TASK_FENS, max(500, math.ceil(count / (cpus * 4 * 500)) * 500))
+    parts = [(start, min(size, count - start)) for start in range(0, count, size)]
+    if len(parts) > MAX_TASK_COUNT:
+        raise ValueError('Cloud Run plan exceeds the shared worker task limit')
+    return parts
 
 
 def config_for(run_id, size):
@@ -30,6 +36,10 @@ def task_config(config, index, count):
 
 
 def spec_for(run_id, config, image, task_count, cpus):
+    if type(task_count) is not int or not 1 <= task_count <= MAX_TASK_COUNT:
+        raise ValueError(f'Cloud Run requires 1–{MAX_TASK_COUNT} tasks')
+    if type(cpus) is not int or not 1 <= cpus <= MAX_PARALLEL_CPUS:
+        raise ValueError(f'Cloud Run requires 1–{MAX_PARALLEL_CPUS} CPUs')
     validate_uri(image)
     fields = ("input", "output", "workers", "threads", "hash_mb", "memory_mib", "nodes",
               "multipv", "max_positions", "position_timeout", "run_timeout", "stall_timeout",

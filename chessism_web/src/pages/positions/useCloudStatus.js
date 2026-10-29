@@ -26,13 +26,10 @@ export default function useCloudStatus(onProgress) {
       },
     })
     poller.current = polling
-    const visible = () => { if (document.visibilityState !== 'hidden') polling.refresh() }
-    document.addEventListener('visibilitychange', visible)
     polling.refresh()
     return () => {
       polling.stop()
       poller.current = null
-      document.removeEventListener('visibilitychange', visible)
     }
   }, [])
   const refresh = useCallback(() => poller.current?.refresh(), [])

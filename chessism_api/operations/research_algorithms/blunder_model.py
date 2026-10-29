@@ -180,7 +180,7 @@ def compare_transitions(batch, fits, *, device=0):
     Count changes are descriptive, not proof that blunder labels are correct.
     """
     from .cuda_runtime import cuda_backend
-    from ..player_game_scores import is_lichess_blunder
+    from .legacy_blunder_reference import is_lichess_blunder
     cp, _ = cuda_backend(device)
     result = []
     for model in fits:

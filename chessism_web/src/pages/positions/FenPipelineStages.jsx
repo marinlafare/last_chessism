@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { formatNumber } from './positionPageSupport'
 import { pipelineSteps, stepEstimate } from './pipelineProgress.js'
 import './fenIngestion.css'
@@ -35,7 +36,6 @@ export default function FenPipelineStages({ jobState, ingestionTiming }) {
               : ['working', 'running'].includes(step.status) ? 'stopped' : step.status
             const heartbeatAge = step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : null
             const stale = working && heartbeatAge != null && heartbeatAge > 30
-            const percent = step.total > 0 ? Math.min(100, step.processed / step.total * 100) : null
             const elapsed = step.elapsed_seconds + (
               working && step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : 0
             )
@@ -52,12 +52,9 @@ export default function FenPipelineStages({ jobState, ingestionTiming }) {
                   {step.total != null ? ` / ${formatNumber(step.total)}` : ''}
                   {' '}<span className="fen-pipeline-unit">{step.unit || 'items'}</span>
                 </strong>
-                {percent != null && (
-                  <div className="fen-pipeline-stage-track" role="progressbar"
-                    aria-label={step.label} aria-valuemin={0} aria-valuemax={step.total}
-                    aria-valuenow={step.processed}>
-                    <div style={{ width: `${percent}%` }} />
-                  </div>
+                {step.total > 0 && (
+                  <ProgressMeter className="fen-pipeline-stage-track"
+                    aria-label={step.label} max={step.total} value={step.processed} />
                 )}
                 <div {...pageStyleTarget('text')} className="fen-pipeline-step-meta">
                   <span>{status === 'waiting' ? 'Between batches' : status}</span>

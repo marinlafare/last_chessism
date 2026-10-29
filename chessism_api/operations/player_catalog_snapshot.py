@@ -65,7 +65,9 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         {analytics_table(storage_for(session), 'snapshot')} WHERE player_name=:player AND section=:kind'''),
         {'player': scope.player, 'kind': kind})).mappings().first()
     if not meta:
-        return None
+        from .cuda_summaries.metadata_store import enabled as cuda_metadata
+        if not await cuda_metadata(session):return None
+        meta={'revision':0,'generated_at':None}
     # Reuse the saved counts across outcomes; filter and rank before paging.
     identity = [scope.player, kind, mode, color, meta['revision']]
     key = 'chessism:catalog-ranking:v6:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()

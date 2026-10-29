@@ -360,6 +360,8 @@ ROW_TYPES: dict[str, MatrixRowType] = {
 from .summary_inputs import row_types as summary_row_types
 
 ROW_TYPES.update(summary_row_types(MatrixColumn, MatrixRowType))
+from .accuracy_inputs import row_type as accuracy_row_type
+ROW_TYPES['accuracy_positions'] = accuracy_row_type(MatrixColumn, MatrixRowType)
 
 
 def matrix_catalog() -> dict[str, Any]:

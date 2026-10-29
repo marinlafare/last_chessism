@@ -28,13 +28,16 @@ from .preparation import StageTimings
 
 async def save_run(run_id, **changes):
     async with AsyncDBSession() as session, session.begin():
-        run = await session.get(CloudAnalysisRun, run_id, with_for_update=True)
+        # Scalar transitions must not hydrate millions of positions/receipts.
+        run = await session.get(CloudAnalysisRun, run_id, with_for_update=True,
+                                execution_options={'cloud_documents': ()})
         if 'status' in changes and changes['status'] != run.status:
             await history.transition(session, run, run.status, changes['status'])
             if changes['status'] == 'finalizing':
                 from chessism_api.database.cloud_codec import checksum
                 run.results_verified_at = datetime.now(timezone.utc)
-                launch = changes.get('launch', run.launch)
+                launch = (changes['launch'] if 'launch' in changes else
+                          await session.run_sync(lambda _: run.launch))
                 if launch.get('workflow_version') == 3:
                     from .work_units_results import proof
                     run.completion_manifest_sha256 = checksum(proof(launch))
@@ -129,8 +132,14 @@ class Controller:
             cancellation = await session.get(CloudJobCancellation, job.id)
             runs = [] if sequence_mode else (await session.scalars(select(CloudAnalysisRun).where(
                 CloudAnalysisRun.job_id == job.id,
-                ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at))).all()
-        run = next((item for item in runs if item.status != "complete"), None)
+                ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at)
+                .execution_options(cloud_documents=()))).all()
+            run = next((item for item in runs if item.status != "complete"), None)
+            # Completed runs only need their scalar status. Summary refresh uses
+            # persisted input references in SQL, never the whole Python input.
+            if run is not None and run.status != 'refreshing' and cancellation is None:
+                for name in run.CLOUD_DOCUMENTS:
+                    await session.run_sync(lambda _, name=name: getattr(run, name))
         from .read_recovery import RecoveringClient
         if isinstance(self.cloud, RecoveringClient):
             self.cloud.observe_job(job.id)
@@ -257,9 +266,13 @@ class Controller:
             validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
             if launch.get("recovery_session"):
                 await asyncio.to_thread(self.cloud.require_recovery_stopped, run.id, launch)
-            result = await asyncio.to_thread(cleaning_job, plan=run.cleanup_plan, execute=True,
-                cloud=self.cloud, wait_seconds=0,
-                plan_directory=runtime.CLEANUP_ROOT)
+            from .cleanup_progress import bind
+            timings = bind(StageTimings(), run.job_id)
+            try:
+                result = await asyncio.to_thread(cleaning_job, plan=run.cleanup_plan, execute=True,
+                    cloud=self.cloud, wait_seconds=0, plan_directory=runtime.CLEANUP_ROOT, timings=timings)
+            finally:
+                await timings.save(run.job_id, run.id)
             if result["complete"]:
                 await save_run(run.id, status="log_planning" if launch.get("workflow_version") == 2 else "refreshing", error=None)
         elif run.status == "log_planning":

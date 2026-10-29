@@ -41,7 +41,7 @@ function MeasuresContent({ playerName, disabled }) {
         if (controller.signal.aborted) return
         setQuality(current => JSON.stringify(current) === JSON.stringify(payload) ? current : payload)
         setQualityError('')
-        setQualityLoading(Boolean(payload.summary_pending))
+        setQualityLoading(Boolean(payload.summary_pending) && !payload.cuda_summaries?.manual)
         // Small saved counters only; no calendar calculations or repairs.
         timer = window.setTimeout(load, 30000)
       } catch (requestError) {
@@ -60,6 +60,12 @@ function MeasuresContent({ playerName, disabled }) {
 
   return (
     <div className="player-analysis-chart-list">
+      {quality?.cuda_summaries?.manual && quality.cuda_summaries.pending_metrics?.length > 0 &&
+        <p {...pageStyleTarget('player.measures.pending')} role="status">
+          Update pending — previous summaries are shown where available; new summaries have not been calculated.
+          {quality.cuda_summaries.pending_metrics.some(metric => quality.cuda_summaries.deferred_metrics?.includes(metric))
+            ? ' Some calculations are awaiting their GPU migration.' : ' A superuser can run CUDA summaries from Analyze Positions.'}
+        </p>}
       <div className="player-stockfish-summary">
         <PlayerScoreDistribution key={`scores:${playerName}`} playerName={playerName} />
         <PlayerBlunderDistribution key={`blunders:${playerName}`} playerName={playerName} />

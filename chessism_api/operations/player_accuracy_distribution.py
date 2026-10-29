@@ -81,8 +81,11 @@ def summary_rows_sql(session, metric):
               AND m.name=ANY(CAST(:modes AS text[]))
               AND coverage.is_fully_analyzed AND coverage.total_positions>0
               AND {eligibility}"""
+    # Legacy layouts have no canonical CUDA results. They must never serve old
+    # CPU counts, including through explorer/filter paths.
+    if metric == 'blunders': eligibility = 'false'
     return f"""SELECT gp.link AS game_link, gp.color AS player_color, gp.played_at, gp.mode,
-        {accuracy} AS accuracy, engine.blunder_count
+        {accuracy} AS accuracy, NULL::integer AS blunder_count
         FROM game_player gp
         JOIN game_player_engine_summary engine ON engine.game_link=gp.link AND engine.player_color=gp.color
         JOIN game_analysis_summary coverage ON coverage.link=gp.link
@@ -134,21 +137,19 @@ async def get_accuracy_distribution(player_name, redis):
 
 async def get_blunder_distribution(player_name, redis):
     from .canonical_blunders import readers
-    if readers.enabled():
-        async with AsyncDBSession() as session:
-            await prepare(session)
-            saved=await readers.saved(session,str(player_name or '').strip().lower())
-            control=await readers.current(session)
-        if saved is not None: return saved
-        result=await get_summary_distribution(player_name,redis,metric='blunders')
-        return {**result,'canonical_pending':bool(control and control['target_model']),
-            'target_model_id':control['target_model'] if control else None,'model_id':'legacy_cpu_v1'}
-    return await get_summary_distribution(player_name, redis, metric='blunders')
+    player=str(player_name or '').strip().lower()
+    if not player or len(player)>128:
+        raise ValueError('A player name of 1–128 characters is required.')
+    async with read_slot(), AsyncDBSession() as session:
+        await prepare(session)
+        return await readers.saved(session,player)
 
 
 async def get_summary_distribution(player_name, redis, *, metric):
     if metric not in ('accuracy', 'blunders'):
         raise ValueError('Unsupported saved-summary metric.')
+    if metric == 'blunders':
+        return await get_blunder_distribution(player_name,redis)
     bins = blunder_bins() if metric == 'blunders' else accuracy_bins()
     bin_sql = 'LEAST(6, blunder_count)' if metric == 'blunders' else 'LEAST(19, FLOOR(accuracy / 5)::int)'
     player = str(player_name or '').strip().lower()
@@ -225,7 +226,7 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
             CASE WHEN selected.player_color='white' THEN g.white_result ELSE g.black_result END AS result
         FROM selected JOIN {game_table} g ON g.link=selected.game_link {opponent_join}
         ORDER BY selected.cursor_time DESC, selected.game_link DESC, selected.player_color DESC"""
-        rows = (await session.execute(text(query), {
+        rows = [] if metric == 'blunders' and (not canonical or not canonical['active_model']) else (await session.execute(text(query), {
             'player': scope.player, 'modes': list(modes), **bounds,
             'cursor_time': cursor_time, 'cursor_id': cursor_id, 'cursor_color': cursor_color, 'limit': limit + 1,
         })).mappings().all()

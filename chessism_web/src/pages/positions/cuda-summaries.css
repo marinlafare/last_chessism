@@ -1,0 +1,11 @@
+.cuda-summary-panel { display: grid; gap: 1rem; padding: 1rem; border: 1px solid var(--border-color, #293b3b); border-radius: .6rem; background: var(--panel-bg, #10171b); }
+.cuda-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.cuda-summary-panel button { padding: .65rem 1rem; border-radius: .4rem; cursor: pointer; }
+.cuda-summary-panel button:disabled { cursor: not-allowed; opacity: .5; }
+.cuda-summary-metrics { display: flex; flex-wrap: wrap; gap: .75rem; }
+.cuda-summary-metrics > span { padding: .5rem; border: 1px solid #293b3b; border-radius: .4rem; }
+.cuda-summary-panel p { margin: 0; }
+.cuda-summary-progress, .cuda-summary-history { display: grid; gap: .65rem; }
+.cuda-summary-track { height: .75rem; overflow: hidden; background: #263637; border-radius: .4rem; }
+.cuda-summary-track > span { display: block; height: 100%; background: #00b582; transition: width .2s ease; }
+.cuda-summary-history article { display: grid; gap: .3rem; padding: .6rem; border: 1px solid #293b3b; border-radius: .4rem; }

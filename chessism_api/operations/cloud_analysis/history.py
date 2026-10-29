@@ -113,7 +113,11 @@ async def compact_run(run_id, *, historical=False):
     performance summaries. Never compact failed or still-recoverable runs.
     """
     async with AsyncDBSession() as session, session.begin():
-        run = await session.get(CloudAnalysisRun, run_id, with_for_update=True)
+        # Normal compaction already has durable verification/cleanup gates.
+        # Do not decode input/receipt payloads just to replace them with empties.
+        options = {} if historical else {'cloud_documents': ('launch', 'cleanup_plan')}
+        run = await session.get(CloudAnalysisRun, run_id, with_for_update=True,
+                                execution_options=options)
         if run.details_pruned:
             return False
         if historical:

@@ -30,6 +30,7 @@ async def fixture(conn):
         ALTER TABLE fen ALTER COLUMN score TYPE integer;
         CREATE TABLE game(link bigint PRIMARY KEY,fens_done boolean DEFAULT true,
             fens_processing boolean DEFAULT false);
+        CREATE TABLE game_player(game_link bigint);
         CREATE TABLE moves(link bigint,n_move int,white_move text,black_move text,
             PRIMARY KEY(link,n_move));
         CREATE TABLE game_fen_association(
@@ -95,6 +96,12 @@ async def exercise(conn, factory):
             raise AssertionError("Invalid link accepted")
         except ValueError:
             pass
+    # The old string looked up a globally existing row outside the locked batch.
+    # Refuse that malformed input even when the target FEN exists in the database.
+    try:
+        await save(fens=fens[:1],links=[{**links[-1],'game_link':3}])
+        raise AssertionError('Association outside locked identity set accepted')
+    except ValueError:pass
     try:
         async with factory.begin() as session:
             await persist_positions(session, fens, [{**row, "game_link": 3} for row in links])
@@ -123,6 +130,21 @@ async def exercise(conn, factory):
         session, selected = await tablebase._lease_tablebase_batch(None, 1, candidate_ids=[identity])
         assert session is None and selected == []
         await conn.execute("DELETE FROM cloud_fen_claim WHERE fen=$1", endgame)
+        # Reads hold no FEN lock while probing. A concurrent score/claim wins at
+        # publication, and is not mislabeled or counted as our tablebase result.
+        for changed in ('claim','score'):
+            await conn.execute("UPDATE fen SET score=NULL,analysis_source=NULL WHERE fen=$1",endgame)
+            initial=await tablebase._read_tablebase_batch([identity])
+            assert len(initial)==1
+            async with conn.transaction():
+                await conn.execute('SELECT fen_id FROM fen WHERE fen_id=$1 FOR UPDATE NOWAIT',identity)
+                if changed=='claim':await conn.execute('INSERT INTO cloud_fen_claim VALUES($1)',endgame)
+                else:await conn.execute("UPDATE fen SET score=77,analysis_source='stockfish' WHERE fen_id=$1",identity)
+            session,selected=await tablebase._lease_tablebase_batch(None,1,candidate_ids=[identity])
+            assert session is None and selected==[]
+            if changed=='claim':await conn.execute('DELETE FROM cloud_fen_claim WHERE fen=$1',endgame)
+            else:assert await conn.fetchval('SELECT score FROM fen WHERE fen_id=$1',identity)==77
+        await conn.execute("UPDATE fen SET score=NULL,analysis_source=NULL WHERE fen=$1",endgame)
         # Reservation commits while selection waits for the FEN lock. The
         # second, fresh snapshot must reject it rather than overwrite a claim.
         async with factory.begin() as reserver:
@@ -218,6 +240,11 @@ async def main():
             host=str(socket), port=55432, database="postgres"))
         factory = async_sessionmaker(engine, expire_on_commit=False,
             info={SESSION_KEY: RelationalStorage("public", "archive", "reads", "relational_v3")})
+        # Exercise real ingestion with the production refresh triggers installed.
+        # Their empty conflict-update statements must remain cheap and idempotent.
+        from chessism_api.operations.fen_summary_recovery import install
+        async with factory.begin() as session:
+            await install(session, session.info[SESSION_KEY])
         await asyncio.wait_for(exercise(conn, factory), 180)
         await asyncio.wait_for(exercise_coverage(conn, factory), 90)
     finally:

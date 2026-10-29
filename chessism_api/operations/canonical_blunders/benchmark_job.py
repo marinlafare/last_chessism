@@ -18,6 +18,7 @@ from ..research_algorithms.storage import workspace,ensure_capacity
 from . import compute,benchmark_compute as measured,benchmark_source as source
 from .benchmark_store import Scratch,OPERATION
 from .schema import table
+from .assessment import POLICY, empty_mode, add_record
 
 GAMES=100000
 MAX_ROWS=32000000
@@ -25,10 +26,10 @@ MAX_ROWS=32000000
 
 def configuration(model_id,model,*,reader_comparison=False):
     if model['kernel_sha256']!=compute.implementation_hash():raise ValueError('Canonical implementation changed.')
-    result={'operation':OPERATION,'implementation_version':1,'backend':'cuda_cupy',
+    result={'operation':OPERATION,'implementation_version':3,'backend':'cuda_cupy','assessment_policy':POLICY,
         'model_id':model_id,'model':deepcopy(model),'games':GAMES,'max_rows':MAX_ROWS,
         'columns':['game','ply','before','after','before_kind','after_kind']}
-    if reader_comparison:result.update(implementation_version=2,reader_comparison='legacy_vs_binary_v1')
+    if reader_comparison:result.update(implementation_version=4,reader_comparison='legacy_vs_binary_v1')
     return result
 
 
@@ -44,11 +45,7 @@ async def current_configuration():
 
 def add_histograms(histograms,records):
     for row in records:
-        for side in ('white','black'):
-            owner=row.get(side+'_owner'); count=row.get(side+'_count')
-            if owner in histograms and count is not None:
-                dest=histograms[owner][row['mode']]
-                dest['counts'][min(6,count)]+=1; dest['games_count']+=1
+        add_record(histograms,row)
 
 
 def batch(xp,rows,data,model):
@@ -89,7 +86,7 @@ async def execute(config,reporter,*,factory=None):
             start=time.perf_counter(); await scratch.create(config['model_id'],items,players)
             totals['scratch_setup_seconds']=time.perf_counter()-start
             del items
-            histograms={p:{m:{'counts':[0]*7,'games_count':0} for m in ('bullet','blitz','rapid')} for p in players}
+            histograms={p:{m:empty_mode() for m in ('bullet','blitz','rapid')} for p in players}
             batches=[]; processed=0
             # Warm up on one bounded batch; exclude this extra computation.
             rows,data=await file_operation(source.read,folder,0)
@@ -133,7 +130,7 @@ async def execute(config,reporter,*,factory=None):
         totals['sequential_stage_sum_seconds']=sum(totals[k] for k in baseline)
         return {'format':'chessism_canonical_blunder_timing_v1','status':'passed','production_changed':False,
             'backend':'cuda_cupy','hardware':hardware,'memory_plan':plan,'model_id':config['model_id'],
-            'kernel_sha256':config['model']['kernel_sha256'],
+            'kernel_sha256':config['model']['kernel_sha256'],'assessment_policy':POLICY,
             'instrumentation_sha256':hashlib.sha256(Path(measured.__file__).read_bytes()).hexdigest(),
             'source':info,'input_rows':info['rows'],'included_rows':info['rows'],
             'checks':{'canonical_flags_counts':'passed','published_flags_counts':'passed','player_histograms':'passed',

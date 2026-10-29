@@ -1,0 +1,7 @@
+# Code-only controller release; preserve verified local dependencies and entrypoint.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY chessism_api/ /app/chessism_api/
+COPY stockfish-batch-worker/cloud_job/ /app/stockfish-batch-worker/cloud_job/
+COPY stockfish-batch-worker/cleaning_job/ /app/stockfish-batch-worker/cleaning_job/
+COPY stockfish-batch-worker/stockfish_batch/ /app/stockfish-batch-worker/stockfish_batch/

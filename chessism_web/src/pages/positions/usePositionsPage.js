@@ -8,6 +8,8 @@ import {
   storeJobState,
 } from './positionPageSupport'
 import { playCompletionSound, unlockCompletionAudio } from '../../utils/completionAudio'
+import { usePositionJobPolling, usePositionStatusFeed } from './usePositionStatusPolling.js'
+import { obsoletePositionStatus } from './positionStatusFreshness.js'
 import {
   deleteQueuedAnalysisJob,
   fetchActiveJobs,
@@ -17,7 +19,6 @@ import {
   fetchGameAnalysisOverview,
   fetchLatestIngestionTiming,
   fetchPlayerAnalysisCounts,
-  fetchPositionJobStatus,
   inspectPlayerGameScope,
   previewPlayerGameAnalysis,
   queueAnalysisLoop,
@@ -80,7 +81,6 @@ export function usePositionsPage() {
   const jobCardNodesRef = useRef(new Map())
   const jobCardVisibilityRef = useRef(new Map())
   const jobCardObserverRef = useRef(null)
-  const activeJobPollSignatureRef = useRef('')
   const etaEstimatesRef = useRef(new Map())
 
   const scoredPositions = Number(analysisCounts?.analyzed_fens || 0)
@@ -266,23 +266,19 @@ export function usePositionsPage() {
     return payload
   }
 
-  const loadIngestionTiming = async () => {
-    const payload = await fetchLatestIngestionTiming()
+  usePositionStatusFeed(fetchLatestIngestionTiming, payload => {
     setIngestionTiming(payload?.run || null)
-  }
+  })
 
-  const loadAnalysisProcesses = async () => {
-    try {
-      const payload = await fetchAnalysisProcesses()
+  const loadAnalysisProcesses = usePositionStatusFeed(fetchAnalysisProcesses,
+    payload => {
       setAnalysisProcesses(Array.isArray(payload.jobs) ? payload.jobs : [])
       setAnalysisProcessesError('')
-    } catch (err) {
+    }, err => {
       setAnalysisProcessesError(err instanceof Error ? err.message : 'Unable to load analysis processes.')
-    }
-  }
+    })
 
-  const hydrateActiveJobs = async () => {
-    const payload = await fetchActiveJobs()
+  usePositionStatusFeed(fetchActiveJobs, payload => {
     const jobs = Array.isArray(payload.jobs) ? payload.jobs : []
     jobs.forEach((job) => {
       const progress = job.progress || {}
@@ -290,6 +286,7 @@ export function usePositionsPage() {
       if (!key) return
 
       setJobState((current) => {
+        if (current[key]?.loading || obsoletePositionStatus(current[key], job)) return current
         const next = { ...current }
         Object.entries(next).forEach(([trackedKey, trackedState]) => {
           if (trackedKey !== key && trackedState?.jobId === job.job_id) {
@@ -348,28 +345,17 @@ export function usePositionsPage() {
         return next
       })
     })
-  }
+  })
 
   useEffect(() => {
     loadCoverage()
     loadGameAnalysisOverview().catch(() => {})
     loadAnalysisCounts().catch(() => {})
-    loadIngestionTiming().catch(() => {})
-    hydrateActiveJobs().catch(() => {})
-    loadAnalysisProcesses().catch(() => {})
   }, [])
 
-  useEffect(() => {
-    const timer = window.setInterval(() => {
-      loadAnalysisProcesses().catch(() => {})
-      hydrateActiveJobs().catch(() => {})
-      loadIngestionTiming().catch(() => {})
-    }, 3000)
-    return () => window.clearInterval(timer)
-  }, [])
-
-  const updateJobState = (key, patch) => {
+  const updateJobState = (key, patch, expectedJobId) => {
     setJobState((current) => {
+      if (expectedJobId && current[key]?.jobId !== expectedJobId) return current
       const next = {
         ...current,
         [key]: {
@@ -405,9 +391,10 @@ export function usePositionsPage() {
     fadeTimersRef.current.clear()
   }
 
-  const clearJobState = (key) => {
+  const clearJobState = (key, expectedJobId) => {
     setJobState((current) => {
       if (!current[key]) return current
+      if (expectedJobId && current[key].jobId !== expectedJobId) return current
       const next = { ...current }
       delete next[key]
       storeJobState(next)
@@ -608,76 +595,37 @@ export function usePositionsPage() {
     }
   }, [])
 
-  useEffect(() => {
-    const activeJobs = Object.entries(jobState).filter(([, state]) => {
-      return isTrackedJobActive(state)
-    })
-
-    if (!activeJobs.length) return undefined
-    const activeSignature = activeJobs
-      .map(([key, state]) => `${key}:${state.jobId}`)
-      .sort()
-      .join('|')
-
-    const pollJobs = async () => {
-      await Promise.all(
-        activeJobs.map(async ([key, state]) => {
-          try {
-            const status = await fetchPositionJobStatus(state.jobId)
-            const patch = { status, error: '' }
-
-            if (key === 'fen') {
-              const serverProgress = status.progress
-              if (serverProgress) {
-                const targetGames = Math.max(1, Number(serverProgress.total || 1))
-                const extracted = Math.min(targetGames, Math.max(0, Number(serverProgress.processed || 0)))
-                patch.progress = {
-                  extracted,
-                  target: targetGames,
-                  percent: Math.min(100, Math.round((extracted / targetGames) * 100)),
-                  phase: serverProgress.phase,
-                  detail: serverProgress.detail
-                }
-              }
-            }
-
-            if (isAnalysisJobKey(key)) {
-              patch.progress = getAnalysisJobProgress({ ...state, status })
-            }
-            const phase = getTrackedJobPhase({ status })
-            if (phase === 'complete') {
-              await loadCoverage()
-              await loadAnalysisCounts()
-              await loadGameAnalysisOverview().catch(() => {})
-              if (key === 'gameParsing') {
-                clearJobState(key)
-                return
-              }
-              handleCompletedJob(key, state, status, patch)
-            } else if (phase === 'failed' || phase === 'unavailable') {
-              patch.error = status.progress?.detail || 'Automatic pipeline stage failed.'
-              patch.fading = false
-            }
-            updateJobState(key, patch)
-          } catch (err) {
-            const message = err?.message || 'Job status unavailable'
-            if (message.includes('HTTP 404')) {
-              clearJobState(key)
-              return
-            }
-            updateJobState(key, { loading: false, error: message })
-          }
-        })
-      )
+  usePositionJobPolling(jobState, (key, state, status) => {
+    const patch = { status, error: '' }
+    if (key === 'fen' && status.progress) {
+      const { total, processed, phase, detail } = status.progress
+      const target = Math.max(1, Number(total || 1))
+      const extracted = Math.min(target, Math.max(0, Number(processed || 0)))
+      patch.progress = { extracted, target, percent: Math.min(100, Math.round(extracted / target * 100)), phase, detail }
     }
-
-    if (activeJobPollSignatureRef.current !== activeSignature) {
-      activeJobPollSignatureRef.current = activeSignature
-      pollJobs()
+    if (isAnalysisJobKey(key)) patch.progress = getAnalysisJobProgress({ ...state, status })
+    const phase = getTrackedJobPhase({ status })
+    if (phase === 'not_found') {
+      clearJobState(key, state.jobId)
+      return
     }
-    const timer = window.setInterval(pollJobs, 3000)
-    return () => window.clearInterval(timer)
-  }, [jobState])
+    if (phase === 'complete') {
+      // Totals refresh independently; an unavailable summary must not hide a
+      // completed job or delay polling other jobs.
+      Promise.allSettled([loadCoverage(), loadAnalysisCounts(), loadGameAnalysisOverview()])
+      if (key === 'gameParsing') {
+        clearJobState(key, state.jobId)
+        return
+      }
+      handleCompletedJob(key, state, status, patch)
+    } else if (phase === 'failed' || phase === 'unavailable') {
+      patch.error = status.progress?.detail || 'Automatic pipeline stage failed.'
+      patch.fading = false
+    }
+    updateJobState(key, patch, state.jobId)
+  }, (key, state, error) => {
+    updateJobState(key, { loading: false, error: error?.message || 'Job status unavailable' }, state.jobId)
+  })
 
   const enqueueJob = async ({ key, request, body, meta = {} }) => {
     cancelJobDismissTimers(key)

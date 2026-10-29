@@ -117,7 +117,7 @@ FENs overall. Each cycle holds at most `n_vms × 1,000,000` FENs. For example,
 2,000,000 uses one cycle with two VMs (1,000,000 each), or two cycles with one VM.
 1,963,096 with two VMs uses one cycle of 981,548 FENs per VM. Larger selections
 advance to further cycles automatically. Game previews are divided, never
-multiplied. Cloud Run retains its 200,000-FEN bound. Saved cycle records and
+multiplied. Cloud Run accepts up to 6,000,000 FENs. Saved cycle records and
 legacy explicit 500k loops keep their original partitioning on recovery.
 
 The local controller freezes and reserves the entire selection in bounded 50k
@@ -229,7 +229,7 @@ The Compose controller runs on your PC using your existing `gcloud` login:
    requests reserve at most 50,000 per unit, up to 1,000,000 per VM per cycle
    for new automatic sequences; older explicit 500,000-FEN loops retain their
    saved partitioning. Cloud Run retains
-   its 200,000-FEN whole-request bound.
+   a 6,000,000-FEN whole-request bound with at most 5,000 FENs per task.
 3. Before fleet creation, it verifies that earlier Batch jobs, compute resources,
    repository images and live/noncurrent bucket objects are gone. Unexpected
    leftovers pause the job before upload; they are not blindly deleted because
@@ -525,7 +525,7 @@ A 500,000-FEN request with one VM produces ten sequential container runnables
 inside one Google Batch task, on the **same n2d-highcpu-16 Spot VM**. More VMs split
 the selection evenly first; each VM runs its own ordered list of bounded units.
 The engine profile, 16-GiB VM/12-GiB container budgets, and five-minute analysis
-inactivity watchdog are unchanged. Cloud Run's limit stays at 200,000 FENs.
+inactivity watchdog are unchanged. Cloud Run's whole-request limit is 6,000,000 FENs.
 
 Every input is reserved and uploaded before any supervisor is started. Once all
 supervisors are running, Google schedules the remaining units even if the PC is
@@ -623,7 +623,7 @@ These do not replace the next user-launched, paid 500,000-FEN integration test.
 - For game jobs, use Preview to freeze latest/oldest/date-range/fair-range game
   selection. The server derives the FEN target from that saved preview's missing
   positions; there is no editable maximum-FEN field for game selections. Empty
-  or over-limit selections (10,000,000 for automatic Batch sequences; 200,000 for Cloud Run) are rejected,
+  or over-limit selections (10,000,000 for automatic Batch sequences; 6,000,000 for Cloud Run) are rejected,
   never silently truncated. Select
   fewer games and preview again if the existing safety limit is exceeded.
 - Closing the browser has no effect on the host controller. Stopping the controller
@@ -694,11 +694,53 @@ Existing unfinished Batch jobs and their recovery controls remain visible.
 The Cloud Run card offers one FEN-selection dropdown for all positions, player
 positions, player games (with a frozen preview), or grouped selections. Only
 missing, unreserved FENs are selected. Changing the selection invalidates its
-preview; changing CPU concurrency preserves it. Choose `n_cpus` (1–100, default 4)
+preview; changing CPU concurrency preserves it. Choose `n_cpus` (1–200, default 4)
 for the maximum simultaneous **one-vCPU, 1-GiB tasks**. Small selections
-can use fewer CPUs. The input limit remains 200,000 FENs per UI request. The
+can use fewer CPUs. The input limit is 6,000,000 FENs per UI request, including
+combined selections. UI validation, both submission endpoints, and the controller
+task planner enforce the same bound. Task inputs remain capped at 5,000 FENs
+(at most 1,200 tasks for a maximum-size request); worker memory/CPU settings,
+checkpoint size and retry/cancellation policies are unchanged. The
 controller verifies regional CPU/memory quota before uploading; quotas are shared
 with other Cloud Run workloads and do not guarantee capacity or immediate start.
+
+Worker release 1.5.1 shares the 1,200-task bound with the planner and job-spec
+validator. The old worker's 400-task guard rejected larger selections even when
+the planner accepted them. Deploy the matching controller AND worker image;
+the worker-version preflight rejects stale local images before publishing.
+Regression tests initialize every planned task (including the 753-task,
+3,760,444-FEN case and the 1,200-task maximum), not just the partition counts.
+Preparation failures with no published launch can resume their existing
+reservation after this update; do not recreate or duplicate the job.
+
+The local controller still materializes whole-run Cloud Run metadata. Its Compose
+memory ceiling is 12 GiB (previously 2 GiB); this is an allowance, not a reservation.
+The five-CPU budget is unchanged. A future streaming-metadata refactor can reduce
+that local overhead independently of the selection limit. Boundary tests cover
+3.7 million, exactly 6 million, and rejection above 6 million; these are not an
+end-to-end billable benchmark of a 6-million-FEN run.
+
+Finalization avoids duplicate whole-run snapshots: scalar status updates load
+no payload documents; successful imports refresh only changed receipts, and
+normal compaction never reloads the positions/receipts it is about to release.
+Receipt SQL snapshots decode in groups of at most 32 batches, and canonical
+checksums stream the same JSON bytes instead of allocating whole-document text
+and bytes copies. Integrity checks and exact-result/cleanup gates are unchanged.
+This reduces peak memory, but is not a fully streaming whole-run representation.
+
+Upload-step counters are read-only. Automatic Batch sequences use the saved
+`uploaded` work-unit flags. Cloud Run lists only completed input-object names
+under the exact run prefix through the isolated `cloud-billing` reader, then
+maps those task indices to their saved FEN counts (including the short final
+task). No FEN contents are downloaded and no job is changed. The reader caches
+observations for ten seconds, bounds its queue, and returns immediately while a
+refresh is pending. Unknown/unavailable observations remain indeterminate, never
+zero or a time-based estimate. The authenticated `/analysis/cloud/{job_id}/upload-progress`
+endpoint reads only small native counters; it does not load positions/receipts.
+Only an active upload requests telemetry. Completed upload rows retain their
+confirmed totals in the progress tooltip. Existing per-step progress/detail
+Edit styles targets control the counter and bar. API/reader updates do not
+require restarting a running cloud controller.
 
 The UI shows each workflow step from reservation through uploads, analysis/import,
 verification, cleanup and the final database-summary refresh. A successful Google
@@ -763,16 +805,43 @@ An I/O error drains the bounded in-flight work and withholds completion.
 
 Both import paths skip contract downloads for fully committed tasks on later
 polls, without skipping their final manifest checks. Both cleanup paths list up
-to four exact run-owned prefixes concurrently and delete at most eight pinned
-object generations concurrently. Fresh ownership/UID checks still precede
+to four exact run-owned prefixes concurrently. File deletion uses a rolling queue
+of four JSON API batches, each containing at most 100 generation-pinned DELETEs,
+with one persistent HTTP session per worker. Fresh ownership/UID checks still precede
 deletion, and image/log cleanup still follows successful data/compute cleanup.
 No VM sizing, engine profile, retry policy or cleanup scope changes are involved.
 
 Cloud Run now uses the saved-input set-based affected-game lookup already used
 by Batch. Absolute game/player summary refreshes remain retry-safe; full global
-summaries still run at the existing lifecycle boundary. No schema migration is
-needed. Only the local cloud-controller needs rebuilding/restarting for these
-completion optimizations; remote workers and workflows are unchanged.
+summaries still run at the existing lifecycle boundary. Verification and summary
+I/O changes need only a local controller release. Batched-deletion progress also
+needs the small additive table and API release described below; remote workers
+and workflows are unchanged.
+
+The batch-deletion transport is also shared by stop-and-cleanup. It parses every
+multipart sub-response: an HTTP 200 envelope alone never acknowledges deletion.
+Only successful/absent exact versions advance the counter; transient failures or
+lost responses retry the remaining pinned versions with bounded backoff. A 401
+can refresh authentication once; permission/generation conflicts fail closed.
+Replacement objects, unrelated resources, bucket policies and audit logs remain
+protected. Batching reduces HTTP overhead, not Google's logical operation count.
+
+Cleanup progress is saved in `cloud_cleanup_progress`, one compact row per
+job/plan, and returned by the existing cloud-jobs endpoint. Apply this additive
+table before releasing the API/controller (normal schema initialization creates
+it on a fresh installation). The UI reuses its existing editable step meters and
+shows acknowledged file counts, then image/log status. Counters never authorize
+deletion: resumption rechecks the saved plan against current cloud inventory.
+Overlapping cancellation plans are displayed separately, never summed.
+
+An explicitly authorized 512-file-per-case microbenchmark on 2026-10-28 UTC
+measured the old eight-request waves at 55.733 s, two 100-file batches at 6.016 s,
+and four at 3.928 s (six HTTP requests for each batch case, no retries). All 1,536
+tiny benchmark files were removed and their random prefix verified empty.
+This supports the four-batch default, not a 14x end-to-end cleanup promise:
+compute deletion, ownership checks, images and logs have their own latencies.
+`scripts/benchmark_cleanup_deletion.py --execute` is a live, opt-in test; it must
+not be included in offline suites or run without authorization.
 
 Detailed durations are buffered into existing `cloud_phase_timing` rows:
 `verify_task_artifacts`, `verify_unit_artifacts`, `verify_unit_commit`,

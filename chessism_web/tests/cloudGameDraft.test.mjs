@@ -24,6 +24,18 @@ test('combined submission requires current preview, positive count and valid VM 
   for (const n of [0, 11, 1.5, 'bad']) assert.notEqual(draftSubmitError(draft(), n), '')
 })
 
+test('Cloud Run combined selections accept six million but not one FEN more', () => {
+  for (const count of [200001, 3700000, 6000000]) {
+    const selected = { ...draft(), preview: { revision: 2, fens_to_analyze: count } }
+    for (const cpus of [100, 101, 200]) assert.equal(draftSubmitError(selected, cpus, 'cloud_run'), '')
+    assert.match(draftSubmitError(selected, 201, 'cloud_run'), /1–200 CPUs/)
+  }
+  assert.match(draftSubmitError({ ...draft(), preview: { revision: 2, fens_to_analyze: 6000001 } },
+    100, 'cloud_run'), /at most 6,000,000 FENs/)
+  assert.equal(draftSubmitError({ ...draft(), preview: { revision: 2, fens_to_analyze: 10000000 } },
+    6, 'batch_spot'), '')
+})
+
 test('task sizes depend on VM count without changing the selected set', () => {
   assert.match(draftTaskSummary(1300000), /^1 × 1,000,000 \+ 300,000 FENs across 2 cycle/)
   assert.match(draftTaskSummary(1000000), /^1 × 1,000,000 FENs across 1 cycle/)

@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Isolated ingestion polling</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import AutomaticIngestionPanel from '/src/pages/scored-positions/AutomaticIngestionPanel.jsx'
+import { usePoll } from '/src/hooks/usePoll.js'
+import '/src/index.css'
+
+const root = createRoot(document.getElementById('root'))
+const state = window.ingestionPollingTest = {
+  hidden: false, count: 10, hold: false, status: 'running',
+  requests: [], pending: [], aborted: [], errors: [],
+}
+Object.defineProperty(document, 'visibilityState', {
+  configurable: true, get: () => state.hidden ? 'hidden' : 'visible',
+})
+state.visibility = hidden => {
+  state.hidden = hidden
+  document.dispatchEvent(new Event('visibilitychange'))
+}
+window.addEventListener('error', event => state.errors.push(event.message))
+window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
+const run = () => ({
+  run_id: 'polling-run', player_name: 'offline-player', status: state.status,
+  finished_at: state.status === 'complete' ? '2026-10-27T22:00:00Z' : null,
+  steps: [{ step: 'save_positions', label: 'Save unique positions', group: 'Positions',
+    status: state.status === 'complete' ? 'complete' : 'working', processed: state.count,
+    total: 100, unit: 'positions', elapsed_seconds: 1, heartbeat_at: Date.now() / 1000 }],
+})
+const job = () => ({
+  job_id: 'offline-job', status: state.status === 'complete' ? 'complete' : 'in_progress',
+  progress: { kind: 'fen_extraction', ingestion_run_id: 'polling-run',
+    phase: state.status === 'complete' ? 'complete' : 'saving_fens',
+    processed: state.count, total: 100, updated_at: Date.now() / 1000 },
+})
+window.fetch = (input, options = {}) => {
+  const pathname = new URL(input, location.href).pathname.replace(/^\/api/, '')
+  const method = options.method || 'GET'
+  state.requests.push({ pathname, method })
+  if (method !== 'GET') throw new Error('Writes are forbidden in this fixture')
+  let payload
+  if (pathname === '/jobs/active') payload = { jobs: state.status === 'complete' ? [] : [job()] }
+  else if (pathname === '/jobs/offline-job') payload = job()
+  else if (pathname === '/fens/pipeline/timings/latest') payload = { run: run() }
+  else throw new Error(`Unexpected request: ${pathname}`)
+  const respond = () => new Response(JSON.stringify(payload), { headers: { 'Content-Type': 'application/json' } })
+  if (!state.hold) return Promise.resolve(respond())
+  // Deliberately ignore abort completion to prove late responses stay obsolete.
+  return new Promise(resolve => {
+    const aborted = () => state.aborted.push(pathname)
+    options.signal?.addEventListener('abort', aborted, { once: true })
+    state.pending.push(() => {
+      options.signal?.removeEventListener('abort', aborted)
+      resolve(respond())
+    })
+  })
+}
+const probe = async () => state.count
+function Freshness() {
+  const status = usePoll(probe, 5000, { pauseWhenHidden: true, requestTimeoutMs: 10000 })
+  state.freshness = { data: status.data, lastSuccessAt: status.lastSuccessAt }
+  return null
+}
+state.render = (show = true) => root.render(show
+  ? React.createElement(React.StrictMode, null,
+      React.createElement(AutomaticIngestionPanel), React.createElement(Freshness))
+  : null)
+state.release = () => state.pending.splice(0).forEach(resolve => resolve())
+state.render()
+</script></body></html>

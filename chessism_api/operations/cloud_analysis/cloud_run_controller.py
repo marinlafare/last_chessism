@@ -106,7 +106,7 @@ async def advance(controller, job, run):
             await asyncio.to_thread(cloud.request, "run", ident["name"] + ":cancel", method="POST", body={"etag": execution["etag"]})
         await save_run(run.id, cloud_state=state)
         storage = await asyncio.to_thread(cloud.storage)
-        await ingest_ready(storage, run, [{**task, 'output': api.task_config(
+        imported = await ingest_ready(storage, run, [{**task, 'output': api.task_config(
             config, task['index'], len(launch['tasks'])).output} for task in launch['tasks']],
             storage_factory=cloud.storage)
         if state in {"FAILED", "CANCELLED"}:
@@ -114,19 +114,25 @@ async def advance(controller, job, run):
             await save_run(run.id, status="failed", error=message)
             await save_job(run.job_id, status="failed", error=message)
         elif state == "SUCCEEDED":
-            async with AsyncDBSession() as session:
-                current = await session.get(CloudAnalysisRun, run.id)
+            if imported:
+                # The input snapshot is immutable. Only receipts changed during
+                # this tick; release the old cache before loading their update.
+                run.__dict__['_cloud_documents'].pop('receipts', None)
+                async with AsyncDBSession() as session:
+                    current = await session.get(CloudAnalysisRun, run.id,
+                        execution_options={'cloud_documents': ('receipts',)})
+                run.__dict__['_cloud_documents']['receipts'] = current.receipts
             timings = StageTimings()
             try:
                 with timings.measure('verify_task_artifacts'):
                     performance = await asyncio.to_thread(verify_tasks, cloud.storage, config,
-                        launch['tasks'], run.positions, current.receipts)
+                        launch['tasks'], run.positions, run.receipts)
             finally:
                 await timings.save(run.job_id, run.id)
             launch["task_performance"] = performance
             launch["execution_summary"] = execution
-            launch["manifest"] = completion_manifest(run.contract, len(run.positions), current.receipts)
-            validate_manifest(launch["manifest"], run.positions, run.contract, current.receipts)
+            launch["manifest"] = completion_manifest(run.contract, len(run.positions), run.receipts)
+            validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
             launch["performance"] = {"backend": "cloud_run", "position_count": len(run.positions),
                                      "task_count": len(performance), "parallelism": launch["spec"]["template"]["parallelism"],
                                      "worker_seconds_sum": sum(p["metrics"]["worker_seconds"] for p in performance),
@@ -144,7 +150,8 @@ async def advance(controller, job, run):
             plan = await asyncio.to_thread(prepare, cloud, launch, run.id)
             await save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
         else:
-            timings = StageTimings()
+            from .cleanup_progress import bind
+            timings = bind(StageTimings(), run.job_id)
             try:
                 result = await asyncio.to_thread(apply, cloud, run.cleanup_plan, timings=timings)
             finally:

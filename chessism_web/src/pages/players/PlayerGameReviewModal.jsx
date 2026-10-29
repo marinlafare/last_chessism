@@ -149,7 +149,8 @@ function useBoardWidth(containerRef, active, maximized) {
   return width
 }
 
-export default function PlayerGameReviewModal({ gameId, playerName, startingPosition, onBack, onClose }) {
+export default function PlayerGameReviewModal({ gameId, playerName, startingPosition, onBack, onClose,
+  loadGame = fetchGameScore, renderComparison }) {
   const [request, setRequest] = useState({ data: null, error: '', loading: false })
   const [positionIndex, setPositionIndex] = useState(0)
   const [maximized, setMaximized] = useState(false)
@@ -175,7 +176,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
     const controller = new AbortController()
     setPositionIndex(0)
     setRequest({ data: null, error: '', loading: true })
-    fetchGameScore({ gameId, signal: controller.signal })
+    loadGame({ gameId, signal: controller.signal })
       .then((data) => {
         if (!controller.signal.aborted) {
           const match=findPositionOccurrence(data,startingPosition)
@@ -189,7 +190,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
         }
       })
     return () => controller.abort()
-  }, [gameId,startingPosition])
+  }, [gameId,startingPosition,loadGame])
 
   const moves = request.data?.moves || []
   const game = request.data?.game
@@ -199,6 +200,11 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
     )
   ), [playerName, request.data])
   const playerColor = game?.black?.name?.toLowerCase() === String(playerName).toLowerCase() ? 'black' : 'white'
+  const blunderCoverage = request.data?.blunder_coverage?.[playerColor]
+  const blunderLabel = request.data?.blunder_annotations_pending ? 'Updating…'
+    : blunderCoverage && !blunderCoverage.complete && blunderCoverage.assessed_moves > 0
+    ? `${blunderCoverage.detected_blunders} detected · partial`
+    : playerSummary?.blunder_count ?? '—'
   const orientation = flipped ? (playerColor === 'white' ? 'black' : 'white') : playerColor
   const topColor = orientation === 'white' ? 'black' : 'white'
   const clocks = useMemo(() => clockHistory(moves, game?.time_control), [moves, game?.time_control])
@@ -244,7 +250,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
 
   return createPortal(
     <div {...pageStyleTarget('gameReview.backdrop')} className={`game-review-backdrop${maximized ? ' maximized' : ''}`} role="presentation">
-      <section {...pageStyleTarget('gameReview.panel')} className={`game-review-modal ${maximized ? 'maximized' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
+      <section {...pageStyleTarget('gameReview.panel')} className={`game-review-modal ${maximized ? 'maximized' : ''} ${renderComparison ? 'salience-comparison-review' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
         <header {...pageStyleTarget('gameReview.header')} className="game-modal-header game-review-header">
           <div {...pageStyleTarget('gameReview.heading')} className="game-review-heading">
             <div {...pageStyleTarget('gameReview.heading.meta')} className="game-review-heading-meta">
@@ -338,15 +344,17 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
             </div>
 
             <aside {...pageStyleTarget('gameReview.analysis')} className="game-review-analysis">
+              {renderComparison ? renderComparison({ data: request.data, positionIndex }) : <>
               <div {...pageStyleTarget('gameReview.summary')} className="game-review-summary">
                 {[
                   ['accuracy', 'Accuracy', playerSummary?.accuracy?.toFixed(2) ?? 'N/A'],
                   ['result', 'Result', outcome.result ?? '—'],
-                  ['blunders', 'Blunders', playerSummary?.blunder_count ?? '—'],
+                  ['blunders', 'Blunders', blunderLabel],
                   ['ending', 'Ended by', outcome.endBy ?? '—'],
                 ].map(([id, label, value]) => <div {...pageStyleTarget(`gameReview.summary.${id}`)} key={id}>
                   <span {...pageStyleTarget(`gameReview.summary.${id}.label`)}>{label}</span>
-                  <strong {...pageStyleTarget(`gameReview.summary.${id}.value`)}>{value}</strong>
+                  <strong {...pageStyleTarget(`gameReview.summary.${id}.value`)}
+                    title={id === 'blunders' && blunderCoverage ? `${blunderCoverage.assessed_moves ?? 0} moves assessed; ${blunderCoverage.unassessed_moves ?? 'unknown'} unassessed.` : undefined}>{value}</strong>
                 </div>)}
               </div>
               <div {...pageStyleTarget('gameReview.current')} className="game-review-current">
@@ -355,6 +363,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                 {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span {...pageStyleTarget('gameReview.current.accuracy')}>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
                 {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('gameReview.current.engineLine')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
               </div>
+              </>}
               <div {...pageStyleTarget('gameReview.moves')} className="game-review-moves" aria-label="Game moves">
                 {moves.map((move, index) => (
                   <button {...pageStyleTarget('gameReview.move')}

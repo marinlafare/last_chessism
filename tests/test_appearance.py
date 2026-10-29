@@ -215,7 +215,7 @@ class AppearanceTests(unittest.TestCase):
         targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()
                    if spec.get('initialStyleFrom') == 'button']
         targets = [target for target in targets if not target.startswith('gameReview.')]
-        self.assertEqual(len(targets), 22)
+        self.assertEqual(len(targets), 29)  # Six independent salience bands and All.
         rows = [override(scope='home', target=target, property='background', value='#123456') for target in targets]
         self.assertEqual(len(validate_overrides(rows)), len(targets))
         with self.assertRaises(ValueError): validate_overrides([{**rows[0], 'scope':'games'}])
@@ -232,7 +232,7 @@ class AppearanceTests(unittest.TestCase):
     def test_salience_styles_are_scoped_and_dimensions_are_bounded(self):
         prefix = 'player.accuracy.salience.'
         targets = {name: spec for name, spec in REGISTRY['scopes']['home']['targets'].items() if name.startswith(prefix)}
-        self.assertEqual(len(targets), 10)
+        self.assertEqual(len(targets), 18)  # Preserve legacy targets; add fixed bands.
         for target, spec in targets.items():
             for prop in spec['properties']:
                 field = REGISTRY['properties'][prop]

@@ -4,12 +4,12 @@ Includes uploaded but never started work units. This is deliberately separate
 from success-only cleanup: it must only be called by the cancellation controller
 after all supervisors/executions stop and completed batches are saved locally.
 """
-from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 import re
 from .cloud import PROJECT, BUCKET, REPOSITORY
 from .cleanup import require, digest, inventory, check_bucket, check_inventory, check_other_jobs
 from . import images
+from .deletion import remove_objects, notify
 
 
 def prefixes(run_ids):
@@ -46,17 +46,16 @@ def prepare(cloud, run_ids):
     return plan
 
 
-def apply(cloud, plan, run_ids):
+def apply(cloud, plan, run_ids, *, timings=None):
     validate(plan, run_ids)
     check_other_jobs(cloud, plan)
     check_bucket(cloud)
     images.remaining(cloud, plan)
     objects = check_inventory(cloud, plan)
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        for offset in range(0, len(objects), 8):
-            list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
+    remove_objects(cloud, plan, objects, timings=timings)
     if inventory(cloud, plan['prefixes']):
         return False
+    notify(timings, plan, 'image')
     for uri in images.remaining(cloud, plan):
         require(not images.blockers(cloud, plan, [uri]), 'Another resource still references a cancelled-job image')
         cloud.delete_image(uri)

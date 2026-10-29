@@ -3,6 +3,7 @@ import Header from '../../components/layout/Header'
 import SideRail from '../../components/layout/SideRail'
 import CloudAnalysisSection from './CloudAnalysisSection'
 import LocalAnalysisSection from './LocalAnalysisSection'
+import CudaSummaryPanel from './CudaSummaryPanel'
 import { AnalysisDisclosureGroup } from './AnalysisDisclosure'
 import { formatNumber, formatTruncatedMillions } from './positionPageSupport'
 
@@ -48,6 +49,7 @@ export default function PositionsView({ page }) {
               </section>
             ))}
           </section>
+          <CudaSummaryPanel />
           <AnalysisDisclosureGroup>
             <LocalAnalysisSection page={page} />
             <CloudAnalysisSection collapsible onProgress={page.refreshCloudProgress} />

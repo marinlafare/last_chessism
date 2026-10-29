@@ -82,7 +82,8 @@ async def restore_batch(records):
                 values['p_analyzed_at'] = datetime.fromisoformat(values['p_analyzed_at'])
             if values['p_piece_count'] is None:
                 values['p_piece_count'] = sum(c.isalpha() for c in fen.split(' ', 1)[0])
-            values['p_analysis_source'] = values['p_analysis_source'] or 'stockfish_backup'
+            # A backup proves the saved bytes, not the engine that produced them.
+            # Preserve missing source/time; never manufacture Stockfish provenance.
             prepared.append(values)
             continuations.extend({'fen_fen': fen, 'rank': item['rank'], 'move': item['move'],
                                   'score': item['score']} for item in row.get('continuations') or [])

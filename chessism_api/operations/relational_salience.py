@@ -71,6 +71,9 @@ async def persist_incremental(session, player):
 async def calculate(factory, player):
     from .player_salience_calculation import _full_rebuild, _incremental_update, _prepare_session_memory
     async with factory() as session:
+        from .cuda_summaries.salience_store import enabled
+        if await enabled(session):
+            raise ValueError('Salience is CUDA-only; request the manual summary pipeline.')
         layout = storage_for(session)
         summary = layout.table('player_salience_summary')
         owner = await session.scalar(text(f"""SELECT id FROM {layout.table('player')}

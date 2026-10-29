@@ -31,6 +31,25 @@ test('every workflow step has a stable independently editable progress identity'
   assert.equal(new Set(stop.map(step => step.id)).size, stop.length)
 })
 
+test('cleanup shows acknowledged files and keeps image/log completion separate', () => {
+  const job = { ...jobAt('cleaning'), cleanup_progress: { phase: 'objects', total: 10533, removed: 8400 } }
+  const step = cloudJobProgress(job).steps[7]
+  assert.equal(cloudStepProgress(job, step).value, 8400 / 10533 * 100)
+  assert.match(cloudStepProgress(job, step).detail, /8,400 \/ 10,533 files removed · 79%/)
+  job.cleanup_progress.removed = 10533
+  assert.equal(cloudStepProgress(job, step).value, 100)
+  assert.equal(cloudJobDone(job), false)
+  job.cleanup_progress.phase = 'image'
+  assert.deepEqual(cloudStepProgress(job, step), { value: null, detail: 'Removing worker image', showDetail: true })
+  job.cleanup_progress.phase = 'logs'
+  assert.equal(cloudStepProgress(job, step).detail, 'Cleaning up eligible logs')
+  job.stop_cleanup = { phase: 'cleaning' }
+  job.cleanup_progress.phase = 'objects'
+  assert.equal(cloudStepProgress(job, cloudJobProgress(job).steps[4]).value, 100)
+  job.cleanup_progress.removed = 10534
+  assert.equal(cloudStepProgress(job, step).value, null)
+})
+
 test('reservation progress uses only durable counters, including zero and a partial final selection', () => {
   const job = { status: 'running', runs: [], sequence: { automatic: true, phase: 'selecting', requested: 6000000, reserved: 0 } }
   const step = cloudJobProgress(job).steps[0]
@@ -54,6 +73,17 @@ test('unknown preparation progress is indeterminate, never a fabricated percenta
   }
   const job = { status: 'queued', runs: [] }
   assert.equal(cloudStepProgress(job, cloudJobProgress(job).steps[0]).value, null)
+})
+
+test('Batch log phases override the last image progress label', () => {
+  for (const phase of ['log_planning', 'log_cleaning']) {
+    const job = { ...jobAt(phase), cleanup_progress: { phase: 'image', total: 100, removed: 100 } }
+    const result = cloudStepProgress(job, cloudJobProgress(job).steps[7])
+    assert.equal(result.value, null)
+    assert.equal(result.showDetail, true)
+    assert.match(result.detail, /logs/)
+    assert.doesNotMatch(result.detail, /image/)
+  }
 })
 
 test('analysis progress distinguishes concurrent sequence totals from legacy cycle counts', () => {
@@ -205,6 +235,45 @@ test('100% imported and cloud success never bypass finalization or cleanup', () 
   const done = cloudJobProgress(jobAt('complete', 'complete'))
   assert.equal(done.label, 'Done')
   assert.ok(done.steps.every((step) => step.state === 'complete'))
+})
+
+test('cloud success and fully imported results show verification while its proof is being saved', () => {
+  const job = { ...jobAt('running'), target: 3760444, imported: 3760444,
+    runs: [{ status: 'running', cloud_state: 'SUCCEEDED', positions: 3760444, imported: 3760444 }] }
+  const progress = cloudJobProgress(job)
+  assert.equal(progress.label, 'Verify imported results')
+  assert.equal(progress.steps[5].state, 'complete')
+  assert.equal(progress.steps[6].state, 'current')
+  assert.equal(cloudStepProgress(job, progress.steps[6]).value, null)
+  assert.equal(progress.steps[7].state, 'pending')
+  assert.equal(progress.steps[9].state, 'pending')
+  assert.equal(progress.done, false)
+  assert.match(cloudJobIndicator(job).label, /Verify imported results/)
+  job.status = 'paused'
+  assert.equal(cloudJobProgress(job).steps[6].state, 'attention')
+})
+
+test('import count alone and cloud success alone do not advance to verification', () => {
+  const job = { ...jobAt('running'), runs: [{ status: 'running', cloud_state: 'RUNNING', positions: 1000, imported: 1000 }] }
+  for (const state of ['RUNNING', 'FAILED', 'CANCELLED', undefined]) {
+    job.runs[0].cloud_state = state
+    assert.equal(cloudJobProgress(job).steps[5].state, 'current')
+  }
+  job.runs[0].cloud_state = 'SUCCEEDED'
+  for (const imported of [999, 1001, null, undefined, NaN]) {
+    job.runs[0].imported = imported
+    assert.equal(cloudJobProgress(job).steps[5].state, 'current')
+  }
+})
+
+test('automatic sequence moves to verification only when every selected cycle is ready', () => {
+  const job = sequenceAtSix()
+  job.sequence.cloud_status = 'SUCCEEDED'
+  job.runs.forEach(run => Object.assign(run, { status: 'running', cloud_state: 'SUCCEEDED', imported: run.positions }))
+  assert.equal(cloudJobProgress(job).steps[6].state, 'current')
+  assert.equal(cloudJobProgress(job).steps[7].state, 'pending')
+  job.runs.at(-1).imported -= 1
+  assert.equal(cloudJobProgress(job).steps[5].state, 'current')
 })
 
 test('all durable phases map to a visible workflow step', () => {

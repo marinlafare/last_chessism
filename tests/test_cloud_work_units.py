@@ -67,7 +67,7 @@ class WorkUnitPlanTests(unittest.TestCase):
         for n in (0, True, 11):
             with self.assertRaises(ValueError): work_units.ranges(500000, n)
         self.assertEqual(CloudJobRequest(total_fens=500000).target, 500000)
-        with self.assertRaises(ValueError): CloudJobRequest(backend='cloud_run', total_fens=200001)
+        with self.assertRaises(ValueError): CloudJobRequest(backend='cloud_run', total_fens=6000001)
 
     def test_two_vms_keep_one_million_each_in_bounded_units(self):
         run = fixture(1963096, 2)

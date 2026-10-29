@@ -32,6 +32,7 @@ import {
 } from './services/authApi'
 
 const Settings = lazy(() => import('./pages/Settings'))
+const SalienceComparison = lazy(() => import('./pages/SalienceComparison'))
 
 const APP_PATHS = new Set([
   '/',
@@ -56,6 +57,7 @@ const APP_PATHS = new Set([
   '/research/matrices/collection',
   '/research/algorithms',
   '/research/salience',
+  '/research/salience-comparison',
   '/backups'
 ])
 
@@ -254,6 +256,8 @@ function SuperadminSystem({ account, locationKey, path, onLogout, onOpenSettings
     page = <Algorithms />
   } else if (path === '/research/salience') {
     page = <SalienceResearch />
+  } else if (path === '/research/salience-comparison') {
+    page = <Suspense fallback={<p role="status">Loading salience comparison…</p>}><SalienceComparison /></Suspense>
   } else if (path === '/backups') {
     page = <DatabaseBackups />
   }

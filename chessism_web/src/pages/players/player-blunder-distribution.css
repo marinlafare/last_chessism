@@ -1,13 +1,18 @@
-.player-stockfish-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 8px; min-width: 0; }
-.player-stockfish-summary > section { display: flex; flex-direction: column; min-width: 0; min-height: 250px; }
+.player-stockfish-summary { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: auto auto auto; align-items: start; column-gap: 8px; row-gap: 6px; min-width: 0; }
+.player-stockfish-summary > section { display: grid; grid-row: span 3; grid-template-rows: subgrid; min-width: 0; min-height: 0; }
+.player-stockfish-summary .score-distribution-heading, .player-stockfish-summary .blunder-distribution-heading { grid-row: 1; }
+.player-stockfish-summary .score-distribution-scroll, .player-stockfish-summary .blunder-distribution-plot { grid-row: 3; }
+.stockfish-summary-status { grid-row: 2; }
+.stockfish-summary-status > p { margin: 0; }
 .stockfish-summary-title { display: block; color: var(--accent); font-size: 9px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
 .player-blunder-distribution { --chart-color-1: #15c780; padding: 12px; background: #0b1117; border-radius: 6px; }
-.blunder-distribution-heading { display: flex; align-items: flex-start; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 12px; }
+.blunder-distribution-heading { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; }
+.blunder-distribution-controls { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem; }
 .blunder-distribution-heading .behavior-mode-controls { justify-content: flex-start; }
-.blunder-distribution-plot { margin-top: auto; min-width: 0; }
-.blunder-distribution-plot svg { width: 100%; height: auto; display: block; }
+.blunder-distribution-plot { min-width: 0; }
+.blunder-distribution-plot svg { width: 100%; height: 144px; display: block; }
 .blunder-distribution-plot text { fill: var(--muted); font-size: 10px; }
-.blunder-distribution-total { display: block; text-align: right; font-size: 10px; color: var(--muted); margin-bottom: 6px; }
+.blunder-distribution-total { display: block; text-align: right; font-size: 10px; color: var(--muted); }
 .blunder-distribution-grid line { stroke: var(--border-soft); }
 .blunder-distribution-column { outline: none; }
 .blunder-distribution-column[aria-disabled="false"] { cursor: pointer; }

@@ -6,6 +6,18 @@ from unittest.mock import AsyncMock, patch
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter, merge_steps
 
 
+class PositionBatchTests(unittest.TestCase):
+    def test_position_bound_keeps_a_whole_game_prefix(self):
+        from chessism_api.operations.ingestion_pipeline.fen_batches import bounded_game_prefix
+        moves={1:[{'white_move':'e4','black_move':'e5'}]*2,
+               2:[{'white_move':'e4','black_move':'--'}]*3,
+               3:[{'white_move':'e4','black_move':'e5'}]*4}
+        self.assertEqual(bounded_game_prefix([1,2,3],moves,7),[1,2])
+        self.assertEqual(bounded_game_prefix([3],moves,7),[3])
+        self.assertEqual(bounded_game_prefix([],moves,7),[])
+        self.assertEqual(bounded_game_prefix([4,1],moves,7),[4,1])
+
+
 class StepTests(unittest.IsolatedAsyncioTestCase):
     async def test_batches_accumulate_without_double_counting_advances(self):
         async with StepReporter({}, None) as reporter:

@@ -46,10 +46,39 @@ test('hidden tabs pause automatic reads but explicit actions still refresh', asy
   f.requests[0].resolve('initial'); await first
   f.hide(); await f.tick()
   assert.equal(f.requests.length, 1)
-  assert.equal(f.timers.size, 1)
+  assert.equal(f.timers.size, 0) // No idle polling while hidden; visibility resumes it.
   const explicit = f.polling.refresh()
   f.requests[1].resolve('action result'); await explicit
   assert.deepEqual(f.data, ['initial', 'action result'])
+  f.polling.stop()
+})
+
+test('cloud timeouts retry even when transport ignores abort, and late completion is ignored', async () => {
+  const f = fixture()
+  const pending = f.polling.refresh()
+  const timeout = [...f.timers.values()][0]
+  assert.equal(timeout.delay, 10000)
+  await f.tick(); await pending
+  assert.equal(f.requests[0].signal.aborted, true)
+  assert.equal(f.errors[0].name, 'TimeoutError')
+  const retry = f.tick()
+  f.requests[1].resolve('still cleaning'); await retry
+  f.requests[0].resolve('obsolete running snapshot')
+  await new Promise(resolve => setImmediate(resolve))
+  assert.deepEqual(f.data, ['still cleaning'])
+  assert.equal([...f.timers.values()][0].delay, 5000)
+  f.polling.stop()
+})
+
+test('100% saved is not terminal; cloud status continues through verification and cleanup', async () => {
+  const f = fixture()
+  for (const phase of ['verifying', 'cleaning', 'complete']) {
+    const read = phase === 'verifying' ? f.polling.refresh() : f.tick()
+    f.requests.at(-1).resolve({ imported: 100, target: 100, phase })
+    await read
+    assert.equal(f.timers.size, 1)
+  }
+  assert.deepEqual(f.data.map(row => row.phase), ['verifying', 'cleaning', 'complete'])
   f.polling.stop()
 })
 

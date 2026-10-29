@@ -22,25 +22,24 @@ WIRE=np.dtype([('fields','>i2'),('len_link','>i4'),('link','>i8'),
 
 
 def query(session):
+    from chessism_api.evaluations import kind_sql
     layout=storage_for(session)
     if layout is None:raise ValueError('Binary canonical source requires explicit normalized storage.')
     white='a.is_white' if layout.compact else "a.move_color='white'"
     return f'''SELECT a.game_link::bigint,
         ((a.n_move-1)*2+CASE WHEN {white} THEN 1 ELSE 2 END)::integer AS ply,
         COALESCE(f.score::float8,'NaN'::float8),
-        (CASE WHEN f.score IS NULL THEN -1 WHEN f.analysis_source='tablebase' THEN 2
-            WHEN COALESCE(f.analysis_source,'') NOT LIKE 'stockfish%' THEN -1
-            WHEN ABS(f.score)>=9000 THEN 1 ELSE 0 END)::smallint
+        ({kind_sql('f.score', 'f.analysis_source', codes=True)})::smallint
         FROM {layout.table('game_fen_association')} a LEFT JOIN {layout.table('fen')} f ON f.fen_id=a.fen_id
         WHERE a.game_link=ANY($1::bigint[]) ORDER BY a.game_link,ply LIMIT $2::bigint'''
 
 
-def blocks(games):
+def blocks(games, *, max_games=QUERY_GAMES, max_rows=QUERY_ROWS):
     block=[]; rows=0
     for game in games:
         count=game['total_positions']
         if type(count) is not int or not 1<=count<=GAME_ROWS:raise ValueError('Game exceeds canonical position bound.')
-        if block and (len(block)==QUERY_GAMES or rows+count>QUERY_ROWS):
+        if block and (len(block)==max_games or rows+count>max_rows):
             yield block; block=[]; rows=0
         block.append(game); rows+=count
     if block:yield block

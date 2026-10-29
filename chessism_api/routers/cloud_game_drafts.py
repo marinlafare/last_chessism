@@ -13,7 +13,7 @@ from chessism_api.database.models import (CloudGameDraft, CloudGameDraftEntry, C
 from chessism_api.operations.cloud_analysis import game_drafts as drafts
 from chessism_api.operations.cloud_analysis import draft_cache
 from chessism_api.operations.cloud_analysis.admission import require_available
-from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_BATCH_TOTAL_FENS, MAX_CLOUD_RUN_FENS, batch_cycle_count
+from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_BATCH_TOTAL_FENS, MAX_CLOUD_RUN_FENS, MAX_CLOUD_RUN_CPUS, batch_cycle_count
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from chessism_api.redis_client import get_redis_pool
 
@@ -33,7 +33,7 @@ class AddSelection(Revision):
 class SubmitDraft(Revision):
     backend: Literal['batch_spot', 'cloud_run'] = 'batch_spot'
     n_vms: int = Field(1, ge=1, le=10, strict=True)
-    n_cpus: int = Field(4, ge=1, le=100, strict=True)
+    n_cpus: int = Field(4, ge=1, le=MAX_CLOUD_RUN_CPUS, strict=True)
 
 
 @router.get('/current')

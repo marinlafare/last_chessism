@@ -90,8 +90,23 @@ try {
     await evaluate(`document.querySelector('[aria-label="Recalculate group data"]').click()`)
     await waitFor(`${idle} && ${previews}===1`)
     await assert(`!cloudTest.requests.some(r=>r.path.endsWith('/submit'))`)
+    if (backend === 'cloud_run') {
+      for (const cpus of [200, 201, 200]) {
+        await evaluate(`{ const input=document.querySelector('input[max="200"]');
+          Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,'${cpus}');
+          input.dispatchEvent(new Event('input',{bubbles:true})); }`)
+        await waitFor(`document.querySelector('.cloud-draft-run').disabled === ${cpus > 200}`)
+      }
+      for (const count of [3700000, 6000000, 6000001]) {
+        await evaluate(`cloudTest.draft.preview.fens_to_analyze=${count};cloudTest.remount()`)
+        await waitFor(`${idle} && document.querySelector('.cloud-draft-run')`)
+        await assert(`document.querySelector('.cloud-draft-run').disabled === ${count > 6000000}`)
+        if (count > 6000000) await assert(`document.body.textContent.includes('at most 6,000,000 FENs')`)
+      }
+      await assert(`!cloudTest.requests.some(r=>r.path.endsWith('/submit'))`)
+    }
   }
-  console.log('PASS: both backends; Add/Edit/Remove return totals without group-preview requests; double-click guard, failed save retains draft, restore is read-only, explicit refresh only, no launches.')
+  console.log('PASS: both backends; incremental draft totals, restore, guards, Cloud Run 200-CPU/6m-FEN acceptance and over-limit rejection; no launches.')
 } finally {
   socket?.close()
   if (browser.exitCode === null) {

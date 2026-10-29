@@ -168,8 +168,9 @@ services:
     security_opt: [no-new-privileges:true]
     cpus: "5.0"
     # Four bounded CPU validators plus one serialized database writer.
-    # Legacy runs hold <=200k references; larger requests use bounded 50k units.
-    mem_limit: 2g
+    # Batch uses bounded 50k units. Cloud Run retains whole-job input/receipt
+    # metadata (now up to 6m FENs); allow headroom without reserving host memory.
+    mem_limit: 12g
     pids_limit: 128
     tmpfs:
       - /tmp:rw,noexec,nosuid,size=128m,mode=1777
@@ -213,7 +214,7 @@ services:
         max-size: "2m"
         max-file: "2"
 
-  # On-demand billing export reads; deliberately separate from active job control.
+  # On-demand billing/upload observations; separate from active job control.
   cloud-billing:
     build:
       context: .
@@ -432,8 +433,10 @@ services:
     # Research releases are independent of the ingestion/FEN worker image.
     image: chessism-algorithms:runtime
     command: arq chessism_api.operations.research_algorithms.worker.WorkerSettings
-    cpus: "1.00"
-    mem_limit: 2g
+    # Host transport/validation uses bounded input and merge/packing buffers.
+    # Equations remain on the RTX 4060; these are not CPU calculation workers.
+    cpus: "${CHESSISM_ALGORITHMS_CPUS:-4.00}"
+    mem_limit: ${CHESSISM_ALGORITHMS_MEMORY:-16g}
     deploy:
       resources:
         reservations:
@@ -463,7 +466,8 @@ services:
 
   worker-salience:
     build: .
-    image: chessism-api:latest
+    # Consumes legacy queue wake-ups but defers salience to manual CUDA runs.
+    image: chessism-salience:runtime
     command: arq worker.WorkerSettings
     cpus: "0.50"
     environment:
@@ -527,7 +531,7 @@ services:
 
   fen-worker-1:
     build: .
-    image: chessism-api:latest
+    image: chessism-ingestion:runtime
     container_name: fen-worker-1
     command: arq worker.WorkerSettings
     environment:
@@ -548,7 +552,7 @@ services:
 
   fen-worker-2:
     build: .
-    image: chessism-api:latest
+    image: chessism-ingestion:runtime
     container_name: fen-worker-2
     command: arq worker.WorkerSettings
     environment:
@@ -565,7 +569,7 @@ services:
 
   fen-worker-3:
     build: .
-    image: chessism-api:latest
+    image: chessism-ingestion:runtime
     container_name: fen-worker-3
     command: arq worker.WorkerSettings
     environment:
@@ -583,17 +587,19 @@ services:
   # --- NEW: THE "BOSS" WORKER ---
   pipeline-worker:
     build: .
-    image: chessism-api:latest
+    # Independent persistent release; other queue workers keep their images.
+    image: chessism-ingestion:runtime
     container_name: pipeline-worker
     command: arq worker.WorkerSettings
-    # Keep ingestion bounded without forcing serial Syzygy work to half a core.
+    # Bounded Syzygy process pool; no change to a running container until deployed.
     # This is independent of Stockfish nodes/threads and cloud VM settings.
-    cpus: "${INGESTION_CPU_LIMIT:-1.0}"
+    cpus: "${INGESTION_CPU_LIMIT:-4.0}"
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
+      - TABLEBASE_PROBE_WORKERS=${TABLEBASE_PROBE_WORKERS:-4}
       - BACKUP_VOLUME_ROOT=/backup-volume
       - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
       - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis

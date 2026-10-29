@@ -36,10 +36,17 @@ async def read_snapshot(session, player, section):
         JOIN {table('state')} state USING(player_name)
         WHERE s.player_name=:player AND s.section=:section'''),
         {'player': player, 'section': section})).mappings().first()
+    from .cuda_summaries.metadata_store import enabled as cuda_metadata
+    manual=await cuda_metadata(session)
     if not row:
-        return None
+        if not manual:return None
+        payload={'modes':{},'latest_played_at':None} if section=='hours' else {'counts':[]} if section=='distribution' else {'rows':[]}
+        profile=(await session.execute(text('SELECT country,location,timezone,timezone_source FROM player WHERE player_name=:p'),{'p':player})).mappings().first()
+        return {**payload,'time_context':resolve_player_timezone(dict(profile or {})).payload(),
+            'summary_revision':0,'summary_stale':True,'summary_pending':True,'manual':True,'generated_at':None}
     return {**row['payload'], 'summary_revision': int(row['revision']),
             'summary_stale': row['revision'] != row['current_revision'],
+            **({'manual':True} if manual else {}),
             'generated_at': row['generated_at'].isoformat()}
 
 
@@ -192,7 +199,14 @@ async def get_latest_game(player):
 async def refresh_player(player, *, batch_days=32, session_factory=None):
     factory = session_factory or AsyncDBSession
     async with factory() as session:
+        from .cuda_summaries.metadata_store import enabled as cuda_metadata
+        if await cuda_metadata(session):return {'status':'awaiting_cuda'}
+        await session.rollback()
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
+        from .cuda_summaries.schema import CONTROL
+        if await session.scalar(text('SELECT to_regclass(:t) IS NOT NULL'),{'t':CONTROL}):
+            manual=await session.scalar(text(f"SELECT COALESCE((to_jsonb(c)->>'metadata')::boolean,false) AND manual FROM {CONTROL} c WHERE id FOR SHARE"))
+            if manual:return {'status':'awaiting_cuda'}
         await session.execute(text("SET LOCAL statement_timeout='30s'"))
         await session.execute(text("SET LOCAL lock_timeout='1s'"))
         await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
@@ -257,6 +271,8 @@ async def refresh_player(player, *, batch_days=32, session_factory=None):
 async def refresh_pending(*, session_factory=None):
     factory = session_factory or AsyncDBSession
     async with factory() as session:
+        from .cuda_summaries.metadata_store import enabled as cuda_metadata
+        if await cuda_metadata(session):return None
         table = analytics_table(storage_for(session), 'state')
         player = await session.scalar(text(f'''SELECT player_name FROM {table}
             WHERE revision<>published_revision AND (error IS NULL OR attempted_at<now()-interval '30 seconds')

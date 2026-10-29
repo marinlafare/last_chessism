@@ -32,6 +32,8 @@ from chessism_api.database.ask_db import (
 )
 
 router = APIRouter()
+from .cuda_summaries import router as cuda_summaries_router
+router.include_router(cuda_summaries_router, prefix='/cuda-summaries')
 PLAYER_GAME_PLAN_TTL_SECONDS = 60 * 60
 PLAYER_GAME_ANALYSIS_RATE = 2.2
 PLAYER_GAME_ANALYSIS_CHUNK_SIZE = 5_000
@@ -179,7 +181,7 @@ async def api_queue_tablebase_analysis(
         })
     return JSONResponse(status_code=202, content={
         "message": (
-            f"Syzygy caching queued for {result['pending']} positions."
+            "Syzygy caching queued; the position count will appear after discovery."
             if result["status"] == "queued"
             else "Syzygy caching is already running."
         ),

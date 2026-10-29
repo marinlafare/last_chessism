@@ -10,8 +10,8 @@ const registry = { ...base, properties: { ...base.properties, ...charts.properti
 const prefix = 'player.accuracy.salience.'
 const targets = Object.entries(scopes.scopes.home.targets).filter(([id]) => id.startsWith(prefix))
 
-test('salience exposes independent container, label, range, tick and handle styles', () => {
-  assert.equal(targets.length, 10)
+test('salience exposes independent fixed bands and preserves legacy range styles', () => {
+  assert.equal(targets.length, 18)
   for (const [target, spec] of targets) {
     for (const property of registryTarget(registry, 'home', target).properties) {
       const field = registry.properties[property]

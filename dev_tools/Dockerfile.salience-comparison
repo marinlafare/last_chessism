@@ -1,0 +1,5 @@
+FROM chessism-api:ingestion-optimized-20261029
+COPY chessism_api/operations/salience_comparison/ /app/chessism_api/operations/salience_comparison/
+COPY chessism_api/routers/salience_comparison.py chessism_api/routers/research.py /app/chessism_api/routers/
+COPY chessism_api/operations/appearance.py /app/chessism_api/operations/appearance.py
+COPY chessism_api/appearance_scopes.json /app/chessism_api/appearance_scopes.json

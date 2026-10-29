@@ -1,9 +1,16 @@
 # Summary algorithms: research history and canonical blunders
 
-Current status: rating-aware blunder summaries are automatically calculated on
-the RTX 4060 under explicit provisional user approval. Score distribution remains
-CPU-calculated; accuracy and salience are unchanged. No GPU job starts on page
-load. The research sections below record historical stages; their statements
+Current status: a superuser requests summaries from **Run CUDA summaries** on
+Analyze Positions. Rating-aware blunders, score distribution and unchanged
+per-game accuracy share bounded input reads and run on the RTX 4060. Daily
+accuracy is displayed as the most common of six game-accuracy bands, including
+all ties and hover counts. Ingestion/FEN analysis mark work pending, not automatic
+GPU execution. An opt-in metadata stage also computes hours/days, rating history
+and counts, opponents/openings and Unexpected endings on CUDA; it reuses the same
+manual control and retains prior snapshots during replacement. Salience is
+unchanged. See `chessism_api/operations/cuda_summaries/README.md` for the current
+writer, revision checks and tests. No GPU job starts on page load.
+The research sections below record historical stages; their statements
 about unchanged production behavior apply to those stages, before the
 "Provisional canonical adoption" section near the end.
 
@@ -2093,8 +2100,8 @@ The whole refresh, including publication, took approximately 0.67s; this is not
 GPU-kernel-only time. The saved summary was published 2.19s after cloud completion,
 with no errors, stale revisions or queued games remaining.
 
-All 1,000 selected games became fully analyzed. Of those, 998 have usable blunder
-counts for the player; one Daily game is unsupported, and one Blitz game has
+All 1,000 selected games became numerically scored. At the time, 998 had non-null
+blunder counts for the player, including partial assessments; one Daily game is unsupported, and one Blitz game has
 existing scores with missing `analysis_source` metadata, leaving none of the
 player's before/after pairs assessable. Unknown results remain null, never zero.
 The player's published histogram covers 31,466 games, up from 30,428 before the
@@ -2104,6 +2111,597 @@ do not infer Stockfish provenance from a non-null score alone.
 Focused checks also cover binary-reader corruption/coverage rejection, exact
 reference equivalence, no CPU fallback, and disposable-PostgreSQL worker recovery.
 Operational success does not remove the statistical limitations below.
+
+## Assessment coverage and durable input refresh — 2026-10-27
+
+Read policy `complete_player_moves_v1` separates numeric score coverage from
+blunder assessment coverage. A game enters the player's histogram only when
+every move by that player was assessable. Partial detected counts and move flags
+are retained, but partial zero counts are not classified as zero-blunder games.
+The distribution response reports partial, wholly unassessed, and ineligible
+counts by mode. Chart selection and game exploration use the same complete-side
+projection; game review labels partial counts and exposes assessed/unassessed
+move totals. Missing source provenance is never inferred from a numeric score.
+
+The existing contiguous-ply input contract lets the projection derive exact
+per-side unknown counts from saved assessed counts and unknown-ply array lengths.
+No FEN scan, fitting, full GPU run, threshold change, or model-ID change is needed.
+An explicit transactional upgrade installs the projection and rebuilds saved
+histograms from cached game results:
+
+```sh
+python -m scripts.manage_canonical_blunders --upgrade-coverage
+```
+
+Run with the new API image before replacing the API and idle algorithms worker.
+The upgrade rejects active cloud work, pending canonical changes and model
+rebuilds; source scores and immutable models are untouched. Unknown/older snapshot
+policies fail closed rather than being labeled complete. Benchmark configs now
+version this read policy separately from inference, and private scratch storage
+uses the same projection. Historical reports remain retained.
+
+`fen_summary_refresh` is a durable outbox populated in the same transaction as
+score or provenance changes. Cloud-claimed FENs keep their existing durable
+cloud-job projection/recovery path. The serialized algorithms worker handles up
+to 500 game refreshes before CUDA extraction, acknowledges only captured source
+revisions after both coverage and CPU engine summaries succeed, and retains
+failures with a 60-second retry delay. Newer updates survive acknowledgement.
+Pending input refreshes are excluded from CUDA extraction and shown in Algorithms
+progress. This also runs after explicit rollback to CPU reads. The queue recovers
+game summaries; it does not repair global database-counter deltas or guess old
+provenance. Poison-game isolation remains separate future work.
+
+Checks: focused canonical unit tests; disposable PostgreSQL odd/even coverage,
+partial-zero exclusion, chart/view parity, transactional rollback, cloud claims,
+failure/backoff, concurrent revisions, production refresh failure after coverage
+commit, benchmark compatibility and worker recovery; mocked browser coverage and
+progress checks; UI production build. No new statistical quality gate is claimed.
+
+Deployment verification: all 46 saved profiles use this policy, the model/kernel
+hashes are unchanged, and both queues are empty with no recovery errors. The
+stricter audit exposes a substantial existing provenance gap: no cached
+game/player side is fully assessed; 933,730 sides are partial and 8,244 wholly
+unassessed. For `prosaicjonny`, 31,466 sides are partial. In the latest 1,000-game
+test, all 998 non-null player counts are partial, one side has no assessments and
+one Daily game is unsupported. This corrects the earlier interpretation of those
+non-null counts as usable whole-game totals. A read-only ten-game recalculation
+matches the saved move flags; opening FENs have numeric scores but missing
+`analysis_source`. Histograms now explicitly report no fully assessed games.
+Partial detections remain visible in review. Recovering verified provenance (or
+reanalyzing affected positions) requires a separate, scoped repair; do not infer
+the source or turn unknown moves into zero blunders to populate the chart.
+
+## Shared evaluation input pipeline — 2026-10-27
+
+`chessism_api/evaluations.py` defines `verified_evaluation_v1`: CP and mate
+classification requires the existing case-sensitive `stockfish*` source rule;
+tablebases remain distinct; missing source is unknown, not zero blunders.
+An evaluation timestamp is **not** required for classification or CUDA inference.
+The canonical binary reader and the research training reader share the same SQL
+expression without changing the frozen equation, threshold, mate exceptions,
+kernel hash, or model ID. This is input/persistence hardening, not a new fit.
+
+The rating-aware blunder default uses `summary_input_version=3`, sharing that verified
+classification and omitting the raw `analysis_source` column. Saved v1/v2 recipes
+retain their historical population and type policy. Score distribution's built-in
+v2 recipe, historical fixed-rule comparison recipe, and CPU summaries are unchanged; newly created generic v3 summary
+recipes use verified kinds. Unknown evaluations remain explicit rows, not silently
+skipped predecessors. No unscored rows are added to the score-distribution matrix.
+
+Fresh local/cloud Stockfish results and tablebase results are validated before
+persisting. Numeric zero is valid; missing, nonfinite, fractional integer scores,
+duplicate FENs, malformed continuations, conflicting source fields, and invalid
+WDL distributions fail. Normal local/cloud import refuses to overwrite already
+scored FENs. Bounded `UPDATE FROM VALUES` batches replace per-FEN executemany
+updates, so statement-level invalidation deduplicates games once per batch.
+Result/continuation writes and newly-scored database totals now commit
+together, including local analysis and tablebase ingestion. Cloud receipts/claims
+retain their existing transaction and retry behavior. This does not introduce an
+already-scored replacement/repair mode or retrospectively reconcile old totals.
+
+FEN backup restoration preserves saved source/timestamp verbatim. In particular,
+it no longer assigns `stockfish_backup` to a missing source. The backup checksum
+proves the archived bytes, not which engine originally generated a score.
+
+`evaluation_refresh_v2` extends the existing durable input-refresh outbox to
+game/FEN association and game/player ownership changes. New games composed
+entirely of already-scored positions therefore retain pending refresh work even
+if ingestion stops before its finalizer. Requests coalesce by game and acknowledge
+only the captured revision. Publication also rejects a result when a newer input
+refresh is pending, even before coverage refresh increments the canonical dirty
+revision. Existing cloud projection checkpoints, CPU score summaries, and mixed-
+player CUDA batching are retained. No new per-FEN GPU job or full-cohort rebuild.
+
+The explicit, transactional deployment step rejects active cloud, ingestion,
+algorithm, or pending summary work and does not scan/update FENs or snapshots:
+
+```sh
+python -m scripts.manage_canonical_blunders --upgrade-input-pipeline
+```
+
+The deployer must additionally verify local-analysis/backup queues are idle before
+replacing their workers. Do not restart active workers. Tests use synthetic data,
+no cloud credentials, no GPU access, and private socket-only PostgreSQL: scalar/SQL
+classification parity, saved recipe compatibility, score/total rollback, duplicate
+imports, missing totals, honest backup restoration, pre-scored reuse after failed
+ingestion, concurrent input revisions, and worker retry/publication recovery.
+
+The 493,363 historical missing-source evaluations are **not repaired or relabeled**
+by this change. Establish their old encoding/source rules separately before
+approving a compatibility policy or scoped reanalysis. Missing timestamp alone
+is not a reason to reanalyze an evaluation.
+
+Deployment verified: `evaluation-pipeline-20261027` code-only releases promoted
+to the persistent API/local-worker, algorithms, research, backup-worker and cloud-
+controller startup tags. Only the API and six affected idle workers/controllers
+were recreated; PostgreSQL, Redis, the Stockfish service and FEN workers were not
+restarted. No cloud or GPU analysis job was submitted. The input migration installed
+seven triggers, changed zero scores and queued zero games. Canonical state remained
+`ready` with both queues empty and no error. All 46 snapshot payloads retained digest
+`ddd87a07547cbc2c2dda09be4e518be7`; database totals remained 58,730,043 scored and
+6,854,044 unscored FENs. The frozen CUDA implementation hash is unchanged.
+
+Final checks: 230-test offline suite passed (8 opt-in backup-database cases skipped);
+7 isolated evaluation writer cases and 24 cloud import/recovery cases passed, plus
+socket-only matrix/type parity, canonical coverage/input migration, worker retry,
+and compact storage/dump-restore harnesses. All use synthetic data. The writer test
+also verifies one statement-level notification for a multi-FEN batch and correct
+counts across the 1,000-row statement boundary. No end-to-end live speedup or new
+model-quality approval is claimed.
+
+## Ingestion trigger regression and legacy encoding audit — 2026-10-27
+
+The first ingestion after `evaluation_refresh_v2`, `gurelediz`
+(`df608df1-3e4f-487f-9c93-972999269992`), completed without a recorded error but
+took 4,439.481 s for 13,295 saved games. Position extraction/persistence took
+3,661.15 s; coverage took 59.24 s; tablebase marking took 555.81 s, including
+509.20 s probing 32,230 endgames. The three position workers' overlapping
+`save_positions` and `appearance_counts` timings must not be added to wall time.
+
+The regression was reproduced offline: conflict-locking ingestion statements
+fire empty UPDATE transition tables before large metadata/appearance updates.
+After eight empty calls, the old trigger's cached old/new join plan made a
+20,000-position counter-only update exceed a 20 s statement timeout. Without
+that warmup the same old fixture completed in 0.173 s, which explains why small
+fresh-connection correctness checks missed this performance failure.
+
+`evaluation_refresh_v3` compares only `(fen_id, score, analysis_source)` using
+set difference, then returns immediately if no evaluations changed. Changed
+IDs are local to the statement; genuine changes still persist the same
+transactional, deduplicated game-refresh requests and respect cloud claims.
+No session bypass flag, disabled trigger, or removed durability guarantee.
+
+The warmed-up fixed synthetic update completed in 0.193 s (trigger 9.731 ms).
+An exclusive lock on the association table proves counter-only, no-op and empty
+updates do not even attempt to read it. Additional checks cover source-only and
+NULL transitions, mixed changed/unchanged rows, cloud reservations, rollback,
+real ingestion/replay/concurrency, coverage recovery, publication races and the
+automatic canonical worker. Nine offline evaluation/mate-summary tests passed.
+These are regression checks, not an end-to-end live speedup measurement.
+
+The idle-guarded migration was applied at approximately 20:19 UTC without
+restarting any service, changing scores, queuing analysis or rebuilding summaries.
+All 47 cached snapshot payloads retained digest
+`31a3d0efb806235c64495772ee5b0389`; totals stayed 58,762,273 scored and 7,790,639
+unscored. Canonical status stayed `ready`, with no error or pending work. Code-only
+`evaluation-refresh-v3-20261027` images are promoted to persistent API/local-worker,
+algorithms, research, backup and cloud-controller tags for subsequent startups;
+running Python services are unchanged because this fix executes in PostgreSQL.
+
+Historical Git evidence, not an inferred per-FEN source:
+
+- `700453b` (2026-01-23) replaced a Leela service with Stockfish. Both the earlier
+  Leela serializer and the initial Stockfish serializer used White's perspective
+  and encoded mate as `10000 + mate_distance`, preserving ordinary CP as `score()`.
+- `95cd186` (2026-07-26) introduced `analysis_source`/`analyzed_at` and changed
+  Stockfish serialization to `score(mate_score=10000)`.
+- Consequently, old losing mate in 3 and modern winning mate in 3 both produce
+  `9997`; the old zero-distance representation also lost the winning side.
+  Numeric magnitude alone cannot establish the encoding or engine for a row.
+- The earlier verified backup audit found the 493,363 missing-source evaluations
+  already present with identical scores and missing source/time in the August 6
+  archive and October 20 manifest chain. Git dates do not prove deployment dates
+  or which writer produced each archived value.
+
+The offline evaluation-contract regression now explicitly checks this mate-sign
+collision and retains unknown classification for untyped historical values.
+No historical value is relabeled, converted, discarded or reanalyzed by v3.
+Any further repair needs per-row encoding evidence or an explicitly scoped fresh
+evaluation replacement that retains the old value until validated atomic commit.
+Absence of timestamp alone is still not grounds for recalculation.
+
+## Bounded legacy repair shadow pilot — 2026-10-27
+
+`operations/evaluation_repair` and `scripts/preview_evaluation_repair.py` provide
+the first **read-only** repair stage. The separately reviewed matching-only
+publisher below is an explicit admin command, not a background repair job,
+automatic migration, or new UI endpoint.
+
+Planning runs in a repeatable-read, read-only transaction with a 10-second query
+timeout. Selection is restricted to one explicit ID window of at most 100,000
+IDs, at most 16 FENs, at most 20 actual association rows per FEN and at most 16
+stored alternative lines. Cached `n_games` is only a preliminary filter: a bounded
+association lookup rejects stale counts that conceal high fanout. Active cloud,
+ingestion and algorithm jobs and cloud claims prevent unsafe pilot selection.
+
+The checksummed plan preserves the complete old FEN row, its row version, old
+continuations, game references and player identities. Reports are created
+exclusively, never overwrite existing files, and reject corruption/modified
+snapshots. A separate read-only recheck identifies source/continuation/reference
+drift. Checksums establish artifact integrity, not historical provenance.
+
+The shadow runner starts its own one-thread Stockfish process, verifies the
+binary SHA-256, and uses the existing `sf16-1-n100000-t1-h256-pv4-v1` profile.
+Native score kind, White perspective, signed mate distance/winner, engine
+identity, WDL and legal PV are retained alongside scalar storage encoding. No
+database imports or credentials are required. A per-position timeout terminates
+only this dedicated process; no shared-service restart or endless retry. Unknown
+old numeric encodings are never interpreted as CP deltas or statistical error.
+
+The first live-data pilot selected eight mate-like unknown-source positions in
+the first 100,000 IDs. They reference 50 games and 21 eligible profiles; this is
+an intentionally small, non-representative safety pilot, not a corpus estimate.
+The isolated, network-disabled, one-CPU runner took 0.586 s; a repeat with the
+explicit review classifications took 0.617 s and reproduced the same scores.
+
+| FEN ID | Stored number | Fresh number | Review |
+| --- | ---: | ---: | --- |
+| 2234 | 10007 | 542 | Hold: mate-like legacy value not reproduced |
+| 2242 | 10010 | 547 | Hold: mate-like legacy value not reproduced |
+| 2489 | -10000 | -10000 | Matches numerically; historical source still unknown |
+| 4159 | -9990 | -451 | Hold: mate-like legacy value not reproduced |
+| 6646 | 9995 | 9995 | Matches numerically; historical source still unknown |
+| 6649 | 9996 | 9996 | Matches numerically; historical source still unknown |
+| 19097 | -9995 | -9995 | Matches numerically; historical source still unknown |
+| 19362 | 9996 | 9996 | Matches numerically; historical source still unknown |
+
+A further network-disabled, read-only local Syzygy check confirmed winning
+outcomes for White, White and Black respectively in the three held endgames.
+Their saved PVs are legal and end in checkmate. **Neither WDL/DTZ nor a single
+legal mating PV establishes the historical forced mate-in-N distance.** The
+current 100,000-node search failed to reproduce mate detection; this is evidence
+against automatic downgrade, not proof that those old values were wrong.
+Four-field FENs use the same default halfmove clock 0 as the analysis profile.
+
+Local artifacts (intentionally outside Git):
+
+- `research_data/evaluation-repair/pilot-mates-plan-20261027.json`
+  (`7cff9a4d27c1d298a7a52a348032c1cdfcf342ac2c344c968d6f9daba1bf33e3`)
+- `pilot-mates-shadow-reviewed-20261027.json`
+  (`cd7d633d4b40fab7dfcfdb6ee3ceae9be7b71392757caa481d33d5c2640f65b5`)
+- `pilot-mates-endgames-20261027.json`
+  (`be79951f69493d8b2a3f2251cf0e2fe300b006032d91458ce797cf12c247f294`)
+- `pilot-mates-recheck-reviewed-20261027.json`: all eight source snapshots unchanged.
+
+Verification: 14 offline artifact/engine/encoding tests and a disposable
+PostgreSQL harness passed, including actual read-only enforcement, bounds,
+cloud claims, active work, continuation drift and association drift. No service
+restart, cloud job, production score update or summary recalculation occurred.
+All 47 canonical snapshots retained digest `31a3d0efb806235c64495772ee5b0389`;
+totals remained 58,762,273 scored and 7,790,639 unscored, with both canonical input
+queues empty and status `ready`.
+
+### Guarded matching-only publication
+
+`scripts/publish_evaluation_repair.py` implements `matching_score_and_wdl_v1`.
+It requires the exact plan and shadow hashes, explicitly selected IDs, a reviewer
+identity and `--acknowledgement publish-reviewed-matching-evaluations`. It
+independently checks source identity, native mate encoding/winner/distance, legal
+PVs, WDL, piece count and genuine shadow timestamps; human-readable review labels
+are not authorization. Changed primary scores or WDL are refused. Consequently
+all numeric aggregate deltas are **zero**, not increments of already-scored FENs.
+
+The additive `evaluation_repair_receipt` table requires a separate `--install`.
+Records retain the complete plan and shadow report plus before/after snapshots;
+UPDATE, DELETE and TRUNCATE are rejected. A deterministic operation ID makes
+retries return the original receipt without repeating writes or notifications.
+An already-published response confirms the old commit, not that its values are
+still the latest. No new engine analysis occurs during publication.
+
+Publication refuses active cloud/ingestion/algorithm jobs or pending input/CUDA
+refresh queues. Short SHARE locks acquired with NOWAIT protect claims, job
+admission, FENs, alternatives, associations and ownership from phantoms. These
+briefly defer new writes, never stop workers, and leave reads available. Busy
+tables or FEN row locks cause immediate refusal, not waiting for a workload to
+finish. FEN row locks use the ordinary writer's stable FEN order. Every plan
+snapshot is checked again under READ COMMITTED after locks. SQL/lock/idle timeout
+bounds protect the transaction; no automatic retry is performed.
+
+The shared writer saves replacements and continuations, with original fresh
+shadow timestamps rather than invented historical dates. The existing durable
+trigger must be enabled, and every affected game's refresh request must exist
+before inserting the receipt. Writes, queue requests and receipt commit together
+or roll back together. The existing recovery and canonical CUDA worker consume
+the affected games normally; no cohort-wide rebuild or service restart is needed.
+
+Offline checks: 18 artifact/engine/encoding/publication tests, plus disposable
+PostgreSQL planner, publication and coverage-recovery harnesses. Cases include
+active work, claims, source/continuation/association/owner drift, held rows,
+disabled/no-op refresh triggers, disabled audit protection, concurrent write
+admission, failure after writes, receipt insertion failure, immutable receipts,
+idempotent retry, unchanged totals and durable queue consumption.
+
+This policy does **not** authorize a corpus-wide repair. Retain the three held
+mate-detection cases until an explicit preservation or deeper-verification policy
+exists. Do not route scored legacy rows through the ordinary unscored queue or
+clear scores to force reanalysis. The admin tool imports `stockfish_core` for its
+versioned contract, so mount `stockfish-batch-worker` read-only on its Python path
+when using an API image that does not package that library.
+
+First approved publication committed at **2026-10-27 20:55:24 UTC**. Receipt ID:
+`a8f47537ee0ef6616d52d0c1ae5605e6d9b3d0baa7633d90c8b8ae06fc7c5373`.
+Exactly IDs 2489, 6646, 6649, 19097 and 19362 were replaced. Their numeric scores
+and WDL remained identical, and all database totals (including refreshed_at)
+were unchanged. Full FEN rows for held IDs 2234, 2242 and 4159 remained identical
+to the plan. The five new rows matched their retained after-snapshots exactly.
+
+The transaction queued **20 distinct games / 15 eligible profiles**. Existing
+automatic recovery and the unchanged canonical model completed the 20-game,
+3,114-move CUDA refresh on the **RTX 4060**, reporting 1.178 s for its worker
+batch. The ready status was recorded at 20:55:32 UTC (about eight seconds after
+the repair receipt). Input and canonical queues were empty, Stockfish summaries
+had no pending revisions or errors, and all 47 canonical snapshots remained
+available with identical payload fingerprints (the small repair did not change
+the displayed canonical histograms). All eight positions' continuations also
+matched the expected published or held snapshots. No cloud work, inference/model change, service restart or clearing of
+old scores was needed. This small pilot does not establish bulk-repair speed or
+resolve the remaining historical mate encoding uncertainty.
+
+### Coordinated pre-cleanup repair pass — 2026-10-27
+
+This pass extends the admin workflow, not the automatic normal-analysis budget
+or the blunder formula/model. No broad historical repair is authorized.
+
+1. **Held mates:** new read-only snapshots of IDs 2234, 2242 and 4159 reference
+   30 distinct games and 16 eligible profiles. One-million-node searches found
+   White mate in 7, White mate in 10 and Black mate in 10. Ten-million and
+   twenty-million independent, cold-position searches agreed on **White mate
+   in 6, White mate in 7 and Black mate in 10**. Total shadow search times were
+   1.290 s, 8.123 s and 14.152 s respectively. Local Syzygy independently confirms
+   the winning sides. These are fresh engine-reported mate distances, not exact
+   DTM-table proofs or verification of the historical engine/encoding.
+2. **Disagreement policy:** matching-only publication remains the default.
+   `reviewed_same_bucket_replacement_v1` requires the separate acknowledgement
+   `replace-reviewed-legacy-evaluations`. Mate cases additionally require a
+   higher-budget confirmation agreeing on typed score, distance and winner,
+   plus linked local-tablebase evidence confirming the winner. Bounds-only
+   engine scores, missing evidence, inconsistent mate results and category
+   changes are rejected. Originals remain in immutable receipts; no automatic
+   downgrade of historical mates or inference of their original source/date.
+3. **Changed-score publication:** bounded old-to-new deltas update the existing
+   `scored_position_summary` and, only for zero/nonzero transitions, database
+   nonzero counters in the same transaction as FENs, continuations, refresh
+   requests and the receipt. Already-scored totals never increase. Existing
+   50/150/300/9000 bucket boundaries, the different inclusive ±50 side boundary,
+   appearances, absolute/signed sums and nullable WDL populations are preserved.
+   Missing/inconsistent cached totals or negative results fail closed.
+4. **Second small pilot:** four CP candidates, IDs 13, 24, 164 and 188, reference
+   24 games and 10 eligible profiles. The normal 100,000-node shadow took
+   0.775 s and returned -40, 20, 40 and 14 CP (old values -39, 32, 41 and 11).
+   All remain in the equal bucket. This is a safety/coverage test, not a
+   representative quality estimate for the full legacy population.
+5. **Refresh/UI regression:** disposable PostgreSQL tests cover the shared
+   writer, exact delta parity with an independent SQL aggregate oracle,
+   NULL/known WDL, zero/nonzero and ±50 boundaries, stale input, claim/admission
+   races, failure after delta writes, immutable receipts and replay. Existing
+   input recovery/CUDA coverage integration tests pass. Both fully mocked
+   browser suites pass: canonical progress/retries/history and partial/stale
+   game-review blunder labels. No real browser workflow submits a cloud job.
+6. **Ingestion performance:** the trigger regression check updated 20,000 FEN
+   metadata rows in 0.173 s, including 10.74 ms of trigger execution, despite
+   400,000 synthetic associations. It structurally verifies that no-op and
+   metadata-only updates never read associations. The full ingestion harness
+   also passed duplicate/concurrent replay, rollback, claims, scoped/full
+   coverage parity and a 1,200-link batch in 0.045 s. These are isolated timings.
+   No new real ingestion has run since the fix: the latest recorded ingestion
+   remains gurelediz, 73m59s overall and 61m01s in the FEN stage. Its overlapping
+   worker durations must not be added as serial wall time. Real before/after
+   performance remains pending the user's next ingestion; do not claim a
+   production speedup yet.
+
+Important bound: crossing an advantage category is deliberately **not** allowed
+by this repair policy. That also changes the saved rating-group bucket counts
+and needs its own atomic/durable projection update before expansion. Same-bucket
+replacements leave rating groups, membership, category counts and total position
+counts unchanged. The original max-16-FEN/max-20-reference limits remain. We can
+resume backend cleanup without processing the remaining historical backlog.
+
+Artifacts are retained under `research_data/evaluation-repair`: the
+`held-mates-plan`, `held-mates-1m`, `held-mates-10m`, `held-mates-20m`,
+`held-mates-tablebase`, `cp-pilot-plan` and `cp-pilot-shadow` files, each suffixed
+`-20261027.json`. Each publication receipt retains its exact checked artifacts,
+including stronger-search/tablebase evidence and before/after aggregate values.
+
+Live result: the three mates committed at 21:12:47 UTC, receipt
+`924368e4679e1721962c20c6ac86e374b3af701faa4794474ed7a59897525732`;
+the four CP evaluations committed at 21:14:26 UTC, receipt
+`3fa73522f7a71fd6f96c0254c0746bb0180004ad2c2686067b78c48baa86f6b5`.
+The seven replacements affect **54 distinct games / 20 eligible profiles**.
+Six primary numbers changed; the rook mate stayed -9990. Both publications
+retained genuine shadow analysis timestamps, alternatives and original rows.
+All 12 published FENs (including the previous five) still matched their audit
+after-snapshots exactly at the final read-back.
+
+Observed aggregate deltas matched predictions exactly: score sum -41, absolute
+score sum -39, mate absolute sum -30, equal absolute sum -9, and WDL sums
+(-28,+21,+7). All category/appearance/population counts and the complete
+`database_summary` row stayed unchanged. The two automatic recovery batches
+handled 30 and 24 games. CUDA evaluated 27 / 23 eligible games and 4,495 / 1,983
+moves respectively on the RTX 4060; unsupported games retained explicit coverage
+handling. Worker batch times were 1.317 s and 1.036 s, not GPU-kernel-only times.
+The final canonical status was ready at 21:14:34 UTC, with no input/CUDA queue,
+no Stockfish-summary pending revisions/errors, and the original model ID intact.
+No services were restarted or new ingestion/cloud jobs submitted.
+
+Final focused checks: 23 offline tests; isolated planner, changed-publication,
+coverage/recovery, ingestion and trigger-cost harnesses; two mocked browser
+suites. Remaining before broad repair: a category-changing rating-projection
+policy and representative high-fanout/performance testing. Remaining before a
+production ingestion speed claim: one new real ingestion. Neither blocks
+returning to the requested backend cleanup.
+
+## Explicit historical provenance repair — 2026-10-27
+
+User-approved scope: freshly probe missing-source positions with at most five
+pieces using local Syzygy, and attribute larger **ordinary CP** evaluations as
+`stockfish_legacy_assumed`. This is an accepted historical assumption, **not**
+recovered or verified engine provenance. The existing `stockfish*` input policy
+accepts that source; no kernel, threshold, calibration or mate encoding changed.
+The user explicitly chose to leave larger historical mate-encoded scores alone.
+
+The frozen plan contains 493,351 already-scored FENs:
+
+- 16,932 tablebase candidates, including former engine mate scores.
+- 474,609 larger ordinary scores eligible for source-only attribution.
+- 1,810 larger mate-like scores held unchanged.
+
+`scripts/repair_legacy_provenance.py` separates read-only planning from explicit
+`--apply --acknowledgement repair-legacy-cp-and-probe-tablebases`. The plan SHA-256
+is `72476707db3c18ffa4cb6ec31789539e1cfeda7942f5e1751a7f8fc56df31950`.
+The dedicated container `chessism-legacy-provenance-repair-20261027` started at
+23:44:53 UTC with 100-FEN transactions, one CPU, and 1 GiB memory. No service was
+restarted. Completion is recorded in the progress file, not inferred from launch.
+
+Plan/progress/unsupported-position records live under
+`research_data/evaluation-repair/legacy-provenance-20261027.*`. Immutable database
+receipts retain original rows, replacements and removed Stockfish continuations.
+Retries discover committed IDs from receipts; a commit followed by lost client
+output cannot relabel or double-count those positions. Row rechecks, cloud claim
+checks, fail-fast locks and active ingestion/cloud/research admission guards
+protect each batch. Larger historical mates are rejected by both preparation and
+publication. Unsupported local tablebase probes retain their existing scores and
+missing metadata, with an explicit skip record; they are never mislabeled.
+
+Fresh tablebase results use the normal WDL/DTZ/score/move representation and a
+genuine new analysis timestamp. Assumed larger scores change only their source:
+their scores, continuations and unknown timestamps are retained. Exact global
+old-to-new deltas and rating-group occurrence bucket deltas commit with each
+replacement, so already-scored totals never increase. Normal durable FEN refresh
+triggers queue coverage/player summaries and the canonical RTX 4060 calculation;
+the repair completing does not imply all downstream summaries have finished.
+
+The repair reserves the existing backup lane and invalidates the timestamp delta
+base **before** changing data. The next FEN backup must create a full snapshot so
+NULL-timestamp metadata changes cannot be missed. No old backups are deleted.
+
+Validation: 24 offline policy/evaluation/tablebase tests passed, plus a disposable
+PostgreSQL test covering actual writes, transaction rollback after writes, stale
+inputs, claims, active jobs, locks, idempotency, immutable originals, retained
+mates/continuations/timestamps, durable queues, global aggregate parity and
+rating-group parity (including repeated FEN occurrences and incomplete games).
+These are repair-correctness checks, not new statistical model-quality claims.
+
+### Source-only refresh routing (2026-10-27)
+
+`evaluation_refresh_v4` records whether a queued game needs CPU engine/coverage
+projections. Changing only a non-tablebase source label does not change their
+inputs: it now transfers directly to canonical CUDA invalidation, without
+recomputing accuracy, efficiency, the old CPU blunder equation, or coverage.
+Score changes, transitions into/out of tablebase, and association/ownership
+changes retain the full path. Coalescing uses logical OR, so a later metadata
+edit cannot downgrade a genuine score change. GPU enqueue and exact-revision
+input acknowledgement commit together; failures roll both back.
+
+Unknown historical queue reasons default to full refresh. The explicit
+`scripts/route_provenance_refresh.py --plan <completed-plan>` preview and
+`--apply` migration are restricted to the exclusive two-phase legacy repair:
+all value-changing receipts must precede source-only receipts, overlapping job
+and analysis histories are rejected, queue transaction IDs must match immutable
+source-only receipts, and requests predating that phase, later writers and failed
+requests remain conservative. An immutable routing receipt records captured
+revisions. PostgreSQL `xmin` is used only as immediate migration evidence, not as
+a durable application identifier. No evaluations or timestamps are rewritten.
+
+Source-only transfer and mixed-player selection allow up to 32,768 games, bounded
+by 2,097,152 position rows per inference call. The frozen CUDA function and model
+hash are unchanged; it still sizes internal CUDA chunks against available VRAM
+and retries smaller chunks on allocation failure. Histograms are published once
+per larger batch, not once per 500 metadata-only games. Logs report input refresh,
+source extraction, CUDA and publication timings separately, plus end-to-end time.
+This does not claim that database reads or JSON publication execute on CUDA.
+
+Validation includes network-isolated PostgreSQL tests for source-only bypass,
+mixed-change precedence, tablebase semantics, ingestion/ownership invalidation,
+failed-handoff rollback, receipt-backed migration, historical overlap refusal,
+exact-revision preservation, stale publication rejection and worker retry.
+
+The live routing migration retained and reclassified **911,893** queued games;
+none required the full CPU refresh at the migration snapshot. No FEN values were
+changed. Its first attempt rolled back on the receipt-ID length constraint;
+the corrected hashed ID passed the real receipt-schema test before retry. The
+CUDA worker alone was replaced with
+`chessism-algorithms:source-only-refresh-v4-20261027` (also tagged `runtime`).
+The frozen inference hash remained
+`cd1cb1e18e29abc79f83fcd0dc28469889f7633a047c805bb163914445e774e3`.
+
+First live batch after deployment: 32,768 games / 1,874,377 position rows in
+17.98 seconds end to end (input handoff 0.63 s, extraction 11.50 s, cold CUDA
+3.04 s, publication 2.38 s). The next batch hit the row cap at 2,097,138 rows
+and 29,552 games, with 1.07 s in CUDA. Both used the RTX 4060; input recovery
+reported `engine_refreshed=0`. The remaining workload continues durably in the
+background. These are initial observed batches, not a whole-run benchmark.
+An obsolete ARQ max-retry result from the controlled restart was verified and
+removed before issuing the normal wakeup; no database inputs or results were
+deleted. The cron's ordinary deduplication then resumed normally.
+
+### CPU blunders retired from production (2026-10-27)
+
+Blunder results are now CUDA-only for **all** production updates, not just
+provenance-only edits. The shared `refresh_game_player_engine_summaries` query
+no longer computes, selects, inserts or updates a blunder count. Its remaining
+accuracy, efficiency, CP gain/loss, mate and ending statistics are unchanged.
+This covers new FEN evaluations, deliberate replacements, newly ingested games,
+local/cloud imports, repair recovery and request-time missing-summary refreshes.
+
+The chart endpoint, game-review annotations and compatibility view no longer
+fall back to legacy CPU judgments/counts. Missing CUDA data remains pending or
+unknown. The old `CHESSISM_CANONICAL_BLUNDERS` rollout flag cannot re-enable CPU
+reads. Administrative rollback accepts retained CUDA models, not `legacy_cpu`.
+The obsolete physical count column is retained for schema/history compatibility
+but is not maintained by the CPU writer or exposed as the production count.
+The scalar historical oracle lives exclusively in an explicitly invoked research
+validation module; production writers/readers do not import or call it.
+
+`scripts/manage_canonical_blunders.py --retire-cpu-blunders` updates the
+read view and retires the physical counter's required/default value under
+idle/current-model guards. It does not replace the model,
+recalculate existing results, erase historical rows, or modify FEN scores.
+Code-only `cuda-only-blunders-20261027` images update the API, ingestion/local
+analysis workers, cloud importer, backup/research shared-worker callers and CUDA
+worker under their persistent deployment tags. Database, Redis, Stockfish engine
+and frontend services are not restarted by this deployment.
+
+Validation: 56 focused offline tests, the complete 103-test pipeline helper
+suite, and four disposable PostgreSQL test runs passed. The new database test
+compares every retained numerical projection against the pre-retirement query
+on synthetic data, checks that CPU count sentinels remain untouched, exercises
+new-score automatic refresh through canonical publication, and refuses legacy
+fallback when the CUDA model/output is absent or the old flag is disabled.
+No production data is used for the CPU reference comparison.
+
+The first live post-cloud refresh exposed an omitted schema migration: the
+normalized physical `blunder_count` remained `NOT NULL` with no default even
+though the CPU writer correctly omitted it. PostgreSQL checks this before
+`ON CONFLICT`, so even an existing summary could fail. The former fixture's
+default masked that production contract.
+
+Canonical installation/retirement now makes this unused physical column
+nullable with no default, without rewriting old values. Existing deployments
+can run `scripts/manage_canonical_blunders.py --repair-retired-counter`:
+the explicit, transactional metadata-only repair verifies PostgreSQL column
+dependencies prove both compatibility and engine reads use CUDA assessments,
+never the physical CPU counter. It has a two-second lock wait and a fifteen-second
+statement limit. It does not change models, FEN scores, GPU results, queues or
+job status. Resume the paused job separately through its normal recovery action.
+Tests now reproduce the exact missing-default failure, cover fresh installation
+and repeat standalone repair, preserve historical sentinels, leave new retired
+counts NULL, and verify retained numerical results plus CUDA-only publication.
+
+An additional network-isolated check on the actual RTX 4060 passed for 18,000
+synthetic transitions across 90 games. Post-deployment read-only checks confirm
+the active model/kernel is unchanged, both refresh queues are empty, and the
+player-facing blunder reader returns current canonical CUDA results even when
+the obsolete rollout flag is disabled. No existing player results were rebuilt.
 
 ## Remaining statistical gates (before claiming validated quality)
 

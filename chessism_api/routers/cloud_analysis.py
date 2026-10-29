@@ -10,7 +10,7 @@ from sqlalchemy import case, func, literal_column, select, text
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudControllerHeartbeat,
-    CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudBatchUnit,
+    CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudBatchUnit, CloudCleanupProgress,
     CloudBatchSequence, CloudBatchCycle, CloudSequenceControl, CloudGameDraft, CloudGameDraftEntry, CloudJobCancellation)
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, CloudVmCountRequest, MAX_CLOUD_FENS, MAX_CLOUD_RUN_FENS, MAX_BATCH_TOTAL_FENS, batch_cycle_count
 from chessism_api.operations.cloud_analysis.admission import blocking_job, require_available
@@ -21,11 +21,13 @@ from chessism_api.database.cloud_columns import SCHEMAS
 from .cloud_game_drafts import router as game_drafts_router
 from .cloud_billing import router as billing_router
 from .cloud_history import router as history_router
+from .cloud_upload_progress import router as upload_progress_router
 
 router = APIRouter()
 router.include_router(game_drafts_router, prefix='/drafts')
 router.include_router(billing_router, prefix='/billing')
 router.include_router(history_router, prefix='/history')
+router.include_router(upload_progress_router)
 
 
 async def controller_online(session):
@@ -95,6 +97,10 @@ async def cloud_jobs():
         runs_by_job = defaultdict(list)
         for run in runs:
             runs_by_job[run.job_id].append(run)
+        cleanup = {row.job_id: row for row in (await session.scalars(select(CloudCleanupProgress)
+            .where(CloudCleanupProgress.job_id.in_([job.id for job in jobs]))
+            .distinct(CloudCleanupProgress.job_id)
+            .order_by(CloudCleanupProgress.job_id, CloudCleanupProgress.updated_at.desc()))).all()} if jobs else {}
         return {"controller_online": await controller_online(session),
                 "cloud_busy": blocker is not None, "blocking_job_id": blocker.id if blocker else None,
                 "jobs": [{
@@ -102,6 +108,9 @@ async def cloud_jobs():
             "target": job.target, "imported": job.imported,
             "combined_selection": combined.get(job.id),
             "created_at": job.created_at, "error": job.error,
+            "cleanup_progress": ({'phase': cleanup[job.id].phase, 'total': cleanup[job.id].total,
+                'removed': cleanup[job.id].removed, 'updated_at': cleanup[job.id].updated_at}
+                if job.id in cleanup else None),
             "stop_cleanup": ({'phase': cancellations[job.id].phase,
                 'requested_at': cancellations[job.id].requested_at, 'finished_at': cancellations[job.id].finished_at}
                 if job.id in cancellations else None),

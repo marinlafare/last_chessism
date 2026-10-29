@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>Daily accuracy bands test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import {createRoot} from 'react-dom/client'
+import PlayerDailyEfficiencyChart from '/src/pages/players/PlayerDailyEfficiencyChart.jsx'
+import '/src/index.css'
+import '/src/pages/players/player-hero-analytics.css'
+import '/src/pages/players/player-measures.css'
+const state=window.bandsFixture={requests:[],selections:[],pending:false}
+window.fetch=async(input,options={})=>{
+ const url=new URL(input,location.href);state.requests.push({path:url.pathname,method:options.method||'GET'})
+ if(!url.pathname.includes('/analysis/measures/daily-')) throw Error('Unexpected request')
+ if(url.pathname.endsWith('/daily-accuracy-bands')) return new Response(JSON.stringify({
+  metric:'modal_accuracy_band',summary_pending:state.pending,stale:false,
+  salience:{status:state.pending?'pending':'ready',metric:'modal_salience_band',points:[
+   ['2024-01-01',[3,5],[0,0,0,6,0,6],12],
+   ['2024-01-02',[5],[0,0,0,0,0,8],8],
+   ['2025-01-01',[0],[5,0,0,0,0,0],5],
+  ]},
+  points:url.searchParams.get('mode')==='rapid'?[]:[
+   ['2024-01-01',[3,5],[0,0,0,4,1,4],4.5,9],
+   ['2024-01-02',[0],[3,0,0,0,0,0],2.4,3],
+   ['2025-01-01',[4],[0,0,0,0,6,0],1.2,6],
+  ],
+ }),{headers:{'Content-Type':'application/json'}})
+ return new Response(JSON.stringify({points:[['2024-01-01',80,81,2,4]],salience:{status:'ready'}}),{headers:{'Content-Type':'application/json'}})
+}
+const root=createRoot(document.getElementById('root'))
+state.show=(name='alice')=>root.render(React.createElement(PlayerDailyEfficiencyChart,{
+ playerName:name,availableModes:new Set(['bullet','blitz','rapid']),onSelectPoint:p=>state.selections.push(p),
+}))
+state.show()
+</script></body></html>

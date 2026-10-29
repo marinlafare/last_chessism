@@ -44,6 +44,9 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
             raise LookupError(f"Game {game_id} does not belong to {player}.")
         if state["status"] != "ready" or state["salience"] is None:
             raise ValueError(f"Salience for {player} is not ready.")
+        from .cuda_summaries.salience_store import published_version
+        from .cuda_summaries.salience_compute import VERSION
+        opening = await published_version(session,player) == VERSION
 
         result = await session.execute(text("""
             WITH ordered_occurrences AS (
@@ -66,6 +69,7 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
                     )::integer AS game_occurrence_count
                 FROM game_fen_association association
                 WHERE association.game_link = :game_id
+                  AND (NOT :opening OR association.n_move BETWEEN 1 AND 15)
             )
             SELECT
                 occurrence.n_move,
@@ -89,20 +93,20 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
                     / occurrence.occurrence_index
                 )::double precision AS position_salience,
                 (
-                    0.25 + 0.75 * LEAST(
+                    CASE WHEN :opening THEN 1.0 ELSE 0.25 + 0.75 * LEAST(
                         occurrence.ply::double precision / 16.0,
                         1.0
-                    )
+                    ) END
                 )::double precision AS depth_weight,
                 (
                     1.0
                     / COALESCE(frequency.games_with_position, 1)
                     / occurrence.occurrence_index
                     * (
-                        0.25 + 0.75 * LEAST(
+                        CASE WHEN :opening THEN 1.0 ELSE 0.25 + 0.75 * LEAST(
                             occurrence.ply::double precision / 16.0,
                             1.0
-                        )
+                        ) END
                     )
                 )::double precision AS weighted_move_salience
             FROM ordered_occurrences occurrence
@@ -121,6 +125,7 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
             "player": player,
             "player_color": str(state["player_color"]),
             "game_id": int(game_id),
+            "opening": opening,
         })
         rows = result.mappings().all()
 
@@ -139,8 +144,10 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
             "repeated_position_count": int(state["repeated_position_count"]),
         },
         "formula": {
+            "version": VERSION if opening else 'legacy_full_game_depth_weighted',
+            "maximum_ply": 30 if opening else None,
             "position_salience": "1 / (corpus_games_with_position * occurrence_index)",
-            "depth_weight": "0.25 + 0.75 * min(ply / 16, 1)",
+            "depth_weight": "1 (first 30 plies only)" if opening else "0.25 + 0.75 * min(ply / 16, 1)",
             "game_salience": "sum(position_salience * depth_weight) / sum(depth_weight)",
         },
         "moves": [

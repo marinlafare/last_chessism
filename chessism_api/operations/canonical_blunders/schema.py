@@ -36,6 +36,10 @@ async def install(connection, layout):
     }
     for name, fields in definitions.items():
         await connection.execute(text(f'CREATE TABLE IF NOT EXISTS {t(name)} ({fields})'))
+    from ..fen_summary_recovery import install as install_recovery
+    from .assessment import install_view
+    await install_recovery(connection, layout)
+    await install_view(connection, layout)
     for owner in ('white_owner', 'black_owner'):
         await connection.execute(text(f'CREATE INDEX IF NOT EXISTS canonical_blunder_game_{owner} ON {t("game")}(model_id,{owner})'))
     await connection.execute(text(f'INSERT INTO {t("control")}(id) VALUES(true) ON CONFLICT DO NOTHING'))
@@ -81,16 +85,21 @@ async def install(connection, layout):
         await connection.execute(text(f'DROP TRIGGER IF EXISTS canonical_blunder_truncate ON {layout.table(relation)}'))
         await connection.execute(text(f'''CREATE TRIGGER canonical_blunder_truncate AFTER TRUNCATE ON {layout.table(relation)}
             FOR EACH STATEMENT EXECUTE FUNCTION {function}()'''))
-    # A read-only overlay preserves the compatibility view's exact columns and
-    # types. Legacy CPU values remain intact for rollback and old experiments.
+    await install_engine_view(connection, layout)
+
+
+async def install_engine_view(connection, layout):
+    t = lambda name: table(layout, name)
+    # Preserve the exact compatibility columns/types, but never expose the old
+    # CPU count, even before a model is active. Missing GPU output is unknown.
     columns = (await connection.execute(text('''SELECT column_name FROM information_schema.columns
         WHERE table_schema=:schema AND table_name='game_player_engine_summary' ORDER BY ordinal_position'''), {'schema': layout.core})).scalars().all()
-    projected = [f'''CASE WHEN c.active_model IS NULL THEN s.blunder_count
-        ELSE CASE WHEN gp.is_white THEN b.white_count ELSE b.black_count END END::int AS blunder_count'''
+    projected = [f'''CASE WHEN gp.is_white AND b.white_complete THEN b.white_count
+                  WHEN NOT gp.is_white AND b.black_complete THEN b.black_count END::int AS blunder_count'''
         if col == 'blunder_count' else 's.'+identifier(col) for col in columns]
     await connection.execute(text(f'''CREATE OR REPLACE VIEW {t('engine')} AS SELECT {','.join(projected)}
         FROM {layout.table('game_player_engine_summary')} s JOIN {layout.table('game_player')} gp ON gp.id=s.game_player_id
-        CROSS JOIN {t('control')} c LEFT JOIN {t('game')} b ON b.model_id=c.active_model AND b.game_link=gp.game_link'''))
+        CROSS JOIN {t('control')} c LEFT JOIN {t('assessment')} b ON b.model_id=c.active_model AND b.game_link=gp.game_link'''))
     compat = f'{identifier(layout.reads)}.{identifier("game_player_engine_summary")}'
     definition = await connection.scalar(text('SELECT pg_get_viewdef(to_regclass(:name),true)'), {'name': compat})
     if definition:
@@ -101,3 +110,7 @@ async def install(connection, layout):
         if changed == definition and 'canonical_blunder_engine' not in definition:
             raise ValueError('Unrecognized engine compatibility view; installation rolled back.')
         await connection.execute(text(f'CREATE OR REPLACE VIEW {compat} AS {changed}'))
+    # The CPU writer omits this retired column. Keep the physical write contract
+    # in step with CUDA-only reads, including future installs and reinstalls.
+    from .retired_counter import repair
+    await repair(connection, layout)

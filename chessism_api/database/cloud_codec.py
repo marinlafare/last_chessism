@@ -13,7 +13,20 @@ from . import cloud_columns as columns
 
 
 def checksum(value):
-    return hashlib.sha256(json.dumps(value, sort_keys=True, separators=(',', ':'), allow_nan=False).encode()).hexdigest()
+    # Identical canonical JSON bytes, without allocating a second multi-GB
+    # string/bytes pair for a whole-run input or completion manifest.
+    digest = hashlib.sha256()
+    encoder = json.JSONEncoder(sort_keys=True, separators=(',', ':'), allow_nan=False)
+    pending, size = [], 0
+    for part in encoder.iterencode(value):
+        pending.append(part)
+        size += len(part)
+        if size >= 65536:
+            digest.update(''.join(pending).encode())
+            pending, size = [], 0
+    if pending:
+        digest.update(''.join(pending).encode())
+    return digest.hexdigest()
 
 
 def wrap(kind, value):
@@ -284,14 +297,21 @@ class Receipts(Document):
         value = super().__get__(obj, owner)
         if obj is None:
             return self
-        if obj.__dict__.get('_batch_receipts_loaded') or not inspect(obj).persistent:
+        if (obj.__dict__.get('_batch_receipts_loaded') or not inspect(obj).persistent
+                or self.name in obj.__dict__.get('_cloud_document_dirty', ())):
+            # An explicit replacement (terminal compaction) must not pull the
+            # soon-to-be-deleted ledger back into the replacement snapshot.
             return value
         from .models import CloudResultBatch
         connection = object_session(obj).connection()
         pairs = connection.execute(select(CloudResultBatch.object_name, CloudResultBatch.detail_record_id).where(
             CloudResultBatch.run_id == obj.id, CloudResultBatch.detail_record_id.is_not(None))).all()
-        docs = read_documents(connection, [ref for _, ref in pairs]) if pairs else {}
-        value.update({name: docs[ref] for name, ref in pairs})
+        # A receipt contains at most 500 records. Decode bounded groups rather
+        # than retaining SQL arrays for every receipt alongside decoded rows.
+        for offset in range(0, len(pairs), 32):
+            group = pairs[offset:offset + 32]
+            docs = read_documents(connection, [ref for _, ref in group])
+            value.update({name: docs[ref] for name, ref in group})
         obj.__dict__['_batch_receipts_loaded'] = True
         return value
 
@@ -302,10 +322,15 @@ def install(models):
         def load(obj, context):
             # ORM load events run inside SQLAlchemy's async greenlet. No lazy
             # database I/O is attempted later in detached controller code.
-            refs = {name: getattr(obj, '_' + name + '_ref') for name in obj.CLOUD_DOCUMENTS}
+            names = context.execution_options.get('cloud_documents', obj.CLOUD_DOCUMENTS)
+            if set(names) - set(obj.CLOUD_DOCUMENTS):
+                raise ValueError('Unknown cloud document requested')
+            refs = {name: getattr(obj, '_' + name + '_ref') for name in names}
             found = {name: ref for name, ref in refs.items() if ref}
-            decoded = read_documents(context.session.connection(), list(found.values())) if found else {}
-            obj.__dict__['_cloud_documents'] = {name: decoded[ref] for name, ref in found.items()}
+            # Release each document's encoded SQL rows before decoding the next.
+            # Inputs and manifests can each contain millions of identities.
+            obj.__dict__['_cloud_documents'] = {
+                name: read_document(context.session.connection(), ref) for name, ref in found.items()}
             if 'receipts' in refs:
                 getattr(obj, 'receipts')
 

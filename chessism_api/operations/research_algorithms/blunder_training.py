@@ -78,15 +78,14 @@ def selection_sql(session):
 
 
 def positions_sql(session):
+    from chessism_api.evaluations import kind_sql
     layout = storage_for(session)
     association = layout.table('game_fen_association') if layout else 'game_fen_association'
     fen = layout.table('fen') if layout else 'fen'
     white = 'a.is_white' if layout and layout.compact else "a.move_color='white'"
     return f'''SELECT a.game_link,(a.n_move-1)*2+CASE WHEN {white} THEN 1 ELSE 2 END AS ply,
         f.score::float8,
-        CASE WHEN f.score IS NULL THEN -1 WHEN f.analysis_source='tablebase' THEN 2
-             WHEN COALESCE(f.analysis_source,'') NOT LIKE 'stockfish%' THEN -1
-             WHEN ABS(f.score)>=9000 THEN 1 ELSE 0 END AS kind
+        {kind_sql('f.score', 'f.analysis_source', codes=True)} AS kind
         FROM {association} a LEFT JOIN {fen} f ON f.fen_id=a.fen_id
         WHERE a.game_link=ANY(CAST(:links AS bigint[]))
         ORDER BY a.game_link,ply LIMIT :row_limit'''

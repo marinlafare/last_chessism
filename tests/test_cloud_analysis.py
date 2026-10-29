@@ -54,7 +54,7 @@ class CloudValidationTests(unittest.TestCase):
 
     def test_launch_requires_image_with_current_fen_compatibility(self):
         image_id = "sha256:" + "a" * 64
-        for version in (__version__, "1.2.0"):
+        for version in (__version__, "1.5.0", "1.2.0"):
             metadata = {"worker_version": version, "engine_sha": ENGINE_SHA256, "chess_version": "1.11.2"}
             with self.subTest(version=version), patch.object(launch, "docker", side_effect=[image_id, json.dumps(metadata)]):
                 if version == __version__:

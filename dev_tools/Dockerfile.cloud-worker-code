@@ -1,0 +1,4 @@
+# Code-only worker release; keep the verified engine binary, libraries and user.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY stockfish-batch-worker/stockfish_batch/ /app/stockfish_batch/

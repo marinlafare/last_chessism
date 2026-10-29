@@ -21,13 +21,18 @@ def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Unknown matrix row type.")
 
     summary_contract = {}
+    if row_type_key == 'accuracy_positions':
+        revision = config.get('summary_input_version', 1)
+        if type(revision) is not int or revision != 1:
+            raise ValueError('Unsupported accuracy input version.')
+        summary_contract = {'summary_input_version': revision}
     if row_type_key in {'score_distribution', 'blunder_moves'}:
         # Pre-v2 frozen recipes have a normalized version but no summary marker.
-        # Preserve their historical population; newly created formulas are v2.
+        # Preserve saved populations/types; new recipes use verified score kinds.
         revision = config.get('summary_input_version')
         if revision is None:
-            revision = 1 if config.get('version') else 2
-        if type(revision) is not int or revision not in (1, 2):
+            revision = 1 if config.get('version') else 3
+        if type(revision) is not int or revision not in (1, 2, 3):
             raise ValueError('Unsupported summary input version.')
         summary_contract = {'summary_input_version': revision}
 
@@ -90,7 +95,7 @@ def normalize_matrix_config(config: dict[str, Any]) -> dict[str, Any]:
             "date_from": date_from,
             "date_to": date_to,
             "min_moves": min_moves,
-            "analyzed_only": bool(filters.get("analyzed_only", False)),
+            "analyzed_only": row_type_key == 'accuracy_positions' or bool(filters.get("analyzed_only", False)),
             "max_rows": max_rows,
         },
     }

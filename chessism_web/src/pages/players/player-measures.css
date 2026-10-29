@@ -306,6 +306,14 @@
 .measure-daily-efficiency-point.strong { fill: #4ea3c7; }
 .measure-daily-efficiency-point.mixed { fill: #c9a84c; }
 .measure-daily-efficiency-point.poor { fill: #d55c5c; }
+.measure-daily-efficiency-point[data-band] { fill: currentColor; }
+.measure-daily-efficiency-point.accuracy-band-0 { color: #d55c5c; }
+.measure-daily-efficiency-point.accuracy-band-1 { color: #d68a4d; }
+.measure-daily-efficiency-point.accuracy-band-2 { color: #c9a84c; }
+.measure-daily-efficiency-point.accuracy-band-3 { color: #4ea3c7; }
+.measure-daily-efficiency-point.accuracy-band-4 { color: #58b98d; }
+.measure-daily-efficiency-point.accuracy-band-5 { color: #15c780; }
+.measure-daily-efficiency-point[data-tied="true"] { stroke-dasharray: 2 2; }
 
 .measure-daily-x-tick,
 .measure-daily-axis-title {

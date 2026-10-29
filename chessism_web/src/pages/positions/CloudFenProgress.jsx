@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { fenProgress } from './cloudJobState'
 import { cloudJobProgress } from './cloudJobProgress'
 import CloudJobIndicator from './CloudJobIndicator'
@@ -16,7 +17,7 @@ export default function CloudFenProgress({ job, label = 'Overall progress', vari
         </span>
         <strong {...pageStyleTarget(`${style}.percentage`)}>{percent}%</strong>
       </div>
-      <progress {...pageStyleTarget(`${style}.bar`)} value={imported} max={target || 1} aria-label={`${label} — FENs saved locally`}
+      <ProgressMeter native {...pageStyleTarget(`${style}.bar`)} value={imported} max={target || 1} aria-label={`${label} — FENs saved locally`}
         aria-valuetext={`${imported} of ${target} FENs saved locally, ${percent}%`} />
       {showCompletionStatus && (done || percent === 100 || job.stop_cleanup) && <small {...pageStyleTarget(`${style}.status`)}>{done ? 'Analysis, import and cleanup complete.'
         : currentProcess}</small>}

@@ -5,8 +5,9 @@ import { fetchPlayerScoreDistribution } from './playerAnalysisApi'
 import { useAnalysisVisible } from './PlayerAnalysisDisclosure'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 import PlayerScorePositions from './PlayerScorePositions'
+import PlayerMateSummary from './PlayerMateSummary'
 import useSummaryChartWidth from './useSummaryChartWidth'
-import { combineScoreModes, scoreInterval, SCORE_ENDINGS } from './scoreDistribution'
+import { combineScoreModes, scoreInterval } from './scoreDistribution'
 import './player-score-distribution.css'
 import './player-chart-hover.css'
 
@@ -82,7 +83,6 @@ export default function PlayerScoreDistribution({ playerName }) {
     if (!totals.counts[bin.id]) return
     setSelection({ bin, modes, snapshot: request.data.snapshot })
   }
-  const endingDescription = `Recorded game endings in the selected modes, including games without engine analysis.${totals.endings.stalemates_unattributed ? ` ${formatNumber(totals.endings.stalemates_unattributed)} stalemates lack a reliable final move and cannot be attributed.` : ''}`
   const progressText = progress?.total_games != null
     ? `${formatNumber(progress.completed_games)} / ${formatNumber(progress.total_games)} games`
     : progress?.phase === 'queued' ? 'Waiting for the current calculation…' : ''
@@ -91,19 +91,20 @@ export default function PlayerScoreDistribution({ playerName }) {
     <div className="score-distribution-heading">
       <div className="score-distribution-controls">
         <span {...pageStyleTarget('label')} className="stockfish-summary-title">Score distribution</span>
-        <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
-          label="Score distribution game modes" styleId="player.scores.modes" onToggle={toggleMode} />
+        <div className="score-distribution-mode-row">
+          <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
+            label="Score distribution game modes" styleId="player.scores.modes" onToggle={toggleMode} />
+          {request.data?.summary_managed && !request.data.summary_pending && !request.data.mate_distances_pending
+            ? <PlayerMateSummary key={playerName} playerName={playerName} totals={totals} /> : null}
+        </div>
       </div>
       {request.loading && request.data ? <small className="score-distribution-refresh" role="status">Updating… {progressText}</small> : null}
-      {request.data && !request.data.summary_pending ? <div className="score-distribution-endings" title={endingDescription}>
-        {SCORE_ENDINGS.map(([key, label]) => <div key={key}>
-          <span>{label}</span><strong>{formatNumber(totals.endings[key] || 0)}</strong>
-        </div>)}
-      </div> : null}
     </div>
-    {request.loading && !request.data ? <p className="score-distribution-message" role="status">Calculating scored positions… {progressText}</p> : null}
-    {request.data?.summary_pending ? <p {...pageStyleTarget('player.scores.status')} role="status">Summary queued. It will appear here automatically after background preparation.</p> : request.data?.summary_managed && request.data.stale ? <p {...pageStyleTarget('player.scores.status')} role="status">Showing the last complete summary; an update is queued.</p> : null}
-    {request.error ? <p role="alert">{request.error}{' '}<button {...pageStyleTarget('player.scores.action')} type="button" onClick={refresh}>Retry</button></p> : null}
+    <div className="stockfish-summary-status">
+      {request.loading && !request.data ? <p className="score-distribution-message" role="status">Calculating scored positions… {progressText}</p> : null}
+      {request.data?.summary_pending ? <p {...pageStyleTarget('player.scores.status')} role="status">Not calculated yet — summary update pending.</p> : request.data?.summary_managed && request.data.stale ? <p {...pageStyleTarget('player.scores.status')} role="status">Showing the last complete summary; an update is pending.</p> : null}
+      {request.error ? <p role="alert">{request.error}{' '}<button {...pageStyleTarget('player.scores.action')} type="button" onClick={refresh}>Retry</button></p> : null}
+    </div>
     {request.data && !request.data.summary_pending ? <div className="score-distribution-scroll"><div className="score-distribution-canvas">
       <svg ref={chart.ref} viewBox={`0 0 ${chart.width} ${HEIGHT}`} role="group" aria-label="Scored position occurrences by player-perspective centipawn score">
         <desc>Each repeated position counts again. Positive favors {playerName}. {formatNumber(totals.cp)} centipawn occurrences plotted; {formatNumber(totals.unscored)} unscored, {formatNumber(totals.mates)} mate evaluations and {formatNumber(totals.tablebases)} tablebase evaluations excluded. Select a bar to browse positions.</desc>
@@ -130,19 +131,6 @@ export default function PlayerScoreDistribution({ playerName }) {
         <text x={(LEFT + right) / 2} y={HEIGHT - 4} textAnchor="middle">Score (centipawns)</text>
       </svg>
     </div></div> : null}
-    {request.data?.summary_managed && !request.data.summary_pending && !request.data.mate_distances_pending ? <div {...pageStyleTarget('player.scores.mates')} className="score-mate-summary" aria-label="Mate evaluations by distance">
-      <div {...pageStyleTarget('player.scores.mates.row')} className="score-mate-row">
-        <span {...pageStyleTarget('player.scores.mates.label')}>Mate distance</span>
-        <span {...pageStyleTarget('player.scores.mates.label')}>For {playerName}</span>
-        <span {...pageStyleTarget('player.scores.mates.label')}>Against {playerName}</span>
-      </div>
-      {totals.mateDistances.map(row => <div {...pageStyleTarget('player.scores.mates.row')} className="score-mate-row" key={row.moves ?? 'unknown'}>
-        <span {...pageStyleTarget('player.scores.mates.label')}>{row.moves === null ? 'Distance unavailable' : row.moves === 0 ? 'Checkmate' : `Mate in ${row.moves}`}</span>
-        <strong {...pageStyleTarget('player.scores.mates.for')}>{formatNumber(row.for)}</strong>
-        <strong {...pageStyleTarget('player.scores.mates.against')}>{formatNumber(row.against)}</strong>
-      </div>)}
-      <small {...pageStyleTarget('player.scores.status')}>Position occurrences · {formatNumber(totals.unscored)} unscored · {formatNumber(totals.tablebases)} tablebase</small>
-    </div> : null}
     {selection ? <PlayerScorePositions key={JSON.stringify(selection)} playerName={playerName} selection={selection}
       onClose={() => setSelection(null)} /> : null}
   </section>

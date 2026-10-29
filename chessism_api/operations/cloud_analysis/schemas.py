@@ -3,7 +3,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 MAX_CLOUD_FENS = 500_000
 MAX_BATCH_FENS_PER_VM = 1_000_000
-MAX_CLOUD_RUN_FENS = 200_000
+MAX_CLOUD_RUN_FENS = 6_000_000
+MAX_CLOUD_RUN_CPUS = 200
 MAX_BATCH_REPEATS = 20
 MAX_BATCH_TOTAL_FENS = MAX_CLOUD_FENS * MAX_BATCH_REPEATS
 MAX_CLOUD_RUNS = MAX_BATCH_TOTAL_FENS // 1000
@@ -30,7 +31,7 @@ class CloudJobRequest(BaseModel):
 
     mode: Literal["all", "player", "loop", "games"] = "all"
     backend: Literal["batch_spot", "cloud_run"] = "batch_spot"
-    n_cpus: int = Field(4, ge=1, le=100, strict=True)
+    n_cpus: int = Field(4, ge=1, le=MAX_CLOUD_RUN_CPUS, strict=True)
     n_vms: int = Field(1, ge=1, le=10, strict=True)
     # Stored in the native sequence table, not the legacy selection document.
     repeat_count: int = Field(1, ge=1, le=MAX_BATCH_REPEATS, strict=True, exclude=True)
@@ -56,7 +57,7 @@ class CloudJobRequest(BaseModel):
         if self.mode == "games" and self.total_fens is not None:
             raise ValueError("The FEN count for game selections is calculated by the server")
         if self.backend == 'cloud_run' and self.mode != 'games' and self.target > MAX_CLOUD_RUN_FENS:
-            raise ValueError('Cloud Run selections are limited to 200,000 FENs')
+            raise ValueError(f'Cloud Run selections are limited to {MAX_CLOUD_RUN_FENS:,} FENs')
         return self
 
     @property

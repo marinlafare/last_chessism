@@ -20,6 +20,8 @@ REGISTRY['scopes'] = {
 }
 # Additive registry expansion: all v1 Scored Positions preset keys remain valid.
 REGISTRY['scopes'][REGISTRY['scope']]['targets'].update(REGISTRY['targets'])
+from .salience_comparison.styles import register as register_salience_comparison_styles
+register_salience_comparison_styles(REGISTRY)
 # Explicit selectors describe painted data, never axes, labels or invisible hit
 # areas. Styles remain scoped to the existing chart identity and page. Additive
 # properties keep old presets valid and do not change their appearance.

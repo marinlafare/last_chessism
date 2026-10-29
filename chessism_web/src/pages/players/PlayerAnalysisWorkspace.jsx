@@ -51,7 +51,7 @@ function BehaviouralContent({ playerName, disabled }) {
       if (controller.signal.aborted) return
       setActivity(nextActivity)
       setError('')
-      timer = window.setTimeout(load, nextActivity.summary_stale ? 2000 : 30000)
+      timer = window.setTimeout(load, nextActivity.summary_stale && !nextActivity.manual ? 2000 : 30000)
     }).catch((requestError) => {
       if (requestError.name !== 'AbortError') {
         setError(requestError.message || 'Unable to load playing patterns.')
@@ -77,7 +77,7 @@ function BehaviouralContent({ playerName, disabled }) {
     const load = () => fetchBehaviouralRatings({ playerName, signal: controller.signal }).then(payload => {
       if (controller.signal.aborted) return
       setRatings(payload)
-      if (payload.summary_stale) timer = window.setTimeout(load, 2000)
+      if (payload.summary_stale) timer = window.setTimeout(load, payload.manual ? 30000 : 2000)
     }).catch(failure => {
       if (failure.name !== 'AbortError') setRatingError(failure.message)
     }).finally(() => { if (!controller.signal.aborted) setRatingLoading(false) })
@@ -87,6 +87,10 @@ function BehaviouralContent({ playerName, disabled }) {
 
   return (
     <div className="player-analysis-chart-list">
+      {activity?.manual && activity.summary_stale && <p {...pageStyleTarget('player.measures.pending')} role="status">
+        {activity.summary_pending ? 'Behavioral summaries have not been calculated.' : 'Behavioral summary update pending; previous results are shown.'}
+        {' '}A superuser can run CUDA summaries from Analyze Positions.
+      </p>}
       <PlayerBehaviouralPanel
         activity={activity}
         playerName={playerName}

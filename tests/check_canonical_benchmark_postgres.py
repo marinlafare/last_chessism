@@ -11,6 +11,7 @@ from sqlalchemy import text
 from tests import check_canonical_blunders_postgres as base
 from chessism_api.operations.canonical_blunders import compute,source,benchmark_source,benchmark_job
 from chessism_api.operations.canonical_blunders.benchmark_store import Scratch,NAMES,recover_interrupted
+from chessism_api.operations.canonical_blunders.assessment import empty_mode
 
 original=base.check
 
@@ -60,7 +61,7 @@ async def check(factory,connection,layout):
     else:raise AssertionError('Malformed records accepted')
     result,timing=await scratch.write(mid,items,records)
     assert result['activated'] and result['written']==3 and timing['publication_commit_seconds']>0
-    hist={p:{m:{'counts':[0]*7,'games_count':0} for m in ('bullet','blitz','rapid')} for p in players}
+    hist={p:{m:empty_mode() for m in ('bullet','blitz','rapid')} for p in players}
     benchmark_job.add_histograms(hist,data['expected'])
     assert await scratch.snapshots(mid)==hist
     # Reject changed contents; do not erase unknown objects.

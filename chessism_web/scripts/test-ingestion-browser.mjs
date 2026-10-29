@@ -47,8 +47,17 @@ try {
       if (await evaluate(expression)) return
       await pause(100)
     }
-    throw new Error('Timed out: ' + expression)
+    const diagnostic = await evaluate(`JSON.stringify({
+      text: document.body.innerText.slice(0, 2000),
+      errors: window.ingestionPollingTest?.errors || window.ingestionTest?.errors,
+      freshness: window.ingestionPollingTest?.freshness,
+      requests: window.ingestionPollingTest?.requests,
+      local: window.positionPollingTest && { errors: window.positionPollingTest.errors,
+        requests: window.positionPollingTest.requests, jobs: window.positionPollingTest.page?.jobState },
+    })`)
+    throw new Error('Timed out: ' + expression + '\n' + diagnostic)
   }
+  if (!process.argv.includes('--local-only')) {
   await send('browsingContext.navigate', { context,
     url: 'http://127.0.0.1:6789/tests/fixtures/ingestion.html', wait: 'complete' })
   await waitFor("document.querySelectorAll('.fen-pipeline-stage').length === 3")
@@ -76,6 +85,94 @@ try {
   await evaluate("window.ingestionTest.run.status='complete'; window.ingestionTest.run.finished_at=new Date().toISOString(); window.ingestionTest.run.steps.forEach(s=>s.status='complete'); window.ingestionTest.render()")
   await waitFor("document.querySelector('.fen-ingestion-dismiss') && document.querySelectorAll('.fen-pipeline-stage.is-complete').length === 3")
   console.log('PASS: progress, unknown totals, stale heartbeat, failure, retained completion, dismissal/reload, retried run review; no live requests')
+
+  await send('browsingContext.navigate', { context,
+    url: 'http://127.0.0.1:6789/tests/fixtures/ingestionPolling.html', wait: 'complete' })
+  const state = 'window.ingestionPollingTest'
+  const progress = `document.querySelector('.fen-pipeline-stage [role="progressbar"]')?.getAttribute('aria-valuenow')`
+  const completed = `Array.from(document.querySelectorAll('.fen-ingestion-result')).find(row => row.querySelector('.fen-ingestion-result-heading strong')?.textContent === 'offline-player')`
+  await waitFor(`${progress} === '10' && ${state}.freshness.data === 10`)
+  await evaluate(`${state}.before = { calls: ${state}.requests.length, stamp: ${state}.freshness.lastSuccessAt }; ${state}.visibility(true); ${state}.count = 40`)
+  await pause(5200)
+  await waitFor(`${state}.requests.length === ${state}.before.calls && ${state}.freshness.lastSuccessAt === ${state}.before.stamp && ${progress} === '10'`)
+  await evaluate(`${state}.visibility(false)`)
+  await waitFor(`${progress} === '40' && ${state}.freshness.data === 40 && ${state}.freshness.lastSuccessAt > ${state}.before.stamp`)
+
+  // A hung status request is a transport problem, never a failed backend job.
+  await evaluate(`${state}.visibility(true); ${state}.hold = true; ${state}.visibility(false)`)
+  await waitFor(`${state}.pending.length >= 2`)
+  await pause(10500)
+  await waitFor(`document.querySelector('[role="alert"]')?.textContent.includes('timed out') && document.querySelector('.fen-pipeline-stage.is-working') && !document.querySelector('.fen-pipeline-stage.is-failed')`)
+  await evaluate(`${state}.visibility(true); ${state}.hold = false; ${state}.count = 60; ${state}.visibility(false)`)
+  await waitFor(`${progress} === '60' && !document.querySelector('[role="alert"]')`)
+  await evaluate(`${state}.release()`)
+  await pause(200)
+  await waitFor(`${progress} === '60'`)
+
+  // Leaving/remounting the page cancels reads only and reconnects to current work.
+  await evaluate(`${state}.visibility(true); ${state}.hold = true; ${state}.visibility(false)`)
+  await waitFor(`${state}.pending.length >= 2`)
+  await evaluate(`${state}.render(false)`)
+  await waitFor(`!document.querySelector('.fen-ingestion-panel')`)
+  await evaluate(`${state}.before.calls = ${state}.requests.length; ${state}.release(); ${state}.visibility(true); ${state}.visibility(false)`)
+  await pause(3200)
+  await waitFor(`${state}.requests.length === ${state}.before.calls`)
+  await evaluate(`${state}.hold = false; ${state}.count = 100; ${state}.status = 'complete'; ${state}.render()`)
+  await waitFor(`${completed}?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '100'`)
+  await evaluate(`${completed}.querySelector('.fen-ingestion-dismiss').click()`)
+  await waitFor(`!${completed} && document.querySelector('.fen-ingestion-result')?.textContent.includes('sample')`)
+  await evaluate(`${state}.render(false)`)
+  await waitFor(`!document.querySelector('.fen-ingestion-panel')`)
+  await evaluate(`${state}.render()`)
+  await waitFor(`document.querySelector('.fen-ingestion-panel') && !${completed}`)
+  await waitFor(`${state}.errors.length === 0 && ${state}.requests.every(request => request.method === 'GET')`)
+  console.log('PASS: real ingestion polling; hidden-tab freshness, immediate return, timeout/recovery, late response suppression, navigation, retained completion/dismissal; mocked GETs only')
+  }
+
+  await send('browsingContext.navigate', { context,
+    url: 'http://127.0.0.1:6789/tests/fixtures/positionPolling.html', wait: 'complete' })
+  const local = 'window.positionPollingTest'
+  const localProgress = `document.querySelector('.job-result [role="progressbar"]')?.getAttribute('aria-valuenow')`
+  await waitFor(`${localProgress} === '10' && document.querySelector('[data-style-id="local.activity.track"]')`)
+  await evaluate(`${local}.visibility(true); ${local}.count = 40; ${local}.before = ${local}.requests.length`)
+  await pause(3300)
+  await waitFor(`${local}.requests.length === ${local}.before && ${localProgress} === '10'`)
+  await evaluate(`${local}.visibility(false)`)
+  await waitFor(`${localProgress} === '40'`)
+  // Discovery and individual status reads may arrive in either order.
+  await evaluate(`${local}.discovery = [{job_id:'local-fixture',status:'in_progress',progress:{kind:'most_repeated',phase:'analyzing',processed:5,total:100,updated_at:5}}]; ${local}.visibility(true); ${local}.visibility(false)`)
+  await pause(200)
+  await waitFor(`${localProgress} === '40'`)
+  // Unknown 404s remain retryable and keep the last known progress visible.
+  await evaluate(`${local}.visibility(true); ${local}.failure = true; ${local}.visibility(false)`)
+  await waitFor(`document.querySelector('.job-result [role="alert"]')?.textContent.includes('Proxy') && ${localProgress} === '40' && ${local}.page.jobState.global.jobId === 'local-fixture'`)
+  await evaluate(`${local}.visibility(true); ${local}.failure = false; ${local}.hold = true; ${local}.visibility(false)`)
+  await waitFor(`${local}.pending.length >= 3`)
+  await evaluate(`${local}.beforeJobs = ${local}.requests.filter(request => request.path.startsWith('/jobs/')).length; ${local}.before = ${local}.requests.length`)
+  await pause(3300)
+  await waitFor(`${local}.requests.filter(request => request.path.startsWith('/jobs/')).length === ${local}.beforeJobs && ${local}.requests.length > ${local}.before`)
+  await pause(7300)
+  await waitFor(`document.querySelector('.job-result [role="alert"]')?.textContent.includes('timed out') && ${localProgress} === '40'`)
+  await evaluate(`${local}.visibility(true); ${local}.hold = false; ${local}.count = 70; ${local}.visibility(false)`)
+  await waitFor(`${localProgress} === '70' && !document.querySelector('.job-result [role="alert"]')`)
+  await evaluate(`${local}.release()`)
+  await pause(100)
+  await waitFor(`${localProgress} === '70'`)
+  await evaluate(`${local}.render(false)`)
+  await waitFor(`!document.querySelector('.job-result')`)
+  await evaluate(`${local}.before = ${local}.requests.length; ${local}.visibility(true); ${local}.visibility(false)`)
+  await pause(3300)
+  await waitFor(`${local}.requests.length === ${local}.before`)
+  await evaluate(`${local}.render()`)
+  await waitFor(`${localProgress} === '70'`)
+  // A summary outage cannot turn a completed local analysis into a failed one.
+  await evaluate(`${local}.visibility(true); ${local}.count = 100; ${local}.phase = 'complete'; ${local}.failTotals = true; ${local}.visibility(false)`)
+  await waitFor(`${localProgress} === '100' && ${local}.page.jobState.global.status.status === 'complete'`)
+  await evaluate(`${local}.visibility(true); ${local}.visibility(false)`)
+  await pause(100)
+  await waitFor(`${local}.page.jobState.global.status.status === 'complete' && !document.querySelector('.job-result [role="alert"]')`)
+  await waitFor(`${local}.errors.length === 0 && ${local}.requests.every(request => request.method === 'GET')`)
+  console.log('PASS: real local progress hooks; serial reads, hidden return, timeout recovery, unrelated 404, stale discovery, navigation and completion despite unavailable totals; mocked GETs only')
   await send('session.end', {})
 } finally {
   socket?.close()

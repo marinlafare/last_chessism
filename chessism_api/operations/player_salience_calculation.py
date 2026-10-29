@@ -457,6 +457,9 @@ async def calculate_player_salience(player_name: str) -> dict[str, Any]:
         raise ValueError("Player name is required.")
 
     async with AsyncDBSession() as selection_session:
+        from .cuda_summaries.salience_store import enabled
+        if await enabled(selection_session):
+            raise ValueError('Salience is CUDA-only. Use Run CUDA summaries; CPU recalculation is disabled.')
         if storage_for(selection_session):
             from .relational_salience import calculate
             return await calculate(AsyncDBSession,player)

@@ -9,6 +9,7 @@ from datetime import date
 from dataclasses import replace
 
 from ..mate_distance import mate_distance_sql
+from chessism_api.evaluations import kind_sql
 
 
 def row_types(Column, RowType):
@@ -46,7 +47,7 @@ def row_types(Column, RowType):
         order_sql="gp.played_at DESC NULLS LAST, gp.link, gp.color, gfa.n_move, gfa.move_color DESC",
         columns=tuple(replace(item, default=item.key in (
             {'player', 'mode', 'player_score', 'score_kind', 'mate_moves'} if key == 'score_distribution' else
-            {'player', 'game', 'mode', 'player_score', 'score_kind', 'analysis_source',
+            {'player', 'game', 'mode', 'player_score', 'score_kind',
              'previous_player_score', 'previous_score_kind', 'player_rating', 'opponent_rating', 'initial_prior'}
         )) for item in common + (extra if key == 'blunder_moves' else ())),
         player_filter_sql='gp.player_name = ANY(CAST(:players AS text[]))',
@@ -59,10 +60,6 @@ def row_types(Column, RowType):
         ('blunder_moves', 'Blunder move transitions',
          'Own moves in fully analyzed games, with preceding evaluations and game-time ratings. No blunder model is applied.'),
     )}
-
-
-def kind_sql(score, source):
-    return f"CASE WHEN {score} IS NULL THEN 'unscored' WHEN {source}='tablebase' THEN 'tablebase' WHEN ABS({score})>=9000 THEN 'mate' ELSE 'cp' END"
 
 
 def summary_input_sql(config, row_type, where_parts, params):
@@ -85,8 +82,9 @@ def summary_input_sql(config, row_type, where_parts, params):
     base = 'FROM game_player gp JOIN game_fen_association gfa ON gfa.game_link=gp.link'
     count = f'SELECT COUNT(*)::bigint FROM (SELECT 1 {base} {where} LIMIT :count_limit) counted'
     sign = "CASE WHEN s.color='white' THEN 1 ELSE -1 END"
-    score_kind = kind_sql('f.score', 'f.analysis_source')
-    previous_kind = kind_sql('previous.score', 'previous.analysis_source')
+    verified = config.get('summary_input_version', 1) >= 3
+    score_kind = kind_sql('f.score', 'f.analysis_source', verified=verified)
+    previous_kind = kind_sql('previous.score', 'previous.analysis_source', verified=verified)
     selected_keys = [*config['feature_columns'], *config['label_columns']]
     include_result = blunders and 'result' in selected_keys
     extra_projection = (',gp.rating,gp.opponent_rating' + (',gp.result' if include_result else '')) if blunders else ''

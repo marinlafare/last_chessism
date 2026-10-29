@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Isolated local progress lifecycle</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { usePositionsPage } from '/src/pages/positions/usePositionsPage.js'
+import { JobStatus } from '/src/pages/positions/JobStatus.jsx'
+import LocalAnalysisActivity from '/src/pages/positions/LocalAnalysisActivity.jsx'
+import '/src/index.css'
+import '/src/pages/positions/positions.css'
+
+const state = window.positionPollingTest = {
+  hidden: false, count: 10, phase: 'analyzing', hold: false, failure: false,
+  missing: false, failTotals: false, discovery: [], requests: [], pending: [], errors: [],
+}
+Object.defineProperty(document, 'visibilityState', {
+  configurable: true, get: () => state.hidden ? 'hidden' : 'visible',
+})
+state.visibility = hidden => { state.hidden = hidden; document.dispatchEvent(new Event('visibilitychange')) }
+window.addEventListener('error', event => state.errors.push(event.message))
+window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
+const snapshot = () => ({ job_id: 'local-fixture', status: state.phase === 'complete' ? 'complete' : 'in_progress',
+  progress: { kind: 'most_repeated', phase: state.phase, total: 100, processed: state.count, updated_at: state.count },
+  info: { function: 'run_analysis_job', kwargs: { total_fens_to_process: 100 } }, result: { success: true },
+})
+localStorage.setItem('chessism:positions:jobs', JSON.stringify({ global: {
+  jobId: 'local-fixture', payload: { job_id: 'local-fixture' }, targetFens: 100, status: snapshot(),
+} }))
+window.fetch = (input, options = {}) => {
+  const path = new URL(input, location.href).pathname.replace(/^\/api/, '')
+  const request = { path, method: options.method || 'GET', aborted: false }
+  state.requests.push(request)
+  if (request.method !== 'GET') throw new Error('Writes forbidden in this fixture')
+  let payload, code = 200
+  if (path === '/jobs/local-fixture') {
+    if (state.missing) { payload = { job_id: 'local-fixture', status: 'not_found' }; code = 404 }
+    else if (state.failure) { payload = { detail: 'Proxy temporarily unavailable' }; code = 404 }
+    else payload = snapshot()
+  } else if (path === '/jobs/active') payload = { jobs: state.discovery }
+  else if (path === '/jobs/analysis') payload = { jobs: state.phase === 'complete' ? [] : [snapshot()] }
+  else if (path === '/fens/pipeline/timings/latest') payload = { run: null }
+  else if (['/games/generalities', '/fens/analysis_counts', '/fens/scored/games/overview'].includes(path)) {
+    payload = { n_positions: 100, analyzed_fens: state.count, fully_analyzed_games: 1 }
+    if (state.failTotals) { code = 503; payload = { detail: 'Totals temporarily unavailable' } }
+  } else throw new Error(`Unexpected mocked route: ${path}`)
+  const body = JSON.stringify(payload)
+  const respond = () => new Response(body, { status: code, headers: { 'Content-Type': 'application/json' } })
+  if (!state.hold || !path.startsWith('/jobs/')) return Promise.resolve(respond())
+  return new Promise(resolve => {
+    options.signal?.addEventListener('abort', () => { request.aborted = true }, { once: true })
+    state.pending.push(() => resolve(respond())) // Deliberately ignores abort completion.
+  })
+}
+const root = createRoot(document.getElementById('root'))
+function Fixture() {
+  const page = usePositionsPage()
+  state.page = page
+  return React.createElement('main', null,
+    React.createElement(JobStatus, { jobKey: 'global', page }),
+    React.createElement(LocalAnalysisActivity, { page }))
+}
+state.render = (show = true) => root.render(show ? React.createElement(React.StrictMode, null, React.createElement(Fixture)) : null)
+state.release = () => state.pending.splice(0).forEach(resolve => resolve())
+state.render()
+</script></body></html>

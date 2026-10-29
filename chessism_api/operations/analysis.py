@@ -20,7 +20,6 @@ from chessism_api.database.ask_db import (
     get_fens_for_analysis,
     get_player_fens_for_analysis,
     increment_game_analysis_summary_for_scored_fens,
-    increment_database_summary_fen_counts,
     refresh_game_analysis_summary,
     refresh_scored_position_summary,
     refresh_scored_rating_summary
@@ -265,23 +264,11 @@ def timing_rows_from_engine_results(
 async def _increment_summary_for_analysis_results(
     db_ready_data: List[Dict[str, Any]]
 ) -> Dict[str, int]:
-    analyzed_delta = len(db_ready_data)
-    nonzero_scored_delta = 0
-    for item in db_ready_data:
-        try:
-            if float(item.get("score") or 0) != 0.0:
-                nonzero_scored_delta += 1
-        except (TypeError, ValueError):
-            continue
-
-    if analyzed_delta <= 0:
+    # Global counters were committed with the evaluations, not after them.
+    if not db_ready_data:
         return {"games": 0, "fens": 0, "fully_analyzed_games": 0}
 
     try:
-        await increment_database_summary_fen_counts(
-            analyzed_delta=analyzed_delta,
-            nonzero_scored_delta=nonzero_scored_delta
-        )
         return await increment_game_analysis_summary_for_scored_fens(db_ready_data)
     except Exception as error:
         print(f"Failed to update database summary after analysis batch: {repr(error)}", flush=True)
@@ -458,7 +445,8 @@ async def _run_analysis_job(
                         continue
 
                     # 4. Save results (using the same session)
-                    await stage_fen_results(session, db_ready_data, continuation_rows, interface=fen_interface)
+                    await stage_fen_results(session, db_ready_data, continuation_rows,
+                                            interface=fen_interface, count_new=True)
 
                     # 5. Commit the transaction
                     # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'

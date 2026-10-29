@@ -12,7 +12,6 @@ from sqlalchemy import text
 
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.operations.player_game_scores import (
-    is_lichess_blunder,
     lichess_move_accuracy,
     lichess_win_percent,
 )
@@ -335,7 +334,7 @@ async def explore_player_games(
             "wins": int(summary["wins"] or 0),
             "draws": int(summary["draws"] or 0),
             "losses": int(summary["losses"] or 0),
-            "blunders": int(summary["blunders"] or 0),
+            "blunders": int(summary["blunders"]) if summary["blunders"] is not None else None,
         },
         "games": games,
         "pagination": {
@@ -383,7 +382,7 @@ def _classification(
     after: float | None,
     before_kind: str | None,
     after_kind: str | None,
-    blunder_override='legacy',
+    blunder_override=-1,
 ) -> tuple[str | None, float | None, float | None]:
     if before is None or after is None or before_kind is None or after_kind is None:
         return None, None, None
@@ -391,7 +390,7 @@ def _classification(
     accuracy = lichess_move_accuracy(before, after)
     if blunder_override == -1:
         return None, round(loss,4), round(accuracy,2)
-    if (is_lichess_blunder(before, after, before_kind, after_kind) if blunder_override == 'legacy' else blunder_override == 1):
+    if blunder_override == 1:
         label = "blunder"
     elif loss >= 10:
         label = "mistake"
@@ -444,9 +443,9 @@ def _format_moves(rows: list[Any], canonical_flags=None) -> list[dict[str, Any]]
         multiplier = 1 if move_color == "white" else -1
         mover_before = previous_score * multiplier if previous_score is not None else None
         mover_after = score * multiplier if score is not None else None
-        override='legacy'
+        override=-1
         if canonical_flags is not None:
-            override=(-1 if canonical_flags['pending'] or int(row['ply']) in canonical_flags['unassessed']
+            override=(-1 if canonical_flags['pending'] or not canonical_flags.get('supported',True) or int(row['ply']) in canonical_flags['unassessed']
                 else int(int(row['ply']) in canonical_flags['blunders']))
         label, loss, accuracy = _classification(mover_before, mover_after, previous_kind, kind, override)
         fen_after = _complete_fen(row["fen"], int(row["ply"]))
@@ -540,8 +539,9 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
 
     moves = _format_moves(rows,canonical_flags)
     return {
-        'blunder_model':canonical_flags['model_id'] if canonical_flags else 'legacy_cpu_v1',
-        'blunder_annotations_pending':bool(canonical_flags and canonical_flags['pending']),
+        'blunder_model':canonical_flags['model_id'] if canonical_flags else None,
+        'blunder_annotations_pending':not canonical_flags or canonical_flags['pending'],
+        'blunder_coverage':canonical_flags.get('coverage') if canonical_flags else None,
         "game": {
             "game_id": int(game["link"]),
             "played_at_utc": (

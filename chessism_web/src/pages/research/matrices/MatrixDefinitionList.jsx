@@ -21,6 +21,7 @@ export default function MatrixDefinitionList({ definitions, onPreview, onUse, on
         <code>{[...config.feature_columns, ...config.label_columns].join(' | ')}</code>
       </div>}
       <MatrixPreviewButton name={definition.name} live disabled={disabled} onClick={() => onPreview(definition)} />
+      {definition.row_type === 'accuracy_positions' ? <p {...pageStyleTarget('text')} className="matrix-default-description">Fully scored games · each game once · both colors’ moves in order · White-perspective scores. Game and ply are structural keys. Repeated positions are retained; a row limit never splits a selected game. Preview shows a short excerpt only. Initial +15 CP belongs to the algorithm, not an extra column. Formula only: no accuracy algorithm runs.</p> : null}
       {definition.row_type === 'blunder_moves' ? <p {...pageStyleTarget('text')} className="matrix-default-description">Fully analyzed games · before/after evaluations · game-time ratings. Initial prior: 1 means the first White move uses an assumed +15 CP before-evaluation; otherwise 0. Game outcomes belong to a separate training dataset. The rating-aware model is not fitted or active.</p> : null}
       {definition.row_type === 'score_distribution' ? <p {...pageStyleTarget('text')} className="matrix-default-description">Scored positions only · both colors’ moves from each player’s perspective · repeated occurrences retained · centipawn, mate and tablebase evaluations kept separate.</p> : null}
     </article>

@@ -86,7 +86,7 @@ class CanonicalTests(unittest.TestCase):
 
     def test_game_review_uses_published_flags_not_legacy_labels(self):
         from chessism_api.operations.player_game_explorer import _classification
-        self.assertEqual(_classification(14,-345,'cp','cp')[0],'blunder')
+        self.assertIsNone(_classification(14,-345,'cp','cp')[0])
         self.assertEqual(_classification(14,-345,'cp','cp',0)[0],'mistake')
         self.assertEqual(_classification(14,-20,'cp','cp',1)[0],'blunder')
         self.assertIsNone(_classification(14,-345,'cp','cp',-1)[0])

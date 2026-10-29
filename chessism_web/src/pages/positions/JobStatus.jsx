@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import {
   formatCountdown,
   formatNumber,
@@ -47,9 +48,9 @@ function JobProgress({ mode, state, status, etaClockMs, etaEstimatesRef }) {
         <span>{formatNumber(processed)} / {formatNumber(progress.target)}</span>
         <strong {...pageStyleTarget('local.job.percent')}>{progress.percent}%</strong>
       </div>
-      <div className="job-progress-track">
-        <div className="job-progress-fill" style={{ width: `${progress.percent}%` }} />
-      </div>
+      <ProgressMeter className="job-progress-track" fillClassName="job-progress-fill"
+        value={progress.percent} aria-label={mode === 'fen' ? 'FEN extraction' : 'Local analysis'}
+        aria-valuetext={`${formatNumber(processed)} of ${formatNumber(progress.target)}, ${progress.percent}%`} />
       {progress.phase ? (
         <small {...pageStyleTarget('local.job.detail')}>{progress.phase}{progress.detail ? ` | ${progress.detail}` : ''}</small>
       ) : null}
@@ -66,8 +67,7 @@ function JobProgress({ mode, state, status, etaClockMs, etaEstimatesRef }) {
 
 export function JobStatus({ jobKey, page }) {
   const state = page.jobState[jobKey] || {}
-  if (state.error) return <div className="status-banner warn">{state.error}</div>
-  if (!state.payload) return null
+  if (!state.payload) return state.error ? <div className="status-banner warn">{state.error}</div> : null
 
   const status = getTrackedJobPhase(state)
   const info = state.status?.info
@@ -80,6 +80,7 @@ export function JobStatus({ jobKey, page }) {
       className={`job-result ${state.fading ? 'job-result-fading' : ''}`}
       ref={page.setJobCardRef(jobKey)}
     >
+      {state.error && <div className="status-banner warn" role="alert">{state.error}</div>}
       <span>{status.replace('_', ' ')}</span>
       <small {...pageStyleTarget('local.job.function')}>{functionName}</small>
       {isLoopJobKey(jobKey) ? (

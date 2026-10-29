@@ -24,6 +24,7 @@ window.fetch=async(input,options={})=>{
     if(window.canonicalFixture.offline) return new Response(JSON.stringify({detail:'Synthetic connection failure'}),{status:503})
     data={target_model:'model-fixture',active_model:phase==='ready'?'model-fixture':null,
     status:phase,pending_games:phase==='ready'?0:1000,progress:{processed_games:8192,cuda_batch_rows:2097152},
+    pending_input_refresh_games:phase==='ready'?0:12,input_refresh_errors:phase==='ready'?0:1,
     error:phase==='retrying'?'Synthetic GPU interruption':null,
     evidence:{limitations:['Rapid did not pass development calibration/prediction selection.','Independent tests not run.']},
     config:{fits:[{mode:'bullet',a:.2087,b:2.8800}]}}

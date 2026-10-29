@@ -633,13 +633,21 @@
         },
         "player.accuracy.salience.panel": {
           "label": "Accuracy · salience container",
-          "editorRelated": ["player.accuracy.salience.title","player.accuracy.salience.track","player.accuracy.salience.rail","player.accuracy.salience.fill","player.accuracy.salience.ticks","player.accuracy.salience.minimum.handle","player.accuracy.salience.minimum.knob","player.accuracy.salience.maximum.handle","player.accuracy.salience.maximum.knob"],
+          "editorRelated": ["player.accuracy.salience.title","player.accuracy.salience.all","player.accuracy.salience.band.0","player.accuracy.salience.band.1","player.accuracy.salience.band.2","player.accuracy.salience.band.3","player.accuracy.salience.band.4","player.accuracy.salience.band.5","player.accuracy.salience.status","player.accuracy.salience.track","player.accuracy.salience.rail","player.accuracy.salience.fill","player.accuracy.salience.ticks","player.accuracy.salience.minimum.handle","player.accuracy.salience.minimum.knob","player.accuracy.salience.maximum.handle","player.accuracy.salience.maximum.knob"],
           "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
         "player.accuracy.salience.title": {
           "label": "Salience · title", "initialStyleFrom": "value", "editorParent": "player.accuracy.salience.panel",
           "properties": ["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
+        "player.accuracy.salience.all": {"label":"Daily salience · all bands","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.0": {"label":"Daily salience · 0–50","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.1": {"label":"Daily salience · >50–60","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.2": {"label":"Daily salience · >60–70","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.3": {"label":"Daily salience · >70–80","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.4": {"label":"Daily salience · >80–90","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.band.5": {"label":"Daily salience · >90–100","initialStyleFrom":"button","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
+        "player.accuracy.salience.status": {"label":"Daily salience · availability","initialStyleFrom":"text","editorParent":"player.accuracy.salience.panel","properties":["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]},
         "player.accuracy.salience.track": {
           "label": "Salience · slider track", "editorParent": "player.accuracy.salience.panel",
           "editorRelated": ["player.accuracy.salience.rail","player.accuracy.salience.fill","player.accuracy.salience.ticks"],
@@ -693,9 +701,26 @@
           "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
         },
         "player.scores.mates": {
-          "label": "Score distribution · mate counters container",
+          "label": "Score distribution · mate distances popup",
           "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
+        "player.scores.mates.toggle": {
+          "label": "Score distribution · Mates button",
+          "editorRelated": ["player.scores.mates","player.scores.mates.title","player.scores.mates.close"],
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily","textAlign"]
+        },
+        "player.scores.mates.title": {
+          "label": "Score distribution · mate popup title",
+          "properties": ["background","hoverBackground","color","hoverColor","radius","padding","fontSize","fontFamily","textAlign"]
+        },
+        "player.scores.mates.close": {
+          "label": "Score distribution · close mate popup",
+          "properties": ["background","hoverBackground","color","hoverColor","borderColor","hoverBorderColor","borderWidth","radius","padding","fontSize","fontFamily"]
+        },
+        "player.scores.endings": {"label":"Score distribution · popup game endings","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "player.scores.endings.row": {"label":"Score distribution · popup ending row","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "player.scores.endings.label": {"label":"Score distribution · popup ending labels","properties":["color","hoverColor","background","hoverBackground","fontSize","fontFamily","textAlign","padding","radius"]},
+        "player.scores.endings.value": {"label":"Score distribution · popup ending values","properties":["color","hoverColor","background","hoverBackground","fontSize","fontFamily","textAlign","padding","radius"]},
         "player.scores.mates.row": {
           "label": "Score distribution · mate counter row",
           "properties": ["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]
@@ -717,6 +742,14 @@
           "properties": ["background","borderColor","borderWidth","radius","padding","chartColor1"],
           "propertyLabels": {"chartColor1":"Blunder bars"}
         },
+        "player.accuracy.daily.title": {"label":"Daily accuracy · title","initialStyleFrom":"value","properties":["color","hoverColor","background","hoverBackground","fontSize","fontFamily","textAlign","padding","radius"]},
+        "player.accuracy.daily.status": {"label":"Daily accuracy · saved-summary status","properties":["color","hoverColor","background","hoverBackground","fontSize","fontFamily","textAlign","padding","radius"]},
+        "player.accuracy.daily.band.0": {"label":"Daily accuracy · 0–50 band","properties":["color","hoverColor","opacity"]},
+        "player.accuracy.daily.band.1": {"label":"Daily accuracy · 51–60 band","properties":["color","hoverColor","opacity"]},
+        "player.accuracy.daily.band.2": {"label":"Daily accuracy · 61–70 band","properties":["color","hoverColor","opacity"]},
+        "player.accuracy.daily.band.3": {"label":"Daily accuracy · 71–80 band","properties":["color","hoverColor","opacity"]},
+        "player.accuracy.daily.band.4": {"label":"Daily accuracy · 81–90 band","properties":["color","hoverColor","opacity"]},
+        "player.accuracy.daily.band.5": {"label":"Daily accuracy · 91–100 band","properties":["color","hoverColor","opacity"]},
         "player.accuracyDistribution.modes": {
           "label": "Blunders per game · game mode buttons",
           "properties": ["modeActiveBackground","modeInactiveBackground","color","borderColor","radius","fontSize","fontFamily"]
@@ -1175,6 +1208,7 @@
             "padding"
           ]
         },
+        "player.measures.pending": {"label":"Stockfish analysis · pending CUDA notice","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
         "player.measures": {
           "label": "Player measures",
           "properties": [
@@ -1943,6 +1977,28 @@
         "history.local.recovery.note": {"label":"history · local · recovery · note","initialStyleFrom":"text","properties":["background","color","fontSize","fontFamily","textAlign","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","hoverColor"]},
         "history.cloud_run.recovery.note": {"label":"history · cloud_run · recovery · note","initialStyleFrom":"text","properties":["background","color","fontSize","fontFamily","textAlign","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","hoverColor"]},
         "history.batch_spot.recovery.note": {"label":"history · batch_spot · recovery · note","initialStyleFrom":"text","properties":["background","color","fontSize","fontFamily","textAlign","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","hoverColor"]},
+        "cuda.panel": {"label":"CUDA summaries · container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.run": {"label":"CUDA summaries · Run button","initialStyleFrom":"button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.pending": {"label":"CUDA summaries · pending players","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.note": {"label":"CUDA summaries · explanation","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.preparing": {"label":"CUDA summaries · preparation status","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.error": {"label":"CUDA summaries · error","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.retry": {"label":"CUDA summaries · Retry button","initialStyleFrom":"button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.blunders": {"label":"CUDA summaries · blunders counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.accuracy": {"label":"CUDA summaries · accuracy counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.score_distribution": {"label":"CUDA summaries · score counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.behavioral": {"label":"CUDA summaries · behavioral counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.unexpected_endings": {"label":"CUDA summaries · unexpected endings counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.metric.salience": {"label":"CUDA summaries · salience counter","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.salience": {"label":"CUDA summaries · salience progress","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.panel": {"label":"CUDA summaries · progress container","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.phase": {"label":"CUDA summaries · current stage","initialStyleFrom":"label","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.track": {"label":"CUDA summaries · progress track","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.fill": {"label":"CUDA summaries · progress fill","initialStyleFrom":"value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.progress.count": {"label":"CUDA summaries · progress count","initialStyleFrom":"value","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.history.toggle": {"label":"CUDA summaries · History button","initialStyleFrom":"button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.history.panel": {"label":"CUDA summaries · history container","initialStyleFrom":"panel","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "cuda.history.entry": {"label":"CUDA summaries · history entry","initialStyleFrom":"card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
         "local.toggle": {
           "label": "Local button",
           "initialStyleFrom": "button",
@@ -2923,6 +2979,11 @@
           ]
         }
       }
+    },
+    "salience_comparison": {
+      "label": "Salience comparison",
+      "routes": ["/research/salience-comparison"],
+      "targets": {}
     },
     "salience": {
       "label": "Salience Research",

@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressReviewButton from '../../components/progress/ProgressReviewButton.jsx'
 import FenPipelineStages from './FenPipelineStages'
 import IngestionHistory from './IngestionHistory'
 import { isTrackedJobActive } from './positionPageSupport'
@@ -30,9 +31,9 @@ export default function FenIngestionPanel({
           </div>
           {run.last_error && <div className="status-banner warn" role="alert">{run.last_error}</div>}
           <FenPipelineStages jobState={{}} ingestionTiming={run} />
-          <button {...pageStyleTarget('button')} type="button" className="fen-ingestion-dismiss"
+          <ProgressReviewButton {...pageStyleTarget('button')} className="fen-ingestion-dismiss"
             title="Hide this progress result. Downloaded games, positions and ingestion history are kept."
-            onClick={() => onDismiss(key)}>Reviewed — dismiss progress</button>
+            onClick={() => onDismiss(key)} />
         </div>
       ))}
       <IngestionHistory revision={`${ingestionTiming?.run_id || ''}:${ingestionTiming?.status || ''}`} />

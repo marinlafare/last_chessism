@@ -1,8 +1,11 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { fetchDailyEfficiency, fetchDailySalienceAccuracy } from './playerAnalysisApi'
+import { fetchDailyAccuracyBands, fetchDailyEfficiency, fetchDailySalienceAccuracy } from './playerAnalysisApi'
+import { DAILY_ACCURACY_LABELS, accuracyBandPoints, accuracyBandNote } from './dailyAccuracyBands'
 import PlayerModeToggles, { PLAYER_ANALYSIS_MODES } from './PlayerModeToggles'
 import DailySalienceRange from './DailySalienceRange'
+import DailySalienceBands from './DailySalienceBands'
+import { attachSalienceBands, filterSalienceBands, salienceBandNote } from './dailySalienceBands'
 import DailyYearBands from './DailyYearBands'
 import { buildYearScale, yearAtX } from './dailyYearNavigation'
 import { relativeDailySalience, filterDailySalience } from './dailySalience'
@@ -81,14 +84,15 @@ function efficiencyScale(points) {
   return { minimum, maximum, step }
 }
 
-function buildPlot(points) {
-  const scale = efficiencyScale(points)
+function buildPlot(points, modal) {
+  const scale = modal ? { minimum: 0, maximum: 5, step: 1 } : efficiencyScale(points)
   const valueRange = Math.max(1, scale.maximum - scale.minimum)
   const yTicks = []
   for (let value = scale.maximum; value >= scale.minimum - Number.EPSILON; value -= scale.step) {
     const normalizedValue = Number(value.toFixed(scale.step < 1 ? 1 : 0))
     yTicks.push({
       value: normalizedValue,
+      label: modal ? DAILY_ACCURACY_LABELS[normalizedValue] : normalizedValue,
       y: PLOT_TOP + ((scale.maximum - value) / valueRange) * (PLOT_BOTTOM - PLOT_TOP),
     })
   }
@@ -131,26 +135,41 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   const modeCache = useRef(new Map())
   const [refreshToken, setRefreshToken] = useState(0)
   const [salienceRange, setSalienceRange] = useState([0, 100])
+  const [salienceBand, setSalienceBand] = useState(null)
   const selectedModes = useMemo(() => PLAYER_ANALYSIS_MODES.filter(
     (mode) => activeModes.has(mode)
   ), [activeModes])
   const modeQuery = selectedModes.join(',')
   const data = request.playerName === playerName ? request.data : null
+  const modal = data?.metric === 'modal_accuracy_band'
   const selectionReady = Boolean(data && request.modeQuery === modeQuery && !request.loading && !request.error)
   const years = useMemo(() => seriesYears(data?.points), [data])
   const salienceReady = data?.salience?.status === 'ready'
+  const fixedSalience = data?.salience?.metric === 'modal_salience_band'
   const salienceScale = useMemo(
-    () => relativeDailySalience(efficiencyPoints(data?.points, salienceReady)),
-    [data, salienceReady]
+    () => {
+      const points = modal ? accuracyBandPoints(data?.points, salienceReady) : efficiencyPoints(data?.points, salienceReady)
+      return fixedSalience ? { points: attachSalienceBands(points, data.salience), enabled: salienceReady }
+        : relativeDailySalience(points)
+    },
+    [data, salienceReady, modal, fixedSalience]
   )
   const dailyPoints = useMemo(
     () => salienceScale.points.filter((point) => selectedYear === 'all' || String(point.date).startsWith(`${selectedYear}-`)),
     [salienceScale, selectedYear]
   )
-  // Plot before hiding points: both axes and normalization stay fixed while dragging.
-  const plot = useMemo(() => buildPlot(dailyPoints), [dailyPoints])
-  const visiblePoints = useMemo(() => filterDailySalience(plot.points, salienceRange, salienceScale.enabled),
-    [plot, salienceRange, salienceScale.enabled])
+  // Plot before filtering so both axes stay fixed when a band is selected.
+  const plot = useMemo(() => buildPlot(dailyPoints, modal), [dailyPoints, modal])
+  const visiblePoints = useMemo(() => fixedSalience
+    ? filterSalienceBands(plot.points, salienceBand, salienceScale.enabled)
+    : filterDailySalience(plot.points, salienceRange, salienceScale.enabled),
+    [plot, fixedSalience, salienceBand, salienceRange, salienceScale.enabled])
+  const pointNote = point => {
+    if (modal) return accuracyBandNote(point) + (fixedSalience ? salienceBandNote(point) : '')
+    if (fixedSalience) return `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy` + salienceBandNote(point)
+    if (point.dailySalience === null) return `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy\nSalience rebuild pending`
+    return `${point.date}\n${point.gameEfficiency.toFixed(2)} salience-weighted accuracy\n${point.unweightedAccuracy.toFixed(2)} unweighted accuracy\n${point.averageGameSalience === null ? 'Average game salience unavailable' : `${point.averageGameSalience.toPrecision(4)} average game salience`}${point.relativeSalience === null ? '' : `\n${point.relativeSalience.toFixed(1)} / 100 relative average game salience`}\n${point.dailySalience.toFixed(2)} total effective games\n${point.games} eligible analyzed games`
+  }
   const highlightedBand = selectedYear === 'all'
     ? plot.yearBands.find(band => band.year === (hoveredYear || focusedYear)) : null
 
@@ -175,6 +194,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   }
 
   useEffect(() => { setSalienceRange([0, 100]) }, [playerName])
+  useEffect(() => { setSalienceBand(null) }, [playerName])
 
   useEffect(() => {
     modeCache.current.clear()
@@ -210,6 +230,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
     // different player's data or allow an old point to open the new filter.
     setRequest(current => ({ ...(current.playerName === playerName ? current : emptyRequest), playerName, error: '', loading: true }))
     const loadAccuracy = async () => {
+      let fixedBands = null
+      try {
+        const bands = await fetchDailyAccuracyBands({ playerName, mode: modeQuery, signal: controller.signal, bypassCache: true })
+        if (bands.salience?.metric === 'modal_salience_band') fixedBands = bands.salience
+        if (bands.metric === 'modal_accuracy_band' && !bands.summary_pending) return bands
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+      }
       let salienceData = null
       try {
         salienceData = await fetchDailySalienceAccuracy({
@@ -221,7 +249,8 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
       } catch (error) {
         if (controller.signal.aborted) throw error
       }
-      if (salienceData?.salience?.status === 'ready') return salienceData
+      if (salienceData?.salience?.status === 'ready') return { ...salienceData,
+        salience: fixedBands || salienceData.salience, accuracyMigrationPending: true }
 
       const fallback = await fetchDailyEfficiency({
         playerName,
@@ -231,8 +260,9 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
       })
       return {
         ...fallback,
-        salience: salienceData?.salience || { status: 'unavailable' },
+        salience: fixedBands || salienceData?.salience || { status: 'unavailable' },
         saliencePending: true,
+        accuracyMigrationPending: true,
       }
     }
 
@@ -258,10 +288,10 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
 
   useEffect(() => {
     const status = request.data?.salience?.status
-    if (!visible || request.loading || request.error || !status || status === 'ready') return undefined
+    if (!visible || modal || request.loading || request.error || !status || status === 'ready') return undefined
     const timer = window.setTimeout(() => setRefreshToken((value) => value + 1), 15000)
     return () => window.clearTimeout(timer)
-  }, [playerName, request.data, request.loading, request.error, visible])
+  }, [playerName, request.data, request.loading, request.error, visible, modal])
 
   const toggleMode = (mode) => {
     setActiveModes((current) => {
@@ -275,7 +305,7 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
   return (
     <section {...pageStyleTarget('panel')} className="measure-chart-section measure-daily-efficiency-section" aria-label="Daily game accuracy chart" aria-busy={request.loading}>
       <div className="behavior-subchart-heading measure-chart-heading measure-daily-efficiency-heading">
-        <div><strong {...pageStyleTarget('value')}>Accuracy</strong></div>
+        <div><strong {...pageStyleTarget('player.accuracy.daily.title')}>{modal ? 'Most common accuracy band' : 'Accuracy'}</strong></div>
         <div className="measure-daily-years" aria-label="Accuracy year">
           <button {...pageStyleTarget('button')}
             ref={allYearsButton}
@@ -295,7 +325,9 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
         />
       </div>
 
-      {request.loading && !data ? <div className="measure-chart-message">Calculating daily accuracy…</div> : null}
+      {request.loading && !data ? <div className="measure-chart-message">Loading daily accuracy…</div> : null}
+      {data?.accuracyMigrationPending ? <p {...pageStyleTarget('player.accuracy.daily.status')}>Daily bands await a manual CUDA run. Showing the previous accuracy chart.</p> : null}
+      {modal && data?.stale ? <p {...pageStyleTarget('player.accuracy.daily.status')}>Showing the last complete summary; updated data awaits a manual CUDA run.</p> : null}
       {!request.loading && request.error ? <div className="measure-chart-message error" role="alert">
         {request.error}{' '}
         <button {...pageStyleTarget('button')} type="button" onClick={() => setRefreshToken(value => value + 1)}>Retry</button>
@@ -303,8 +335,8 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
       {data || (!request.loading && !request.error) ? (
         <div className="daily-salience-layout">
           <div className="daily-salience-plot">
-            <svg {...pageStyleTarget('chart.accuracy')} className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label={`Average game accuracy by local date — ${selectedYear === 'all' ? 'all years' : selectedYear}`} onPointerMove={hoverYear} onPointerLeave={() => setHoveredYear(null)}>
-              <desc>{data?.saliencePending ? 'Unweighted accuracy. Salience is not available yet.' : 'Salience-weighted daily accuracy.'}</desc>
+            <svg {...pageStyleTarget('chart.accuracy')} className="measure-daily-efficiency-graph" viewBox={`0 0 ${WIDTH} ${HEIGHT}`} role="group" aria-label={`${modal ? 'Most common game accuracy band' : 'Average game accuracy'} by local date — ${selectedYear === 'all' ? 'all years' : selectedYear}`} onPointerMove={hoverYear} onPointerLeave={() => setHoveredYear(null)}>
+              <desc>{modal ? 'Daily game counts in six bands. All tied most common bands are shown. Boundaries are 0 to 50 inclusive, then above 50 to 60 inclusive, and similarly through 100.' : data?.saliencePending ? 'Unweighted accuracy. Salience is not available yet.' : 'Salience-weighted daily accuracy.'}</desc>
               {selectedYear === 'all' ? <DailyYearBands
                 bands={plot.yearBands}
                 activeYear={highlightedBand?.year}
@@ -316,25 +348,26 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
               {plot.yTicks.map((tick) => (
                 <g key={`daily-efficiency-y-${tick.value}`} pointerEvents="none">
                   <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={tick.y} y2={tick.y} />
-                  <text className="graph-rating-label" x={PLOT_LEFT - 10} y={tick.y + 3} textAnchor="end">{tick.value}</text>
+                  <text className="graph-rating-label" x={PLOT_LEFT - 10} y={tick.y + 3} textAnchor="end">{tick.label}</text>
                 </g>
               ))}
               {visiblePoints.length ? (
                 <>
                   {visiblePoints.map((point) => (
                     <circle
-                      className={`measure-daily-efficiency-point ${efficiencyBand(point.gameEfficiency)}`}
+                      {...(modal ? pageStyleTarget(`player.accuracy.daily.band.${point.band}`) : {})}
+                      className={`measure-daily-efficiency-point ${modal ? `accuracy-band-${point.band}` : efficiencyBand(point.gameEfficiency)}`}
                       cx={point.x}
                       cy={point.y}
                       r={2}
                       opacity={1}
                       data-date={point.date}
+                      data-band={point.band}
+                      data-tied={modal ? point.modalBands.length > 1 : undefined}
                       role="button"
                       tabIndex={selectionReady ? 0 : -1}
                       aria-disabled={!selectionReady}
-                      aria-label={point.dailySalience === null
-                        ? `${point.date}, ${point.gameEfficiency.toFixed(2)} accuracy. Explore games.`
-                        : `${point.date}, ${point.gameEfficiency.toFixed(2)} salience-weighted accuracy, ${point.averageGameSalience === null ? 'average game salience unavailable' : `${point.averageGameSalience.toPrecision(4)} average game salience`}. Explore games.`}
+                      aria-label={pointNote(point) + '\nExplore games.'}
                       onClick={() => selectionReady && onSelectPoint?.({
                         scope: 'date',
                         date: point.date,
@@ -354,16 +387,14 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
                           })
                         }
                       }}
-                      key={point.date}
+                      key={modal ? `${point.date}:${point.band}` : point.date}
                     >
-                      <title>{point.dailySalience === null
-                        ? `${point.date}\n${point.gameEfficiency.toFixed(2)} accuracy\nSalience rebuild pending`
-                        : `${point.date}\n${point.gameEfficiency.toFixed(2)} salience-weighted accuracy\n${point.unweightedAccuracy.toFixed(2)} unweighted accuracy\n${point.averageGameSalience === null ? 'Average game salience unavailable' : `${point.averageGameSalience.toPrecision(4)} average game salience`}${point.relativeSalience === null ? '' : `\n${point.relativeSalience.toFixed(1)} / 100 relative average game salience`}\n${point.dailySalience.toFixed(2)} total effective games\n${point.games} eligible analyzed games`}</title>
+                      <title>{pointNote(point)}</title>
                     </circle>
                   ))}
                 </>
               ) : (
-                <text className="graph-empty-label" pointerEvents="none" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(PLOT_TOP + PLOT_BOTTOM) / 2} textAnchor="middle">{!modeQuery ? 'Select a game type.' : plot.points.length ? 'No days in this salience range.' : 'No analyzed games in this selection.'}</text>
+                <text className="graph-empty-label" pointerEvents="none" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(PLOT_TOP + PLOT_BOTTOM) / 2} textAnchor="middle">{!modeQuery ? 'Select a game type.' : plot.points.length ? fixedSalience ? 'No days in this salience band.' : 'No days in this salience range.' : 'No analyzed games in this selection.'}</text>
               )}
               {plot.xTicks.map((tick, index) => (
                 <text className="graph-axis-label measure-daily-x-tick" pointerEvents="none" x={tick.x} y={AXIS_Y} textAnchor={index === 0 ? 'start' : index === plot.xTicks.length - 1 ? 'end' : 'middle'} key={`daily-efficiency-x-${index}`}>{tick.label}</text>
@@ -371,7 +402,9 @@ export default function PlayerDailyEfficiencyChart({ availableModes, playerName,
               {highlightedBand ? <text className="daily-year-label" pointerEvents="none" x={(highlightedBand.left + highlightedBand.right) / 2} y={PLOT_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedBand.year}</text> : null}
             </svg>
           </div>
-          <DailySalienceRange range={salienceRange} scale={salienceScale} onChange={setSalienceRange} />
+          {fixedSalience ? <DailySalienceBands selected={salienceBand} snapshot={data.salience}
+            disabled={!selectionReady} onChange={setSalienceBand} />
+            : <DailySalienceRange range={salienceRange} scale={salienceScale} onChange={setSalienceRange} />}
         </div>
       ) : null}
     </section>

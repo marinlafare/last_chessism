@@ -783,8 +783,9 @@ class PlayerHeroAnalyticsTests(unittest.TestCase):
         self.assertNotIn("tablebase_winning", columns)
 
     def test_lichess_blunder_uses_winning_chance_loss_not_fixed_cp_loss(self):
-        self.assertTrue(player_hero_analytics.is_lichess_blunder(100, -100))
-        self.assertFalse(player_hero_analytics.is_lichess_blunder(50, -50))
+        from chessism_api.operations.research_algorithms.legacy_blunder_reference import is_lichess_blunder
+        self.assertTrue(is_lichess_blunder(100, -100))
+        self.assertFalse(is_lichess_blunder(50, -50))
 
     def test_lichess_winning_chances_are_symmetric_and_cap_at_1000_cp(self):
         positive = player_hero_analytics.lichess_winning_chances(250)
@@ -822,17 +823,18 @@ class PlayerHeroAnalyticsTests(unittest.TestCase):
             player_hero_efficiency.normalize_efficiency_modes("daily")
 
     def test_lichess_blunder_copies_forced_mate_boundaries(self):
+        from chessism_api.operations.research_algorithms.legacy_blunder_reference import is_lichess_blunder
         self.assertTrue(
-            player_hero_analytics.is_lichess_blunder(-700, -9_000, "cp", "mate")
+            is_lichess_blunder(-700, -9_000, "cp", "mate")
         )
         self.assertFalse(
-            player_hero_analytics.is_lichess_blunder(-701, -9_000, "cp", "mate")
+            is_lichess_blunder(-701, -9_000, "cp", "mate")
         )
         self.assertTrue(
-            player_hero_analytics.is_lichess_blunder(9_000, 700, "mate", "cp")
+            is_lichess_blunder(9_000, 700, "mate", "cp")
         )
         self.assertFalse(
-            player_hero_analytics.is_lichess_blunder(9_000, 701, "mate", "cp")
+            is_lichess_blunder(9_000, 701, "mate", "cp")
         )
 
     def test_activity_rows_can_be_aggregated_after_grouping_by_mode(self):
@@ -976,7 +978,7 @@ class TablebaseAnalysisTests(unittest.TestCase):
 
 class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_scoped_handoff_refreshes_ratings_even_without_a_solved_fen(self):
-        fake_tablebase = MagicMock()
+        fake_prober = SimpleNamespace(workers=1,probe=AsyncMock(return_value=([],[])),close=AsyncMock())
         candidates = MagicMock()
         candidates.discover = AsyncMock()
         candidates.count = 1
@@ -985,11 +987,8 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(tablebase, "CandidateSpool", return_value=candidates),
             patch.object(tablebase.os.path, "isdir", return_value=True),
-            patch.object(
-                tablebase.chess.syzygy,
-                "open_tablebase",
-                return_value=fake_tablebase,
-            ),
+            patch.object(tablebase, 'TablebaseProber', return_value=fake_prober),
+            patch.object(tablebase, '_read_tablebase_batch', AsyncMock(return_value=[])),
             patch.object(
                 tablebase,
                 "_lease_tablebase_batch",
@@ -1011,7 +1010,7 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["solved"], 0)
         refresh_rating.assert_awaited_once_with()
-        fake_tablebase.close.assert_called_once_with()
+        fake_prober.close.assert_awaited_once()
 
     async def test_failed_job_preserves_its_last_progress_counts(self):
         redis = MagicMock()
@@ -1021,6 +1020,7 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
             "failed": 12,
         }).encode("utf-8"))
         redis.set = AsyncMock()
+        redis.eval = AsyncMock(return_value=0)
 
         with (
             patch.object(
@@ -1040,6 +1040,7 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(progress_payload["total"], 1_575)
         self.assertEqual(progress_payload["processed"], 1_000)
         self.assertEqual(progress_payload["failed"], 12)
+        redis.eval.assert_awaited_once()
 
 
 class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
@@ -1386,9 +1387,9 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 tablebase,
-                "count_tablebase_candidates",
+                "has_tablebase_candidates",
                 new_callable=AsyncMock,
-                return_value=8,
+                return_value=True,
             ) as count_candidates,
             patch.object(tablebase, "_write_progress", new_callable=AsyncMock),
         ):
@@ -1403,7 +1404,7 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
             "run_tablebase_analysis_job",
             max_positions=None,
             batch_size=1_000,
-            candidate_count=8,
+            candidate_count=None,
             game_links=[11, 12],
             ingestion_run_id=None,
             _queue_name="pipeline_queue",

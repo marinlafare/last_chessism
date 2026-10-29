@@ -1,4 +1,4 @@
-"""Internal billing reader. No public port, Docker socket, DB login, or job loop."""
+"""Internal cloud readers. No public port, Docker socket, DB login, or job control."""
 import os
 from pathlib import Path
 import tempfile
@@ -8,9 +8,11 @@ import uvicorn
 
 from cloud_job.run_compose import prepare_credentials
 from .reader import BillingCache, BillingError
+from .uploads import UploadCache
 
 app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
 cache = BillingCache()
+uploads = UploadCache()
 
 
 @app.get('/health')
@@ -24,6 +26,14 @@ def billing():
         return cache.get()
     except BillingError as exc:
         raise HTTPException(503, str(exc)) from None
+
+
+@app.get('/upload-progress/{run_id}')
+def upload_progress(run_id: str):
+    try:
+        return uploads.get(run_id)
+    except ValueError:
+        raise HTTPException(400, 'Invalid run ID') from None
 
 
 def main():

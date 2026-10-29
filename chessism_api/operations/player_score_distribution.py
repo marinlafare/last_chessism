@@ -276,7 +276,10 @@ def histogram_is_fresh(payload, snapshot):
 async def get_distribution(player_name, redis, *, refresh=False):
     player, modes = normalize(player_name)
     from .player_stockfish_summary import enabled, read_saved
-    if enabled():
+    from .cuda_summaries.schema import enabled as manual_summaries
+    async with AsyncDBSession() as session:
+        manual = await manual_summaries(session)
+    if enabled() or manual:
         async with AsyncDBSession() as session:
             await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
             await session.execute(text("SET LOCAL statement_timeout='5s'"))
@@ -310,6 +313,11 @@ async def get_distribution(player_name, redis, *, refresh=False):
 
 
 async def calculate_distribution(player, modes, redis):
+    from .cuda_summaries.schema import enabled as manual_summaries
+    from .player_stockfish_summary import read_saved
+    async with AsyncDBSession() as session:
+        if await manual_summaries(session):
+            return await read_saved(session, player)
     async with read_slot(wait_seconds=120):
         async with AsyncDBSession() as session:
             await prepare(session)

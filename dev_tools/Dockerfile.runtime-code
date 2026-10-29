@@ -1,0 +1,6 @@
+# Code-only release on a locally verified dependency image. No package/driver
+# installation and no credentials/build-time service access. Pass a preserved
+# local release tag as BASE_IMAGE; never build from a tag being replaced.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY chessism_api/ /app/chessism_api/

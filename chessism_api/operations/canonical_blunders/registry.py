@@ -77,7 +77,12 @@ async def status(session):
     if not await installed(session, layout): return {'installed': False}
     t = lambda name: table(layout,name)
     row = dict((await session.execute(text(f'''SELECT c.*,m.source_run,m.config,m.evidence,m.approval,
-        (SELECT COUNT(*) FROM {t('dirty')}) AS pending_games
+        (SELECT COUNT(*) FROM (SELECT game_link FROM {t('dirty')}
+            UNION SELECT game_link FROM {layout.table('fen_summary_refresh')}) pending) AS pending_games,
+        (SELECT COUNT(*) FROM {layout.table('fen_summary_refresh')}) AS pending_input_refresh_games,
+        (SELECT COUNT(*) FROM {layout.table('fen_summary_refresh')} WHERE error IS NOT NULL) AS input_refresh_errors
         FROM {t('control')} c LEFT JOIN {t('model')} m ON m.id=c.target_model'''))).mappings().one())
     row['installed'] = True
+    from ..cuda_summaries.runs import status as manual_status
+    row['manual_summaries'] = await manual_status(session)
     return row

@@ -30,6 +30,8 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
     row_type = ROW_TYPES[normalized["row_type"]]
     cap = normalized["filters"]["max_rows"]
     all_moves = bool((normalized.get('move_scores') or {}).get('all_moves'))
+    whole_games = normalized['row_type'] == 'accuracy_positions'
+    sample_limit = min(limit, cap) if cap is not None else limit
     # Select a tiny ordered prefix BEFORE optional expensive enrichment joins.
     # There is intentionally no total-count query or unbounded OFFSET paging.
     selected_config = {
@@ -41,9 +43,9 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         from .move_scores import score_matrix_sql
         _, select_sql, params = score_matrix_sql(selected_config, sample_all_moves=True)
     else:
-        _, select_sql, params = matrix_sql(selected_config)
-    sample_limit = min(limit, cap) if cap is not None else limit
-    params["max_rows"] = min(sample_limit + 1, cap) if cap is not None else sample_limit + 1
+        _, select_sql, params = matrix_sql(selected_config, preview_rows=sample_limit + 1 if whole_games else None)
+    if not whole_games:
+        params["max_rows"] = min(sample_limit + 1, cap) if cap is not None else sample_limit + 1
     async with AsyncDBSession() as session:
         await session.execute(text("SET TRANSACTION READ ONLY"))
         await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
@@ -73,6 +75,7 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         "total_rows": len(rows), "total_rows_is_sample": True,
         "more_matching_rows": more_matching_rows, "row_limit": cap,
         "column_scope": "sample_moves" if all_moves else "fixed",
+        **({'selection_unit': 'whole_games', 'display_may_truncate_game': True} if whole_games else {}),
         "has_more": False, "slice_count": 1, "slice_index": 0,
         "columns": columns, "rows": rows,
         "row_keys": [str(record["row_key"]) for record in records[:sample_limit]],

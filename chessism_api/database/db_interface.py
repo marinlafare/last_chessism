@@ -1,6 +1,6 @@
 from typing import Any, List, Dict, TypeVar
 
-from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData
+from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData, column, values, cast, null
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.engine import AsyncDBSession
@@ -275,79 +275,36 @@ class DBInterface:
     # --- END NEW METHOD ---
 
 
-    async def update_fen_analysis_data(self,
-                                            session: AsyncSession, # <-- MODIFIED: Use existing session
-                                            analysis_data: ListOfDataObjects) -> int:
-        """
-        Updates 'score' and 'next_moves' for existing Fen records in a bulk operation
-        using an EXISTING session (for transactional safety with FOR UPDATE).
-        
-        Args:
-            session: The active AsyncSession holding the row locks.
-            analysis_data: List of dicts, each with 'fen', 'score', 'next_moves'.
-        
-        Returns:
-            The number of rows updated.
+    async def update_fen_analysis_data(self, session: AsyncSession,
+                                     analysis_data: ListOfDataObjects) -> int:
+        """Bounded set-based writes; caller owns row locks and the transaction.
+
+        Executemany would fire the statement-level summary trigger for every
+        FEN. UPDATE FROM VALUES fires it once per batch, deduplicating affected
+        games before queue writes. Never commit, round scores, or hide failures.
         """
         if not analysis_data:
-            print("No analysis data provided for update.", flush=True)
             return 0
-            
-        # We do not use a 'with' block here, as the session is managed by the caller
-        try:
-            prepared_data = []
-            layout = compact_for(session)
-            for item in analysis_data:
-                if layout:
-                    item = integer_result(item)
-                prepared_data.append({
-                    'p_fen': item['fen'],
-                    'p_piece_count': item.get('piece_count'),
-                    'p_score': item['score'],
-                    'p_next_moves': item['next_moves'],
-                    'p_wdl_win': item.get('wdl_win'),
-                    'p_wdl_draw': item.get('wdl_draw'),
-                    'p_wdl_loss': item.get('wdl_loss')
-                })
-
-            # --- THE CORE FIX ---
-            # Use self.db_class.__table__ (Core) instead of self.db_class (ORM)
-            # to ensure compatibility with bulk parameter binding.
-            target = compact_table(Fen, layout.core) if layout else Fen.__table__
-            stmt = (
-                update(target)
-                .where(target.c.fen == bindparam('p_fen'))
-                .values(
-                    piece_count=func.coalesce(
-                        target.c.piece_count,
-                        bindparam('p_piece_count'),
-                    ),
-                    score=bindparam('p_score'),
-                    next_moves=bindparam('p_next_moves'),
-                    wdl_win=bindparam('p_wdl_win'),
-                    wdl_draw=bindparam('p_wdl_draw'),
-                    wdl_loss=bindparam('p_wdl_loss'),
-                    analysis_source='stockfish',
-                    tablebase_wdl=None,
-                    tablebase_dtz=None,
-                    analyzed_at=func.now(),
-                )
-            )
-            
-            await session.execute(
-                stmt,
-                prepared_data,
-                execution_options={"synchronize_session": False}
-            )
-            
-            # --- COSMETIC FIX for -1 rowcount ---
-            total_updated_rows = len(analysis_data)
-            
-            print(f"Successfully staged {total_updated_rows} FEN updates for analysis data (pending commit).", flush=True)
-            
-            # DO NOT COMMIT HERE. The caller (run_analysis_job) will commit.
-            return total_updated_rows
-        except Exception as e:
-            # DO NOT ROLL BACK HERE. The caller will roll back.
-            print(f"An error occurred during bulk update of FEN analysis data: {e}", flush=True)
-            raise
+        from chessism_api.evaluations import validate_batch
+        validate_batch(analysis_data, source='stockfish')
+        layout = compact_for(session)
+        target = compact_table(Fen, layout.core) if layout else Fen.__table__
+        fields = ('fen', 'piece_count', 'score', 'next_moves', 'wdl_win', 'wdl_draw', 'wdl_loss')
+        prepared = [integer_result(row) if layout else row for row in analysis_data]
+        updated = 0
+        for start in range(0, len(prepared), 1000):
+            batch = prepared[start:start+1000]
+            # PostgreSQL otherwise resolves an all-NULL VALUES column as text.
+            payload = [tuple(cast(null(), target.c[name].type) if row.get(name) is None else row[name]
+                             for name in fields) for row in batch]
+            incoming = values(*(column(name, target.c[name].type) for name in fields),
+                              name='evaluation_input').data(payload)
+            statement = update(target).where(target.c.fen == incoming.c.fen).values(
+                piece_count=func.coalesce(target.c.piece_count, incoming.c.piece_count),
+                **{name: incoming.c[name] for name in fields[2:]},
+                analysis_source='stockfish', tablebase_wdl=None, tablebase_dtz=None, analyzed_at=func.now())
+            result = await session.execute(statement, execution_options={'synchronize_session': False})
+            if result.rowcount != len(batch):
+                raise ValueError('Not every evaluation matched a stored FEN; refusing a partial batch')
+            updated += result.rowcount
+        return updated

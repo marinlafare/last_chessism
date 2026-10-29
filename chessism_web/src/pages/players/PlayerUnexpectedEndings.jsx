@@ -75,7 +75,11 @@ function EndingsContent({ playerName }) {
     {request.error ? <p className="player-analysis-error" role="alert">{request.error}{' '}
       <button {...pageStyleTarget(`${STYLE}.action`)} type="button" onClick={() => setRetry(value => value + 1)}>Retry</button>
     </p> : null}
-    {data ? <UnexpectedEndingsCharts data={data} modes={modes} disabled={request.loading} onSelect={setSelection} /> : null}
+    {data?.stale && <p {...pageStyleTarget(`${STYLE}.text`)} role="status">
+      {data.summary_pending ? 'Not calculated yet.' : 'Update pending; previous summaries are shown.'}
+      {' '}A superuser can run CUDA summaries from Analyze Positions.
+    </p>}
+    {data && !data.summary_pending ? <UnexpectedEndingsCharts data={data} modes={modes} disabled={request.loading} onSelect={setSelection} /> : null}
     {!reviewGameId ? <PlayerGameExplorerModal playerName={playerName} selection={selection}
       onClose={() => setSelection(null)} onOpenGame={setReviewGameId} /> : null}
     <PlayerGameReviewModal gameId={reviewGameId} playerName={playerName} onBack={() => setReviewGameId(null)}

@@ -59,6 +59,7 @@ window.fetch = async (input, options = {}) => {
       result: { white: 1, black: 0, white_reason: 'win', black_reason: 'resigned' } },
     player_summaries: [{ player_name: 'WhitePlayer', accuracy: 92, blunder_count: 1 },
       { player_name: 'BlackPlayer', accuracy: 58, blunder_count: 3 }], moves,
+    ...(state.coverage ? { blunder_coverage: state.coverage, blunder_annotations_pending: !!state.pending } : {}),
   }), { headers: { 'Content-Type': 'application/json' } })
   state.unexpected.push(pathname)
   throw Error('No live access allowed: ' + pathname)

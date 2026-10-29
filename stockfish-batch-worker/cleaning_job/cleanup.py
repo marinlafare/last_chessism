@@ -2,7 +2,6 @@
 
 from datetime import datetime, timezone
 import hashlib
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 import json
 import os
@@ -13,6 +12,7 @@ import time
 from .cloud import BUCKET, Cloud, CleanupError, PROJECT, PROJECT_NUMBER, REGION, REPOSITORY
 from . import images as image_cleanup
 from .parallel import read_parallel
+from .deletion import remove_objects, notify
 
 OUT = Path(__file__).resolve().parents[1] / "out" / "cleaning_job"
 TERMINAL = {"SUCCEEDED", "FAILED", "CANCELLED"}
@@ -303,6 +303,7 @@ def apply(cloud, plan, *, wait_seconds=60, timings=None):
             lambda: check_bucket(cloud) if plan['prefixes'] else None,
             lambda: check_inventory(cloud, plan), lambda: image_cleanup.remaining(cloud, plan))
     with measure('cleanup_batch_compute'):
+        notify(timings, plan, 'compute')
         # Fresh UID/state/path check immediately before job deletion, not a cached
         # result from the preceding independent inventory reads.
         for target, state in current_jobs(cloud, plan):
@@ -323,12 +324,9 @@ def apply(cloud, plan, *, wait_seconds=60, timings=None):
         # A retry may have been submitted during cleanup. Check again before files.
         _, _, objects = read_parallel(lambda: check_other_jobs(cloud, plan),
             lambda: check_bucket(cloud) if plan['prefixes'] else None, lambda: check_inventory(cloud, plan))
-        # Exact, generation-pinned targets only. At most eight requests/futures;
-        # drain in-flight deletes on error before preserving the resumable plan.
-        with ThreadPoolExecutor(max_workers=8) as pool:
-            for offset in range(0, len(objects), 8):
-                list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
+        remove_objects(cloud, plan, objects, timings=timings)
     with measure('cleanup_image'):
+        notify(timings, plan, 'image')
         # Images come last, after all temporary data and job compute are gone.
         report = verify(cloud, plan)
         if report["remaining_jobs"] or report["remaining_compute"] or report["remaining_object_versions"]:

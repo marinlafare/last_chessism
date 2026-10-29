@@ -7,8 +7,9 @@ from chessism_api.database.relational_storage import storage_for
 from ..research_algorithms.blunder_training import game_blocks,positions_sql
 from . import compute
 from .schema import table
+from .eligibility import moving_owners
 
-MAX_GAMES = 8192
+MAX_GAMES = 32768
 MAX_ROWS = 2097152
 
 
@@ -34,8 +35,9 @@ async def load(session, report=lambda *a:None, *, selected_items=None, timings=N
     if not model_id: return None
     config=await session.scalar(text(f'SELECT config FROM {t("model")} WHERE id=:id'),{'id':model_id})
     if selected_items is None:
-        dirty=[dict(r) for r in (await session.execute(text(f'''SELECT game_link,revision FROM {t('dirty')}
-            ORDER BY game_link LIMIT :limit'''),{'limit':MAX_GAMES})).mappings()]
+        dirty=[dict(r) for r in (await session.execute(text(f'''SELECT d.game_link,d.revision FROM {t('dirty')} d
+            WHERE NOT EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} r WHERE r.game_link=d.game_link)
+            ORDER BY d.game_link LIMIT :limit'''),{'limit':MAX_GAMES})).mappings()]
     else:
         dirty=[dict(r) for r in selected_items]
         if len(dirty)>MAX_GAMES or len({r['game_link'] for r in dirty})!=len(dirty):
@@ -55,7 +57,7 @@ async def load(session, report=lambda *a:None, *, selected_items=None, timings=N
     add('source_queries_seconds',started); started=time.perf_counter()
     by_id={g['game_link']:g for g in data}; accepted=[]; unsupported=[]; taken=[]; total=0
     for item in dirty:
-        g=by_id.get(item['game_link'])
+        g=moving_owners(by_id.get(item['game_link']))
         eligible=bool(g and g['analyzed'] and (g['total_positions'] or 0)>0 and g['mode'] in ('bullet','blitz','rapid')
             and (g['white_owner'] or g['black_owner']) and all(isinstance(g[k],int) and 1<=g[k]<=4000 for k in ('white_elo','black_elo')))
         if eligible and accepted and total+g['total_positions']>MAX_ROWS: break

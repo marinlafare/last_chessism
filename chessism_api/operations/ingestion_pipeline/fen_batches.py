@@ -6,7 +6,7 @@ import random
 from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.ask_db import refresh_game_analysis_summary, refresh_fen_pipeline_summary
 from .fen_bulk import persist_positions
-from .fen_core import process_single_game_sync, aggregate_fen_data
+from .fen_core import process_single_game_sync, aggregate_fen_data, count_expected_fen_positions
 from .fen_repository import (
     claim_games_needing_fens, read_moves_for_games, set_game_fen_state,
     finalize_fen_game_states, release_fen_processing_claims,
@@ -16,9 +16,20 @@ from .steps import StepReporter
 from .timing import start_ingestion_stage, finish_ingestion_stage
 
 BATCH_GAMES = 300
+BATCH_POSITIONS = 30_000
 MAX_BATCH_ATTEMPTS = 4
 RETRYABLE_SQLSTATES = {"40P01", "40001"}  # Deadlock / serialization rollback.
 logger = logging.getLogger(__name__)
+
+
+def bounded_game_prefix(links, moves, max_positions=BATCH_POSITIONS):
+    """Bound replay/write buffers by work, without splitting or dropping a game."""
+    selected, positions = [], 0
+    for link in links:
+        count = count_expected_fen_positions(moves.get(link, []))
+        if selected and positions + count > max_positions: break
+        selected.append(link); positions += count
+    return selected
 
 
 def _retryable_transaction_error(error):
@@ -49,6 +60,9 @@ async def _commit_batch(limit, reporter):
                 if not links:
                     return None
                 moves = await read_moves_for_games(session, links)
+                # Unselected claims are just row locks, released at commit;
+                # they are not marked processing and remain available next time.
+                links = bounded_game_prefix(links, moves)
                 good, bad, associations = [], [], []
                 async with reporter.step("extract_positions", len(links), "games"):
                     for link in links:

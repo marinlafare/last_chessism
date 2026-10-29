@@ -214,6 +214,18 @@ class CloudSequenceControl(Base):
     stop_acknowledged = Column(Boolean, nullable=False, default=False)
 
 
+class CloudCleanupProgress(Base):
+    """Observed progress only; never authorizes deletion or replaces inventory."""
+    __tablename__ = 'cloud_cleanup_progress'
+    job_id = Column(String(32), ForeignKey('cloud_analysis_job.id'), primary_key=True)
+    plan_sha256 = Column(String(64), primary_key=True)
+    phase = Column(String(24), nullable=False)
+    total = Column(Integer, nullable=False)
+    removed = Column(Integer)
+    updated_at = Column(DateTime(timezone=True), nullable=False)
+    __table_args__ = (CheckConstraint('total >= 0 AND (removed IS NULL OR (removed >= 0 AND removed <= total))'),)
+
+
 class CloudPhaseTiming(Base):
     __tablename__ = 'cloud_phase_timing'
     id = Column(BigInteger, primary_key=True, autoincrement=True)

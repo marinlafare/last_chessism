@@ -19,7 +19,9 @@ def validate_manifest(manifest, positions, contract, receipts):
     records = [record for name in sorted(receipts) for record in receipts[name]["records"]]
     expected = {"status": "complete", "fingerprint": contract["fingerprint"],
                 "position_count": len(positions), "records": records}
-    if [row["id"] for row in positions] != [row["id"] for row in records] or manifest != expected:
+    if (len(positions) != len(records)
+            or any(position['id'] != record['id'] for position, record in zip(positions, records))
+            or manifest != expected):
         raise ValueError("Final manifest does not exactly match committed input IDs and result hashes")
 
 
@@ -89,15 +91,8 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
         formatted, continuations = _format_engine_results(results)
         if len(formatted) != len(fens):
             raise ValueError("Not every downloaded result can be persisted")
-        await stage_fen_results(session, formatted, continuations, fen_ids={row.fen: row.fen_id for row in rows})
-        # Same counters as the local writer, but atomic with the cloud receipt.
-        await session.execute(text("""
-            UPDATE database_summary SET analyzed_fens = analyzed_fens + :count,
-              unscored_fens = GREATEST(unscored_fens - :count, 0),
-              scored_fens = scored_fens + :nonzero,
-              nonzero_scored_fens = nonzero_scored_fens + :nonzero,
-              refreshed_at = CURRENT_TIMESTAMP WHERE id = 1
-        """), {"count": len(formatted), "nonzero": sum(row["score"] != 0 for row in formatted)})
+        await stage_fen_results(session, formatted, continuations,
+            fen_ids={row.fen: row.fen_id for row in rows}, count_new=True)
         await session.execute(delete(CloudFenClaim).where(
             CloudFenClaim.run_id == run.id, CloudFenClaim.fen.in_(fens)))
         await session.execute(update(CloudAnalysisJob).where(CloudAnalysisJob.id == run.job_id)

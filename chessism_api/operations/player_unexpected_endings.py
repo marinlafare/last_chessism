@@ -157,6 +157,9 @@ async def get_unexpected_endings(player_name, redis, *, threshold_cp=200):
     async with read_slot(), AsyncDBSession() as session:
         await prepare(session)
         scope = await _analytics_scope(session, player_name)
+        from .cuda_summaries.metadata_reader import saved_endings
+        saved=await saved_endings(session,scope.player)
+        if saved is not None:return saved
         key = 'chessism:unexpected-endings:v2:' + hashlib.sha256(
             json.dumps([scope.player, threshold_cp]).encode()).hexdigest()
         try:
@@ -183,8 +186,17 @@ async def get_unexpected_endings(player_name, redis, *, threshold_cp=200):
     by_mode = {mode: {ending: dict.fromkeys(COUNTS, 0) for ending in ENDINGS} for mode in MODES}
     for row in rows:
         by_mode[row['mode']][row['ending']] = {key: int(row[key]) for key in COUNTS}
-    payload = {
-        'version': 2, 'player_name': scope.player, 'threshold_cp': threshold_cp,
+    payload=ending_payload(scope.player,by_mode)
+    try:
+        await redis.set(key, json.dumps(payload), ex=CACHE_SECONDS)
+    except RedisError:
+        LOG.warning('Could not cache unexpected endings.')
+    return payload
+
+
+def ending_payload(player,by_mode):
+    return {
+        'version': 2, 'player_name': player, 'threshold_cp': THRESHOLD_CP,
         'score_perspective': 'player', 'score_source': 'final_recorded_position',
         'percentage_denominator': 'assessable_games_with_this_result_and_ending',
         'special_scores': 'mate_and_tablebase_excluded', 'fully_analyzed_only': False,
@@ -198,11 +210,6 @@ async def get_unexpected_endings(player_name, redis, *, threshold_cp=200):
         'by_mode': by_mode, 'generated_at': datetime.now(timezone.utc).isoformat(),
         'cache_hit': False, 'max_age_seconds': CACHE_SECONDS,
     }
-    try:
-        await redis.set(key, json.dumps(payload), ex=CACHE_SECONDS)
-    except RedisError:
-        LOG.warning('Could not cache unexpected endings.')
-    return payload
 
 
 async def explore_unexpected_endings(player_name, *, modes, ending, threshold_cp,

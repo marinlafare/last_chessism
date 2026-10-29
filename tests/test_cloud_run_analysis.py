@@ -9,12 +9,13 @@ from unittest.mock import AsyncMock, Mock, patch
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 from chessism_api.operations.cloud_analysis import controller, importer
 from chessism_api.operations.cloud_analysis import cloud_run_controller as run_controller
-from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
+from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, MAX_CLOUD_RUN_FENS, MAX_CLOUD_RUN_CPUS
 from cloud_job import cloud_run as api
 from cloud_job.launch import expected_contract
 from cleaning_job.cloud import CleanupError, REPOSITORY
 from stockfish_batch.checkpoints import BatchCheckpoints, encode
 from stockfish_batch.cloud_run_task import task_config
+from stockfish_batch.cloud_run_limits import MAX_TASK_COUNT
 from stockfish_core import ENGINE_SHA256
 
 RUN_ID = "a" * 32
@@ -35,23 +36,55 @@ def fixture():
 class PlanningTests(unittest.TestCase):
     def test_backend_and_cpu_validation(self):
         self.assertEqual(CloudJobRequest().backend, "batch_spot")
-        for cpus in (1, 4, 64, 65, 100):
+        self.assertEqual(MAX_CLOUD_RUN_CPUS, 200)
+        self.assertEqual(api.MAX_PARALLEL_CPUS, MAX_CLOUD_RUN_CPUS)
+        for cpus in (1, 4, 64, 65, 100, 101, 200):
             self.assertEqual(CloudJobRequest(backend="cloud_run", n_cpus=cpus).n_cpus, cpus)
-        for value in (0, 101, 2.5, "4", True):
+        for value in (0, 201, 2.5, "4", True):
             with self.assertRaises(ValueError):
                 CloudJobRequest(backend="cloud_run", n_cpus=value)
         with self.assertRaises(ValueError):
             CloudJobRequest(backend="anything")
 
     def test_shards_cover_selection_once_with_bounded_memory(self):
-        for count in (1, 20, 499, 500, 501, 2082, 25000, 200000):
-            for cpus in (1, 4, 16, 64, 100):
+        self.assertEqual(MAX_CLOUD_RUN_FENS, 6_000_000)
+        self.assertEqual(api.MAX_SELECTION_FENS, MAX_CLOUD_RUN_FENS)
+        for count in (1, 20, 499, 500, 501, 2082, 25000, 200000, 200001, 3700000, 3760444, 6000000):
+            for cpus in (1, 4, 16, 64, 100, 101, 200):
                 parts = api.partitions(count, cpus)
-                self.assertLessEqual(len(parts), 400)
-                self.assertEqual([i for start, size in parts for i in range(start, start + size)], list(range(count)))
+                self.assertLessEqual(len(parts), 1200)
+                self.assertEqual(parts[0][0], 0)
+                self.assertEqual(sum(size for _, size in parts), count)
+                self.assertTrue(all(start + size == following[0]
+                                    for (start, size), following in zip(parts, parts[1:])))
+                self.assertEqual(sum(parts[-1]), count)
                 self.assertTrue(all(start % 500 == 0 and 1 <= size <= 5000 for start, size in parts))
-        for args in ((0, 1), (200001, 1), (1, 0), (1, 101)):
+                # Validate the real worker adapter for EVERY planned task, not
+                # just the planner's counts or a two-task fixture.
+                config = api.config_for(RUN_ID, max(size for _, size in parts))
+                paths = set()
+                for index in range(len(parts)):
+                    chosen = api.task_config(config, index, len(parts))
+                    self.assertEqual(chosen, task_config(config, {
+                        'CLOUD_RUN_TASK_INDEX': str(index), 'CLOUD_RUN_TASK_COUNT': str(len(parts))}))
+                    self.assertTrue(chosen.input.endswith(f'/tasks/{index:06d}/input.jsonl'))
+                    paths.add(chosen.input)
+                self.assertEqual(len(paths), len(parts))
+        for args in ((0, 1), (6000001, 1), (1, 0), (1, 201), (1, True), (1, '200'), (True, 1), (1.5, 1), ('1000', 1)):
             with self.assertRaises(ValueError): api.partitions(*args)
+
+    def test_selection_limit_for_all_player_and_legacy_loop_requests(self):
+        for count in (200001, 3700000, 6000000):
+            for mode in ('all', 'player'):
+                self.assertEqual(CloudJobRequest(backend='cloud_run', mode=mode,
+                    player_name='example', total_fens=count).target, count)
+        self.assertEqual(CloudJobRequest(backend='cloud_run', mode='loop',
+            positions_per_run=1000, runs=6000).target, 6000000)
+        for mode in ('all', 'player'):
+            with self.assertRaisesRegex(ValueError, '6,000,000'):
+                CloudJobRequest(backend='cloud_run', mode=mode, player_name='example', total_fens=6000001)
+        with self.assertRaisesRegex(ValueError, '6,000,000'):
+            CloudJobRequest(backend='cloud_run', mode='loop', positions_per_run=1000, runs=6001)
 
     def test_fixed_single_core_profile_and_task_paths(self):
         config = api.config_for(RUN_ID, 500)
@@ -59,6 +92,8 @@ class PlanningTests(unittest.TestCase):
         self.assertEqual((config.run_timeout, config.stall_timeout), (0, 300))
         spec = api.spec_for(RUN_ID, config, IMAGE, 2, 4)["template"]
         self.assertEqual((spec["taskCount"], spec["parallelism"]), (2, 2))
+        large = api.spec_for(RUN_ID, config, IMAGE, 1200, 200)['template']
+        self.assertEqual((large['taskCount'], large['parallelism']), (1200, 200))
         template = spec["template"]
         self.assertEqual((template["maxRetries"], template["timeout"]), (1, "604800s"))
         self.assertEqual(template["containers"][0]["resources"]["limits"], {"cpu": "1", "memory": "1Gi"})
@@ -69,13 +104,30 @@ class PlanningTests(unittest.TestCase):
             with self.assertRaises(ValueError): api.task_config(config, index, 2)
         with self.assertRaises(ValueError): task_config(config, {})
 
+    def test_worker_task_count_boundary_and_legacy_compatibility(self):
+        config = api.config_for(RUN_ID, 5000)
+        self.assertEqual(MAX_TASK_COUNT, 1200)
+        for count in (1, 400, 401, 753, 1200):
+            for index in (0, count - 1):
+                chosen = api.task_config(config, index, count)
+                self.assertTrue(chosen.output.endswith(f'/tasks/{index:06d}'))
+        for index, count in ((0, 0), (-1, 753), (753, 753), (1200, 1200), (0, 1201)):
+            with self.assertRaises(ValueError): api.task_config(config, index, count)
+        for count in (0, 1201, True, '753'):
+            with self.assertRaises(ValueError): api.spec_for(RUN_ID, config, IMAGE, count, 200)
+        for cpus in (0, 201, True, '200'):
+            with self.assertRaises(ValueError): api.spec_for(RUN_ID, config, IMAGE, 753, cpus)
+
     def test_quota_requires_both_metrics_in_correct_region(self):
         cloud = Mock()
         def metric(name, limit, region="us-central1"):
             return {"metric": "run.googleapis.com/" + name, "consumerQuotaLimits": [
                 {"quotaBuckets": [{"dimensions": {"region": region}, "effectiveLimit": str(limit)}]}]}
         cloud.pages.return_value = [{"metrics": [metric("cpu_allocation", 200000), metric("mem_allocation", 400 * 1024**3)]}]
-        self.assertEqual(api.check_quota(cloud, 100)["cpu"], 200000)
+        self.assertEqual(api.check_quota(cloud, 200)["cpu"], 200000)
+        for cpu, memory in ((199999, 400 * 1024**3), (200000, 199 * 1024**3)):
+            cloud.pages.return_value = [{'metrics': [metric('cpu_allocation', cpu), metric('mem_allocation', memory)]}]
+            with self.assertRaises(CleanupError): api.check_quota(cloud, 200)
         for metrics in ([metric("cpu_allocation", 200000)],
                         [metric("cpu_allocation", 1000), metric("mem_allocation", 400 * 1024**3)],
                         [metric("cpu_allocation", 200000), metric("mem_allocation", 1024**3)],

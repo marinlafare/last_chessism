@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { cloudJobProgress, cloudStepProgress } from './cloudJobProgress'
 
 export default function CloudJobSteps({ job, controllerOnline = true }) {
@@ -17,14 +18,12 @@ export default function CloudJobSteps({ job, controllerOnline = true }) {
       <span {...pageStyleTarget(`cloud.step.${state}.name`)} className="cloud-job-badge cloud-step-name">{title}</span>
       <small {...pageStyleTarget(`cloud.step.${state}.status`)} className="cloud-step-status">{status}</small>
       <div className="cloud-step-meter">
-        <div {...pageStyleTarget(`cloud.step.progress.${id}`)}
+        <ProgressMeter {...pageStyleTarget(`cloud.step.progress.${id}`)}
           className={`cloud-step-bar${indeterminate ? ' is-indeterminate' : ''}${active ? ' is-active' : ''}`}
-          role="progressbar" aria-label={title} aria-valuemin={0} aria-valuemax={100}
-          aria-valuenow={progress.value ?? undefined} aria-valuetext={`${status} — ${progress.detail}`}
-          title={indeterminate ? `${status}. This step does not report a completion percentage.` : progress.detail}>
-          <span className="cloud-step-bar-fill" aria-hidden="true" style={{ width: indeterminate ? '30%' : `${progress.value}%` }} />
-        </div>
-        {(state === 'current' || state === 'attention') && !indeterminate && <small
+          value={progress.value} aria-label={title} aria-valuetext={`${status} — ${progress.detail}`}
+          fillTag="span" fillClassName="cloud-step-bar-fill" indeterminateWidth={30}
+          title={indeterminate ? `${status}. This step does not report a completion percentage.` : progress.detail} />
+        {(state === 'current' || state === 'attention') && (!indeterminate || progress.showDetail) && <small
           {...pageStyleTarget(`cloud.step.${state}.detail`)} className="cloud-step-detail">{progress.detail}</small>}
       </div>
     </li>})}

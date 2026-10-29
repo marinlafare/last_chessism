@@ -25,7 +25,8 @@ count or preview request.
 ### Built-in defaults versus custom formulas
 
 The algorithm input browser's collapsed **Default** section shows formulas
-from `defaults.py`. It currently contains **Game move scores**. Built-ins are
+from `defaults.py`, including **Game move scores**, score distribution, blunder
+inputs, and **Accuracy — ordered game evaluations, v1**. Built-ins are
 versioned code-owned templates, not auto-created database rows; they cannot be
 edited or deleted through definition endpoints. They require per-use parameters
 and use the same bounded preview implementation as user-created templates.
@@ -42,6 +43,30 @@ and `builtin_version` values. `POST /research/matrices/defaults/{key}/preview`
 accepts the same `MatrixParameters` body and `limit`/`role` query options as a
 saved-template preview. Both inherit the existing superuser authorization. No
 default dataset is generated simply by expanding the Default section.
+
+#### Accuracy input v1 (review only)
+
+The constructor's Default matrices section exposes `default:accuracy` with four
+columns: `game` (dictionary-encoded identity), `ply` (int32), `score` (float64),
+and `score_kind` (category). Game/ply are structural keys. Each fully scored game
+appears once, including when both tracked participants are selected. All White
+and Black plies remain in order, scores stay in White's perspective, and repeated
+positions remain separate occurrences. Eligible owners have `joined > 0` and
+are not deleted. Modes are bullet, blitz and rapid; runtime filters restrict the
+population without changing the formula.
+
+Coverage flags are checked against actual scores and contiguous unique plies;
+incomplete or inconsistent games are excluded whole. A runtime row budget rounds
+down to a prefix of whole games. Only the bounded preview display can truncate
+that sequence. Score kinds use the shared verified evaluation contract:
+`cp`, `mate`, `tablebase`, or `unknown`; missing provenance is not invented and
+unknown scored evaluations remain visible for review.
+
+The +15 CP starting evaluation belongs to the future algorithm configuration,
+not a repeated input column. Per-game ownership/date/mode metadata and the shared
+GPU extraction stage are separate future work. This formula does not calculate
+accuracy, queue GPU work, change summaries, or replace the current CPU accuracy
+implementation. Loading its metadata never reads chess records.
 
 ### Custom and foreign collections; retired snapshots
 

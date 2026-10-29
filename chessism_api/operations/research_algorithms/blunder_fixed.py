@@ -35,11 +35,11 @@ def kernel(xp, before, after, before_kind, after_kind):
 
 
 def reference(batch):
-    # Use the actual scalar production function, independently of CUDA arithmetic.
-    from ..player_game_scores import (is_lichess_blunder, LICHESS_WINNING_CHANCE_MULTIPLIER,
-                                     LICHESS_BLUNDER_THRESHOLD, LICHESS_CP_CEILING)
+    # Frozen historical oracle, not a production calculation or fallback.
+    from .legacy_blunder_reference import is_lichess_blunder, LICHESS_BLUNDER_THRESHOLD
+    from ..player_game_scores import LICHESS_WINNING_CHANCE_MULTIPLIER, LICHESS_CP_CEILING
     if (abs(LICHESS_WINNING_CHANCE_MULTIPLIER), LICHESS_BLUNDER_THRESHOLD, LICHESS_CP_CEILING) != (COEFFICIENT, 2*THRESHOLD, 1000):
-        raise ValueError('The production rule changed; create a new candidate version.')
+        raise ValueError('The historical reference changed; create a new candidate version.')
     kinds = {0: 'cp', 1: 'mate'}
     return np.array([int(is_lichess_blunder(float(row['before']), float(row['after']),
                      kinds[int(row['before_kind'])], kinds[int(row['after_kind'])]))

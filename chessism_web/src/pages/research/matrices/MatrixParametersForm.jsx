@@ -4,9 +4,10 @@ import { pageStyleTarget } from '../../../appearance/styleCore.js'
 // These are per-use choices, never modifications to the saved formula.
 export default function MatrixParametersForm({ definition, catalog, onApply, onDirty, disabled = false }) {
   const isScores = definition.row_type === 'move_scores'
+  const isAccuracy = definition.row_type === 'accuracy_positions'
   const scoredDistribution = definition.row_type === 'score_distribution' && definition.config.summary_input_version >= 2
   const [filters, setFilters] = useState({ players: '', modes: ['bullet', 'blitz', 'rapid'],
-    date_from: '', date_to: '', min_moves: 0, max_rows: null, analyzed_only: isScores || scoredDistribution })
+    date_from: '', date_to: '', min_moves: 0, max_rows: null, analyzed_only: isScores || scoredDistribution || isAccuracy })
   const [moves, setMoves] = useState({ all_moves: true, first_move: 1, last_move: 40, score_perspective: 'player' })
   const rowType = catalog?.row_types.find((row) => row.key === definition.row_type)
   const capabilities = rowType?.filters || {}
@@ -68,10 +69,10 @@ export default function MatrixParametersForm({ definition, catalog, onApply, onD
         <div className="matrix-filter-actions">
           {['bullet', 'blitz', 'rapid'].map((mode) => <button {...pageStyleTarget('button')} className={filters.modes.includes(mode) ? 'active' : ''} type="button" key={mode} disabled={!capabilities.modes}
             onClick={() => updateFilter('modes', filters.modes.includes(mode) ? filters.modes.filter((item) => item !== mode) : [...filters.modes, mode])}>{mode}</button>)}
-          <label {...pageStyleTarget('label')}><input {...pageStyleTarget('field')} type="checkbox" checked={scoredDistribution || filters.analyzed_only} disabled={scoredDistribution || !capabilities.analyzed_only} onChange={(event) => updateFilter('analyzed_only', event.target.checked)} />{scoredDistribution ? 'Scored positions only' : isScores ? moves.all_moves ? 'Fully scored games' : 'Fully scored games + complete selected range' : 'Analyzed only'}</label>
+          <label {...pageStyleTarget('label')}><input {...pageStyleTarget('field')} type="checkbox" checked={isAccuracy || scoredDistribution || filters.analyzed_only} disabled={isAccuracy || scoredDistribution || !capabilities.analyzed_only} onChange={(event) => updateFilter('analyzed_only', event.target.checked)} />{isAccuracy ? 'Fully scored games · required' : scoredDistribution ? 'Scored positions only' : isScores ? moves.all_moves ? 'Fully scored games' : 'Fully scored games + complete selected range' : 'Analyzed only'}</label>
         </div>
         {isScores ? <p {...pageStyleTarget('text')} className="matrix-sources">One row per player/game; selecting both participants produces two rows. With all moves, shorter games remain eligible and have N/A after their final move. Scores are in centipawns; stored mate encodings are not ordinary centipawn values.</p> : null}
-        <p {...pageStyleTarget('text')} className="matrix-sources">Applying only sets this algorithm’s input instructions. Preview and calculation are separate actions. The current CPU runner requires a fixed move range and an explicit row limit; all-moves and unlimited-row selections are preview-only.</p>
+        {isAccuracy ? <p {...pageStyleTarget('text')} className="matrix-sources">Each game appears once, with every move in order and scores from White’s perspective. The output row budget rounds down to whole games; a preview may show only an excerpt. Applying sets input instructions only. The CUDA accuracy algorithm is not implemented yet.</p> : <p {...pageStyleTarget('text')} className="matrix-sources">Applying only sets this algorithm’s input instructions. Preview and calculation are separate actions. The current CPU runner requires a fixed move range and an explicit row limit; all-moves and unlimited-row selections are preview-only.</p>}
         <button {...pageStyleTarget('button')} className="btn btn-primary btn-inline" type="submit">Apply data selection</button>
       </fieldset>
     </form>

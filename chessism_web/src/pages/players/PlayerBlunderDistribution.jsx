@@ -27,7 +27,8 @@ export default function PlayerBlunderDistribution({ playerName }) {
   const completed = useRef(null)
   const modes = PLAYER_ANALYSIS_MODES.filter(mode => activeModes.has(mode))
   const availableModes = useMemo(() => new Set(PLAYER_ANALYSIS_MODES.filter(mode =>
-    Number(request.data?.by_mode?.[mode]?.games_count || 0) > 0)), [request.data])
+    ['games_count','partial_games','unassessed_games'].some(key =>
+      Number(request.data?.by_mode?.[mode]?.[key] || 0) > 0))), [request.data])
   const counts = (request.data?.bins || []).map((_, index) => modes.reduce((sum, mode) =>
     sum + Number(request.data?.by_mode?.[mode]?.counts[index] || 0), 0))
   const total = counts.reduce((sum, count) => sum + count, 0)
@@ -82,20 +83,25 @@ export default function PlayerBlunderDistribution({ playerName }) {
     aria-label="Blunders per game" aria-busy={request.loading}>
     <div className="blunder-distribution-heading">
       <span {...pageStyleTarget('label')} className="stockfish-summary-title">Blunders per game</span>
-      <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
-        label="Blunders per game modes" styleId={`${STYLE}.modes`} onToggle={toggleMode} />
+      <div className="blunder-distribution-controls">
+        <PlayerModeToggles activeModes={activeModes} availableModes={availableModes}
+          label="Blunders per game modes" styleId={`${STYLE}.modes`} onToggle={toggleMode} />
+        {request.data && <small {...pageStyleTarget('text')} className="blunder-distribution-total">{formatNumber(total)} games</small>}
+      </div>
     </div>
-    {request.loading && !request.data ? <p className="blunder-distribution-message" role="status">Loading saved blunders…</p> : null}
-    {request.loading && request.data ? <small role="status">Updating…</small> : null}
-    {request.data?.canonical_pending && <small role="status">Preparing rating-aware GPU summaries; showing the previous calculation.</small>}
-    {request.data?.source === 'canonical_cuda_blunders' && <small {...pageStyleTarget('text')} title="Adopted provisionally; rapid calibration and independent model-quality checks have not passed.">Rating-aware · provisional{request.data.stale ? ' · update pending' : ''}</small>}
-    {request.error ? <p className="blunder-distribution-error" role="alert">{request.error}{' '}
-      <button {...pageStyleTarget(`${STYLE}.action`)} type="button" onClick={() => setRetry(value => value + 1)}>Retry</button>
-    </p> : null}
+    <div className="stockfish-summary-status">
+      {request.loading && !request.data ? <p className="blunder-distribution-message" role="status">Loading saved blunders…</p> : null}
+      {request.loading && request.data ? <small role="status">Updating…</small> : null}
+      {request.data?.canonical_pending && <small role="status">Preparing rating-aware GPU summaries; showing the previous calculation.</small>}
+      {request.error ? <p className="blunder-distribution-error" role="alert">{request.error}{' '}
+        <button {...pageStyleTarget(`${STYLE}.action`)} type="button" onClick={() => setRetry(value => value + 1)}>Retry</button>
+      </p> : null}
+    </div>
     {request.data ? <div className="blunder-distribution-plot">
-      <small {...pageStyleTarget('text')} className="blunder-distribution-total">{formatNumber(total)} games</small>
       <svg ref={chart.ref} viewBox={`0 0 ${chart.width} ${HEIGHT}`} role="group" aria-label="Blunders per game: zero through five, then six or more">
-        <desc>Only fully analyzed games with saved blunder counts and measured player moves. Missing summaries are excluded, not zero. Zero means no detected blunders, not perfect play. Select a bar to browse games, newest first.</desc>
+        <desc>{request.data.assessment_policy === 'complete_player_moves_v1'
+          ? 'Only games where every player move has a blunder assessment. Partial assessments, unsupported evaluations and missing summaries are excluded, not zero.'
+          : 'Games with a saved blunder count. Missing summaries are excluded, not zero.'} Zero means no detected blunders, not perfect play. Select a bar to browse games, newest first.</desc>
         {ticks.map(tick => <g className="blunder-distribution-grid" key={tick} aria-hidden="true">
           <line x1={LEFT} x2={right} y1={y(tick)} y2={y(tick)} />
           <text x={LEFT - 8} y={y(tick) + 4} textAnchor="end">{tickFormat.format(tick)}</text>
@@ -117,7 +123,8 @@ export default function PlayerBlunderDistribution({ playerName }) {
           y={BOTTOM + 15} textAnchor="middle">{bin.label}</text>)}
         <text x={(LEFT + right) / 2} y={HEIGHT - 4} textAnchor="middle">Blunders</text>
         {!total ? <text x={(LEFT + right) / 2} y={(TOP + BOTTOM) / 2} textAnchor="middle">
-          {modes.length ? 'No saved blunder counts in this selection.' : 'Select a game type.'}
+          {modes.length ? (request.data.assessment_policy === 'complete_player_moves_v1'
+            ? 'No fully assessed games in this selection.' : 'No saved blunder counts in this selection.') : 'Select a game type.'}
         </text> : null}
       </svg>
     </div> : null}

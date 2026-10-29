@@ -1,4 +1,5 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressReviewButton from '../../components/progress/ProgressReviewButton.jsx'
 import { useEffect, useState } from 'react'
 import {
   createCloudAnalysis, resumeCloudAnalysis, retryCloudAnalysis, stopAndCleanCloudAnalysis,
@@ -152,9 +153,9 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
                 className={`cloud-stop-indicator${job.status === 'paused' ? ' is-paused' : ''}`}
                 role="img" aria-label={stopLabel} title={stopLabel} />
             </div>}
-            {canDismiss && <button {...pageStyleTarget('cloud.job.dismiss')} className="cloud-job-dismiss" type="button"
+            {canDismiss && <ProgressReviewButton {...pageStyleTarget('cloud.job.dismiss')} className="cloud-job-dismiss"
               title="Hide this progress card. Saved scores, reports and job history are kept."
-              onClick={() => dismiss(job.id)}>Reviewed — dismiss progress</button>}
+              onClick={() => dismiss(job.id)} />}
             {showHistory && <AnalysisDisclosureGroup>
               <AnalysisHistory backend={backend} revision={historyRevision(backend)} />
             </AnalysisDisclosureGroup>}

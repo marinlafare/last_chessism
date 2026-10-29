@@ -94,6 +94,24 @@ async def main():
             rows, _ = await read('score-distribution',players=['alice'],modes=['blitz'])
             mate = next(row for row in rows if row['player_score']==9998)
             assert (mate['mate_moves'],mate['score_kind'])==(distance,score_kind)
+        # New inputs use the SAME policy as canonical CUDA extraction, while
+        # saved v1/v2 recipes keep their historical numerical interpretation.
+        from chessism_api.evaluations import kind_sql, score_kind as classify, KINDS
+        for score in (None, 0, 42, -100, 9998, -9998):
+            for source in (None, '', 'unknown', 'Stockfish', 'stockfish', 'stockfish_backup', 'tablebase'):
+                for verified in (False, True):
+                    expected = classify(score, source, verified=verified)
+                    expression = kind_sql('v.score', 'v.source', verified=verified)
+                    code = kind_sql('v.score', 'v.source', verified=verified, codes=True)
+                    row = await conn.fetchrow(f'SELECT {expression} AS kind,{code} AS code FROM (SELECT $1::float8 score,$2::text source) v', score, source)
+                    assert (row['kind'], row['code']) == (expected, KINDS[expected])
+        await conn.execute('UPDATE fen SET analysis_source=NULL WHERE fen_id=2')
+        rows, _ = await read('blunder-moves', contract=3, players=['bob'])
+        assert rows[0]['score_kind'] == 'unknown'
+        assert 'analysis_source' not in rows[0] and 'analyzed_at' not in rows[0]
+        old, _ = await read('blunder-moves', contract=2, players=['bob'])
+        assert old[0]['score_kind'] == 'mate'
+        print('PASS verified contract: scalar/SQL/type-code parity, missing timestamp independent, legacy preservation, lean canonical-compatible matrix')
         print('PASS: scored-only five-column input, filter-before-limit, zero/repeated scores, normalized mate provenance, both perspectives, prior-ply boundaries, simplified blunder input, dates and v1 compatibility')
     finally:
         if engine: await engine.dispose()

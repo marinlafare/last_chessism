@@ -72,11 +72,15 @@ def _where_parts(row_type: MatrixRowType, config: dict[str, Any]) -> tuple[list[
     return parts, params
 
 
-def matrix_sql(config: dict[str, Any]) -> tuple[str, str, dict[str, Any]]:
+def matrix_sql(config: dict[str, Any], *, preview_rows: int | None = None) -> tuple[str, str, dict[str, Any]]:
     if config['row_type'] == 'move_scores':
         from .move_scores import score_matrix_sql
         return score_matrix_sql(config)
     row_type = ROW_TYPES[config["row_type"]]
+    if row_type.key == 'accuracy_positions':
+        from .accuracy_inputs import accuracy_sql
+        where_parts, params = _where_parts(row_type, config)
+        return accuracy_sql(config, row_type, where_parts, params, preview_rows=preview_rows)
     if row_type.key in {'score_distribution', 'blunder_moves'}:
         from .summary_inputs import summary_input_sql
         where_parts, params = _where_parts(row_type, config)

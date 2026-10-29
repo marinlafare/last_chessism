@@ -30,11 +30,11 @@ const RESEARCH_AREAS = [
   },
   {
     id: 'salience',
-    href: '/research/salience',
+    href: '/research/salience-comparison',
     eyebrow: 'SIMILARITY',
-    title: 'Game salience',
-    description: 'Build and inspect corpus-wide position frequencies, move weights, and game salience for every tracked player.',
-    action: 'Open salience research',
+    title: 'Salience comparison',
+    description: 'Compare three salience formulas on lafareto’s saved games without changing official scores.',
+    action: 'Open comparison',
   },
 ]
 

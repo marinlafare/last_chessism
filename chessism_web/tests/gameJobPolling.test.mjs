@@ -135,3 +135,21 @@ test('recovery discovers only live download/update jobs without resubmitting wor
   assert.deepEqual(recovered.download.job, { jobId: 'download', playerName: 'chessgarida' })
   assert.equal(recovered.update.job.jobId, 'update')
 })
+
+test('an ignored timeout cannot hang tracking or publish a late terminal response', async () => {
+  const clock = timers(), statuses = [], errors = []
+  let calls = 0, finishOld
+  const stop = watchGameJob({
+    ...clock, jobId: 'existing',
+    fetchStatus: () => ++calls === 1 ? new Promise(resolve => { finishOld = resolve })
+      : Promise.resolve({ status: 'in_progress', progress: { processed: 42 } }),
+    onStatus: value => statuses.push(value), onUnavailable: error => errors.push(error),
+  })
+  clock.run(10000); await settle()
+  assert.equal(errors[0].name, 'TimeoutError')
+  await clock.run(3000)
+  finishOld({ status: 'complete' }); await settle()
+  assert.deepEqual(statuses, [{ status: 'in_progress', progress: { processed: 42 } }])
+  assert.equal(clock.pending.size, 1)
+  stop()
+})

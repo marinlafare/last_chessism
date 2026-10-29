@@ -13,7 +13,7 @@ from scripts.validate_summary_cuda import synthetic_rows
 class SummaryMatrixTests(unittest.TestCase):
     def test_defaults_are_reusable_not_hidden_data_selections(self):
         defaults = {row['builtin_key']: row for row in default_formulas()}
-        self.assertEqual(set(defaults), {'game-move-scores', 'blunder-moves', 'blunder-fixed', 'score-distribution'})
+        self.assertEqual(set(defaults), {'accuracy', 'game-move-scores', 'blunder-moves', 'blunder-fixed', 'score-distribution'})
         for row in defaults.values():
             self.assertTrue(row['read_only'])
             self.assertEqual(row['config']['definition_kind'], 'template')
@@ -24,7 +24,8 @@ class SummaryMatrixTests(unittest.TestCase):
         self.assertEqual(config['label_columns'], [])
         self.assertIn('player_rating', config['feature_columns'])
         self.assertIn('opponent_rating', config['feature_columns'])
-        for column in ('result', 'player_color', 'started_at', 'ply', 'blunders'):
+        self.assertEqual(config['summary_input_version'], 3)
+        for column in ('result', 'player_color', 'started_at', 'ply', 'blunders', 'analysis_source', 'analyzed_at'):
             self.assertNotIn(column, config['feature_columns'])
 
     def test_score_default_has_five_columns_and_a_versioned_population(self):
@@ -64,6 +65,14 @@ class SummaryMatrixTests(unittest.TestCase):
         self.assertNotIn('LAG(', query)
         self.assertNotIn('game_player_engine_summary', query)
         self.assertNotIn('gp.result', query)
+        self.assertIn("THEN 'unknown'", query)
+
+    def test_saved_matrix_types_are_not_silently_changed(self):
+        config = self.recipe('blunder-moves')
+        config['summary_input_version'] = 2
+        self.assertNotIn("THEN 'unknown'", matrix_sql(config)[1])
+        config['summary_input_version'] = 3
+        self.assertIn("THEN 'unknown'", matrix_sql(config)[1])
 
     def test_empty_label_preview_is_valid_sql(self):
         config = self.recipe('score-distribution')

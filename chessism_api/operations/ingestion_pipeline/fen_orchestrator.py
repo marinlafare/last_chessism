@@ -612,7 +612,9 @@ async def run_fen_pipeline(
                 ingestion_run_id=ingestion_run_id,
                 phase="discovering_tablebase",
                 processed_delta=1,
-                detail=f"Found {int(tablebase_job.get('pending') or 0)} tablebase candidates.",
+                detail=(f"Found {int(tablebase_job['pending'])} tablebase candidates."
+                    if tablebase_job.get('pending') is not None else
+                    "Endgame discovery queued; exact count will appear when ready."),
             )
 
         await _release_fen_pipeline_coordination(redis, job_id)

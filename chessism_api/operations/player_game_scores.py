@@ -1,4 +1,4 @@
-"""Player-game Stockfish summary calculations shared by analytics endpoints."""
+"""CPU accuracy/efficiency projections. Blunders are exclusively CUDA-produced."""
 
 from __future__ import annotations
 
@@ -14,7 +14,6 @@ from chessism_api.database.relational_storage import storage_for
 # https://github.com/lichess-org/lila/blob/master/modules/tree/src/main/Advice.scala
 # https://github.com/lichess-org/scalachess/blob/master/core/src/main/scala/eval.scala
 LICHESS_WINNING_CHANCE_MULTIPLIER = -0.00368208
-LICHESS_BLUNDER_THRESHOLD = 0.30
 LICHESS_CP_CEILING = 1_000.0
 LICHESS_ACCURACY_SCALE = 103.1668100711649
 LICHESS_ACCURACY_DECAY = 0.04354415386753951
@@ -49,29 +48,6 @@ def lichess_move_accuracy(before_cp: float, after_cp: float) -> float:
         + LICHESS_ACCURACY_UNCERTAINTY_BONUS
     )
     return max(0.0, min(100.0, raw_accuracy))
-
-
-def is_lichess_blunder(
-    previous_player_score: float,
-    player_score: float,
-    previous_kind: str = "cp",
-    score_kind: str = "cp",
-) -> bool:
-    """Mirror Lichess's CP and forced-mate blunder judgments for the mover."""
-    if previous_kind == "cp" and score_kind == "cp":
-        loss = (
-            lichess_winning_chances(previous_player_score)
-            - lichess_winning_chances(player_score)
-        )
-        return loss >= LICHESS_BLUNDER_THRESHOLD
-    if previous_kind == "cp" and score_kind == "mate" and player_score < 0:
-        return previous_player_score >= -700
-    if previous_kind == "mate" and previous_player_score > 0:
-        if score_kind == "mate" and player_score < 0:
-            return True
-        if score_kind == "cp":
-            return player_score <= 700
-    return False
 
 
 async def refresh_game_player_engine_summaries(
@@ -338,34 +314,6 @@ async def refresh_game_player_engine_summaries(
                         )
                 END AS harmonic_accuracy,
                 COUNT(*) FILTER (
-                    WHERE move_color = player_color
-                      AND (
-                        (
-                            effective_previous_score_kind = 'cp'
-                            AND score_kind = 'cp'
-                            AND win_percent_loss >= 15.0
-                        )
-                        OR (
-                            effective_previous_score_kind = 'cp'
-                            AND score_kind = 'mate'
-                            AND player_score < 0
-                            AND effective_previous_player_score >= -700
-                        )
-                        OR (
-                            effective_previous_score_kind = 'mate'
-                            AND effective_previous_player_score > 0
-                            AND score_kind = 'cp'
-                            AND player_score <= 700
-                        )
-                        OR (
-                            effective_previous_score_kind = 'mate'
-                            AND effective_previous_player_score > 0
-                            AND score_kind = 'mate'
-                            AND player_score < 0
-                        )
-                      )
-                )::int AS blunder_count,
-                COUNT(*) FILTER (
                     WHERE score_kind = 'mate' AND player_score > 0
                 )::int AS mate_for_positions,
                 COUNT(*) FILTER (
@@ -391,7 +339,6 @@ async def refresh_game_player_engine_summaries(
             ) / 2.0 AS game_efficiency,
             mean_win_percent_loss,
             median_win_percent_loss,
-            blunder_count,
             mate_for_positions,
             mate_against_positions,
             final_player_cp,
@@ -404,7 +351,7 @@ async def refresh_game_player_engine_summaries(
             game_link, player_name, player_color, analyzed_player_moves,
             own_move_cp_gain, own_move_cp_loss,
             game_efficiency, mean_win_percent_loss, median_win_percent_loss,
-            blunder_count, mate_for_positions, mate_against_positions,
+            mate_for_positions, mate_against_positions,
             final_player_cp, result, end_by
         )
     """ + refresh_values + """
@@ -416,7 +363,6 @@ async def refresh_game_player_engine_summaries(
             game_efficiency = EXCLUDED.game_efficiency,
             mean_win_percent_loss = EXCLUDED.mean_win_percent_loss,
             median_win_percent_loss = EXCLUDED.median_win_percent_loss,
-            blunder_count = EXCLUDED.blunder_count,
             mate_for_positions = EXCLUDED.mate_for_positions,
             mate_against_positions = EXCLUDED.mate_against_positions,
             final_player_cp = EXCLUDED.final_player_cp,
@@ -426,6 +372,11 @@ async def refresh_game_player_engine_summaries(
     """)
     async with AsyncDBSession() as session:
         try:
+            from .cuda_summaries.schema import enabled as manual_summaries
+            if await manual_summaries(session):
+                # Preparation maintains coverage and durable invalidation.
+                # No page-load, import, or recovery path may launch CPU accuracy.
+                return {"game_players": 0, "games": 0, "deferred": True}
             layout = storage_for(session)
             if layout:
                 target = layout.table('game_player_engine_summary')
@@ -433,7 +384,7 @@ async def refresh_game_player_engine_summaries(
                 coverage = layout.table('game_analysis_coverage')
                 fields = ('analyzed_player_moves', 'own_move_cp_gain', 'own_move_cp_loss',
                           'game_efficiency', 'mean_win_percent_loss', 'median_win_percent_loss',
-                          'blunder_count', 'mate_for_positions', 'mate_against_positions',
+                          'mate_for_positions', 'mate_against_positions',
                           'final_player_cp', 'result', 'end_by')
                 delete_sql = text(f"""DELETE FROM {target} s USING {owners} gp
                     WHERE s.game_player_id=gp.id

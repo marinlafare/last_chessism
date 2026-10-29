@@ -22,6 +22,7 @@ export const PAGE_SCOPES = {
   "/research/matrices/collection": "algorithms",
   "/research/algorithms": "algorithms",
   "/research/salience": "salience",
+  "/research/salience-comparison": "salience_comparison",
   "/backups": "backups"
 }
 

@@ -69,3 +69,15 @@
 .daily-salience-handle:focus-visible { outline: 2px solid #fff; outline-offset: 1px; z-index: 2; }
 .daily-salience-track[data-disabled="true"] { opacity: 0.4; cursor: default; }
 .daily-salience-handle:disabled { cursor: default; }
+
+.daily-salience-bands { gap: 4px; }
+.daily-salience-bands button {
+  width: 100%; min-width: 0; padding: 3px 5px;
+  border: 1px solid var(--border-soft); border-radius: 4px;
+  background: #101b20; color: var(--text); font: inherit; cursor: pointer;
+}
+.daily-salience-bands button:hover { background: #183429; }
+.daily-salience-bands button[aria-pressed="true"] { outline: 1px solid currentColor; outline-offset: 1px; }
+.daily-salience-bands button:focus-visible { outline: 2px solid currentColor; outline-offset: 2px; }
+.daily-salience-bands button:disabled { opacity: .45; cursor: default; }
+.daily-salience-bands [role="status"] { font-size: 9px; text-align: center; }

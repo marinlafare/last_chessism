@@ -6,6 +6,14 @@ from .definitions import definition_config
 
 
 DEFAULT_FORMULAS = {
+    'accuracy': {
+        'name': 'Accuracy — ordered game evaluations, v1',
+        'definition_kind': 'template',
+        'row_type': 'accuracy_positions',
+        'summary_input_version': 1,
+        'feature_columns': ['game', 'ply', 'score', 'score_kind'],
+        'label_columns': [],
+    },
     'game-move-scores': {
         'name': 'Game move scores',
         'definition_kind': 'template',
@@ -34,9 +42,9 @@ DEFAULT_FORMULAS = {
         'name': 'Blunder moves — rating-aware inputs',
         'definition_kind': 'template',
         'row_type': 'blunder_moves',
-        'summary_input_version': 2,
+        'summary_input_version': 3,
         'feature_columns': ['player', 'game', 'mode',
-                            'player_score', 'score_kind', 'analysis_source',
+                            'player_score', 'score_kind',
                             'previous_player_score', 'previous_score_kind',
                             'player_rating', 'opponent_rating', 'initial_prior'],
         'label_columns': [],

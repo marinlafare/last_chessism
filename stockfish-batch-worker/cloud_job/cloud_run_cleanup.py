@@ -1,5 +1,4 @@
 """Receipt-gated Cloud Run cleanup. Exact job UID, object generations, image upload."""
-from concurrent.futures import ThreadPoolExecutor
 from contextlib import nullcontext
 from urllib.parse import quote
 
@@ -7,6 +6,7 @@ from cleaning_job.cloud import BUCKET, PROJECT, REGION
 from cleaning_job.cleanup import require, digest, check_bucket, inventory, check_inventory
 from cleaning_job import images
 from cleaning_job.parallel import read_parallel
+from cleaning_job.deletion import remove_objects, notify
 from .cloud_run import PARENT, job_name, executions, terminal, matches
 
 STREAMS = {"run.googleapis.com/stdout", "run.googleapis.com/stderr", "run.googleapis.com/varlog/system"}
@@ -129,6 +129,7 @@ def apply(cloud, plan, *, timings=None):
         read_parallel(lambda: other_references(cloud, plan), lambda: check_bucket(cloud),
                       lambda: check_inventory(cloud, plan), lambda: images.remaining(cloud, plan))
     with measure('cleanup_run_job'):
+        notify(timings, plan, 'compute')
         remote = current_job(cloud, plan)
         if remote:
             if not remote.get("deleteTime"):
@@ -137,19 +138,17 @@ def apply(cloud, plan, *, timings=None):
     with measure('cleanup_objects'):
         other_references(cloud, plan)
         objects = check_inventory(cloud, plan)
-        # No prefix/bucket delete: every request pins an approved generation.
-        # Drain the current bounded batch on failure; retries use the same plan.
-        with ThreadPoolExecutor(max_workers=8, thread_name_prefix='cloud-cleanup') as pool:
-            for offset in range(0, len(objects), 8):
-                list(pool.map(cloud.delete_object, objects[offset:offset + 8]))
+        remove_objects(cloud, plan, objects, timings=timings)
         if inventory(cloud, plan["prefixes"]):
             return {"complete": False, "phase": "deleting_objects"}
     with measure('cleanup_image'):
+        notify(timings, plan, 'image')
         for uri in images.remaining(cloud, plan):
             other_references(cloud, plan)
             cloud.delete_image(uri)
         if images.remaining(cloud, plan):
             return {"complete": False, "phase": "deleting_image"}
     with measure('cleanup_logs'):
+        notify(timings, plan, 'logs')
         logs = clean_logs(cloud, plan)
     return {"complete": not logs["pending"], "logs": logs}
