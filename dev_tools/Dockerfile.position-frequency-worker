@@ -1,0 +1,4 @@
+# Code-only CUDA-stage release. No drivers, dependencies or cloud image changes.
+ARG BASE_IMAGE=chessism-algorithms:salience-bands-20261029
+FROM ${BASE_IMAGE}
+COPY chessism_api/operations/cuda_summaries/ /app/chessism_api/operations/cuda_summaries/

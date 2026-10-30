@@ -1,0 +1,12 @@
+.game-review-timeline { grid-row: 2; min-width: 0; margin-top: 0; padding: 0 1rem 1rem; background: #000; border-bottom: 1px solid var(--border-soft); flex-shrink: 0; }
+.game-review-timeline-stage { position: relative; min-width: 0; }
+.game-review-timeline svg { display: block; width: 100%; box-sizing: border-box; cursor: crosshair; border-radius: 4px; outline: none; }
+.game-review-timeline svg:focus { outline: var(--review-chart-focus-width, 1px) solid var(--review-chart-focus-color, #fff); outline-offset: var(--review-chart-focus-offset, 2px); }
+.review-chart-black { fill: currentColor; color: #000; }
+.review-chart-white { fill: currentColor; color: #e4e3e1; }
+.review-chart-line { fill: none; stroke: currentColor; stroke-width: var(--pie-outline-width, 1.2px); color: #efeeec; }
+.review-chart-zero { stroke: currentColor; stroke-width: var(--pie-outline-width, 1px); color: #8c8a86; }
+.review-chart-selected { stroke: currentColor; stroke-width: var(--pie-outline-width, 1.5px); stroke-dasharray: 3 2; color: #47a7d8; }
+.review-chart-current-point { fill: currentColor; color: #fff; stroke: var(--pie-outline-color, #000); stroke-width: var(--pie-outline-width, 1px); }
+.review-chart-label { fill: currentColor; color: var(--muted, #9baaba); font-size: 10px; }
+.game-review-timeline-tooltip { position: absolute; top: 100%; transform: translateX(-50%); padding: 0; background: transparent; color: #fff; font-size: 11px; line-height: 1rem; pointer-events: none; text-align: center; }

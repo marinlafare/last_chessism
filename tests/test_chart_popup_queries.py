@@ -34,6 +34,17 @@ class QueryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             pages.decode_cursor('bad', 'scope')
 
+    def test_color_filter_precedes_game_limit_and_scopes_cursor(self):
+        for session, predicate in [(self.session, "gp.is_white=(:color='white')"),
+                                   (SimpleNamespace(info={}), 'color=:color')]:
+            sql = str(pages.candidate_games_sql(session))
+            self.assertLess(sql.index(predicate), sql.index('LIMIT :game_limit'))
+        scopes = [pages.scope_key('alice', ['blitz'], 5, color) for color in [None, 'white', 'black']]
+        self.assertEqual(len(set(scopes)), 3)
+        cursor = pages.encode_cursor(scopes[1], 10, True, 20)
+        with self.assertRaises(ValueError):
+            pages.decode_cursor(cursor, scopes[2])
+
     def test_blunders_read_owner_index_and_gpu_not_full_engine_view(self):
         sql = blunder_rows_sql(self.session, 'blunder_count >= :blunder_count')
         self.assertIn('white_owner=:player AND white_complete', sql)
@@ -85,6 +96,30 @@ class PageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(page['scanned_positions'],512)
         self.assertEqual(pages.decode_cursor(page['next_cursor'],page['snapshot']), (10,True,9488))
         self.assertEqual(session.execute.await_count,2)
+
+    async def test_negative_interval_is_player_relative_for_both_colors(self):
+        interval = dict(id=5, lower=-150, upper=-50, lower_inclusive=True, upper_inclusive=False)
+        for color, white, sign in [('white', True, 1), ('black', False, -1)]:
+            session = self.session([self.row(i, score * sign, white) for i, score in
+                                    enumerate([-151, -150, -100, -51, -50, 100], 1)])
+            page = await pages.read_position_page(session, 'alice', ['blitz'], interval, color=color)
+            self.assertEqual([r['score_min'] for r in page['rows']], [-150, -100, -51])
+            self.assertTrue(all(r['player_color'] == color for r in page['rows']))
+            self.assertEqual(page['score_perspective'], 'player')
+            self.assertEqual(session.execute.call_args_list[0].args[1]['color'], color)
+
+    async def test_same_fen_with_opposite_player_colors_keeps_each_perspective(self):
+        session = self.session([self.row(1, 25, True), self.row(1, 25, False), self.row(1, 25, False)])
+        page = await pages.read_position_page(session, 'alice', ['blitz'],
+            dict(id=6, lower=-50, upper=50, lower_inclusive=True, upper_inclusive=True))
+        self.assertEqual([(r['player_color'], r['score_min']) for r in page['rows']],
+                         [('white', 25), ('black', -25)])
+
+    async def test_invalid_color_rejected_before_database_access(self):
+        session = self.session([])
+        with self.assertRaises(ValueError):
+            await pages.read_position_page(session, 'alice', ['blitz'], {'id': 5}, color='red')
+        session.scalar.assert_not_called()
 
     async def test_empty_games_advance_without_getting_stuck(self):
         games = [dict(game_link=i,is_white=True) for i in range(100,67,-1)]

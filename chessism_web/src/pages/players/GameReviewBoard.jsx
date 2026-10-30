@@ -2,6 +2,8 @@ import { Children, createContext, forwardRef, useContext, useLayoutEffect, useRe
 import { Chessboard } from 'react-chessboard'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { createReviewBoardMotion } from './reviewBoardMotion.js'
+import { reviewMoveBadge } from './reviewMoveBadge.js'
+import BookMoveIcon from './BookMoveIcon.jsx'
 import './game-review-board.css'
 
 const BoardView = createContext({ orientation: 'white', width: 0 })
@@ -25,18 +27,24 @@ const ReviewSquare = forwardRef(function ReviewSquare({ square, squareColor, sty
   </div>
 })
 
-export default function GameReviewBoard({ id, position, orientation, animationDuration, ply, onSettled }) {
+export default function GameReviewBoard({ id, position, orientation, animationDuration, ply, onSettled, move }) {
   const frame = useRef(null)
   const pieces = useRef(null), overlay = useRef(null), motion = useRef(null)
   const [width, setWidth] = useState(0)
+  const [settledView, setSettledView] = useState(null)
+  const viewKey = JSON.stringify([id, position, orientation, width, ply])
+  const badge = settledView === viewKey && width > 0 ? reviewMoveBadge(move, orientation) : null
+  const quality = badge?.classification === 'book' && ['inaccuracy','mistake','blunder'].includes(move?.classification)
+    ? reviewMoveBadge({ ...move, book: null }, orientation) : null
   useLayoutEffect(() => {
     motion.current = createReviewBoardMotion(pieces.current, overlay.current)
     return () => motion.current.destroy()
   }, [])
   useLayoutEffect(() => {
+    setSettledView(null)
     motion.current.update({ id, position, orientation, width, duration: animationDuration, ply,
-      onSettled: () => onSettled?.(ply) })
-  }, [id, position, orientation, width, animationDuration, ply, onSettled])
+      onSettled: () => { setSettledView(viewKey); onSettled?.(ply) } })
+  }, [id, position, orientation, width, animationDuration, ply, onSettled, viewKey])
   useLayoutEffect(() => {
     const element = frame.current
     const observer = new ResizeObserver(([entry]) => {
@@ -57,6 +65,18 @@ export default function GameReviewBoard({ id, position, orientation, animationDu
         /></BoardView.Provider> : null}
       </div>
       <div ref={overlay} className="game-review-capture-layer" aria-hidden="true" />
+      {badge ? <div className="game-review-badge-square" data-badge-square={badge.square}
+        style={{ left: `${badge.column * 12.5}%`, top: `${badge.row * 12.5}%`,
+          '--review-badge-size': `${Math.min(26, Math.max(16, width / 8 * .36))}px` }}>
+        <span {...pageStyleTarget(`gameReview.board.badge.${badge.classification}`)}
+          className={`game-review-quality-badge ${badge.classification}`} role="img"
+          aria-label={`${badge.label} move on ${badge.square}`} title={badge.title || badge.label}>
+          {badge.classification === 'book' ? <BookMoveIcon /> : badge.symbol}
+        </span>
+        {quality ? <span {...pageStyleTarget(`gameReview.board.badge.${quality.classification}`)}
+          className={`game-review-quality-badge secondary ${quality.classification}`} role="img"
+          aria-label={`${quality.label} move on ${quality.square}`} title={quality.label}>{quality.symbol}</span> : null}
+      </div> : null}
     </div>
   </div>
 }

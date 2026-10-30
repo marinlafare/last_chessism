@@ -22,6 +22,7 @@ await browserFixture(9298, async ({send,context,evaluate,assert,waitFor}) => {
   await waitFor("document.querySelectorAll('.measure-daily-efficiency-point').length===4")
   await assert("document.querySelectorAll('[data-salience-band]').length===0 && document.querySelectorAll('[role=slider]').length===2")
   await assert("[...document.querySelectorAll('.daily-salience-tick')].map(n=>n.textContent).join(',')==='0,50,60,70,80,90,100'")
+  await assert(`(()=>{const ys=[...document.querySelectorAll('.daily-salience-tick')].map(n=>n.getBoundingClientRect().top);return ys.slice(1).every((y,i)=>Math.abs(ys[i]-y-(ys[0]-ys[6])/6)<1)})()`)
   await assert("[...document.querySelectorAll('.daily-salience-tick')].at(-1).getBoundingClientRect().top < document.querySelector('.daily-salience-tick').getBoundingClientRect().top")
   await assert("document.querySelector('[data-salience-handle=\"0\"]').dataset.styleId==='player.accuracy.salience.minimum.handle'")
   await evaluate(`window.salienceKey=(i,key)=>document.querySelector('[data-salience-handle="'+i+'"]').dispatchEvent(new KeyboardEvent('keydown',{key,bubbles:true,cancelable:true}));
@@ -52,12 +53,12 @@ await browserFixture(9298, async ({send,context,evaluate,assert,waitFor}) => {
   await assert("document.querySelector('.measure-daily-efficiency-point').dataset.date==='2025-01-01'")
   await evaluate("salienceKey(1,'End')")
   await waitFor("salienceValues()==='0,100' && document.querySelectorAll('.measure-daily-efficiency-point').length===4")
-  // Real pointer drag: 73 snaps to 70. Track padding/borders remain editable.
+  // Real pointer drag: halfway up selects 70, not 50. Padding/borders stay editable.
   await evaluate("document.querySelector('.daily-salience-track').style.cssText='border:3px solid red;padding:8px'")
   const geometry=JSON.parse(await evaluate(`JSON.stringify((()=>{
     const t=document.querySelector('.daily-salience-track'),r=t.getBoundingClientRect();
     const h=document.querySelector('[data-salience-handle="0"]').getBoundingClientRect();
-    return {x:Math.round(h.x+h.width/2),y:Math.round(h.y+h.height/2),target:Math.round(r.top+t.clientTop+t.clientHeight*.27)};
+    return {x:Math.round(h.x+h.width/2),y:Math.round(h.y+h.height/2),target:Math.round(r.top+t.clientTop+t.clientHeight*.5)};
   })())`))
   await send('input.performActions',{context,actions:[{type:'pointer',id:'mouse',parameters:{pointerType:'mouse'},actions:[
     {type:'pointerMove',x:geometry.x,y:geometry.y},{type:'pointerDown',button:0},

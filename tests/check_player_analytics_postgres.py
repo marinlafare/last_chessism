@@ -150,7 +150,8 @@ async def main():
                                             os.environ['CHESSISM_PLAYER_SUMMARIES']='1'
                                             actual=await catalog.get_player_game_catalog(player,summary_cache,**kwargs)
                                             assert clean(actual)==clean(expected),(normalized,player,kwargs,actual,expected)
-                                            assert all(row['games'] >= 2 for row in actual['rows'])
+                                            minimum = 1 if kind == 'opponents' and search else 2
+                                            assert all(row['games'] >= minimum for row in actual['rows'])
                                             checks += 1
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
                     expected=await ask_db.get_player_hours_played(player)
@@ -181,19 +182,30 @@ async def main():
                             assert empty['pagination']['total_groups'] == empty['pagination']['total_pages'] == 0
                             assert not empty['pagination']['has_more']
                             checks += 2
-                # The minimum is applied after mode selection; ratings remain
-                # present only on eligible opponents, never one-off encounters.
+                # Search includes single encounters, browsing still excludes
+                # them, and cached rankings cannot leak between the two views.
                 for enabled in ('0', '1'):
                     os.environ['CHESSISM_PLAYER_SUMMARIES'] = enabled
                     cache = Redis()
-                    for search in ('one-off', 'carol'):
+                    browse = await catalog.get_player_game_catalog('alice', cache, kind='opponents', limit=50)
+                    assert all(row['games'] >= 2 for row in browse['rows'])
+                    for search in ('one-off',):
                         data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search=search)
-                        assert data['rows'] == [] and data['pagination']['total_groups'] == data['total_games'] == 0
+                        assert len(data['rows']) == 1 and data['rows'][0]['key'] == search, (normalized, enabled, search, data)
+                        assert data['pagination']['total_groups'] == data['total_games'] == data['rows'][0]['games'] == 1
+                        assert not data['pagination']['has_more']
+                        assert 'latest_ratings' in data['rows'][0]
+                        assert clean(await catalog.get_player_game_catalog('alice', cache, kind='opponents', search=search.upper())) == clean(data)
+                    assert clean(await catalog.get_player_game_catalog('alice', cache, kind='opponents', limit=50)) == clean(browse)
+                    # Carol's only Alice game is archived Chess960, not an
+                    # eligible standard game; search must not resurrect it.
+                    assert (await catalog.get_player_game_catalog('alice', cache, kind='opponents', search='carol'))['rows'] == []
                     data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search='bob')
                     assert len(data['rows']) == 1 and data['rows'][0]['games'] >= 2
                     assert data['rows'][0]['latest_ratings']['blitz'] == 2300
                     data = await catalog.get_player_game_catalog('alice', cache, kind='opponents', search='bob', mode='rapid')
-                    assert data['rows'] == []
+                    assert len(data['rows']) == 1 and data['rows'][0]['games'] == 1
+                    assert (await catalog.get_player_game_catalog('alice', cache, kind='opponents', mode='rapid'))['rows'] == []
                     checks += 4
                 # Every bin matches between SQL and saved summaries, including
                 # exact boundaries, totals, caches, search and paginated order.
@@ -224,7 +236,11 @@ async def main():
                                     assert paged['rows'] == rows[page-1:page]
                                     assert paged['pagination']['has_more'] == (page < len(rows))
                                 searched = await catalog.get_player_game_catalog('alice', cache, search='Boundary', **kwargs)
-                                assert searched['rows'] == [r for r in rows if 'boundary' in r['key'].lower()]
+                                # Searching opponents includes one-game groups
+                                # in the pre-search ranking, so global ranks can
+                                # shift without changing these matching groups.
+                                without_rank = lambda row: {key: value for key, value in row.items() if key != 'rank'}
+                                assert [without_rank(r) for r in searched['rows']] == [without_rank(r) for r in rows if 'boundary' in r['key'].lower()]
                                 checks += 4
                             checks += 1
                         baseline = await catalog.get_player_game_catalog('alice', summary_cache, kind=kind, color='white', limit=50)

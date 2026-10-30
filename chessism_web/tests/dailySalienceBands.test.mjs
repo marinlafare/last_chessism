@@ -1,6 +1,15 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { SALIENCE_BAND_BOUNDARIES, attachSalienceBands, filterSalienceBands, moveSalienceBandBound, salienceBoundStops, salienceBandNote } from '../src/pages/players/dailySalienceBands.js'
+import { SALIENCE_BAND_BOUNDARIES, attachSalienceBands, filterSalienceBands, moveSalienceBandBound, salienceBoundStops, salienceBandNote, salienceBandOffset, salienceBandValue } from '../src/pages/players/dailySalienceBands.js'
+
+test('all seven boundaries occupy evenly spaced slider stops, including 0–50', () => {
+  const offsets = SALIENCE_BAND_BOUNDARIES.map(salienceBandOffset)
+  assert.deepEqual(offsets.map(salienceBandValue), SALIENCE_BAND_BOUNDARIES)
+  offsets.slice(1).forEach((value, i) => assert.ok(Math.abs(value - offsets[i] - 100/6) < 1e-10))
+  assert.equal(salienceBandValue(50), 70)
+  assert.equal(salienceBandValue(-10), 0)
+  assert.equal(salienceBandValue(110), 100)
+})
 
 test('independent salience totals and ties do not duplicate accuracy points', () => {
   const points = [{ date: '2026-01-01', games: 2, band: 0 }, { date: '2026-01-01', games: 2, band: 1 }, { date: '2026-01-02' }]

@@ -15,6 +15,11 @@ CATALOG_SORTS = ('games', 'wins', 'losses', 'draws')
 CATALOG_MIN_GAMES = 2
 
 
+def catalog_min_games(kind, search):
+    """Explicit opponent searches include single encounters; browsing does not."""
+    return 1 if kind == 'opponents' and search.strip() else CATALOG_MIN_GAMES
+
+
 def catalog_ratio_bin(sort_by, ratio_bin):
     if sort_by not in CATALOG_SORTS:
         raise ValueError('Choose games, wins, losses or draws.')
@@ -69,8 +74,11 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         if not await cuda_metadata(session):return None
         meta={'revision':0,'generated_at':None}
     # Reuse the saved counts across outcomes; filter and rank before paging.
-    identity = [scope.player, kind, mode, color, meta['revision']]
-    key = 'chessism:catalog-ranking:v6:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+    minimum = catalog_min_games(kind, search)
+    # Separate the searchable ranking from the repeated-only browsing ranking,
+    # but reuse it across search strings rather than rebuilding per keystroke.
+    identity = [scope.player, kind, mode, color, meta['revision'], minimum]
+    key = 'chessism:catalog-ranking:v7:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     ranked = None
     try:
         raw = await redis.get(key)
@@ -81,7 +89,7 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
         saved = await read_snapshot(session, scope.player, kind)
         if not saved:
             return None
-        ranked = rank_catalog(saved['rows'], mode, color, min_games=CATALOG_MIN_GAMES)
+        ranked = rank_catalog(saved['rows'], mode, color, min_games=minimum)
         # A refresh between reads must not cache a new ranking under an old key.
         if saved['summary_revision'] == meta['revision']:
             try:

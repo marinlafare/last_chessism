@@ -16,8 +16,8 @@ POSITION_BATCH = 512
 PAGE_SIZE = 10
 
 
-def scope_key(player, modes, bin_id):
-    return hashlib.sha256(json.dumps([player, list(modes), bin_id]).encode()).hexdigest()
+def scope_key(player, modes, bin_id, color=None):
+    return hashlib.sha256(json.dumps([player, list(modes), bin_id, color]).encode()).hexdigest()
 
 
 def encode_cursor(scope, game, white, occurrence):
@@ -55,10 +55,12 @@ def candidate_games_sql(session):
         source = f"""SELECT gp.game_link,gp.is_white FROM {t('game_player')} gp
             JOIN {t('game')} g ON g.link=gp.game_link
             JOIN {t('game_mode')} m ON m.id=g.mode_id
-            WHERE gp.player_id=:player_id AND m.name=ANY(CAST(:modes AS text[]))"""
+            WHERE gp.player_id=:player_id AND m.name=ANY(CAST(:modes AS text[]))
+              AND (CAST(:color AS text) IS NULL OR gp.is_white=(:color='white'))"""
     else:
         source = """SELECT link AS game_link,color='white' AS is_white FROM game_player
-            WHERE player_name=:player AND mode=ANY(CAST(:modes AS text[]))"""
+            WHERE player_name=:player AND mode=ANY(CAST(:modes AS text[]))
+              AND (CAST(:color AS text) IS NULL OR color=:color)"""
     return text(f"""SELECT * FROM ({source}) owned
         WHERE CAST(:after_game AS bigint) IS NULL
             OR (game_link,is_white)<(:after_game,CAST(:after_white AS boolean))
@@ -85,8 +87,10 @@ def occurrences_sql(session):
       ORDER BY s.game_link DESC,s.is_white DESC,s.occurrence_id DESC""")
 
 
-async def read_position_page(session, player, modes, interval, cursor=None):
-    scope = scope_key(player, modes, interval['id'])
+async def read_position_page(session, player, modes, interval, cursor=None, *, color=None):
+    if color not in (None, 'white', 'black'):
+        raise ValueError('Choose White, Black, or both player colors.')
+    scope = scope_key(player, modes, interval['id'], color)
     after_game, after_white, after_occurrence = decode_cursor(cursor, scope)
     layout = storage_for(session)
     t = layout.table if layout else lambda name: name
@@ -94,7 +98,7 @@ async def read_position_page(session, player, modes, interval, cursor=None):
         FROM {t('player')} WHERE player_name=:player AND joined>0 AND deleted_at IS NULL"""), {'player': player})
     if player_id is None:
         raise LookupError(f'Player {player!r} was not found.')
-    params = dict(player=player, player_id=player_id, modes=list(modes), after_game=after_game,
+    params = dict(player=player, player_id=player_id, modes=list(modes), color=color, after_game=after_game,
                   after_white=after_white, after_occurrence=after_occurrence,
                   game_limit=GAME_BATCH + 1, scan_limit=POSITION_BATCH + 1)
     games = (await session.execute(candidate_games_sql(session), params)).mappings().all()
@@ -111,10 +115,12 @@ async def read_position_page(session, player, modes, interval, cursor=None):
         if score is None or record['analysis_source'] == 'tablebase' or abs(score) >= 9000:
             continue
         score = float(score) * (1 if record['is_white'] else -1)
-        if record['fen_id'] in seen or not matches_interval(score, interval):
+        identity = (record['fen_id'], record['is_white'])
+        if identity in seen or not matches_interval(score, interval):
             continue
-        seen.add(record['fen_id'])
-        rows.append({'fen_id': str(record['fen_id']), 'score_min': score, 'score_max': score})
+        seen.add(identity)
+        rows.append({'fen_id': str(record['fen_id']), 'score_min': score, 'score_max': score,
+                     'player_color': 'white' if record['is_white'] else 'black'})
         if len(rows) == PAGE_SIZE:
             if index + 1 < len(records) or len(games) > GAME_BATCH:
                 continuation = (record['game_link'], record['is_white'], record['occurrence_id'])
@@ -132,5 +138,6 @@ async def read_position_page(session, player, modes, interval, cursor=None):
         for row in rows:
             row['fen'] = boards[int(row['fen_id'])]
     return {'rows': rows, 'next_cursor': encode_cursor(scope, *continuation) if continuation else None,
-            'snapshot': scope, 'bin_id': interval['id'], 'modes': list(modes),
+            'snapshot': scope, 'bin_id': interval['id'], 'modes': list(modes), 'color': color,
+            'score_perspective': 'player',
             'sort': 'matching_examples', 'scanned_positions': len(scanned)}

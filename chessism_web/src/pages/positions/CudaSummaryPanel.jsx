@@ -6,7 +6,7 @@ import { fetchCudaSummaries, runCudaSummaries, retryCudaSummaries } from './posi
 import './cuda-summaries.css'
 
 const names = { blunders: 'Blunders', accuracy: 'Accuracy', score_distribution: 'Score distribution',
-  behavioral: 'Behavioral analysis', unexpected_endings: 'Unexpected endings', salience: 'Salience · first 15 moves' }
+  behavioral: 'Behavioral analysis', unexpected_endings: 'Unexpected endings', salience: 'Salience · first 15 moves', position_frequency: 'Repeated positions' }
 const number = value => Number(value || 0).toLocaleString()
 const players = value => number(value) + (Number(value) === 1 ? ' player' : ' players')
 function Fill(props) { return <span {...pageStyleTarget('cuda.progress.fill')} {...props} /> }
@@ -29,13 +29,15 @@ export default function CudaSummaryPanel() {
   const pending = data?.pending_games || {}
   const metadata = run?.timings?.metadata
   const salience = run?.timings?.salience
+  const frequency = run?.timings?.position_frequency
+  const frequencyActive = frequency && !frequency.complete && /position frequencies|repeated positions/i.test(run?.phase || '')
   const salienceActive = run?.metrics?.includes('salience') && !salience?.complete &&
     (salience || !Number(run?.total_games))
   const metadataOnly = run?.metrics?.includes('behavioral') && !Number(run?.total_games)
   const available = (data?.available_metrics || []).reduce((sum, metric) => sum + Number(pending[metric] || 0), 0)
     + Number(data?.pending_score_players || 0) + Number(data?.pending_accuracy_players || 0)
     + Number(data?.pending_behavioral_players || 0) + Number(data?.pending_unexpected_endings_players || 0)
-    + Number(data?.pending_salience_players || 0)
+    + Number(data?.pending_salience_players || 0) + Number(data?.pending_position_frequency_players || 0)
   return <section {...pageStyleTarget('cuda.panel')} className="cuda-summary-panel" aria-label="CUDA summaries">
     <div className="cuda-summary-heading">
       <button {...pageStyleTarget('cuda.run')} type="button"
@@ -49,9 +51,9 @@ export default function CudaSummaryPanel() {
     </div>
     {data?.manual && <>
       <div className="cuda-summary-metrics">{Object.entries(names).filter(([metric]) =>
-        !['behavioral','unexpected_endings','salience'].includes(metric) || data.available_metrics.includes(metric)).map(([metric, name]) =>
+        !['behavioral','unexpected_endings','salience','position_frequency'].includes(metric) || data.available_metrics.includes(metric)).map(([metric, name]) =>
         <span {...pageStyleTarget('cuda.metric.' + metric)} key={metric}>
-          {name}: {['behavioral','unexpected_endings','salience'].includes(metric) ? players(data['pending_' + metric + '_players']) + ' pending' : metric === 'accuracy' && data.pending_accuracy_players > 0
+          {name}: {['behavioral','unexpected_endings','salience','position_frequency'].includes(metric) ? players(data['pending_' + metric + '_players']) + ' pending' : metric === 'accuracy' && data.pending_accuracy_players > 0
             ? players(data.pending_accuracy_players) + ' pending' : number(pending[metric]) + ' games'}
           {data.deferred_metrics.includes(metric) ? ' · GPU migration pending' : ' · ready for manual runs'}
         </span>)}</div>
@@ -66,13 +68,16 @@ export default function CudaSummaryPanel() {
         <strong {...pageStyleTarget('cuda.progress.phase')} role="status">{run.phase}</strong>
         <ProgressMeter {...pageStyleTarget('cuda.progress.track')} className="cuda-summary-track"
           fillTag={Fill} aria-label="CUDA summary progress"
-          aria-valuetext={metadataOnly || salienceActive ? run.phase : undefined}
-          value={salienceActive ? (salience?.prepared && salience.shards < salience.shard_total ? salience.shards : undefined) : metadataOnly ? (!metadata?.ready && run.status !== 'complete' ? undefined : metadata?.complete ? 1 : Number(metadata?.computed || 0)) : Number(run.processed_games) + Number(run.superseded_games)}
-          max={salienceActive ? salience?.shard_total || 32 : metadataOnly ? (metadata?.complete ? 1 : Math.max(1, metadata?.chunks?.length || 0)) : Number(run.total_games) || 1} />
-        {!metadataOnly && !salienceActive && Number(run.total_games) > 0 && <span {...pageStyleTarget('cuda.progress.count')}>{number(run.processed_games)} / {number(run.total_games)} games processed
+          aria-valuetext={metadataOnly || salienceActive || frequencyActive ? run.phase : undefined}
+          value={frequencyActive ? (frequency.prepared ? frequency.shards + frequency.published : undefined) : salienceActive ? (salience?.prepared && salience.shards < salience.shard_total ? salience.shards : undefined) : metadataOnly ? (!metadata?.ready && run.status !== 'complete' ? undefined : metadata?.complete ? 1 : Number(metadata?.computed || 0)) : Number(run.processed_games) + Number(run.superseded_games)}
+          max={frequencyActive ? frequency.shard_total + frequency.players.length : salienceActive ? salience?.shard_total || 32 : metadataOnly ? (metadata?.complete ? 1 : Math.max(1, metadata?.chunks?.length || 0)) : Number(run.total_games) || 1} />
+        {!metadataOnly && !salienceActive && !frequencyActive && Number(run.total_games) > 0 && <span {...pageStyleTarget('cuda.progress.count')}>{number(run.processed_games)} / {number(run.total_games)} games processed
           {run.superseded_games > 0 ? ' · ' + number(run.superseded_games) + ' changed games left pending for a new run' : ''}
         </span>}
         {run.error && <p {...pageStyleTarget('cuda.error')} role="alert">{run.error}</p>}
+        {frequency && <span {...pageStyleTarget('cuda.progress.position_frequency')}>
+          Repeated positions: {number(frequency.rows)} occurrences prepared · {number(frequency.batches)} GPU batches · {number(frequency.published)} / {number(frequency.players.length)} players published
+        </span>}
         {salience && <span {...pageStyleTarget('cuda.progress.salience')}>
           Salience: {number(salience.games)} games · {number(salience.rows)} early positions prepared · {number(salience.batches)} GPU batches
         </span>}
@@ -92,6 +97,7 @@ export default function CudaSummaryPanel() {
             {item.metrics?.includes('score_distribution') ? ' · Finalize: ' + Number(item.timings?.finalization_seconds || 0).toFixed(1) + ' s' : ''}</span>
           {item.timings?.metadata && <span>Metadata input: {Number(item.timings.metadata.preparation_seconds || 0).toFixed(1)} s · Calculate/stage: {Number(item.timings.metadata.cuda_seconds || 0).toFixed(1)} s · GPU batches: {number(item.timings.metadata.batches)}</span>}
           {item.timings?.salience && <span>Salience input: {Number(item.timings.salience.input_seconds || 0).toFixed(1)} s · CUDA: {Number(item.timings.salience.cuda_seconds || 0).toFixed(1)} s · GPU batches: {number(item.timings.salience.batches)}</span>}
+          {item.timings?.position_frequency && <span>Frequency input: {Number(item.timings.position_frequency.input_seconds || 0).toFixed(1)} s · CUDA: {Number(item.timings.position_frequency.cuda_seconds || 0).toFixed(1)} s · Stored rows: {number(item.timings.position_frequency.stored_rows)}</span>}
         </article>)}
       </div>}
     </>}

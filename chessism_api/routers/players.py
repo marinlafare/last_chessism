@@ -90,7 +90,8 @@ class RangeGamesScoreRequest(BaseModel):
 
 
 class ExploreGamesRequest(BaseModel):
-    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening|accuracy|blunders|unexpected_endings)$")
+    scope: str = Field(..., pattern="^(date|hour|weekday|weekday_hour|rating|result|opponent|opening|accuracy|blunders|unexpected_endings|position)$")
+    fen_id: int | None = Field(None, ge=1, lt=2**63)
     modes: list[str] = Field(..., min_length=1, max_length=3)
     date: str | None = Field(None, min_length=10, max_length=10)
     weekday: int | None = Field(None, ge=1, le=7)
@@ -119,6 +120,7 @@ class ScorePositionsRequest(BaseModel):
     modes: list[str] = Field(..., min_length=1, max_length=3)
     snapshot: str | None = Field(..., max_length=64)
     cursor: str | None = Field(None, max_length=512)
+    color: str | None = Field(None, pattern="^(white|black)$")
 
 
 async def _get_cached_player_analysis(
@@ -459,7 +461,8 @@ async def api_get_player_game_catalog(
     """Groups ranked by games, or by outcome percentage within ten-point bins.
 
     Bin 0 is [0,10), bin 8 is [80,90), and bin 9 is [90,100].
-    Outcomes default to bin 9. Opening and opponent groups need at least two games.
+    Outcomes default to bin 9. Groups need at least two games when browsing;
+    an explicit opponent search also includes single-game opponents.
     """
     try:
         response = await _hero_analytics_response(
@@ -543,9 +546,10 @@ async def api_get_player_score_positions(
     selection: ScorePositionsRequest,
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> JSONResponse:
-    """Up to ten matching examples from a bounded occurrence scan.
+    """Ten repeated positions ranked by saved player-specific frequencies.
 
-    Seek cursors continue sparse batches without counting/ranking the corpus.
+    Before first publication, use bounded matching examples, not a live recount.
+    Filter by the player's color; scores always use the player's perspective.
     Board text is fetched only for the returned examples.
     """
     try:
@@ -623,6 +627,7 @@ async def api_explore_player_games(
         explore_player_games,
         player_name,
         scope_kind=request.scope,
+        fen_id=request.fen_id,
         modes=request.modes,
         target_date=request.date,
         weekday=request.weekday,

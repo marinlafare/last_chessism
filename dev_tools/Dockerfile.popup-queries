@@ -5,5 +5,11 @@ FROM scratch AS update
 COPY chessism_api/operations/player_game_explorer.py chessism_api/operations/player_game_explorer_query.py chessism_api/operations/player_accuracy_distribution.py chessism_api/operations/player_blunder_page.py chessism_api/operations/player_score_distribution.py chessism_api/operations/player_score_position_page.py /app/chessism_api/operations/
 COPY chessism_api/routers/players.py chessism_api/routers/jobs.py chessism_api/routers/cloud_analysis.py /app/chessism_api/routers/
 COPY worker.py /app/worker.py
+COPY chessism_api/appearance_scopes.json chessism_api/appearance_registry.json /app/chessism_api/
+COPY chessism_api/operations/player_frequency_position_page.py /app/chessism_api/operations/player_frequency_position_page.py
+COPY chessism_api/operations/cuda_summaries/ /app/chessism_api/operations/cuda_summaries/
+COPY chessism_api/operations/opening_book/ /app/chessism_api/operations/opening_book/
+COPY chessism_api/operations/player_position_games.py /app/chessism_api/operations/player_position_games.py
+COPY chessism_api/operations/player_catalog_snapshot.py chessism_api/operations/player_game_catalog.py /app/chessism_api/operations/
 FROM ${BASE_IMAGE}
 COPY --from=update /app/ /app/

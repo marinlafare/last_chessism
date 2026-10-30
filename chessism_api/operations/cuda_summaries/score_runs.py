@@ -169,6 +169,8 @@ async def complete(session, run):
     if 'salience' in run['metrics']:
         from .salience_store import SCOPE as salience_scope
         skipped += await session.scalar(text(f"SELECT count(*) FROM {salience_scope} WHERE run_id=:id AND status='superseded'"), p)
+    if 'position_frequency' in run['metrics']:
+        skipped += await session.scalar(text(f"SELECT COALESCE((timings->'position_frequency'->>'superseded')::int,0) FROM {RUN} WHERE id=:id"),p)
     await session.execute(text(f'''UPDATE {RUN} SET status='complete',phase=:phase,finished_at=clock_timestamp(),
         updated_at=clock_timestamp(),attempts=0,error=NULL,retry_after=NULL,
         timings=timings || jsonb_build_object('superseded_score_players',CAST(:skipped AS bigint)) WHERE id=:id'''),

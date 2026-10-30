@@ -16,6 +16,9 @@ async def finalize(factory, run, xp):
             ORDER BY player_name LIMIT 1'''), {'id': run['id']})).mappings().first()
         if not row:
             await session.rollback()
+            from . import frequency_worker
+            if await frequency_worker.tick(factory,run,xp):
+                return {'status':'building','remaining':1}
             from . import salience_worker
             if await salience_worker.tick(factory,run,xp):
                 return {'status':'building','remaining':1}

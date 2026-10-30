@@ -32,6 +32,12 @@ async def main(args):
             if args.enable_salience:
                 from .salience_store import activate
                 await activate(session)
+            if args.install_frequencies:
+                from .frequency_store import install
+                await install(session, configured_storage())
+            if args.enable_frequencies:
+                from .frequency_store import activate
+                await activate(session)
             print(json.dumps(await runs.status(session), default=str))
     finally:
         await engine.dispose()
@@ -46,4 +52,6 @@ if __name__ == '__main__':
     group.add_argument('--enable-accuracy', action='store_true')
     group.add_argument('--enable-metadata', action='store_true')
     group.add_argument('--enable-salience', action='store_true')
+    group.add_argument('--install-frequencies', action='store_true')
+    group.add_argument('--enable-frequencies', action='store_true')
     asyncio.run(main(parser.parse_args()))

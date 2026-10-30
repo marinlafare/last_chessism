@@ -12,7 +12,7 @@ const ratingModeLabels = { bullet: 'Bu', blitz: 'Bl', rapid: 'Ra' }
 const results = [['wins', 'Wins'], ['draws', 'Draws'], ['losses', 'Losses'], ['unknown', 'Unknown']]
 const catalogSorts = [['games', 'By games'], ['wins', 'By wins'], ['losses', 'By losses'], ['draws', 'By draws']]
 const ratioBins = Array.from({ length: 10 }, (_, index) => 9 - index)
-const orderVersion = 'catalog-outcome-bins-v6'
+const orderVersion = 'catalog-outcome-bins-v7'
 const openingLabel = key => key ? key.replaceAll('-', ' ') : 'Unknown opening'
 
 export default function PlayerGameCatalog({ playerName, kind, summaryRevision }) {

@@ -1,6 +1,10 @@
 export const SALIENCE_BAND_LABELS = ['0–50', '>50–60', '>60–70', '>70–80', '>80–90', '>90–100']
 export const SALIENCE_BAND_BOUNDARIES = [0, 50, 60, 70, 80, 90, 100]
 
+// Visual distance represents bins, not the unequal numeric width of each bin.
+export const salienceBandOffset = value => SALIENCE_BAND_BOUNDARIES.indexOf(value) * 100 / 6
+export const salienceBandValue = offset => SALIENCE_BAND_BOUNDARIES[Math.max(0, Math.min(6, Math.round(offset * 6 / 100)))]
+
 export function salienceBoundStops(range, index) {
   // Keep at least one complete bin selected; handles cannot meet or cross.
   return SALIENCE_BAND_BOUNDARIES.filter(value => index === 0 ? value < range[1] : value > range[0])

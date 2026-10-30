@@ -1,8 +1,8 @@
-"""Player-perspective position histograms and bounded matching FEN pages.
+"""Player-perspective histograms and saved-frequency or bounded FEN pages.
 
-No new tables or engine work. Histograms use saved summaries in manual mode.
-Popup pages read small batches of matching occurrences without ranking the
-whole corpus. The legacy histogram path retains its bounded cache/shared work.
+Histograms and rankings use saved CUDA summaries when available. Before the
+first frequency publication, popups retain bounded matching examples. Requests
+never count or rank the raw occurrence corpus.
 """
 import asyncio
 import hashlib
@@ -353,7 +353,7 @@ async def calculate_distribution(player, modes, redis):
         return payload
 
 
-async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=None):
+async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=None, color=None):
     player, modes = normalize(player_name, modes)
     if type(bin_id) is not int or not 0 <= bin_id <= 12:
         raise ValueError('Choose one of the thirteen score intervals.')
@@ -367,4 +367,12 @@ async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=N
             await session.execute(text("SET LOCAL work_mem='8MB'"))
             await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
             await session.execute(text('SET LOCAL jit=off'))
-            return await read_position_page(session, player, modes, bins()[bin_id], cursor)
+            from .player_frequency_position_page import read_ranked_page, FrequencySnapshotChanged
+            try:
+                ranked = await read_ranked_page(session, player, modes, bins()[bin_id], cursor, color=color)
+            except FrequencySnapshotChanged as error:
+                raise ScoreDistributionChanged(str(error)) from error
+            if ranked and not ranked.get('ranking_pending'):
+                return ranked
+            page = await read_position_page(session, player, modes, bins()[bin_id], cursor, color=color)
+            return {**page, **(ranked or {})}

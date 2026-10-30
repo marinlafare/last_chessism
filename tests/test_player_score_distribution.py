@@ -325,7 +325,7 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(data, chunk)
         revision.assert_not_awaited()
         calculation.assert_not_awaited()
-        reader.assert_awaited_once_with(self.session, 'player', ('bullet',), scores.bins()[6], 'seek')
+        reader.assert_awaited_once_with(self.session, 'player', ('bullet',), scores.bins()[6], 'seek', color=None)
         statements = [str(c.args[0]) for c in self.session.execute.call_args_list]
         self.assertIn("SET LOCAL statement_timeout='3s'", statements)
         self.assertIn('SET LOCAL max_parallel_workers_per_gather=0', statements)

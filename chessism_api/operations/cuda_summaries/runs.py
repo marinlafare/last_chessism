@@ -50,7 +50,9 @@ async def request_run(session, account_id):
     metadata_work = await metadata_store.capture(session, run_id) if scores else 0
     from . import salience_store
     salience_work = await salience_store.capture(session, run_id) if scores else 0
-    if not total and not score_work and not metadata_work and not salience_work:
+    from . import frequency_store
+    frequency_work = await frequency_store.capture(session, run_id) if scores else 0
+    if not total and not score_work and not metadata_work and not salience_work and not frequency_work:
         raise ValueError('No pending work for the currently available CUDA calculations.')
     if scores:
         await session.execute(text(f"UPDATE {RUN} SET metrics=ARRAY['blunders','score_distribution'] WHERE id=:id"), {'id': run_id})
@@ -60,6 +62,8 @@ async def request_run(session, account_id):
         await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['behavioral','unexpected_endings'] WHERE id=:id"), {'id':run_id})
     if salience_work:
         await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['salience'] WHERE id=:id"), {'id':run_id})
+    if frequency_work:
+        await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['position_frequency'] WHERE id=:id"), {'id':run_id})
     await session.execute(text(f'UPDATE {RUN} SET total_games=:total WHERE id=:id'), {'id': run_id, 'total': total})
     return await progress(session, run_id)
 
@@ -176,6 +180,11 @@ async def status(session, *, player=None):
     salience_players = (await session.execute(text(f'SELECT player_name FROM ({salience_store.needed(layout)}) q'))).scalars().all() if salience else []
     if salience:
         available = [*available, 'salience']
+    from . import frequency_store
+    frequency_players = [p['player_name'] for p in await frequency_store.pending(session)]
+    frequencies = await frequency_store.enabled(session)
+    if frequencies:
+        available = [*available, frequency_store.METRIC]
     owner_filter = f'''AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
         JOIN {layout.table('player')} p ON p.id=gp.player_id
         WHERE gp.game_link=q.game_link AND p.player_name=:player)''' if player else ''
@@ -190,13 +199,18 @@ async def status(session, *, player=None):
         accuracy_stale = accuracy and await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM ({accuracy_store.needs_work(layout)}) q WHERE player_name=:player)'), params)
         metadata_metrics = [name for name,key in zip(metadata_store.METRICS,('behavior','endings')) if any(r[key] for r in metadata)]
         return {'manual': True, 'pending_metrics': [m for m in ['blunders',*DEFERRED]
-                if counts.get(m) or preparing or (m == 'score_distribution' and score_stale) or (m == 'accuracy' and accuracy_stale)]+metadata_metrics+(['salience'] if player in salience_players else []),
+                if counts.get(m) or preparing or (m == 'score_distribution' and score_stale) or (m == 'accuracy' and accuracy_stale)]+metadata_metrics+(['salience'] if player in salience_players else [])+(['position_frequency'] if player in frequency_players else []),
                 'pending_games': counts, 'deferred_metrics': deferred}
     players = await session.scalar(text(f'''SELECT count(DISTINCT gp.player_id) FROM {PENDING} q
         JOIN {layout.table('game_player')} gp ON gp.game_link=q.game_link
         JOIN {layout.table('player')} p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL'''))
     preparing = await session.scalar(text(f'SELECT count(*) FROM {layout.table("fen_summary_refresh")}'))
-    history = [dict(r) for r in (await session.execute(text(f'SELECT * FROM {RUN} ORDER BY created_at DESC LIMIT 20'))).mappings()]
+    # Do not send potentially large internal frequency checkpoint manifests on
+    # every five-second UI poll. The worker still reads the full run record.
+    history = [dict(r) for r in (await session.execute(text(f'''SELECT id,requested_by,model_id,metrics,status,
+        phase,created_at,started_at,finished_at,updated_at,total_games,processed_games,superseded_games,
+        attempts,retry_after,error,timings #- '{{position_frequency,chunks}}' #- '{{position_frequency,outputs}}' AS timings
+        FROM {RUN} ORDER BY created_at DESC LIMIT 20'''))).mappings()]
     active = next((r for r in history if r['status'] in ('queued','running','retrying')), None)
     from chessism_api.database.stockfish_summary_schema import summary_table
     score_players = await session.scalar(text(f'SELECT count(*) FROM {summary_table(layout,"state")} WHERE revision<>published_revision')) if scores else 0
@@ -205,6 +219,7 @@ async def status(session, *, player=None):
         accuracy_union = f'UNION SELECT player_name FROM ({accuracy_store.needs_work(layout)}) a' if accuracy else ''
         metadata_union = f'UNION SELECT player_name FROM ({metadata_store.needed(layout)}) md' if await metadata_store.enabled(session) else ''
         salience_union = f'UNION SELECT player_name FROM ({salience_store.needed(layout)}) sa' if salience else ''
+        frequency_union = f'UNION SELECT player_name FROM ({frequency_store.needed(layout)}) pf' if frequencies else ''
         players = await session.scalar(text(f'''SELECT count(*) FROM (
             SELECT p.player_name FROM {PENDING} q JOIN {layout.table('game_player')} gp ON gp.game_link=q.game_link
             JOIN {layout.table('player')} p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL
@@ -212,11 +227,13 @@ async def status(session, *, player=None):
             {accuracy_union}
             {metadata_union}
             {salience_union}
+            {frequency_union}
         ) pending_players'''))
     return {'manual': True, 'available_metrics': available, 'deferred_metrics': deferred,
             'pending_games': counts, 'pending_players': players, 'pending_score_players': score_players,
             'pending_accuracy_players': accuracy_players,
             'pending_salience_players': len(salience_players),
+            'pending_position_frequency_players': len(frequency_players),
             'pending_behavioral_players': sum(r['behavior'] for r in metadata),
             'pending_unexpected_endings_players': sum(r['endings'] for r in metadata),
             'preparing_games': preparing,

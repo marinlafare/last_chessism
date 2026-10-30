@@ -5,11 +5,18 @@ from datetime import datetime, timezone
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 
 from chessism_api.operations.player_analytics_summary import summarize_day, combine_partitions, played_hours
-from chessism_api.operations.player_catalog_snapshot import catalog_ratio_bin, rank_catalog
+from chessism_api.operations.player_catalog_snapshot import catalog_min_games, catalog_ratio_bin, rank_catalog
 from chessism_api.operations.player_timezone import resolve_player_timezone
 
 
 class PlayerSummaryTests(unittest.TestCase):
+    def test_single_game_exception_is_only_for_nonempty_opponent_search(self):
+        for search in ('yo_itz_warr1or', 'YO_ITZ_WARR1OR', ' yo_itz '):
+            self.assertEqual(catalog_min_games('opponents', search), 1)
+            self.assertEqual(catalog_min_games('openings', search), 2)
+        for search in ('', ' ', '\t\n'):
+            self.assertEqual(catalog_min_games('opponents', search), 2)
+
     def test_hours_round_like_postgresql(self):
         self.assertEqual(played_hours(18), 0.01)
         self.assertEqual(played_hours(54), 0.02)

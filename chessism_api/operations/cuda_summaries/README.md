@@ -1,5 +1,42 @@
 # Manual CUDA summary orchestration
 
+## Full-game repeated-position frequencies
+
+`player_full_position_frequency_v1` is an independent manual stage. One published
+table, `player_fen_frequency`, stores `(player_id,is_white,mode_id,fen_id,appearances)`.
+Only FENs occurring more than once across that player's entire corpus are retained.
+Per-mode/color counts of one are retained when their combined player/FEN count is
+greater than one. All plies, scored and unscored positions, and within-game repeats
+count. The salience first-15-move table and formula are not modified.
+
+The stage reuses salience source revisions plus behavioral revisions (for mode,
+ownership and game edits), storing its publication marker on `cuda_salience_state`.
+Capture, input cursors and result checkpoints live on the existing manual run.
+Bounded numeric COPY builds mixed-player inputs, partitioned by complete player/FEN
+groups. One mmap-able file per input chunk avoids a file per chunk per hash group.
+Checksummed segments compose memory-budgeted GPU batches; counting/grouping runs on
+CUDA only. Local publication transports saved integers, never recomputes frequencies.
+Changed revisions or incomplete FEN extraction preserve the old snapshot and leave
+the player pending. Empty summaries are published explicitly, not confused with an
+unprocessed player. Singleton contributions are recovered by rereading the full
+affected player corpus; new data is never added blindly to a repeats-only table.
+
+Score popups query only this compact table and the current FEN evaluations. Modes
+combine saved subgroup counts, and colors retain their own score perspective. The
+popup excludes selected-perspective totals of one, orders by appearances descending,
+then FEN ID and color for stable keyset pagination. Only ten board strings are read.
+Cursor versions include the published count generation and current score revision.
+New evaluations need no frequency rebuild. Before the initial manual run, bounded
+matching examples remain available with an explicit ranking-pending message.
+
+Deploy the API and the idle algorithms worker, then explicitly run management
+`--install-frequencies` followed by `--enable-frequencies`. Neither command requests
+inference or modifies existing summaries. The next user click on **Run CUDA summaries**
+captures pending players. Progress/history and appearance controls include this stage.
+`tests/check_frequency_cuda_integration.py` uses private PostgreSQL and synthetic data;
+`tests/check_position_frequency_gpu.py` checks the actual RTX 4060 kernel without live
+data. Retained run checkpoints follow the existing CUDA artifact retention policy.
+
 ## Manual salience stage
 
 `salience_first15_equal_cuda_v1` is **First 15 moves · equal weights**: both

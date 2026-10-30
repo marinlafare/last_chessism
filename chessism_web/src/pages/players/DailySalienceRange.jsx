@@ -1,7 +1,7 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useId, useRef } from 'react'
 import { moveSalienceBound } from './dailySalience'
-import { SALIENCE_BAND_BOUNDARIES, moveSalienceBandBound, salienceBoundStops } from './dailySalienceBands'
+import { SALIENCE_BAND_BOUNDARIES, moveSalienceBandBound, salienceBoundStops, salienceBandOffset, salienceBandValue } from './dailySalienceBands'
 
 export default function DailySalienceRange({ range, scale, onChange, banded = false, unavailableMessage = '' }) {
   const id = useId()
@@ -11,6 +11,7 @@ export default function DailySalienceRange({ range, scale, onChange, banded = fa
   const bounds = disabled ? [0, 100] : range
   const moveBound = banded ? moveSalienceBandBound : moveSalienceBound
   const ticks = banded ? SALIENCE_BAND_BOUNDARIES : [0, 25, 50, 75, 100]
+  const offset = banded ? salienceBandOffset : value => value
   const actual = (value) => scale.minimum + (scale.maximum - scale.minimum) * value / 100
   const pointerValue = (event) => {
     const rect = track.current.getBoundingClientRect()
@@ -18,7 +19,8 @@ export default function DailySalienceRange({ range, scale, onChange, banded = fa
     // Keep pointer mapping accurate when Edit styles changes either of them.
     const height = track.current.clientHeight
     const bottom = rect.top + track.current.clientTop + height
-    return height ? Math.max(0, Math.min(100, 100 * (bottom - event.clientY) / height)) : 0
+    const position = height ? Math.max(0, Math.min(100, 100 * (bottom - event.clientY) / height)) : 0
+    return banded ? salienceBandValue(position) : position
   }
   const pointerMove = (event) => {
     if (disabled || drag.current?.pointerId !== event.pointerId) return
@@ -30,7 +32,7 @@ export default function DailySalienceRange({ range, scale, onChange, banded = fa
     const value = pointerValue(event)
     const handle = event.target.closest('[data-salience-handle]')
     const index = handle ? Number(handle.dataset.salienceHandle)
-      : Math.abs(value - bounds[0]) <= Math.abs(value - bounds[1]) ? 0 : 1
+      : Math.abs(offset(value) - offset(bounds[0])) <= Math.abs(offset(value) - offset(bounds[1])) ? 0 : 1
     drag.current = { index, pointerId: event.pointerId }
     track.current.setPointerCapture(event.pointerId)
     track.current.querySelector(`[data-salience-handle="${index}"]`).focus()
@@ -66,13 +68,13 @@ export default function DailySalienceRange({ range, scale, onChange, banded = fa
         onPointerCancel={() => { drag.current = null }} onLostPointerCapture={() => { drag.current = null }}>
         <span {...pageStyleTarget('player.accuracy.salience.rail')} className="daily-salience-rail" aria-hidden="true" />
         <span {...pageStyleTarget('player.accuracy.salience.fill')} className="daily-salience-fill" aria-hidden="true"
-          style={{ bottom: `${bounds[0]}%`, height: `${bounds[1] - bounds[0]}%` }} />
+          style={{ bottom: `${offset(bounds[0])}%`, height: `${offset(bounds[1]) - offset(bounds[0])}%` }} />
         {ticks.map((value) => (
-          <span {...pageStyleTarget('player.accuracy.salience.ticks')} key={value} className="daily-salience-tick" style={{ bottom: `${value}%` }} aria-hidden="true">{value}</span>
+          <span {...pageStyleTarget('player.accuracy.salience.ticks')} key={value} className="daily-salience-tick" style={{ bottom: `${offset(value)}%` }} aria-hidden="true">{value}</span>
         ))}
         {bounds.map((value, index) => (
           <button {...pageStyleTarget(`player.accuracy.salience.${index === 0 ? 'minimum' : 'maximum'}.handle`)} key={index} type="button" role="slider" className="daily-salience-handle"
-            data-salience-handle={index} disabled={disabled} style={{ bottom: `${value}%` }}
+            data-salience-handle={index} disabled={disabled} style={{ bottom: `${offset(value)}%` }}
             aria-label={`${index === 0 ? 'Minimum' : 'Maximum'} ${banded ? 'daily salience bin boundary' : 'relative average game salience'}`}
             aria-orientation="vertical" aria-valuemin={banded ? salienceBoundStops(bounds, index)[0] : index === 0 ? 0 : bounds[0]}
             aria-valuemax={banded ? salienceBoundStops(bounds, index).at(-1) : index === 0 ? bounds[1] : 100} aria-valuenow={value}

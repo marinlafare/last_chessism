@@ -164,12 +164,23 @@ async def explore_player_games(
     ending: str | None = None,
     score_band: str | None = None,
     threshold_cp: int | None = None,
+    fen_id: int | None = None,
 ) -> dict[str, Any]:
     """Return compact analyzed games belonging to one visual chart bin."""
     if not 1 <= limit <= 100:
         raise ValueError("limit must be between 1 and 100.")
     salience_filtered = validate_range(salience_min, salience_max)
     selected_modes = _normalize_modes(modes)
+    if scope_kind == 'position':
+        if (analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None
+                or any(value is not None for value in (target_date, weekday, hour, rating_from,
+                    result, opponent, opening, accuracy_bin, blunder_bin, ending, score_band, threshold_cp))):
+            raise ValueError('Position games require analyzed_only=false without other chart filters.')
+        from .player_position_games import explore_position_games
+        return await explore_position_games(player_name, fen_id=fen_id, color=color, modes=selected_modes,
+            timezone_name=timezone_name, limit=min(limit, 30), cursor=cursor)
+    if fen_id is not None:
+        raise ValueError('fen_id requires the position scope.')
     if scope_kind == 'unexpected_endings':
         if (analyzed_only or salience_filtered or minimum_game_moves_exclusive is not None
                 or any(value is not None for value in (
@@ -554,8 +565,9 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
         rows = move_result.mappings().all()
         from .canonical_blunders.readers import game_flags
         canonical_flags=await game_flags(session,game_id)
-
-    moves = _format_moves(rows,canonical_flags)
+        moves = _format_moves(rows,canonical_flags)
+        from .opening_book.review import annotate_moves
+        await annotate_moves(session, moves)
     return {
         'blunder_model':canonical_flags['model_id'] if canonical_flags else None,
         'blunder_annotations_pending':not canonical_flags or canonical_flags['pending'],

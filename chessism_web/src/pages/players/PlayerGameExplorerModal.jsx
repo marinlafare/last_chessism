@@ -24,6 +24,7 @@ function selectionTitle(selection) {
   if (selection.scope === 'opponent') return `Games against ${selection.opponent}`
   if (selection.scope === 'opening') return `${selection.label || 'Unknown opening'} · ${selection.color || 'both colors'}`
   if (selection.scope === 'date') return `Games on ${selection.date}`
+  if (selection.scope === 'position') return `Games with FEN ${selection.fen_id}`
   if (selection.scope === 'hour') {
     const kind = { win: 'Won games', draw: 'Drawn games', loss: 'Lost games' }[selection.result] || 'Games'
     return `${kind} started at ${String(selection.hour).padStart(2, '0')}:00`
@@ -236,7 +237,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onSelec
   const summary = request.data?.summary
   const games = request.data?.games || []
   const analyzedOnly = selection.analyzed_only !== false
-  const chartSelection = ['rating', 'result', 'opponent', 'opening', 'accuracy', 'blunders', 'unexpected_endings'].includes(selection.scope)
+  const chartSelection = ['rating', 'result', 'opponent', 'opening', 'accuracy', 'blunders', 'unexpected_endings', 'position'].includes(selection.scope)
   return createPortal(
     <div className="game-explorer-backdrop" role="presentation" onMouseDown={onClose}>
       <section {...pageStyleTarget('gameExplorer.panel')}

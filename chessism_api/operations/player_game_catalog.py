@@ -12,7 +12,7 @@ from chessism_api.database.engine import AsyncDBSession
 from chessism_api.database.relational_reads import player_rows_sql
 from chessism_api.database.relational_storage import storage_for
 from chessism_api.operations.player_hero_analytics import _analytics_scope
-from chessism_api.operations.player_catalog_snapshot import CATALOG_MIN_GAMES, catalog_ratio_bin, catalog_snapshot_page
+from chessism_api.operations.player_catalog_snapshot import catalog_min_games, catalog_ratio_bin, catalog_snapshot_page
 
 CACHE_SECONDS = 60
 READ_SLOTS = asyncio.Semaphore(2)
@@ -120,7 +120,7 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
                                             color=color, search=search, page=page, limit=limit, sort_by=sort_by, ratio_bin=ratio_bin)
         if saved is not None:
             return saved
-    key = 'chessism:player-game-catalog:v9:' + hashlib.sha256(json.dumps(
+    key = 'chessism:player-game-catalog:v10:' + hashlib.sha256(json.dumps(
         [scope.player, kind, scope.mode, color, page, limit, search, sort_by, ratio_bin]).encode()).hexdigest()
     cached = await cached_page(redis, key)
     if cached is not None:
@@ -177,7 +177,7 @@ async def get_player_game_catalog(player_name, redis, *, kind, mode='all', color
             """, ('mode', 'color', 'result', field))
             records = (await session.execute(query, {
                 'player': scope.player, 'mode': scope.mode, 'color': color,
-                'min_games': CATALOG_MIN_GAMES,
+                'min_games': catalog_min_games(kind, search),
                 'ratio_bin': ratio_bin,
                 'limit': limit, 'offset': (page - 1) * limit, 'search': search,
             })).mappings().all()

@@ -23,6 +23,7 @@ await browserFixture(9304,async({send,context,evaluate,assert,waitFor})=>{
  await waitFor("document.querySelector('[aria-label=\"Close game viewer\"]')")
  await waitFor("calendarTest.requests.some(r=>r.path.endsWith('/games/42/score'))")
  await waitFor("document.querySelector('.game-review-board')")
+ await assert("document.activeElement === document.querySelector('.game-review-modal')")
  await click('[aria-label="Close game viewer"]')
  await waitFor("document.querySelector('[data-game-key=\"42-white\"]') && !document.querySelector('.game-review-modal')")
  await assert("document.body.textContent.includes('Games on 2024-02-01')")

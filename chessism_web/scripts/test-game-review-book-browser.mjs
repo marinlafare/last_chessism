@@ -1,0 +1,18 @@
+import { browserFixture } from './browser-fixture.mjs'
+await browserFixture(9341, async ({ send, context, evaluate, assert, waitFor }) => {
+  await send('script.addPreloadScript', { functionDeclaration: '()=>{window.reviewBookFixture=true}' })
+  await send('browsingContext.navigate', { context, url: 'http://localhost:6789/tests/fixtures/gameReview.html', wait: 'complete' })
+  await waitFor(`document.querySelector('.game-review-moves button')`)
+  await evaluate(`document.querySelector('.game-review-moves button').click()`)
+  await waitFor(`document.querySelector('.game-review-quality-badge.book svg')`)
+  await assert(`!document.querySelector('.game-review-quality-badge.best') && document.querySelector('.game-review-move-annotation.book svg')`)
+  await assert(`document.querySelector('.game-review-quality-badge.book').title.includes('King’s Pawn')`)
+  await assert(`document.querySelector('[data-style-id="gameReview.current.classification"]').textContent==='Book move · best'`)
+  await evaluate(`document.querySelector('.game-review-moves button:nth-child(3)').click()`)
+  await waitFor(`document.querySelector('.game-review-quality-badge.secondary.mistake')`)
+  await assert(`document.querySelectorAll('.game-review-quality-badge').length===2 && document.querySelector('.game-review-quality-badge.book')`)
+  await evaluate(`document.querySelector('[aria-label="Flip board"]').click()`)
+  await waitFor(`document.querySelector('[data-badge-square="f3"] .book')`)
+  await assert(`gameReviewTest.requests.length===1 && !gameReviewTest.errors.length && !gameReviewTest.unexpected.length`)
+  console.log('PASS: book replaces green icon, names in tooltip, quality assessment preserved, mistake badge remains visible, board flip and no extra frontend calls.')
+})

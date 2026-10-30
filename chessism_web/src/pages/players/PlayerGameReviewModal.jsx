@@ -2,7 +2,9 @@ import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import GameReviewBoard from './GameReviewBoard.jsx'
+import BookMoveIcon from './BookMoveIcon.jsx'
 import GameReviewSoundSet from './GameReviewSoundSet.jsx'
+import GameReviewEvaluationChart from './GameReviewEvaluationChart.jsx'
 import { fetchGameScore } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 import { findPositionOccurrence } from '../../components/chess/positionOccurrence'
 import useBoardSounds from '../../components/chess/useBoardSounds'
@@ -26,7 +28,10 @@ const moveAnnotations = {
   blunder: { symbol: '??', label: 'Blunder' },
 }
 
-function MoveAnnotation({ classification }) {
+function MoveAnnotation({ classification, book }) {
+  if (book && !['inaccuracy','mistake','blunder'].includes(classification)) return <i
+    {...pageStyleTarget('gameReview.move.marker.book')} className="game-review-move-annotation book"
+    role="img" aria-label="Book move" title="Book move"><BookMoveIcon /></i>
   const annotation = moveAnnotations[classification]
   if (!annotation) return null
   return <i {...pageStyleTarget(`gameReview.move.marker.${classification}`)} className="game-review-move-annotation"
@@ -158,6 +163,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const pieceAnimationDuration = usePieceAnimationDuration()
   const { muted, toggleMuted, playMove, playNavigationClick } = useBoardSounds(gameId)
   const pendingMoveSound = useRef(null)
+  const modalRef = useRef(null)
   const moveListRef = useRef(null)
   const playMoveRef = useRef(playMove)
   playMoveRef.current = playMove
@@ -181,6 +187,30 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const boardVisible = Boolean(gameId && request.data?.game && !request.loading)
   const boardWidth = useBoardWidth(boardStageRef, boardVisible, maximized)
   const closeViewer = onBack || onClose
+
+  useEffect(() => {
+    if (!gameId) return undefined
+    // Claim focus after the explorer's unmount cleanup restores its opener.
+    // Otherwise the chart/input underneath can consume the arrow keys.
+    const opener = document.activeElement
+    modalRef.current?.focus({ preventScroll: true })
+    return () => {
+      if (opener?.isConnected) opener.focus({ preventScroll: true })
+    }
+  }, [gameId])
+
+  const handleModalKey = event => {
+    if (event.key !== 'Tab' || event.target.closest('[data-appearance-tools]')) return
+    const controls = [...modalRef.current.querySelectorAll('button, a[href], input, select, textarea, [tabindex]')]
+      .filter(element => element.tabIndex >= 0 && !element.disabled && element.getClientRects().length)
+    const first = controls[0], last = controls.at(-1)
+    if (!first) { event.preventDefault(); return }
+    if (event.shiftKey && (event.target === first || event.target === modalRef.current)) {
+      event.preventDefault(); last.focus({ preventScroll: true })
+    } else if (!event.shiftKey && (event.target === last || event.target === modalRef.current)) {
+      event.preventDefault(); first.focus({ preventScroll: true })
+    }
+  }
 
   useLayoutEffect(() => {
     setMaximized(false)
@@ -274,7 +304,8 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
 
   return createPortal(
     <div {...pageStyleTarget('gameReview.backdrop')} className={`game-review-backdrop${maximized ? ' maximized' : ''}`} role="presentation">
-      <section {...pageStyleTarget('gameReview.panel')} className={`game-review-modal ${maximized ? 'maximized' : ''} ${renderComparison ? 'salience-comparison-review' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
+      <section {...pageStyleTarget('gameReview.panel')} ref={modalRef} tabIndex={-1} onKeyDown={handleModalKey}
+        className={`game-review-modal ${maximized ? 'maximized' : ''} ${renderComparison ? 'salience-comparison-review' : ''}`} role="dialog" aria-modal="true" aria-label={`Game ${gameId}`}>
         <header {...pageStyleTarget('gameReview.header')} className="game-modal-header game-review-header">
           <div {...pageStyleTarget('gameReview.heading')} className="game-review-heading">
             <div {...pageStyleTarget('gameReview.heading.meta')} className="game-review-heading-meta">
@@ -349,6 +380,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     animationDuration={pieceAnimationDuration}
                     onSettled={onBoardSettled}
                     ply={positionIndex}
+                    move={currentMove}
                   />
               </div>
               <div {...pageStyleTarget('gameReview.boardFooter')} className="game-review-names game-review-board-footer">
@@ -369,7 +401,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
             </div>
 
             <aside {...pageStyleTarget('gameReview.analysis')} className="game-review-analysis">
-              {renderComparison ? renderComparison({ data: request.data, positionIndex }) : <>
+              {renderComparison ? renderComparison({ data: request.data, positionIndex }) :
               <div {...pageStyleTarget('gameReview.summary')} className="game-review-summary">
                 {[
                   ['accuracy', 'Accuracy', playerSummary?.accuracy?.toFixed(2) ?? 'N/A'],
@@ -382,13 +414,16 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     title={id === 'blunders' && blunderCoverage ? `${blunderCoverage.assessed_moves ?? 0} moves assessed; ${blunderCoverage.unassessed_moves ?? 'unknown'} unassessed.` : undefined}>{value}</strong>
                 </div>)}
               </div>
-              <div {...pageStyleTarget('gameReview.current')} className="game-review-current">
-                <strong {...pageStyleTarget('gameReview.current.classification')}>{currentMove?.classification || 'position'}</strong>
+              }
+              <GameReviewEvaluationChart key={gameId} moves={moves} positionIndex={positionIndex} onNavigate={navigateTo} />
+              {!renderComparison && currentMove ? <div {...pageStyleTarget('gameReview.current')} className="game-review-current">
+                <strong {...pageStyleTarget('gameReview.current.classification')}>{currentMove?.book
+                  ? `Book move${currentMove.classification ? ` · ${currentMove.classification}` : ''}`
+                  : currentMove?.classification || 'position'}</strong>
                 <span {...pageStyleTarget('gameReview.current.evaluation')}>{hasEvaluation ? `Evaluation ${evaluationLabel(evaluation, 'white')} for White` : noScoreMessage}</span>
                 {currentMove?.move_accuracy !== null && currentMove?.move_accuracy !== undefined ? <span {...pageStyleTarget('gameReview.current.accuracy')}>Move accuracy {currentMove.move_accuracy.toFixed(2)}</span> : null}
                 {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('gameReview.current.engineLine')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
-              </div>
-              </>}
+              </div> : null}
               <div {...pageStyleTarget('gameReview.moves')} ref={moveListRef} className="game-review-moves" aria-label="Game moves">
                 {moves.map((move, index) => (
                   <button {...pageStyleTarget('gameReview.move')}
@@ -398,7 +433,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     onClick={() => navigateTo(index + 1)}
                     key={move.ply}
                   >
-                    <MoveAnnotation classification={move.classification} />
+                    <MoveAnnotation classification={move.classification} book={move.book} />
                     <span {...pageStyleTarget('gameReview.move.number')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.move_color === 'white' ? `${move.move_number}.` : `${move.move_number}…`}</span>
                     <strong {...pageStyleTarget('gameReview.move.notation')} className={positionIndex === index + 1 ? 'active' : undefined}>{move.san || '—'}</strong>
                     <small {...pageStyleTarget('gameReview.move.evaluation')} title={evaluationDescription(move.evaluation_after, 'white')} className={positionIndex === index + 1 ? 'active' : undefined}>{evaluationLabel(move.evaluation_after, 'white')}</small>
