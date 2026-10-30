@@ -51,8 +51,14 @@ function collect(root) {
 // immediately; animate our existing skins with the browser's compositor instead.
 // No React updates or layout measurements occur on individual animation frames.
 export function createReviewBoardMotion(root, overlay) {
-  let config, pending, destroyed = false
+  let config, pending, completion, synchronizing = false, destroyed = false
   const running = new Map(), ghosts = new Set()
+  const settled = () => {
+    if (destroyed || synchronizing || pending || running.size) return
+    const callback = completion
+    completion = null
+    callback?.()
+  }
   const cancel = node => {
     const entry = running.get(node)
     if (entry) { entry.animation.cancel(); entry.finish() }
@@ -66,6 +72,7 @@ export function createReviewBoardMotion(root, overlay) {
     cancel(node)
     if (!node.animate || duration <= 0) {
       if (remove) { ghosts.delete(node); node.remove() }
+      settled()
       return
     }
     const previous = { willChange: node.style.willChange, zIndex: node.style.zIndex }
@@ -79,6 +86,7 @@ export function createReviewBoardMotion(root, overlay) {
       running.delete(node)
       Object.assign(node.style, previous)
       if (remove) { ghosts.delete(node); node.remove() }
+      settled()
     }
     const entry = { animation, finish }
     running.set(node, entry)
@@ -89,9 +97,11 @@ export function createReviewBoardMotion(root, overlay) {
     if (destroyed || !pending) return
     const after = collect(root)
     if (!samePosition(after, pending.target)) return
-    const { before, duration, enabled } = pending
+    const { before, duration, enabled, onSettled } = pending
     pending = null
-    if (!enabled || !before.size) return
+    completion = onSettled
+    if (!enabled || !before.size) { settled(); return }
+    synchronizing = true
     const plan = planReviewMotion(piecesOnly(before), piecesOnly(after))
     // React may reuse a captured piece's skin for its captor. Cancel OLD
     // effects first, so removing the capture cannot cancel the new move.
@@ -126,11 +136,15 @@ export function createReviewBoardMotion(root, overlay) {
     }
     // Detached source nodes must not retain animation callbacks.
     for (const node of [...running.keys()]) if (!root.contains(node) && !ghosts.has(node)) cancel(node)
+    synchronizing = false
+    settled()
   }
   const observer = new MutationObserver(synchronize)
   observer.observe(root, { childList: true, subtree: true })
   return {
     update(next) {
+      // Superseded navigation must never play its delayed sound.
+      completion = null
       const before = collect(root), target = reviewPositionPieces(next.position)
       const enabled = Boolean(config && config.id === next.id && config.orientation === next.orientation
         && config.width === next.width && next.duration > 0 && Math.abs(next.ply - config.ply) === 1)
@@ -144,7 +158,7 @@ export function createReviewBoardMotion(root, overlay) {
       if (!enabled) clear()
       else for (const node of [...ghosts]) cancel(node)
       config = next
-      pending = { before, target, enabled, duration: next.duration }
+      pending = { before, target, enabled, duration: next.duration, onSettled: next.onSettled }
       synchronize()
     },
     destroy() { destroyed = true; observer.disconnect(); clear(); pending = null },

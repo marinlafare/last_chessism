@@ -29,6 +29,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* Keep one stable frame while loading, changing filters and showing rows. */
+  height: min(740px, calc(100dvh - 44px));
 }
 
 .game-explorer-modal > :not(.game-explorer-list) {
@@ -129,6 +131,12 @@
 
 .game-modal-message.error {
   color: #f08a8a;
+}
+
+.game-explorer-modal > .game-modal-message {
+  flex: 1;
+  display: grid;
+  place-items: center;
 }
 
 .game-explorer-list {
@@ -749,6 +757,7 @@
 .game-review-moves button.active {
   border-color: #15c780;
   background: rgba(21, 199, 128, 0.1);
+  box-shadow: inset 3px 0 0 var(--review-current-move-color, #15c780);
 }
 
 .game-review-move-annotation {

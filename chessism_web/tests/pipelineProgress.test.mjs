@@ -27,3 +27,19 @@ test('detailed backend steps are authoritative and unknown totals have no ETA', 
   assert.equal(stepEstimate(steps[0]), null)
   assert.equal(stepEstimate({ ...steps[0], total: 100, fixed_total: true }), 8)
 })
+
+test('queued extraction is explicit, belongs to this run, and cannot override working steps', () => {
+  const run = {run_id:'new',status:'running',steps:[{step:'save_games',status:'complete'}],
+    step_catalog:[{step:'save_games'},{step:'extract_positions'}]}
+  const queued = {fen:{status:{status:'queued',progress:{ingestion_run_id:'new',total:19047}}}}
+  const extraction = pipelineSteps(run,queued)[1]
+  assert.equal(extraction.status,'queued')
+  assert.equal(extraction.total,19047)
+  assert.equal(extraction.processed,0)
+  assert.match(extraction.detail,/positions are not ready/)
+  const working = {...run,steps:[...run.steps,{step:'extract_positions',status:'working',processed:100,total:200}]}
+  assert.equal(pipelineSteps(working,queued)[1].processed,100)
+  queued.fen.status.progress.ingestion_run_id='old'
+  assert.equal(pipelineSteps(run,queued)[1].status,'pending')
+  assert.equal(pipelineSteps({...run,status:'complete'},queued)[1].status,'skipped')
+})

@@ -8,8 +8,8 @@ import PlayerModeToggles, {
 } from './PlayerModeToggles'
 import PlayerGameExplorerModal from './PlayerGameExplorerModal'
 import PlayerGameReviewModal from './PlayerGameReviewModal'
-import DailyYearBands from './DailyYearBands'
-import { buildYearScale, yearAtX } from './dailyYearNavigation'
+import DailyDateBands from './DailyDateBands'
+import { buildDateScale, periodAtX, dateInPeriod, datePeriodLabel, periodTicks } from './dailyYearNavigation'
 import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
 import PlayerResultsChart from './PlayerResultsChart'
 import PlayerRatingDistribution from './PlayerRatingDistribution'
@@ -66,22 +66,37 @@ function groupByMode(observations) {
   return Array.from(grouped.entries())
 }
 
-function RatingPoints({ line, radius }) {
+function RatingPoints({ line, radius, onSelect }) {
   // Disconnected circles in one path per mode keep long histories lightweight.
   // There is no interpolation or connection between recorded ratings.
   const path = useMemo(() => line.points.map(point =>
     `M${(point.x - radius).toFixed(2)},${point.y.toFixed(2)}a${radius},${radius} 0 1,0 ${radius * 2},0a${radius},${radius} 0 1,0 ${-radius * 2},0Z`
   ).join(' '), [line.points, radius])
-  return <path className="behavior-rating-point" pointerEvents="none" d={path}
-    fill={`var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`} />
+  const color = `var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`
+  return <>
+    <path className="behavior-rating-point" data-point-radius={radius} pointerEvents="none" d={path} fill={color} />
+    {onSelect ? line.points.map(point => <circle key={point.label}
+      className="behavior-rating-point-hit" cx={point.x} cy={point.y} r="9"
+      data-date={point.label} data-mode={line.mode} style={{ color }}
+      role="button" tabIndex={0}
+      aria-label={`${point.label} · ${line.mode}: ${formatNumber(point.rating)}. Explore this day's ${line.mode} games.`}
+      onClick={() => onSelect(point)} onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect(point)
+        }
+      }}>
+      <title>{`${point.label} · ${line.mode}: ${formatNumber(point.rating)}. Explore games.`}</title>
+    </circle>) : null}
+  </>
 }
 
-function buildRatingPlot(ratings, selectedYear = 'all') {
+function buildRatingPlot(ratings, selectedPeriod = 'all') {
   const observations = (ratings?.series || []).flatMap((series) => (
     (series.points || [])
       .filter((point) => (
         point.last_rating != null
-        && (selectedYear === 'all' || String(point.date).startsWith(`${selectedYear}-`))
+        && dateInPeriod(point.date, selectedPeriod)
       ))
       .map((point) => ({
         mode: series.mode || 'unknown',
@@ -91,7 +106,7 @@ function buildRatingPlot(ratings, selectedYear = 'all') {
       }))
   )).filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.rating))
   const groups = groupByMode(observations)
-  const { start: domainStart, end: domainEnd, bands: yearBands } = buildYearScale(observations, PLOT_LEFT, PLOT_RIGHT)
+  const { start: domainStart, end: domainEnd, bands: yearBands } = buildDateScale(observations, PLOT_LEFT, PLOT_RIGHT, selectedPeriod)
 
   const allPoints = groups.flatMap(([, points]) => points)
   const minimum = allPoints.length ? Math.min(...allPoints.map((item) => item.rating)) : 0
@@ -116,6 +131,7 @@ function buildRatingPlot(ratings, selectedYear = 'all') {
   return {
     lines,
     yearBands,
+    ticks: periodTicks(domainStart, domainEnd, PLOT_LEFT, PLOT_RIGHT, selectedPeriod),
     minimum,
     maximum,
     startLabel: observations.length ? new Date(domainStart).toISOString().slice(0, 10) : null,
@@ -370,10 +386,12 @@ export default function PlayerBehaviouralPanel({
   const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleHourModes, setVisibleHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
   const [visibleDayModes, setVisibleDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
-  const [selectedRatingYear, setSelectedRatingYear] = useState('all')
+  const [selectedRatingPeriod, setSelectedRatingPeriod] = useState('all')
   const [hoveredRatingYear, setHoveredRatingYear] = useState(null)
   const [focusedRatingYear, setFocusedRatingYear] = useState(null)
   const allRatingYearsButton = useRef(null)
+  const ratingYearButton = useRef(null)
+  const ratingMonthView = selectedRatingPeriod.length === 7
   const [explorerSelection, setExplorerSelection] = useState(null)
   const [reviewGameId, setReviewGameId] = useState(null)
   const hourActivity = useMemo(
@@ -398,8 +416,8 @@ export default function PlayerBehaviouralPanel({
     [activity, resultMode]
   )
   const ratingPlot = useMemo(
-    () => buildRatingPlot(ratings, selectedRatingYear),
-    [ratings, selectedRatingYear]
+    () => buildRatingPlot(ratings, selectedRatingPeriod),
+    [ratings, selectedRatingPeriod]
   )
   const availableRatingModes = useMemo(
     () => new Set(ratingPlot.lines.map((line) => line.mode)),
@@ -414,17 +432,17 @@ export default function PlayerBehaviouralPanel({
   const visibleRatingLines = ratingPlot.lines.filter((line) => visibleRatingModes.has(line.mode))
   const selectedHourModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleHourModes.has(mode))
   const timeContext = activity?.time_context || ratings?.time_context || {}
-  const highlightedRatingBand = selectedRatingYear === 'all'
-    ? ratingPlot.yearBands.find(band => band.year === (hoveredRatingYear || focusedRatingYear)) : null
+  const highlightedRatingBand = ratingPlot.yearBands.find(band => band.key === (hoveredRatingYear || focusedRatingYear))
 
-  const selectRatingYear = year => {
-    setSelectedRatingYear(year)
+  const selectRatingPeriod = period => {
+    setSelectedRatingPeriod(period)
     setHoveredRatingYear(null)
     setFocusedRatingYear(null)
-    allRatingYearsButton.current?.focus({ preventScroll: true })
+    const focusTarget = period.length === 7 ? ratingYearButton : allRatingYearsButton
+    focusTarget.current?.focus({ preventScroll: true })
   }
   const hoverRatingYear = event => {
-    if (selectedRatingYear !== 'all' || event.pointerType === 'touch') return
+    if (ratingMonthView || event.pointerType === 'touch') return
     const svg = event.currentTarget
     const transform = svg.getScreenCTM()
     if (!transform) return
@@ -433,12 +451,12 @@ export default function PlayerBehaviouralPanel({
     cursor.y = event.clientY
     const point = cursor.matrixTransform(transform.inverse())
     setHoveredRatingYear(point.y >= RATING_TOP && point.y <= RATING_AXIS_Y + 8
-      ? yearAtX(ratingPlot.yearBands, point.x) : null)
+      ? periodAtX(ratingPlot.yearBands, point.x) : null)
   }
 
   useEffect(() => {
     setVisibleRatingModes(new Set(PLAYER_ANALYSIS_MODES))
-    setSelectedRatingYear('all')
+    setSelectedRatingPeriod('all')
     setHoveredRatingYear(null)
     setFocusedRatingYear(null)
   }, [playerName])
@@ -489,15 +507,20 @@ export default function PlayerBehaviouralPanel({
                 <div>
                   <strong {...pageStyleTarget('value')}>Rating</strong>
                 </div>
-                <div className="behavior-rating-years" aria-label="Rating year">
+                <div className="behavior-rating-years" aria-label="Rating date range">
                   <button {...pageStyleTarget('button')}
                     ref={allRatingYearsButton}
                     type="button"
-                    className={selectedRatingYear === 'all' ? 'active' : ''}
-                    aria-pressed={selectedRatingYear === 'all'}
+                    className={selectedRatingPeriod === 'all' ? 'active' : ''}
+                    aria-pressed={selectedRatingPeriod === 'all'}
                     aria-label="Show all rating years"
-                    onClick={() => selectRatingYear('all')}
+                    onClick={() => selectRatingPeriod('all')}
                   >All</button>
+                  {selectedRatingPeriod !== 'all' && <button {...pageStyleTarget('button')} ref={ratingYearButton} type="button"
+                    className={!ratingMonthView ? 'active' : ''} aria-pressed={!ratingMonthView}
+                    aria-label={`Show all of ${selectedRatingPeriod.slice(0, 4)}`} onClick={() => selectRatingPeriod(selectedRatingPeriod.slice(0, 4))}
+                  >{selectedRatingPeriod.slice(0, 4)}</button>}
+                  {ratingMonthView && <span {...pageStyleTarget('label')} className="daily-period-current" aria-current="date">{datePeriodLabel(selectedRatingPeriod).split(' ')[0]}</span>}
                 </div>
                 <PlayerModeToggles
                   activeModes={visibleRatingModes}
@@ -509,19 +532,20 @@ export default function PlayerBehaviouralPanel({
               </div>
               <svg
                 className="behavior-graph"
+                data-date-zoom={ratingMonthView ? 'month' : selectedRatingPeriod === 'all' ? 'all' : 'year'}
                 viewBox={`0 0 ${WIDTH} ${RATING_SVG_HEIGHT}`}
                 role="group"
-                aria-label={`Daily last ratings for the selected game types — ${selectedRatingYear === 'all' ? 'all years' : selectedRatingYear}`}
+                aria-label={`Daily last ratings for the selected game types — ${datePeriodLabel(selectedRatingPeriod)}`}
                 onPointerMove={hoverRatingYear}
                 onPointerLeave={() => setHoveredRatingYear(null)}
               >
-                {selectedRatingYear === 'all' ? <DailyYearBands
+                {!ratingMonthView ? <DailyDateBands
                   bands={ratingPlot.yearBands}
-                  activeYear={highlightedRatingBand?.year}
+                  activePeriod={highlightedRatingBand?.key}
                   top={RATING_TOP}
                   bottom={RATING_AXIS_Y + 8}
-                  onSelect={selectRatingYear}
-                  onFocusYear={setFocusedRatingYear}
+                  onSelect={selectRatingPeriod}
+                  onFocusPeriod={setFocusedRatingYear}
                 /> : null}
                 {[0, 1 / 3, 2 / 3, 1].map((ratio) => {
                   const y = RATING_BOTTOM - ratio * (RATING_BOTTOM - RATING_TOP)
@@ -536,16 +560,23 @@ export default function PlayerBehaviouralPanel({
                   )
                 })}
                 {visibleRatingLines.map((line) => (
-                  <RatingPoints key={line.mode} line={line} radius={selectedRatingYear === 'all' ? 1.8 : 2.5} />
+                  <RatingPoints key={line.mode} line={line} radius={ratingMonthView ? 4 : selectedRatingPeriod === 'all' ? 1.8 : 2.5}
+                    onSelect={ratingMonthView && !ratingLoading && !ratingError ? point => setExplorerSelection({
+                      scope: 'date', date: point.label, label: point.label,
+                      modes: [point.mode], analyzed_only: false,
+                    }) : null} />
                 ))}
-                <text className="graph-axis-label" pointerEvents="none" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
-                <text className="graph-axis-label" pointerEvents="none" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>
+                {ratingPlot.ticks.length ? ratingPlot.ticks.map(tick => <text className="graph-axis-label" pointerEvents="none" key={tick.label}
+                  x={tick.x} y={RATING_AXIS_Y} textAnchor="middle">{tick.label}</text>) : <>
+                  <text className="graph-axis-label" pointerEvents="none" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
+                  <text className="graph-axis-label" pointerEvents="none" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>
+                </>}
                 {!ratingPlot.lines.length ? (
                   <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(RATING_TOP + RATING_BOTTOM) / 2} textAnchor="middle">No rating observations.</text>
                 ) : null}
                 {highlightedRatingBand ? <text className="daily-year-label" pointerEvents="none"
                   x={(highlightedRatingBand.left + highlightedRatingBand.right) / 2}
-                  y={RATING_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedRatingBand.year}</text> : null}
+                  y={RATING_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedRatingBand.label}</text> : null}
               </svg>
             </section>
           </div>

@@ -13,7 +13,12 @@ window.addEventListener('error', event => state.errors.push(event.message))
 window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
 window.Audio = class {
   load() {} pause() {} removeAttribute() {}
-  play() { state.sounds++; return Promise.resolve() }
+  play() {
+    state.sounds++
+    state.soundDuringMotion = document.querySelector('.game-review-board')?.getAnimations({ subtree: true })
+      .some(animation => animation.playState === 'running') || false
+    return Promise.resolve()
+  }
 }
 const initial = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'
 const moves = [

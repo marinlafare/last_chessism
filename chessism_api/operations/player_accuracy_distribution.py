@@ -212,7 +212,9 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
             CASE WHEN selected.player_color='white' THEN g.black_player_id ELSE g.white_player_id END"""
             if layout else '')
         opponent_name = 'opponent.player_name' if layout else "CASE WHEN selected.player_color='white' THEN g.black ELSE g.white END"
-        query = f"""WITH eligible AS ({summary_rows_sql(session, metric)}), selected AS MATERIALIZED (
+        from .player_blunder_page import blunder_rows_sql
+        eligible = blunder_rows_sql(session, clause) if metric == 'blunders' else None
+        query = f"""WITH eligible AS ({eligible or summary_rows_sql(session, metric)}), selected AS MATERIALIZED (
             SELECT *, COALESCE(played_at, TIMESTAMPTZ '0001-01-01 00:00:00+00') AS cursor_time
             FROM eligible WHERE {clause}
               AND (CAST(:cursor_time AS timestamptz) IS NULL OR
@@ -228,6 +230,7 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
         ORDER BY selected.cursor_time DESC, selected.game_link DESC, selected.player_color DESC"""
         rows = [] if metric == 'blunders' and (not canonical or not canonical['active_model']) else (await session.execute(text(query), {
             'player': scope.player, 'modes': list(modes), **bounds,
+            'model': canonical['active_model'] if canonical else None,
             'cursor_time': cursor_time, 'cursor_id': cursor_id, 'cursor_color': cursor_color, 'limit': limit + 1,
         })).mappings().all()
     selected, has_more = rows[:limit], len(rows) > limit

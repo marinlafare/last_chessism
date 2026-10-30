@@ -1,5 +1,6 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
+import ProcessTiming from './ProcessTiming.jsx'
 import {
   formatCountdown,
   formatNumber,
@@ -83,6 +84,10 @@ export function JobStatus({ jobKey, page }) {
       {state.error && <div className="status-banner warn" role="alert">{state.error}</div>}
       <span>{status.replace('_', ' ')}</span>
       <small {...pageStyleTarget('local.job.function')}>{functionName}</small>
+      <ProcessTiming {...pageStyleTarget('local.job.detail')}
+        started={resultInfo?.start_time || state.status?.progress?.started_at}
+        finished={resultInfo?.finish_time} pending={['queued', 'deferred'].includes(status)}
+        active={!['queued', 'deferred', 'complete', 'failed', 'not_found'].includes(status)} />
       {isLoopJobKey(jobKey) ? (
         <strong {...pageStyleTarget('local.job.loop-scope')} className="job-scope-label">Running scope: {getLoopScopeLabel(state)}</strong>
       ) : null}

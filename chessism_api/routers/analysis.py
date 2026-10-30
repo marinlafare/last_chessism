@@ -6,6 +6,7 @@ from uuid import uuid4
 import httpx
 from fastapi import APIRouter, Body, Depends, HTTPException
 from fastapi.responses import JSONResponse
+from chessism_api.operations.fen_backup.queue import FEN_BACKUP_QUEUE, FEN_BACKUP_TIMEOUT
 from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
 import math
@@ -500,8 +501,8 @@ async def api_create_fen_analysis_backup(
         job = await redis.enqueue_job(
             "run_fen_analysis_backup_job",
             _job_id=job_id,
-            _queue_name="pipeline_queue",
-            _job_timeout=7 * 24 * 60 * 60,
+            _queue_name=FEN_BACKUP_QUEUE,
+            _job_timeout=FEN_BACKUP_TIMEOUT,
         )
         if job is None:
             raise RuntimeError("The FEN-analysis backup could not be queued.")
@@ -548,8 +549,8 @@ async def api_restore_fen_analysis_backup(
             "run_fen_analysis_restore_job",
             filename=filename,
             _job_id=job_id,
-            _queue_name="pipeline_queue",
-            _job_timeout=7 * 24 * 60 * 60,
+            _queue_name=FEN_BACKUP_QUEUE,
+            _job_timeout=FEN_BACKUP_TIMEOUT,
         )
         if job is None:
             raise RuntimeError("The FEN-analysis restore could not be queued.")

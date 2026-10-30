@@ -156,7 +156,26 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const [maximized, setMaximized] = useState(false)
   const [flipped, setFlipped] = useState(false)
   const pieceAnimationDuration = usePieceAnimationDuration()
-  const { muted, toggleMuted, playMove } = useBoardSounds(gameId)
+  const { muted, toggleMuted, playMove, playNavigationClick } = useBoardSounds(gameId)
+  const pendingMoveSound = useRef(null)
+  const moveListRef = useRef(null)
+  const playMoveRef = useRef(playMove)
+  playMoveRef.current = playMove
+  const onBoardSettled = useCallback((ply) => {
+    const pending = pendingMoveSound.current
+    if (!pending || pending.ply !== ply) return
+    pendingMoveSound.current = null
+    playMoveRef.current(pending.move, pending.backwards)
+  }, [])
+  useEffect(() => { pendingMoveSound.current = null }, [gameId])
+  useEffect(() => {
+    const list = moveListRef.current
+    const active = list?.querySelector('[aria-current="step"]')
+    if (!active) return
+    const box = list.getBoundingClientRect(), row = active.getBoundingClientRect()
+    if (row.top < box.top) list.scrollTop -= box.top - row.top
+    else if (row.bottom > box.bottom) list.scrollTop += row.bottom - box.bottom
+  }, [positionIndex, request.data])
   const { soundSet, updatePreferences, saveError } = useBoardSoundPreferences()
   const boardStageRef = useRef(null)
   const boardVisible = Boolean(gameId && request.data?.game && !request.loading)
@@ -217,13 +236,18 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
   const noScoreMessage = 'No Stockfish score is available for this FEN.'
   const whitePercent = Math.max(2, Math.min(98, Number(evaluation?.white_win_percent ?? 50)))
 
-  const navigateTo = useCallback((index) => {
+  const navigateTo = useCallback((index, repeating = false) => {
     if (!boardVisible) return
     const next = Math.max(0, Math.min(moves.length, index))
     if (next === positionIndex) return
+    // Any navigation can interrupt a move before its normal sound plays, not
+    // just OS key-repeat. Replace that interrupted sound with a quick tick.
+    const interruptedSound = pendingMoveSound.current !== null
+    pendingMoveSound.current = repeating ? null
+      : { ply: next, move: moves[next - 1], backwards: next < positionIndex }
+    if (repeating || interruptedSound) playNavigationClick()
     setPositionIndex(next)
-    playMove(moves[next - 1], next < positionIndex)
-  }, [boardVisible, moves, positionIndex, playMove])
+  }, [boardVisible, moves, positionIndex, playNavigationClick])
 
   useEffect(() => {
     if (!gameId) return undefined
@@ -236,7 +260,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
       if (event.target?.closest?.('input, textarea, select, [contenteditable="true"]')) return
       if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
         event.preventDefault()
-        navigateTo(positionIndex + (event.key === 'ArrowLeft' ? -1 : 1))
+        navigateTo(positionIndex + (event.key === 'ArrowLeft' ? -1 : 1), event.repeat)
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -323,6 +347,7 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                     position={currentFen}
                     orientation={orientation}
                     animationDuration={pieceAnimationDuration}
+                    onSettled={onBoardSettled}
                     ply={positionIndex}
                   />
               </div>
@@ -364,11 +389,12 @@ export default function PlayerGameReviewModal({ gameId, playerName, startingPosi
                 {currentMove?.engine_line_before?.length ? <small {...pageStyleTarget('gameReview.current.engineLine')}>Engine line: {currentMove.engine_line_before.slice(0, 8).join(' ')}</small> : null}
               </div>
               </>}
-              <div {...pageStyleTarget('gameReview.moves')} className="game-review-moves" aria-label="Game moves">
+              <div {...pageStyleTarget('gameReview.moves')} ref={moveListRef} className="game-review-moves" aria-label="Game moves">
                 {moves.map((move, index) => (
                   <button {...pageStyleTarget('gameReview.move')}
                     type="button"
                     className={`${positionIndex === index + 1 ? 'active' : ''} ${move.classification || ''}`}
+                    aria-current={positionIndex === index + 1 ? 'step' : undefined}
                     onClick={() => navigateTo(index + 1)}
                     key={move.ply}
                   >

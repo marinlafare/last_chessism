@@ -320,7 +320,7 @@ services:
 
   worker-analysis:
     build: .
-    image: chessism-api:latest
+    image: chessism-local-analysis:runtime
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
@@ -584,7 +584,32 @@ services:
       - redis
       - db
 
-  # --- NEW: THE "BOSS" WORKER ---
+  # FEN archives have their own queue: they must not hold up position extraction.
+  worker-fen-backup:
+    build: .
+    image: chessism-fen-backup:runtime
+    command: arq chessism_api.operations.fen_backup.worker.WorkerSettings
+    restart: unless-stopped
+    init: true
+    cpus: "1.0"
+    mem_limit: 1g
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - REDIS_HOST=${REDIS_HOST}
+      - BACKUP_VOLUME_ROOT=/backup-volume
+      - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
+      - FEN_ANALYSIS_BACKUP_DIR=/backup-volume/chessism/fen-analysis
+      - FEN_ANALYSIS_BACKUP_DISPLAY_DIR=/main-monitor-db-backups/chessism/fen-analysis
+    volumes:
+      - /main-monitor-db-backups:/backup-volume
+    networks:
+      - chessism_net
+    depends_on:
+      - redis
+      - db
+
+  # Ingestion coordinator. Existing archive jobs can drain on the old worker.
   pipeline-worker:
     build: .
     # Independent persistent release; other queue workers keep their images.

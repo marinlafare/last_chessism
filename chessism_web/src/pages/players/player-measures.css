@@ -288,6 +288,8 @@
 }
 
 .measure-daily-efficiency-point:is(:hover, :focus) { r: 4px; }
+.measure-daily-efficiency-point[role="img"] { cursor: default; }
+.measure-daily-efficiency-graph[data-date-zoom="month"] .measure-daily-efficiency-point:is(:hover, :focus) { r: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   .measure-daily-efficiency-point { transition: none; }

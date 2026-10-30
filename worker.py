@@ -84,6 +84,15 @@ async def shutdown(ctx):
     print(f"--- [WORKER] Shutdown complete. ---", flush=True)
 
 
+async def job_started(ctx):
+    """Actual worker start, independent of mutable per-batch progress payloads."""
+    import time
+    ident = ctx.get('job_id')
+    if ident:
+        key = f'chessism:job_started:{ident}'
+        await ctx['redis'].set(key, str(time.time()), nx=True, ex=7 * 24 * 3600)
+
+
 class WorkerSettings:
     """
     Defines the worker's settings.
@@ -123,6 +132,7 @@ class WorkerSettings:
     queue_name = WORKER_QUEUE
 
     on_startup = startup
+    on_job_start = job_started
     on_shutdown = shutdown
 
     max_jobs = 1

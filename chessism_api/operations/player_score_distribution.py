@@ -1,12 +1,10 @@
-"""Player-perspective position histograms and frequency-ranked FEN pages.
+"""Player-perspective position histograms and bounded matching FEN pages.
 
-No new tables or engine work. Aggregate the histogram directly into its bins;
-position pages rank narrow identities before fetching candidate scores.
-Read-only, bounded queries; cache small histograms and position pages, not the
-whole position corpus. Overlapping requests share one in-flight calculation.
+No new tables or engine work. Histograms use saved summaries in manual mode.
+Popup pages read small batches of matching occurrences without ranking the
+whole corpus. The legacy histogram path retains its bounded cache/shared work.
 """
 import asyncio
-import base64
 import hashlib
 import json
 import logging
@@ -355,93 +353,18 @@ async def calculate_distribution(player, modes, redis):
         return payload
 
 
-def encode_cursor(scope, after_count, after_id, offset):
-    raw = json.dumps([2, scope, after_count, after_id, offset], separators=(',', ':')).encode()
-    return base64.urlsafe_b64encode(raw).decode().rstrip('=')
-
-
-def decode_cursor(cursor, scope):
-    if not cursor:
-        return None, None, 0
-    try:
-        if len(cursor) > 512:
-            raise ValueError()
-        version, expected, count, fen_id, offset = json.loads(base64.b64decode(
-            cursor + '=' * (-len(cursor) % 4), altchars=b'-_', validate=True))
-        if version == 1:
-            raise ScoreDistributionChanged('Position browsing was updated; reopen this list to continue.')
-        if version != 2 or expected != scope or type(offset) is not int or offset != 0:
-            raise ValueError()
-        if not ((count is None and fen_id is None) or
-                (type(count) is int and type(fen_id) is int and 0 < count < 2**63 and 0 < fen_id < 2**63)):
-            raise ValueError()
-        return count, fen_id, offset
-    except (ValueError, TypeError, UnicodeError):
-        raise ValueError('Invalid position-list cursor.') from None
-
-
 async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=None):
     player, modes = normalize(player_name, modes)
     if type(bin_id) is not int or not 0 <= bin_id <= 12:
         raise ValueError('Choose one of the thirteen score intervals.')
-    histogram_snapshot = snapshot
-    async with AsyncDBSession() as session:
-        await prepare(session)
-        current_snapshot = await source_state(session, player)
-    # Opening a bar is a new exploration of that interval, not a request to
-    # resurrect an old PostgreSQL transaction. Rebase it to current data.
-    if not cursor:
-        snapshot = current_snapshot
-    scope = key_for('selection', player, modes, bin_id, snapshot)
-    after_count, after_id, offset = decode_cursor(cursor, scope)
-    key = key_for('page', scope, after_count, after_id)
-    chunk = await read_cache(redis, key)
-    # Already cached pages remain valid as a retained ranking even when more
-    # positions arrive. Only an uncached continuation needs a new source read.
-    if chunk is None and cursor and current_snapshot != snapshot:
-        raise ScoreDistributionChanged('The position list changed; restart it to use the latest ranking.')
-    if chunk is None:
-        chunk = await shared_calculation(key, lambda: calculate_chunk(
-            player, modes, bin_id, snapshot, after_count, after_id, redis, key,
-            rebase=not cursor))
-        # The source can advance between the cheap revision check and entering
-        # the read slot. The first page uses the calculation's actual snapshot.
-        snapshot = chunk['snapshot']
-        scope = key_for('selection', player, modes, bin_id, snapshot)
-    rows = chunk['rows'][:PAGE_SIZE]
-    next_cursor = None
-    if rows and chunk['has_more']:
-        last = rows[-1]
-        next_cursor = encode_cursor(scope, last['appearances'], int(last['fen_id']), 0)
-    return {'rows': rows, 'next_cursor': next_cursor, 'snapshot': snapshot,
-            'histogram_snapshot': histogram_snapshot,
-            'source_changed': snapshot != histogram_snapshot,
-            'bin_id': bin_id, 'modes': list(modes), 'sort': 'appearances_desc_fen_id_asc'}
-
-
-async def calculate_chunk(player, modes, bin_id, snapshot, after_count, after_id, redis, key, *, rebase=False):
-    # An open popup must not wait behind a whole-player histogram refresh.
-    # One position reader and one histogram reader at most, independently.
+    # Live examples do not require rebuilding or validating a corpus snapshot.
+    # Bound the source BEFORE score filtering; no shielded long-running task.
     async with read_slot(wait_seconds=2, slots=POSITION_READ_SLOTS):
-        chunk = await read_cache(redis, key)
-        if chunk is not None:
-            return chunk
         async with AsyncDBSession() as session:
-            await prepare(session)
+            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+            await session.execute(text("SET LOCAL statement_timeout='3s'"))
+            await session.execute(text("SET LOCAL lock_timeout='1s'"))
+            await session.execute(text("SET LOCAL work_mem='8MB'"))
             await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
-            current_snapshot = await source_state(session, player)
-            if current_snapshot != snapshot:
-                if not rebase:
-                    raise ScoreDistributionChanged('The position list changed; restart it to use the latest ranking.')
-                snapshot = current_snapshot
-                scope = key_for('selection', player, modes, bin_id, snapshot)
-                key = key_for('page', scope, after_count, after_id)
-                cached = await read_cache(redis, key)
-                if cached:
-                    return cached
-            rows, has_more = await read_position_page(session, games_sql(session),
-                {'player': player, 'modes': list(modes), 'after_count': after_count, 'after_id': after_id},
-                bins()[bin_id], PAGE_SIZE)
-        chunk = {'version': 1, 'snapshot': snapshot, 'has_more': has_more, 'rows': rows}
-        await save_cache(redis, key, chunk)
-        return chunk
+            await session.execute(text('SET LOCAL jit=off'))
+            return await read_position_page(session, player, modes, bins()[bin_id], cursor)

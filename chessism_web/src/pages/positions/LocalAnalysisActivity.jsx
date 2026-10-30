@@ -3,6 +3,7 @@ import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { EstimatedTime } from './JobStatus'
 import AnalysisHistory from './AnalysisHistory'
 import { formatNumber } from './positionPageSupport'
+import ProcessTiming from './ProcessTiming.jsx'
 
 export default function LocalAnalysisActivity({ page }) {
   const { analysisProcessViews, analysisProcessesError, deletingAnalysisJobIds, etaClockMs, etaEstimatesRef, handleDeleteAnalysisProcess } = page
@@ -37,6 +38,10 @@ export default function LocalAnalysisActivity({ page }) {
             </div>
 
             <div {...pageStyleTarget('local.activity.progress')} className="job-progress">
+              <ProcessTiming {...pageStyleTarget('local.activity.detail')}
+                started={process.result?.start_time || process.progress?.started_at}
+                finished={process.result?.finish_time} active={!process.isQueued && !process.result?.finish_time}
+                pending={process.isQueued} />
               <div {...pageStyleTarget('local.activity.progress-heading')} className="job-progress-head">
                 <span>{formatNumber(process.processed)} / {formatNumber(process.total)}</span>
                 <strong {...pageStyleTarget('local.activity.percent')}>{process.percent}%</strong>

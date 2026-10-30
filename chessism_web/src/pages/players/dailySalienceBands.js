@@ -1,4 +1,17 @@
 export const SALIENCE_BAND_LABELS = ['0–50', '>50–60', '>60–70', '>70–80', '>80–90', '>90–100']
+export const SALIENCE_BAND_BOUNDARIES = [0, 50, 60, 70, 80, 90, 100]
+
+export function salienceBoundStops(range, index) {
+  // Keep at least one complete bin selected; handles cannot meet or cross.
+  return SALIENCE_BAND_BOUNDARIES.filter(value => index === 0 ? value < range[1] : value > range[0])
+}
+
+export function moveSalienceBandBound(range, index, value) {
+  if (!Number.isFinite(value)) return range
+  const stops = salienceBoundStops(range, index)
+  const nearest = stops.reduce((best, stop) => Math.abs(stop - value) < Math.abs(best - value) ? stop : best)
+  return range.map((bound, i) => i === index ? nearest : bound)
+}
 
 export function attachSalienceBands(points, snapshot) {
   const days = new Map()
@@ -14,9 +27,12 @@ export function attachSalienceBands(points, snapshot) {
   return points.map(point => ({ ...point, salienceBands: days.get(point.date) || null }))
 }
 
-export function filterSalienceBands(points, band, enabled) {
-  if (!enabled || band === null) return points
-  return points.filter(point => point.salienceBands?.modalBands.includes(band))
+export function filterSalienceBands(points, range, enabled) {
+  if (!enabled || (range[0] === 0 && range[1] === 100)) return points
+  // A range selects whole bins, not daily averages or approximated bin midpoints.
+  // Any tied winning bin can match, without adding another copy of the point.
+  return points.filter(point => point.salienceBands?.modalBands.some(band =>
+    SALIENCE_BAND_BOUNDARIES[band] >= range[0] && SALIENCE_BAND_BOUNDARIES[band + 1] <= range[1]))
 }
 
 export function salienceBandNote(point) {

@@ -1,0 +1,9 @@
+# A single code-only layer; do not replace running ingestion/backup containers.
+ARG BASE_IMAGE=chessism-api:runtime
+FROM scratch AS update
+COPY chessism_api/operations/worker_runtime.py /app/chessism_api/operations/
+COPY chessism_api/operations/fen_backup/queue.py chessism_api/operations/fen_backup/worker.py /app/chessism_api/operations/fen_backup/
+COPY chessism_api/operations/ingestion_pipeline/assist_worker.py /app/chessism_api/operations/ingestion_pipeline/
+COPY chessism_api/routers/analysis.py chessism_api/routers/jobs.py /app/chessism_api/routers/
+FROM ${BASE_IMAGE}
+COPY --from=update /app/chessism_api/ /app/chessism_api/

@@ -1,4 +1,5 @@
 import { DEFAULT_BOARD_SOUND_SET, getBoardSoundSet } from './boardSoundSets'
+import { createBoardNavigationClick } from './boardNavigationClick.js'
 
 export function boardMoveSound(move, backwards = false) {
   if (backwards) return 'move'
@@ -11,11 +12,12 @@ export function boardMoveSound(move, backwards = false) {
 }
 
 // A separate player from completion notifications: board mute never affects
-// backups or other background tasks. Preloading is silent; play is only called
-// from a user gesture, not from a render/state effect.
+// backups or other background tasks. Preloading is silent; move playback follows
+// user navigation (after animation), while held arrows use a short immediate tick.
 export function createBoardAudio(soundSetId = DEFAULT_BOARD_SOUND_SET, { preload = true } = {}) {
   const soundSet = getBoardSoundSet(soundSetId)
   const clips = new Map()
+  const navigationClick = createBoardNavigationClick()
   let disposed = false
   let active = null
   if (typeof Audio !== 'undefined') {
@@ -29,6 +31,7 @@ export function createBoardAudio(soundSetId = DEFAULT_BOARD_SOUND_SET, { preload
   }
 
   const stop = () => {
+    navigationClick.stop()
     if (!active) return
     active.pause()
     // Seeking before metadata arrives is not supported by every browser.
@@ -38,6 +41,11 @@ export function createBoardAudio(soundSetId = DEFAULT_BOARD_SOUND_SET, { preload
 
   return {
     stop,
+    click() {
+      if (disposed) return
+      stop()
+      return navigationClick.play()
+    },
     play(name, quiet = false) {
       if (disposed) return Promise.resolve(false)
       stop()
@@ -55,6 +63,7 @@ export function createBoardAudio(soundSetId = DEFAULT_BOARD_SOUND_SET, { preload
     dispose() {
       disposed = true
       stop()
+      navigationClick.dispose()
       for (const clip of clips.values()) {
         clip.removeAttribute('src')
         clip.load()

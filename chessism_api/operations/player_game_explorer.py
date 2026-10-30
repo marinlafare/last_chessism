@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import chess
@@ -22,6 +22,7 @@ from chessism_api.operations.player_hero_analytics import (
 )
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
 from chessism_api.operations.player_salience_chart import SALIENCE_JOIN, ELIGIBLE, range_sql, validate_range
+from .player_game_explorer_query import normalized_candidates, engine_lookup
 
 
 LOCAL_PLAYED_AT_SQL = player_local_timestamp_sql("gp")
@@ -221,6 +222,8 @@ async def explore_player_games(
     async with AsyncDBSession() as session:
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
+        # Interactive clicks must not fan out across the host's CPU cores.
+        await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
         if salience_filtered:
             status = await session.scalar(text('SELECT status FROM player_salience_summary WHERE player_name=:player'), {'player':scope.player})
@@ -238,6 +241,13 @@ async def explore_player_games(
             "limit": limit + 1,
             "salience_min": salience_min, "salience_max": salience_max,
         }
+        date_window = ''
+        if scope_kind == 'date':
+            # A conservative UTC window exposes the timestamp index while the
+            # exact local-date predicate below retains DST/mean-zone semantics.
+            day = datetime.combine(date.fromisoformat(target_date), datetime.min.time(), timezone.utc)
+            params.update(day_start=day - timedelta(days=1), day_end=day + timedelta(days=2))
+            date_window = 'AND gp.played_at >= :day_start AND gp.played_at < :day_end'
         minimum_moves_filter = (
             "AND gp.n_moves > :minimum_game_moves_exclusive"
             if minimum_game_moves_exclusive is not None and not salience_filtered else ""
@@ -246,6 +256,20 @@ async def explore_player_games(
         salience_where = f'AND {ELIGIBLE} AND {range_sql("salience.salience")}' if salience_filtered else ''
         accuracy_sql = ('SUM(engine.game_efficiency * salience.salience) / NULLIF(SUM(salience.salience), 0)'
                         if salience_filtered else 'AVG(engine.game_efficiency)')
+        candidates = f"""WITH selected_games AS MATERIALIZED (
+            SELECT gp.* FROM game_player gp
+            WHERE gp.player_name=:player AND gp.mode=ANY(CAST(:modes AS text[]))
+              AND gp.played_at IS NOT NULL {date_window}
+              {minimum_moves_filter} AND {selection_sql}
+        ) """
+        candidates = normalized_candidates(session, date_window=date_window,
+            selection_sql=selection_sql, minimum_moves_filter=minimum_moves_filter) or candidates
+        # Probe saved summaries for the selected games, not a join over the
+        # whole canonical-summary compatibility view. OFFSET 0 keeps this a
+        # parameterized lookup even when planner statistics are stale.
+        selected_from = f"""FROM selected_games gp
+            {engine_lookup(session)}
+            {salience_join}"""
         base_where = f"""
             gp.player_name = :player
             AND gp.mode = ANY(CAST(:modes AS text[]))
@@ -255,7 +279,7 @@ async def explore_player_games(
             {salience_where}
             AND {selection_sql}
         """
-        summary_result = await session.execute(text(f"""
+        summary_result = await session.execute(text(candidates + f"""
             SELECT
                 COUNT(*)::bigint AS games,
                 COUNT(engine.game_efficiency)::bigint AS analyzed_games,
@@ -264,14 +288,11 @@ async def explore_player_games(
                 COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
                 COUNT(*) FILTER (WHERE gp.result = 0)::bigint AS losses,
                 SUM(engine.blunder_count)::bigint AS blunders
-            FROM game_player gp
-            LEFT JOIN game_player_engine_summary engine
-              ON engine.game_link = gp.link AND engine.player_color = gp.color
-            {salience_join}
+            {selected_from}
             WHERE {base_where}
         """), params)
         summary = summary_result.mappings().one()
-        games_result = await session.execute(text(f"""
+        games_result = await session.execute(text(candidates + f"""
             SELECT
                 gp.link AS game_link, gp.color AS player_color,
                 engine.analyzed_player_moves,
@@ -284,10 +305,7 @@ async def explore_player_games(
                      WHEN gp.result = 0.5 THEN 'draw' ELSE 'loss' END AS result,
                 engine.end_by,
                 gp.played_at, gp.mode, gp.opponent_name, gp.rating, gp.opponent_rating
-            FROM game_player gp
-            LEFT JOIN game_player_engine_summary engine
-              ON engine.game_link = gp.link AND engine.player_color = gp.color
-            {salience_join}
+            {selected_from}
             WHERE {base_where}
               AND (
                 CAST(:cursor_time AS timestamptz) IS NULL

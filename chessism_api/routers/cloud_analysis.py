@@ -97,6 +97,17 @@ async def cloud_jobs():
         runs_by_job = defaultdict(list)
         for run in runs:
             runs_by_job[run.job_id].append(run)
+        phase_timings = defaultdict(list)
+        if jobs:
+            phases = (await session.execute(select(
+                CloudPhaseTiming.job_id, CloudPhaseTiming.run_id, CloudPhaseTiming.phase,
+                func.min(CloudPhaseTiming.started_at).label('started_at'),
+                case((func.count() != func.count(CloudPhaseTiming.finished_at), None),
+                     else_=func.max(CloudPhaseTiming.finished_at)).label('finished_at'),
+            ).where(CloudPhaseTiming.job_id.in_([job.id for job in jobs]))
+             .group_by(CloudPhaseTiming.job_id, CloudPhaseTiming.run_id, CloudPhaseTiming.phase))).mappings().all()
+            for phase in phases:
+                phase_timings[phase['job_id']].append({k: v for k, v in phase.items() if k != 'job_id'})
         cleanup = {row.job_id: row for row in (await session.scalars(select(CloudCleanupProgress)
             .where(CloudCleanupProgress.job_id.in_([job.id for job in jobs]))
             .distinct(CloudCleanupProgress.job_id)
@@ -108,6 +119,7 @@ async def cloud_jobs():
             "target": job.target, "imported": job.imported,
             "combined_selection": combined.get(job.id),
             "created_at": job.created_at, "error": job.error,
+            "phase_timings": phase_timings[job.id],
             "cleanup_progress": ({'phase': cleanup[job.id].phase, 'total': cleanup[job.id].total,
                 'removed': cleanup[job.id].removed, 'updated_at': cleanup[job.id].updated_at}
                 if job.id in cleanup else None),

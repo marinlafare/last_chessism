@@ -5,6 +5,7 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, HTTPException, BackgroundTasks, Query, Body, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from sqlalchemy.exc import DBAPIError
 
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.database.ask_db import (
@@ -177,6 +178,12 @@ async def _hero_analytics_response(operation, *args, **kwargs) -> JSONResponse:
         raise HTTPException(status_code=422, detail=str(error)) from error
     except (AccuracyDistributionBusy, UnexpectedEndingsBusy) as error:
         raise HTTPException(status_code=503, detail=str(error), headers={'Retry-After': '3'}) from error
+    except DBAPIError as error:
+        if operation is explore_player_games and getattr(error.orig, 'sqlstate', None) == '57014':
+            raise HTTPException(status_code=503,
+                detail='The game list is temporarily busy. Please try again.',
+                headers={'Retry-After': '3'}) from error
+        raise
     return JSONResponse(content=payload)
 
 
@@ -536,13 +543,10 @@ async def api_get_player_score_positions(
     selection: ScorePositionsRequest,
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> JSONResponse:
-    """Ten distinct FENs, by selected-bin appearances DESC then numeric ID ASC.
+    """Up to ten matching examples from a bounded occurrence scan.
 
-    The first page uses current data and returns its snapshot for subsequent
-    requests. Cached pages retain that ranking. Only an uncached continuation
-    whose source changed returns 409; callers can restart the list in place.
-    Narrow occurrence identities are ranked before batched score lookups;
-    only the ten returned positions have their board text fetched.
+    Seek cursors continue sparse batches without counting/ranking the corpus.
+    Board text is fetched only for the returned examples.
     """
     try:
         response = await _hero_analytics_response(

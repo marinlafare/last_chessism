@@ -25,7 +25,7 @@ const ReviewSquare = forwardRef(function ReviewSquare({ square, squareColor, sty
   </div>
 })
 
-export default function GameReviewBoard({ id, position, orientation, animationDuration, ply }) {
+export default function GameReviewBoard({ id, position, orientation, animationDuration, ply, onSettled }) {
   const frame = useRef(null)
   const pieces = useRef(null), overlay = useRef(null), motion = useRef(null)
   const [width, setWidth] = useState(0)
@@ -34,8 +34,9 @@ export default function GameReviewBoard({ id, position, orientation, animationDu
     return () => motion.current.destroy()
   }, [])
   useLayoutEffect(() => {
-    motion.current.update({ id, position, orientation, width, duration: animationDuration, ply })
-  }, [id, position, orientation, width, animationDuration, ply])
+    motion.current.update({ id, position, orientation, width, duration: animationDuration, ply,
+      onSettled: () => onSettled?.(ply) })
+  }, [id, position, orientation, width, animationDuration, ply, onSettled])
   useLayoutEffect(() => {
     const element = frame.current
     const observer = new ResizeObserver(([entry]) => {

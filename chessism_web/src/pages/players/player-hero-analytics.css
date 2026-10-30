@@ -439,6 +439,19 @@
   min-height: 26px;
 }
 
+.behavior-rating-point-hit {
+  fill: transparent;
+  stroke: transparent;
+  cursor: pointer;
+  outline: none;
+  vector-effect: non-scaling-stroke;
+}
+
+.behavior-rating-point-hit:is(:hover, :focus-visible) {
+  stroke: currentColor;
+  stroke-width: 2;
+}
+
 .behavior-graph {
   display: block;
   width: 100%;

@@ -1,0 +1,18 @@
+import {browserFixture} from './browser-fixture.mjs'
+await browserFixture(9303,async({send,context,evaluate,assert,waitFor})=>{
+ await send('browsingContext.navigate',{context,url:'http://localhost:6789/tests/fixtures/scorePositionSamples.html',wait:'complete'})
+ await waitFor("document.querySelectorAll('.score-positions-list li').length===1")
+ await evaluate('new Promise(resolve=>setTimeout(resolve,300))')
+ await assert("samples.calls.length===1 && !document.body.textContent.includes('Appearances') && document.body.textContent.includes('Matching position')")
+ const more=()=>evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Load more').click()")
+ await more();await waitFor("document.querySelectorAll('.score-positions-list li').length===2")
+ await assert("samples.calls[1].cursor==='next'")
+ await more();await waitFor("samples.calls.length===3 && !document.querySelector('[aria-busy=true]')")
+ await evaluate('new Promise(resolve=>setTimeout(resolve,300))')
+ await assert("samples.calls.length===3 && document.querySelectorAll('.score-positions-list li').length===2")
+ await more();await waitFor("document.querySelectorAll('.score-positions-list li').length===3")
+ await assert("![...document.querySelectorAll('button')].some(b=>b.textContent==='Load more') && samples.errors.length===0")
+ await evaluate("document.querySelector('.score-positions-list li').focus()")
+ await waitFor("document.querySelector('.score-positions-preview small')?.textContent==='+10 cp'")
+ console.log('PASS: one initial request, explicit bounded continuations, duplicate suppression, sparse batches never auto-drain, board preview')
+})

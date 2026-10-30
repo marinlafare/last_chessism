@@ -31,10 +31,11 @@ class QueryTests(unittest.TestCase):
         self.assertEqual((bins[6]['lower'], bins[6]['upper']), (-50, 50))
         self.assertTrue(bins[6]['lower_inclusive'])
         self.assertTrue(bins[6]['upper_inclusive'])
-        cursor = scores.encode_cursor('selection', 120, 54321, 0)
-        self.assertEqual(scores.decode_cursor(cursor, 'selection'), (120, 54321, 0))
+        from chessism_api.operations.player_score_position_page import encode_cursor, decode_cursor
+        cursor = encode_cursor('selection', 54321, True, 120)
+        self.assertEqual(decode_cursor(cursor, 'selection'), (54321, True, 120))
         with self.assertRaises(ValueError):
-            scores.decode_cursor(cursor, 'other-selection')
+            decode_cursor(cursor, 'other-selection')
 
 
 class SharedCalculationTests(unittest.IsolatedAsyncioTestCase):
@@ -154,6 +155,11 @@ class SharedCalculationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class HistogramServiceTests(unittest.IsolatedAsyncioTestCase):
+    def setUp(self):
+        manual = patch('chessism_api.operations.cuda_summaries.schema.enabled', AsyncMock(return_value=False))
+        manual.start()
+        self.addCleanup(manual.stop)
+
     async def test_counts_cache_and_snapshot_contract(self):
         session = AsyncMock()
         session.info = {SESSION_KEY: RelationalStorage('candidate', 'archive', 'reads', 'relational_v3')}
@@ -257,6 +263,13 @@ class BatchTests(unittest.IsolatedAsyncioTestCase):
 
 class SnapshotTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
+        for target, replacement in (
+            ('chessism_api.operations.cuda_summaries.schema.enabled', AsyncMock(return_value=False)),
+            ('chessism_api.operations.player_stockfish_summary.enabled', lambda: False),
+        ):
+            guard = patch(target, replacement)
+            guard.start()
+            self.addCleanup(guard.stop)
         self.session = AsyncMock()
         self.session.info = {}
         self.context = MagicMock()
@@ -301,63 +314,21 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(scores.histogram_is_fresh(self.payload, 'old'))
         self.assertFalse(scores.histogram_is_fresh(self.payload, 'different'))
 
-    async def test_first_page_rebases_an_old_chart_without_rejection(self):
-        chunk = {'version': 1, 'snapshot': 'new', 'has_more': True, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10)
-        ]}
+    async def test_popup_does_not_rebuild_rankings_or_check_global_revisions(self):
+        chunk = {'rows': [], 'next_cursor': 'bounded-next'}
         with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
-                patch.object(scores, 'prepare', AsyncMock()), \
-                patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
-                patch.object(scores, 'read_cache', AsyncMock(return_value=chunk)) as cache:
+                patch.object(scores, 'source_state', AsyncMock()) as revision, \
+                patch.object(scores, 'shared_calculation', AsyncMock()) as calculation, \
+                patch.object(scores, 'read_position_page', AsyncMock(return_value=chunk)) as reader:
             data = await scores.get_positions('player', AsyncMock(), bin_id=6,
-                modes=['bullet'], snapshot='old')
-        self.assertEqual(data['snapshot'], 'new')
-        self.assertTrue(data['source_changed'])
-        self.assertEqual(len(data['rows']), 10)
-        scope = scores.key_for('selection', 'player', ('bullet',), 6, 'new')
-        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (11, 10, 0))
-        self.assertEqual(cache.call_args.args[1], scores.key_for('page', scope, None, None))
-
-    async def test_cached_next_page_survives_source_changes(self):
-        chunk = {'version': 1, 'snapshot': 'old', 'has_more': False, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10, 20)
-        ]}
-        scope = scores.key_for('selection', 'player', ('bullet',), 6, 'old')
-        cursor = scores.encode_cursor(scope, 11, 10, 0)
-        with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
-                patch.object(scores, 'prepare', AsyncMock()), \
-                patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
-                patch.object(scores, 'read_cache', AsyncMock(return_value=chunk)):
-            data = await scores.get_positions('player', AsyncMock(), bin_id=6,
-                modes=['bullet'], snapshot='old', cursor=cursor)
-        self.assertEqual(data['rows'], chunk['rows'])
-        self.assertEqual(data['snapshot'], 'old')
-
-    async def test_uncached_continuation_does_not_mix_changed_rankings(self):
-        scope = scores.key_for('selection', 'player', ('bullet',), 6, 'old')
-        cursor = scores.encode_cursor(scope, 2, 100, 0)
-        with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
-                patch.object(scores, 'prepare', AsyncMock()), \
-                patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
-                patch.object(scores, 'read_cache', AsyncMock(return_value=None)):
-            with self.assertRaises(scores.ScoreDistributionChanged):
-                await scores.get_positions('player', AsyncMock(), bin_id=6,
-                    modes=['bullet'], snapshot='old', cursor=cursor)
-
-    async def test_first_page_uses_snapshot_that_was_calculated_after_queuing(self):
-        chunk = {'version': 1, 'snapshot': 'newer', 'has_more': True, 'rows': [
-            {'fen_id': str(n + 1), 'appearances': 20 - n} for n in range(10)
-        ]}
-        with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
-                patch.object(scores, 'prepare', AsyncMock()), \
-                patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
-                patch.object(scores, 'read_cache', AsyncMock(return_value=None)), \
-                patch.object(scores, 'shared_calculation', AsyncMock(return_value=chunk)):
-            data = await scores.get_positions('player', AsyncMock(), bin_id=6,
-                modes=['bullet'], snapshot='old')
-        self.assertEqual(data['snapshot'], 'newer')
-        scope = scores.key_for('selection', 'player', ('bullet',), 6, 'newer')
-        self.assertEqual(scores.decode_cursor(data['next_cursor'], scope), (11, 10, 0))
+                modes=['bullet'], snapshot='old', cursor='seek')
+        self.assertEqual(data, chunk)
+        revision.assert_not_awaited()
+        calculation.assert_not_awaited()
+        reader.assert_awaited_once_with(self.session, 'player', ('bullet',), scores.bins()[6], 'seek')
+        statements = [str(c.args[0]) for c in self.session.execute.call_args_list]
+        self.assertIn("SET LOCAL statement_timeout='3s'", statements)
+        self.assertIn('SET LOCAL max_parallel_workers_per_gather=0', statements)
 
 
 if __name__ == '__main__':

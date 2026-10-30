@@ -1,13 +1,16 @@
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import { useId, useRef } from 'react'
 import { moveSalienceBound } from './dailySalience'
+import { SALIENCE_BAND_BOUNDARIES, moveSalienceBandBound, salienceBoundStops } from './dailySalienceBands'
 
-export default function DailySalienceRange({ range, scale, onChange }) {
+export default function DailySalienceRange({ range, scale, onChange, banded = false, unavailableMessage = '' }) {
   const id = useId()
   const track = useRef(null)
   const drag = useRef(null)
   const disabled = !scale.enabled
   const bounds = disabled ? [0, 100] : range
+  const moveBound = banded ? moveSalienceBandBound : moveSalienceBound
+  const ticks = banded ? SALIENCE_BAND_BOUNDARIES : [0, 25, 50, 75, 100]
   const actual = (value) => scale.minimum + (scale.maximum - scale.minimum) * value / 100
   const pointerValue = (event) => {
     const rect = track.current.getBoundingClientRect()
@@ -19,7 +22,7 @@ export default function DailySalienceRange({ range, scale, onChange }) {
   }
   const pointerMove = (event) => {
     if (disabled || drag.current?.pointerId !== event.pointerId) return
-    onChange(moveSalienceBound(bounds, drag.current.index, pointerValue(event)))
+    onChange(moveBound(bounds, drag.current.index, pointerValue(event)))
   }
   const pointerDown = (event) => {
     if (disabled || event.button !== 0 || drag.current !== null) return
@@ -34,15 +37,19 @@ export default function DailySalienceRange({ range, scale, onChange }) {
     pointerMove(event)
   }
   const keyDown = (event, index) => {
+    const stops = banded ? salienceBoundStops(bounds, index) : null
+    const position = stops?.indexOf(bounds[index])
+    const higher = banded ? stops[Math.min(position + 1, stops.length - 1)] : bounds[index] + 1
+    const lower = banded ? stops[Math.max(position - 1, 0)] : bounds[index] - 1
     const values = {
-      ArrowUp: bounds[index] + 1, ArrowRight: bounds[index] + 1,
-      ArrowDown: bounds[index] - 1, ArrowLeft: bounds[index] - 1,
-      PageUp: bounds[index] + 10, PageDown: bounds[index] - 10,
-      Home: index === 0 ? 0 : bounds[0], End: index === 0 ? bounds[1] : 100,
+      ArrowUp: higher, ArrowRight: higher, ArrowDown: lower, ArrowLeft: lower,
+      PageUp: banded ? higher : bounds[index] + 10, PageDown: banded ? lower : bounds[index] - 10,
+      Home: banded ? stops[0] : index === 0 ? 0 : bounds[0],
+      End: banded ? stops[stops.length - 1] : index === 0 ? bounds[1] : 100,
     }
     if (disabled || !Object.hasOwn(values, event.key)) return
     event.preventDefault()
-    onChange(moveSalienceBound(bounds, index, values[event.key]))
+    onChange(moveBound(bounds, index, values[event.key]))
   }
 
   return (
@@ -60,22 +67,25 @@ export default function DailySalienceRange({ range, scale, onChange }) {
         <span {...pageStyleTarget('player.accuracy.salience.rail')} className="daily-salience-rail" aria-hidden="true" />
         <span {...pageStyleTarget('player.accuracy.salience.fill')} className="daily-salience-fill" aria-hidden="true"
           style={{ bottom: `${bounds[0]}%`, height: `${bounds[1] - bounds[0]}%` }} />
-        {[0, 25, 50, 75, 100].map((value) => (
+        {ticks.map((value) => (
           <span {...pageStyleTarget('player.accuracy.salience.ticks')} key={value} className="daily-salience-tick" style={{ bottom: `${value}%` }} aria-hidden="true">{value}</span>
         ))}
         {bounds.map((value, index) => (
           <button {...pageStyleTarget(`player.accuracy.salience.${index === 0 ? 'minimum' : 'maximum'}.handle`)} key={index} type="button" role="slider" className="daily-salience-handle"
             data-salience-handle={index} disabled={disabled} style={{ bottom: `${value}%` }}
-            aria-label={`${index === 0 ? 'Minimum' : 'Maximum'} relative average game salience`}
-            aria-orientation="vertical" aria-valuemin={index === 0 ? 0 : bounds[0]}
-            aria-valuemax={index === 0 ? bounds[1] : 100} aria-valuenow={value}
+            aria-label={`${index === 0 ? 'Minimum' : 'Maximum'} ${banded ? 'daily salience bin boundary' : 'relative average game salience'}`}
+            aria-orientation="vertical" aria-valuemin={banded ? salienceBoundStops(bounds, index)[0] : index === 0 ? 0 : bounds[0]}
+            aria-valuemax={banded ? salienceBoundStops(bounds, index).at(-1) : index === 0 ? bounds[1] : 100} aria-valuenow={value}
+            title={banded ? `${bounds[0]}–${bounds[1]}: most common daily salience bins (including ties)` : undefined}
             aria-valuetext={disabled ? 'Salience range unavailable'
-              : `${value} of 100; ${actual(value).toPrecision(4)} average game salience`}
+              : banded ? `${value} of 100; selected most common daily salience bins: ${bounds[0]}–${bounds[1]}`
+                : `${value} of 100; ${actual(value).toPrecision(4)} average game salience`}
             onKeyDown={(event) => keyDown(event, index)}>
             <span {...pageStyleTarget(`player.accuracy.salience.${index === 0 ? 'minimum' : 'maximum'}.knob`)} aria-hidden="true" />
           </button>
         ))}
       </div>
+      {unavailableMessage && <span {...pageStyleTarget('player.accuracy.salience.status')} role="status">{unavailableMessage}</span>}
     </div>
   )
 }

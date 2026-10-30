@@ -15,11 +15,20 @@ const phases = {
 export function pipelineSteps(run, jobs = {}) {
   if (run?.steps?.length) {
     if (!run.step_catalog) return run.steps
-    const recorded = new Map(run.steps.map(step => [step.step, step]))
-    return run.step_catalog.map(step => recorded.get(step.step) || {
+    const recorded = new Map(run.steps.map(step => [step.step, { ...step }]))
+    const rows = run.step_catalog.map(step => recorded.get(step.step) || {
       ...step, status: run.status === 'complete' ? 'skipped' : 'pending',
       processed: 0, total: null, elapsed_seconds: 0, unit: 'items',
     })
+    const queued = jobs.fen?.status
+    const extraction = rows.find(row => row.step === 'extract_positions')
+    if (run.status === 'running' && extraction?.status === 'pending'
+      && ['queued', 'deferred'].includes(queued?.status)
+      && queued.progress?.ingestion_run_id === run.run_id) {
+      Object.assign(extraction, { status: 'queued', total: queued.progress.total || null, unit: 'games',
+        detail: 'Queued for position extraction — waiting for an ingestion worker. Downloading games is complete; their positions are not ready for analysis yet.' })
+    }
+    return rows
   }
   const rows = (run?.stages || []).map(stage => ({
     step: stage.stage, label: labels[stage.stage] || stage.stage.replaceAll('_', ' '),

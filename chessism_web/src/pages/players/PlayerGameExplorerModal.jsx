@@ -4,7 +4,7 @@ import { createPortal } from 'react-dom'
 import { formatNumber } from '../../utils/formatters'
 import { explorePlayerGames } from './playerAnalysisApi.js?game-explorer=b10cbe3'
 
-const emptyRequest = { data: null, error: '', loading: false }
+const pendingRequest = { data: null, error: '', loading: true }
 const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 function resultLabel(value) {
@@ -47,7 +47,11 @@ function GameListDate({ value }) {
 }
 
 export default function PlayerGameExplorerModal({ playerName, selection, onSelectionChange, onClose, onOpenGame }) {
-  const [request, setRequest] = useState(emptyRequest)
+  const [storedRequest, setRequest] = useState(() => ({ ...pendingRequest, playerName, selection }))
+  // Effects run after rendering. Never render another selection's rows/error,
+  // or a false "No games" state, while the new request is being initialized.
+  const request = storedRequest.playerName === playerName && storedRequest.selection === selection
+    ? storedRequest : pendingRequest
   const paginationController = useRef(null)
   const dataSource = useRef(null)
   const listRef = useRef(null)
@@ -132,26 +136,27 @@ export default function PlayerGameExplorerModal({ playerName, selection, onSelec
 
   useEffect(() => {
     dataSource.current = null
+    const source = { playerName, selection }
+    setRequest({ ...pendingRequest, ...source })
     if (!selection || !playerName) return undefined
     const controller = new AbortController()
     setHighlightedKey(null)
     lastPointer.current = null
     if (listRef.current) listRef.current.scrollTop = 0
-    setRequest({ data: null, error: '', loading: true })
     explorePlayerGames({
       playerName,
-      selection: { ...selection, limit: 30 },
+      selection: { ...selection, limit: 15 },
       signal: controller.signal,
     })
       .then((data) => {
         if (!controller.signal.aborted) {
           dataSource.current = { playerName, selection }
-          setRequest({ data, error: '', loading: false })
+          setRequest({ ...source, data, error: '', loading: false })
         }
       })
       .catch((error) => {
         if (!controller.signal.aborted && error.name !== 'AbortError') {
-          setRequest({ data: null, error: error.message || 'Unable to load these games.', loading: false })
+          setRequest({ ...source, data: null, error: error.message || 'Unable to load these games.', loading: false })
         }
       })
     return () => {
@@ -189,11 +194,12 @@ export default function PlayerGameExplorerModal({ playerName, selection, onSelec
     try {
       const next = await explorePlayerGames({
         playerName,
-        selection: { ...selection, limit: 30, cursor },
+        selection: { ...selection, limit: 15, cursor },
         signal: controller.signal,
       })
       if (controller.signal.aborted) return
       setRequest((current) => ({
+        ...current,
         data: {
           ...next,
           games: [...(current.data?.games || []), ...next.games],
@@ -238,6 +244,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onSelec
         className="game-explorer-modal"
         role="dialog"
         aria-modal="true"
+        aria-busy={request.loading}
         aria-label={selectionTitle(selection)}
         onMouseDown={(event) => event.stopPropagation()}
       >
@@ -273,7 +280,7 @@ export default function PlayerGameExplorerModal({ playerName, selection, onSelec
         ) : null}
 
         {request.error && !games.length ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message error" role="alert">{request.error}</p> : null}
-        {!games.length && request.loading ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message">Loading games…</p> : null}
+        {!games.length && request.loading ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message" role="status">Loading games…</p> : null}
         {!games.length && !request.loading && !request.error ? <p {...pageStyleTarget('gameExplorer.text')} className="game-modal-message">{analyzedOnly ? 'No analyzed games are in this bin.' : 'No games are in this bin.'}</p> : null}
 
         {games.length ? (

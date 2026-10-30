@@ -1,0 +1,15 @@
+# Explicit one-run recovery; never restart the occupied pipeline-worker.
+# INGESTION_ASSIST_RUN_ID=<uuid> docker compose -f docker-compose.yml \
+#   -f dev_tools/compose.ingestion-assist.yml up -d --no-deps ingestion-assist
+services:
+  ingestion-assist:
+    extends:
+      file: ./docker-compose.yml
+      service: pipeline-worker
+    image: chessism-api:runtime
+    container_name: chessism-ingestion-assist
+    command: [python, -u, -m, chessism_api.operations.ingestion_pipeline.assist_worker, --run-id, "${INGESTION_ASSIST_RUN_ID:?Set the existing ingestion run UUID}"]
+    restart: "no"
+    init: true
+    cpus: "4.0"
+    mem_limit: 2g

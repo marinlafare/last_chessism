@@ -11,7 +11,7 @@ export default function PlayerScorePositions({ playerName, selection, onClose })
   const [request, setRequest] = useState({ loading: true, data: null, error: '', changed: false })
   const [hover, setHover] = useState(null)
   const [boardWidth, setBoardWidth] = useState(() => Math.min(280, window.innerWidth - 60))
-  const panel = useRef(null), close = useRef(onClose), list = useRef(null), sentinel = useRef(null)
+  const panel = useRef(null), close = useRef(onClose), list = useRef(null)
   const paginationController = useRef(null), dataSource = useRef(null)
   const listSnapshot = useRef(selection.snapshot)
   const titleId = useId(), previewId = useId()
@@ -53,7 +53,7 @@ export default function PlayerScorePositions({ playerName, selection, onClose })
     const timeout = window.setTimeout(() => {
       controller.abort()
       setRequest({ loading: false, data: null, error: 'Positions took too long to load. Please retry.', changed: false })
-    }, 60000)
+    }, 10000)
     fetchPlayerScorePositions({ playerName, signal: controller.signal, selection: {
       bin_id: selection.bin.id, modes: selection.modes, snapshot: listSnapshot.current,
     } }).then(data => {
@@ -84,15 +84,18 @@ export default function PlayerScorePositions({ playerName, selection, onClose })
       if (controller.signal.aborted || paginationController.current !== controller) return
       controller.abort()
       setRequest(current => ({ ...current, loading: false, error: 'More positions took too long to load. Please retry.' }))
-    }, 60000)
+    }, 10000)
     try {
       const next = await fetchPlayerScorePositions({ playerName, signal: controller.signal, selection: {
         bin_id: selection.bin.id, modes: selection.modes, snapshot: listSnapshot.current, cursor,
       } })
       if (!controller.signal.aborted) {
         listSnapshot.current = next.snapshot
-        setRequest(current => ({ loading: false, error: '', changed: false,
-          data: { ...next, rows: [...current.data.rows, ...next.rows] } }))
+        setRequest(current => {
+          const seen = new Set(current.data.rows.map(row => row.fen_id))
+          return { loading: false, error: '', changed: false,
+            data: { ...next, rows: [...current.data.rows, ...next.rows.filter(row => !seen.has(row.fen_id))] } }
+        })
       }
     } catch (error) {
       if (!controller.signal.aborted) setRequest(current => ({ ...current, loading: false,
@@ -102,16 +105,6 @@ export default function PlayerScorePositions({ playerName, selection, onClose })
       if (paginationController.current === controller) paginationController.current = null
     }
   }, [playerName, selection, request.data?.next_cursor, request.loading])
-
-  useEffect(() => {
-    if (!list.current || !sentinel.current || request.loading || request.error || !request.data?.next_cursor) return undefined
-    let active = true
-    const observer = new IntersectionObserver(entries => {
-      if (active && entries.some(entry => entry.isIntersecting)) loadMore()
-    }, { root: list.current, rootMargin: '0px 0px 40px 0px' })
-    observer.observe(sentinel.current)
-    return () => { active = false; observer.disconnect() }
-  }, [loadMore, request.loading, request.error, request.data?.next_cursor])
 
   const show = row => setHover(row)
   const restartList = () => setRetry(value => value + 1)
@@ -124,30 +117,36 @@ export default function PlayerScorePositions({ playerName, selection, onClose })
         <button {...pageStyleTarget('scorePositions.close')} type="button" onClick={onClose} aria-label="Close position list">×</button>
       </header>
       <div className="score-positions-body">
-        <div ref={list} className="score-positions-list-pane" onScroll={() => setHover(null)}>
-          <div className="score-positions-labels"><span>Position</span><span>Appearances ↓</span></div>
+        <div ref={list} className="score-positions-list-pane" onScroll={event => {
+          setHover(null)
+          const node = event.currentTarget
+          if (!request.error && node.scrollTop > 0 && node.scrollTop + node.clientHeight >= node.scrollHeight - 40) loadMore()
+        }}>
+          <div className="score-positions-labels"><span>Matching position</span><span>Score</span></div>
           <ol className="score-positions-list" onPointerLeave={() => setHover(null)}>
             {request.data?.rows.map((row, index) => <li {...pageStyleTarget('scorePositions.row')} key={row.fen_id} tabIndex={0}
-              aria-label={`Position ${index + 1}, ${formatNumber(row.appearances)} appearances. Focus to preview.`}
+              aria-label={`Position ${index + 1}, ${score(row.score_min)} centipawns. Focus to preview.`}
               aria-describedby={hover?.fen_id === row.fen_id ? previewId : undefined}
               onPointerEnter={() => show(row)} onFocus={() => show(row)} onBlur={() => setHover(null)}>
               <span className="score-positions-rank">#{index + 1}</span>
               <span className="score-positions-identity">FEN {row.fen_id}</span>
-              <strong>{formatNumber(row.appearances)}</strong>
+              <strong>{score(row.score_min)}</strong>
             </li>)}
           </ol>
-          <div ref={sentinel} className="score-positions-sentinel" aria-hidden="true" />
           {request.loading ? <p role="status">{request.data ? 'Loading more positions…' : 'Loading positions…'}</p> : null}
           {request.error ? <p role="alert">{request.error}{' '}
             <button {...pageStyleTarget('scorePositions.paging')} type="button"
               onClick={request.changed || !request.data ? restartList : loadMore}>{request.changed ? 'Update position list' : 'Retry'}</button>
           </p> : null}
-          {!request.loading && !request.error && !request.data?.rows.length ? <p>No matching positions.</p> : null}
+          {!request.loading && !request.error && !request.data?.rows.length ? <p>{request.data?.next_cursor
+            ? 'No matches in this batch. Continue to check more positions.' : 'No matching positions.'}</p> : null}
+          {!request.loading && !request.error && request.data?.next_cursor ? <button
+            {...pageStyleTarget('scorePositions.paging')} type="button" onClick={loadMore}>Load more</button> : null}
         </div>
         <aside className="score-positions-preview" id={previewId} aria-label="Position preview" aria-live="polite">
           {hover ? <>
             <PositionBoard fen={hover.fen} width={boardWidth} />
-            <small>{score(hover.score_min)}{hover.score_min !== hover.score_max ? ` to ${score(hover.score_max)}` : ''} cp · {formatNumber(hover.appearances)} appearances</small>
+            <small>{score(hover.score_min)} cp</small>
           </> : <span>Hover a position</span>}
         </aside>
       </div>

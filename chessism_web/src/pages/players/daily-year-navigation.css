@@ -10,3 +10,4 @@
 .daily-year-hint { margin: 6px 16px; color: var(--subtle); font-size: 10px; line-height: 1.5; text-align: center; }
 .measure-daily-years button:focus-visible,
 .behavior-rating-years button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.daily-period-current { align-self: center; padding: 0 4px; font-size: 10px; white-space: nowrap; }

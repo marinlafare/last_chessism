@@ -32,5 +32,9 @@ export default function useBoardSounds(gameId) {
     }
   }, [muted])
 
-  return { muted, toggleMuted, playMove }
+  const playNavigationClick = useCallback(() => {
+    if (!muted && !document.hidden) audioRef.current?.click()
+  }, [muted])
+
+  return { muted, toggleMuted, playMove, playNavigationClick }
 }

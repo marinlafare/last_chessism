@@ -9,12 +9,13 @@ from fastapi.responses import JSONResponse
 from arq.connections import ArqRedis
 
 from chessism_api.redis_client import get_redis_pool
+from chessism_api.operations.fen_backup.queue import FEN_BACKUP_QUEUE
 
 router = APIRouter()
 
 KNOWN_QUEUES = (
     "pipeline_queue", "fen_queue", "analysis_queue", "games_queue",
-    "research_queue", "salience_queue", "backup_queue", "arq:queue",
+    "research_queue", "salience_queue", "backup_queue", FEN_BACKUP_QUEUE, "arq:queue",
 )
 ANALYSIS_JOB_FUNCTIONS = {
     "run_analysis_job",
@@ -101,7 +102,11 @@ async def _read_progress(redis: ArqRedis, job_id: str) -> dict[str, Any] | None:
     try:
         if isinstance(raw, bytes):
             raw = raw.decode("utf-8")
-        return json.loads(raw)
+        progress = json.loads(raw)
+        started = await redis.get(f'chessism:job_started:{job_id}')
+        if isinstance(started, (bytes, str)):
+            progress['started_at'] = float(started)
+        return progress
     except Exception:
         return None
 
