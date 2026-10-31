@@ -1,0 +1,13 @@
+.daily-year-band { fill: transparent; stroke: transparent; cursor: zoom-in; pointer-events: all; }
+.daily-year-band.highlighted, .daily-year-band:focus-visible {
+  fill: rgba(21, 199, 128, 0.09);
+  stroke: rgba(21, 199, 128, 0.5);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  outline: none;
+}
+.daily-year-label { fill: #d9fff1; font: 700 13px "IBM Plex Mono", monospace; paint-order: stroke; stroke: #0b1117; stroke-width: 3px; }
+.daily-year-hint { margin: 6px 16px; color: var(--subtle); font-size: 10px; line-height: 1.5; text-align: center; }
+.measure-daily-years button:focus-visible,
+.behavior-rating-years button:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.daily-period-current { align-self: center; padding: 0 4px; font-size: 10px; white-space: nowrap; }

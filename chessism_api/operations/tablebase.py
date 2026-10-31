@@ -1,0 +1,611 @@
+import asyncio
+import json
+import os
+import sys
+from typing import Any, Sequence
+
+import chess
+import chess.syzygy
+from arq.connections import ArqRedis
+from arq.jobs import Job, JobStatus
+from sqlalchemy import bindparam, func, text, update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from chessism_api.database.ask_db import (
+    increment_game_analysis_summary_for_scored_fens,
+    increment_scored_position_summary_for_scored_fens,
+    refresh_database_summary_fen_counts,
+    refresh_fen_pipeline_summary,
+    refresh_game_analysis_summary,
+    refresh_scored_position_summary,
+    refresh_scored_rating_summary,
+)
+from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
+from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.models import Fen
+from chessism_api.operations.ingestion_pipeline.steps import StepReporter
+from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
+from chessism_api.operations.redis_ownership import release_owned
+from chessism_api.operations.tablebase_batches import CandidateSpool, save_compact_batch
+from chessism_api.operations.tablebase_probe import (
+    TABLEBASE_MAX_PIECES, _best_tablebase_move, _move_rank, _tablebase_score_payload,
+    _probe_batch_sync as probe_batch,
+)
+from chessism_api.operations.tablebase_parallel import TablebaseProber
+from chessism_api.operations.ingestion_pipeline import TABLEBASE_MARKING
+from chessism_api.operations.ingestion_pipeline.timing import (
+    fail_running_ingestion_stages,
+    finish_ingestion_run,
+    finish_ingestion_stage,
+    start_ingestion_stage,
+)
+
+
+TABLEBASE_PATH = os.getenv("STOCKFISH_SYZYGY_PATH", "/syzygy")
+TABLEBASE_BATCH_SIZE = 1_000
+TABLEBASE_PROGRESS_KIND = "tablebase_analysis"
+TABLEBASE_COORDINATION_KEY = "chessism:automatic_tablebase_analysis"
+COORDINATION_TTL_SECONDS = 60 * 60 * 24
+RESERVATION_TTL_SECONDS = 60
+ACTIVE_JOB_STATUSES = {
+    JobStatus.queued,
+    JobStatus.deferred,
+    JobStatus.in_progress,
+}
+
+PIECE_COUNT_SQL = (
+    "COALESCE(f.piece_count, "
+    "char_length(translate(split_part(f.fen, ' ', 1), '12345678/', '')))"
+)
+TABLEBASE_CANDIDATE_SQL = f"""
+    f.score IS NULL
+    AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
+    AND COALESCE(f.analysis_source, '') <> 'tablebase_unavailable'
+    AND {PIECE_COUNT_SQL} BETWEEN 2 AND {TABLEBASE_MAX_PIECES}
+"""
+
+
+def _redis_text(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8")
+    return str(value or "")
+
+
+async def _write_progress(
+    redis: ArqRedis | None,
+    job_id: str,
+    *,
+    total: int,
+    processed: int,
+    failed: int,
+    phase: str,
+    detail: str,
+    ingestion_run_id: str | None = None,
+) -> None:
+    if redis is None:
+        return
+    await write_job_progress(
+        redis, job_id, kind=TABLEBASE_PROGRESS_KIND,
+        ingestion_run_id=ingestion_run_id, total=total, processed=processed,
+        failed=failed, phase=phase, detail=detail,
+    )
+
+
+async def _read_progress(redis: ArqRedis | None, job_id: str) -> dict[str, Any]:
+    if redis is None:
+        return {}
+    raw = await redis.get(f"chessism:job_progress:{job_id}")
+    if not raw:
+        return {}
+    try:
+        if isinstance(raw, bytes):
+            raw = raw.decode("utf-8")
+        payload = json.loads(raw)
+        return payload if isinstance(payload, dict) else {}
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return {}
+
+
+def _clean_game_links(game_links: Sequence[int] | None) -> list[int]:
+    return list(dict.fromkeys(
+        int(link) for link in (game_links or []) if link is not None
+    ))
+
+
+async def count_tablebase_candidates(game_links: Sequence[int] | None = None) -> int:
+    clean_links = _clean_game_links(game_links)
+    if game_links is not None and not clean_links:
+        return 0
+
+    if clean_links:
+        query = f"""
+            SELECT COUNT(DISTINCT f.fen)::bigint
+            FROM game_fen_association gfa
+            JOIN fen f ON f.fen_id = gfa.fen_id
+            WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
+              AND {TABLEBASE_CANDIDATE_SQL};
+        """
+        params = {"game_links": clean_links}
+    else:
+        query = f"SELECT COUNT(*)::bigint FROM fen f WHERE {TABLEBASE_CANDIDATE_SQL};"
+        params = {}
+
+    async with AsyncDBSession() as session:
+        return int(await session.scalar(text(query), params) or 0)
+
+
+async def has_tablebase_candidates(game_links=None):
+    """Cheap admission check; the worker's single discovery determines the count."""
+    clean_links = _clean_game_links(game_links)
+    if game_links is not None and not clean_links: return False
+    scope = ('JOIN game_fen_association a ON a.fen_id=f.fen_id '
+             'WHERE a.game_link=ANY(CAST(:links AS bigint[])) AND ') if clean_links else 'WHERE '
+    async with AsyncDBSession() as session:
+        return bool(await session.scalar(text(
+            f'SELECT EXISTS(SELECT 1 FROM fen f {scope} {TABLEBASE_CANDIDATE_SQL})'), {'links':clean_links}))
+
+
+async def _read_tablebase_batch(identifiers):
+    """Close the read transaction before probing. Publication rechecks under locks."""
+    async with AsyncDBSession() as session:
+        await session.execute(text('SET TRANSACTION READ ONLY'))
+        rows = (await session.execute(text(f'''SELECT f.fen,{PIECE_COUNT_SQL}::smallint AS piece_count
+            FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[])) AND {TABLEBASE_CANDIDATE_SQL}
+            ORDER BY f.fen'''), {'ids':identifiers})).mappings().all()
+        return [dict(row) for row in rows]
+
+
+async def _lease_tablebase_batch(
+    game_links: Sequence[int] | None,
+    limit: int,
+    candidate_ids: list[int] | None = None,
+) -> tuple[AsyncSession | None, list[dict[str, Any]]]:
+    clean_links = _clean_game_links(game_links)
+    if game_links is not None and not clean_links:
+        return None, []
+
+    session = AsyncDBSession()
+    try:
+        await session.begin()
+        if candidate_ids is not None:
+            query = f"""SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
+                FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[]))
+                  AND {TABLEBASE_CANDIDATE_SQL}
+                ORDER BY f.fen FOR UPDATE OF f"""
+            params = {"ids": candidate_ids}
+        elif clean_links:
+            query = f"""
+                WITH candidate_fens AS MATERIALIZED (
+                    SELECT f.fen, MIN(gfa.n_move) AS first_move
+                    FROM game_fen_association gfa
+                    JOIN fen f ON f.fen_id = gfa.fen_id
+                    WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
+                      AND {TABLEBASE_CANDIDATE_SQL}
+                    GROUP BY f.fen
+                )
+                SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
+                FROM candidate_fens candidate
+                JOIN fen f ON f.fen = candidate.fen
+                ORDER BY candidate.first_move, f.fen
+                LIMIT :limit
+                FOR UPDATE OF f SKIP LOCKED;
+            """
+            params = {"game_links": clean_links, "limit": max(1, int(limit))}
+        else:
+            query = f"""
+                SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
+                FROM fen f
+                WHERE {TABLEBASE_CANDIDATE_SQL}
+                ORDER BY f.n_games DESC, f.fen
+                LIMIT :limit
+                FOR UPDATE OF f SKIP LOCKED;
+            """
+            params = {"limit": max(1, int(limit))}
+
+        rows = [dict(row) for row in (await session.execute(text(query), params)).mappings()]
+        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        unclaimed = set(await unclaimed_locked_fens(session, [row["fen"] for row in rows]))
+        rows = [row for row in rows if row["fen"] in unclaimed]
+        if not rows:
+            await session.rollback()
+            await session.close()
+            return None, []
+        return session, rows
+    except BaseException:
+        await session.rollback()
+        await session.close()
+        raise
+
+
+def _probe_batch_sync(tablebase, rows):
+    # Preserve this shared entry point for callers and selection parity tests.
+    return probe_batch(tablebase, rows, best_move=_best_tablebase_move)
+
+
+async def _save_tablebase_batch(
+    session: AsyncSession,
+    solved: list[dict[str, Any]],
+    unavailable: list[dict[str, Any]],
+) -> None:
+    from chessism_api.evaluations import validate_batch
+    validate_batch(solved, source='tablebase')
+    from chessism_api.database.compact_storage import compact_for
+    layout = compact_for(session)
+    if layout:
+        await save_compact_batch(session, solved, unavailable)
+        return
+    target = Fen.__table__
+    if solved:
+        prepared = [{
+            "p_fen": item["fen"],
+            "p_piece_count": item["piece_count"],
+            "p_score": item["score"],
+            "p_next_moves": item["next_moves"],
+            "p_wdl_win": item["wdl_win"],
+            "p_wdl_draw": item["wdl_draw"],
+            "p_wdl_loss": item["wdl_loss"],
+            "p_tablebase_wdl": item["tablebase_wdl"],
+            "p_tablebase_dtz": item["tablebase_dtz"],
+        } for item in solved]
+        statement = (
+            update(target)
+            .where(target.c.fen == bindparam("p_fen"))
+            .values(
+                piece_count=bindparam("p_piece_count"),
+                score=bindparam("p_score"),
+                next_moves=bindparam("p_next_moves"),
+                wdl_win=bindparam("p_wdl_win"),
+                wdl_draw=bindparam("p_wdl_draw"),
+                wdl_loss=bindparam("p_wdl_loss"),
+                analysis_source="tablebase",
+                tablebase_wdl=bindparam("p_tablebase_wdl"),
+                tablebase_dtz=bindparam("p_tablebase_dtz"),
+                analyzed_at=func.now(),
+            )
+        )
+        await session.execute(
+            statement,
+            prepared,
+            execution_options={"synchronize_session": False},
+        )
+
+    if unavailable:
+        prepared_unavailable = [{
+            "p_fen": item["fen"],
+            "p_piece_count": item["piece_count"],
+        } for item in unavailable]
+        unavailable_statement = (
+            update(target)
+            .where(target.c.fen == bindparam("p_fen"))
+            .values(
+                piece_count=bindparam("p_piece_count"),
+                analysis_source="tablebase_unavailable",
+            )
+        )
+        await session.execute(
+            unavailable_statement,
+            prepared_unavailable,
+            execution_options={"synchronize_session": False},
+        )
+
+
+async def _analyze_tablebase_positions(
+    ctx: dict,
+    *,
+    reporter,
+    game_links: Sequence[int] | None = None,
+    candidate_count: int | None = None,
+    max_positions: int | None = None,
+    batch_size: int = TABLEBASE_BATCH_SIZE,
+    progress_job_id: str | None = None,
+    refresh_projections: bool = True,
+    ingestion_run_id: str | None = None,
+) -> dict[str, int]:
+    """Solve tablebase-eligible positions directly and persist exact results."""
+    if not os.path.isdir(TABLEBASE_PATH):
+        raise RuntimeError(f"Syzygy tablebase directory is unavailable: {TABLEBASE_PATH}")
+
+    redis = ctx.get("redis")
+    job_id = str(progress_job_id or ctx.get("job_id") or "tablebase-analysis")
+    # candidate_count is a stale compatibility hint, not a cap on discovery.
+    target = 0
+    await _write_progress(
+        redis,
+        job_id,
+        total=0,
+        processed=0,
+        failed=0,
+        phase="discovering_tablebase",
+        detail="Finding eligible Syzygy positions; count not known yet.",
+        ingestion_run_id=ingestion_run_id,
+    )
+
+    processed = solved_total = unavailable_total = skipped_total = 0
+    safe_batch_size = max(1, min(int(batch_size), 5_000))
+    prober = TablebaseProber(TABLEBASE_PATH)
+    candidates = CandidateSpool()
+    try:
+        async with reporter.step("discover_endgames", None, "positions"):
+            limit = max(0, int(max_positions)) if max_positions is not None else None
+            await candidates.discover(game_links, limit, TABLEBASE_CANDIDATE_SQL, reporter)
+        target = candidates.count
+        reporter.goal("claim_endgames", target)
+        reporter.goal("probe_endgames", target)
+        reporter.goal("save_endgames", target)
+        progress_total = target + (1 if refresh_projections else 0)
+        await _write_progress(redis, job_id, total=progress_total, processed=0, failed=0,
+            phase="tablebase", detail=f"Probing {target} positions with {prober.workers} Syzygy processes.",
+            ingestion_run_id=ingestion_run_id)
+        while identifiers := candidates.read(safe_batch_size):
+            rows = await _read_tablebase_batch(identifiers)
+            async with reporter.step("probe_endgames", len(rows), "positions"):
+                solved, unavailable_rows = await prober.probe(rows)
+            # No locks or database connection were held during CPU/file work.
+            # A cloud claim or score that arrived meanwhile wins; never overwrite.
+            async with reporter.step("claim_endgames", len(identifiers), "positions"):
+                session, eligible = await _lease_tablebase_batch(
+                    game_links, len(identifiers), candidate_ids=identifiers,
+                ) if rows else (None, [])
+            allowed = {row['fen'] for row in eligible}
+            solved = [row for row in solved if row['fen'] in allowed]
+            unavailable_rows = [row for row in unavailable_rows if row['fen'] in allowed]
+            skipped_total += len(identifiers) - len(solved) - len(unavailable_rows)
+            if session is None:
+                processed += len(identifiers)
+                await _write_progress(redis, job_id, total=progress_total, processed=processed,
+                    failed=unavailable_total, phase="tablebase",
+                    detail=f"Solved {solved_total}; {skipped_total} already scored or reserved.",
+                    ingestion_run_id=ingestion_run_id)
+                continue
+            try:
+                async with reporter.step("save_endgames", len(solved)+len(unavailable_rows), "positions"):
+                    await _save_tablebase_batch(session, solved, unavailable_rows)
+                    from chessism_api.operations.fen_results import increment_new_fen_counts
+                    await increment_new_fen_counts(session, solved)
+                    await session.commit()
+            except BaseException:
+                await session.rollback()
+                raise
+            finally:
+                await session.close()
+
+            if solved:
+                try:
+                    async with reporter.step("endgame_summaries", len(solved), "positions"):
+                        await increment_scored_position_summary_for_scored_fens(solved)
+                        await increment_game_analysis_summary_for_scored_fens(solved)
+                except Exception:
+                    # FEN scores were committed immediately before these cached
+                    # summaries. Reconcile them before surfacing the failure so a
+                    # retry cannot leave counters or per-game coverage incomplete.
+                    await refresh_database_summary_fen_counts()
+                    await refresh_scored_position_summary()
+                    await refresh_game_analysis_summary(
+                        _clean_game_links(game_links) if game_links is not None else None
+                    )
+                    raise
+
+            processed += len(identifiers)
+            solved_total += len(solved)
+            unavailable_total += len(unavailable_rows)
+            await _write_progress(
+                redis,
+                job_id,
+                total=progress_total,
+                processed=processed,
+                failed=unavailable_total,
+                phase="tablebase",
+                detail=(f"Solved {solved_total}; {unavailable_total} require Stockfish; "
+                        f"{skipped_total} already scored or reserved."),
+                ingestion_run_id=ingestion_run_id,
+            )
+    finally:
+        # Terminating an unfinished read-only probe is safe; no partial result
+        # was published. The next run rediscovers only still-unscored positions.
+        try: await prober.close(abort=sys.exc_info()[0] is not None)
+        finally: candidates.close()
+
+    # A scoped automatic run follows freshly inserted game associations. Those
+    # associations change rating projections even when every endgame probe is
+    # unavailable, so the handoff still needs one projection refresh.
+    if refresh_projections and (solved_total > 0 or game_links is not None):
+        await _write_progress(
+            redis,
+            job_id,
+            total=progress_total,
+            processed=processed,
+            failed=unavailable_total,
+            phase="refreshing_statistics",
+            detail="Refreshing rating statistics for the solved endgames.",
+            ingestion_run_id=ingestion_run_id,
+        )
+        async with reporter.step("rating_projection", 1, "refreshes"):
+            await refresh_scored_rating_summary()
+        await _write_progress(
+            redis,
+            job_id,
+            total=progress_total,
+            processed=processed + 1,
+            failed=unavailable_total,
+            phase="tablebase",
+            detail="Tablebase and rating projections are current.",
+            ingestion_run_id=ingestion_run_id,
+        )
+
+    return {
+        "processed": processed,
+        "solved": solved_total,
+        "unavailable": unavailable_total,
+        "target": target,
+        "skipped": skipped_total,
+    }
+
+
+async def analyze_tablebase_positions(ctx, **kwargs):
+    async with StepReporter(ctx, kwargs.get("ingestion_run_id")) as reporter:
+        return await _analyze_tablebase_positions(ctx, reporter=reporter, **kwargs)
+
+
+async def _release_coordination(redis: ArqRedis, job_id: str) -> None:
+    await release_owned(redis, TABLEBASE_COORDINATION_KEY, job_id)
+
+
+async def ensure_tablebase_analysis_enqueued(
+    redis: ArqRedis,
+    *,
+    game_links: Sequence[int] | None = None,
+    max_positions: int | None = None,
+    batch_size: int = TABLEBASE_BATCH_SIZE,
+    ingestion_run_id: str | None = None,
+) -> dict[str, Any]:
+    current_job_id = _redis_text(await redis.get(TABLEBASE_COORDINATION_KEY))
+    if current_job_id and current_job_id != "reserving":
+        status = await Job(
+            current_job_id,
+            redis,
+            _queue_name="pipeline_queue",
+        ).status()
+        if status in ACTIVE_JOB_STATUSES:
+            return {"status": "already_active", "job_id": current_job_id, "pending": None}
+        await _release_coordination(redis, current_job_id)
+    elif current_job_id == "reserving":
+        return {"status": "already_active", "job_id": None, "pending": None}
+
+    clean_links = _clean_game_links(game_links)
+    has_work = await has_tablebase_candidates(
+        clean_links if game_links is not None else None
+    )
+    if not has_work:
+        if game_links is None:
+            await refresh_fen_pipeline_summary(mark_tablebase_current=True)
+        return {"status": "up_to_date", "job_id": None, "pending": 0}
+    pending = None  # Exact count comes from discovery, not a second whole scan.
+
+    reserved = await redis.set(
+        TABLEBASE_COORDINATION_KEY,
+        "reserving",
+        ex=RESERVATION_TTL_SECONDS,
+        nx=True,
+    )
+    if not reserved:
+        return {"status": "already_active", "job_id": None, "pending": pending}
+
+    try:
+        job = await redis.enqueue_job(
+            "run_tablebase_analysis_job",
+            max_positions=max_positions,
+            batch_size=max(1, min(int(batch_size), 5_000)),
+            candidate_count=pending,
+            game_links=clean_links if game_links is not None else None,
+            ingestion_run_id=ingestion_run_id,
+            _queue_name="pipeline_queue",
+        )
+        if job is None:
+            raise RuntimeError("Redis did not create the tablebase job.")
+        job_id = str(job.job_id)
+        await redis.set(
+            TABLEBASE_COORDINATION_KEY,
+            job_id,
+            ex=COORDINATION_TTL_SECONDS,
+        )
+        await _write_progress(
+            redis,
+            job_id,
+            total=0,
+            processed=0,
+            failed=0,
+            phase="queued",
+            detail="Waiting to cache exact Syzygy endgames.",
+            ingestion_run_id=ingestion_run_id,
+        )
+        return {"status": "queued", "job_id": job_id, "pending": pending}
+    except Exception:
+        await _release_coordination(redis, "reserving")
+        raise
+
+
+async def run_tablebase_analysis_job(
+    ctx: dict,
+    max_positions: int | None = None,
+    batch_size: int = TABLEBASE_BATCH_SIZE,
+    candidate_count: int | None = None,
+    game_links: Sequence[int] | None = None,
+    ingestion_run_id: str | None = None,
+    **kwargs,
+) -> dict[str, int]:
+    redis: ArqRedis = ctx["redis"]
+    job_id = str(ctx.get("job_id") or "tablebase-analysis")
+    try:
+        await start_ingestion_stage(
+            ingestion_run_id,
+            TABLEBASE_MARKING,
+            detail="Probing exact Syzygy endgames and refreshing projections.",
+        )
+        result = await analyze_tablebase_positions(
+            ctx,
+            game_links=game_links,
+            candidate_count=candidate_count,
+            max_positions=max_positions,
+            batch_size=batch_size,
+            progress_job_id=job_id,
+            ingestion_run_id=ingestion_run_id,
+        )
+        if game_links is None and not await has_tablebase_candidates():
+            await refresh_fen_pipeline_summary(mark_tablebase_current=True)
+        await _write_progress(
+            redis,
+            job_id,
+            total=result["target"] + 1,
+            processed=result["processed"] + 1,
+            failed=result["unavailable"],
+            phase="complete",
+            detail=f"Cached {result['solved']} exact Syzygy positions.",
+            ingestion_run_id=ingestion_run_id,
+        )
+        try:
+            async with StepReporter(ctx, ingestion_run_id) as reporter:
+                async with reporter.step("queue_player_summaries", None, "jobs"):
+                    salience_jobs = await enqueue_stale_player_salience_jobs(redis)
+                    await reporter.advance(len(salience_jobs or []))
+            if salience_jobs:
+                print(
+                    f"[TABLEBASE {job_id[:6]}] Queued {len(salience_jobs)} "
+                    "player salience refreshes.",
+                    flush=True,
+                )
+        except Exception as error:
+            print(
+                f"[TABLEBASE {job_id[:6]}] Could not queue player salience "
+                f"refreshes: {error!r}",
+                flush=True,
+            )
+        await finish_ingestion_stage(
+            ingestion_run_id,
+            TABLEBASE_MARKING,
+            processed=result["processed"] + 1,
+            total=result["target"] + 1,
+            detail=f"Cached {result['solved']} exact Syzygy positions.",
+        )
+        await finish_ingestion_run(ingestion_run_id)
+        return result
+    except Exception as error:
+        previous_progress = await _read_progress(redis, job_id)
+        await _write_progress(
+            redis,
+            job_id,
+            total=int(previous_progress.get("total") or 0),
+            processed=int(previous_progress.get("processed") or 0),
+            failed=max(1, int(previous_progress.get("failed") or 0)),
+            phase="failed",
+            detail=str(error),
+            ingestion_run_id=ingestion_run_id,
+        )
+        await fail_running_ingestion_stages(ingestion_run_id, str(error))
+        await finish_ingestion_run(
+            ingestion_run_id,
+            status="failed",
+            error=str(error),
+        )
+        raise
+    finally:
+        await _release_coordination(redis, job_id)

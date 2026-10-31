@@ -1,0 +1,27 @@
+.analysis-history { margin-top: 22px; padding-top: 14px; border-top: 1px solid var(--border-soft); }
+.analysis-history-toggle { display: flex; width: min(100%, 360px); margin-inline: auto; justify-content: center; }
+.analysis-history-body { display: grid; gap: 10px; margin-top: 12px; min-width: 0; }
+.analysis-history-note { margin: 0; color: var(--muted); font-size: 12px; }
+.analysis-history-job { min-width: 0; border: 1px solid var(--border-soft); border-radius: var(--radius); background: var(--surface-2); }
+.analysis-history-job > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 12px; align-items: center; padding: 12px; cursor: pointer; list-style: none; }
+.analysis-history-job > summary::-webkit-details-marker { display: none; }
+.analysis-history-name { overflow-wrap: anywhere; }
+.analysis-history-job time, .analysis-history-status { font-size: 12px; color: var(--muted); }
+.analysis-history-status.is-complete, .analysis-history-status.is-limit_reached { color: var(--accent); }
+.analysis-history-status.is-failed { color: var(--danger); }
+.analysis-history-detail { padding: 0 12px 12px; }
+.analysis-history-metrics, .analysis-history-phases { display: grid; gap: 7px; margin: 10px 0; }
+.analysis-history-metrics > div, .analysis-history-phases > div { display: flex; gap: 12px; justify-content: space-between; }
+.analysis-history-metrics dd, .analysis-history-phases dd { margin: 0; font-variant-numeric: tabular-nums; text-align: right; }
+.analysis-history-phases { padding-top: 10px; border-top: 1px solid var(--border-soft); }
+.analysis-history-id { display: block; overflow-wrap: anywhere; color: var(--muted); }
+.analysis-history-pagination { display: flex; justify-content: center; gap: 12px; }
+@media (max-width: 600px) {
+  .analysis-history-job > summary { grid-template-columns: minmax(0, 1fr) auto; }
+  .analysis-history-job time { grid-column: 1 / -1; }
+}
+.cloud-recovery-history { margin-top: 1rem; padding: .75rem; border: 1px solid var(--border); border-radius: var(--radius); }
+.cloud-recovery-history-scroll { max-height: 320px; overflow: auto; }
+.cloud-recovery-history table { width: 100%; border-collapse: collapse; font-size: .85rem; }
+.cloud-recovery-history th, .cloud-recovery-history td { padding: .5rem; text-align: left; vertical-align: top; }
+.cloud-recovery-history td:last-child { overflow-wrap: anywhere; }

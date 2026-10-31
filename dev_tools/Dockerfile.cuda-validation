@@ -1,0 +1,10 @@
+# Optional offline validation image, not the API or any existing worker.
+FROM chessism-api:runtime
+RUN pip install --no-cache-dir cupy-cuda12x==13.6.0 nvidia-cuda-runtime-cu12==12.6.77 nvidia-cuda-nvrtc-cu12==12.6.85
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.10/site-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.10/site-packages/nvidia/cuda_nvrtc/lib
+ENV CUDA_PATH=/usr/local/lib/python3.10/site-packages/nvidia/cuda_runtime
+ENV CUPY_CACHE_DIR=/tmp/cupy-cache
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHON_DOTENV_DISABLED=1
+WORKDIR /candidate
+ENTRYPOINT ["python"]

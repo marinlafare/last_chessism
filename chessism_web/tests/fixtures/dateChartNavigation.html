@@ -1,0 +1,43 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>Date drill-down fixture</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import {createRoot} from 'react-dom/client'
+import PlayerBehaviouralPanel from '/src/pages/players/PlayerBehaviouralPanel.jsx'
+import PlayerDailyEfficiencyChart from '/src/pages/players/PlayerDailyEfficiencyChart.jsx'
+import BoardSoundPreferences from '/src/components/chess/BoardSoundPreferences.jsx'
+import '/src/index.css'
+import '/src/pages/players/player-hero-analytics.css'
+import '/src/pages/players/player-measures.css'
+import '/src/pages/players/player-game-explorer.css'
+const state=window.calendarTest={requests:[],selections:[]}
+const dates=['2024-01-31','2024-02-01','2024-02-29','2024-03-01','2025-01-01']
+window.fetch=async(input,options={})=>{
+ const url=new URL(input,location.href);state.requests.push({path:url.pathname,method:options.method||'GET',body:options.body?JSON.parse(options.body):null})
+ let data
+ if(url.pathname.endsWith('/ppd')) data={x:[2000],y:[100],games_count:5,bin_width:10}
+ else if(url.pathname.endsWith('/daily-accuracy-bands')) data={metric:'modal_accuracy_band',summary_pending:false,
+  salience:{status:'ready',metric:'modal_salience_band',points:dates.map((day,i)=>[day,[i===2?3:5],i===2?[0,0,0,4,0,0]:[0,0,0,0,0,4],4])},
+  points:dates.map((day,i)=>[day,i===2?[3,5]:[5],i===2?[0,0,0,2,0,2]:[0,0,0,0,0,4],2,4]),
+ }
+ else if(url.pathname.endsWith('/explore-games')) {
+  const selection=JSON.parse(options.body)
+  data={selection,summary:null,time_context:{timezone:'UTC'},games:[{game_id:42,player_color:'white',
+   played_at_local:selection.date+'T12:00:00+00:00',mode:selection.modes[0],result:'win',
+   opponent_name:'Fixture opponent',player_rating:2040,accuracy:null,blunder_count:null}],
+   pagination:{has_more:false,next_cursor:null}}
+ }
+ else if(url.pathname.endsWith('/games/42/score')) data={game:{initial_fen:'start',
+  mode:'blitz',time_control:'180+2',played_at_utc:'2024-02-01T12:00:00Z',
+  white:{name:'alice',rating:2040},black:{name:'Fixture opponent',rating:2000},
+  result:{white:1,black:0,white_reason:'win',black_reason:'resigned'}},moves:[],player_summaries:[]}
+ else throw Error('Unexpected request in isolated fixture: '+url.pathname)
+ return new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}})
+}
+const root=createRoot(document.getElementById('root'))
+state.show=(name='alice')=>root.render(React.createElement(BoardSoundPreferences,{accountId:'calendar-fixture'},React.createElement('main',null,
+ React.createElement(PlayerDailyEfficiencyChart,{playerName:name,availableModes:new Set(['bullet','blitz','rapid']),onSelectPoint:p=>state.selections.push(p)}),
+ React.createElement(PlayerBehaviouralPanel,{playerName:name,activity:{hours:[],weekdays:[],weekday_hours:[]},
+  ratings:{series:[{mode:'blitz',points:dates.map((date,i)=>({date,last_rating:2000+i*20}))}]}}),
+)))
+state.show()
+</script></body></html>

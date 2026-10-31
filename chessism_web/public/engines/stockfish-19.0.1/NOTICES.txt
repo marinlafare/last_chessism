@@ -1,0 +1,37 @@
+Stockfish Lite for Chessism Live analysis
+
+Upstream: https://github.com/nmrugg/stockfish.js
+Release: https://github.com/nmrugg/stockfish.js/releases/tag/v19.0.1
+Stockfish.js 19.0.1, lite single-threaded WebAssembly build, unmodified.
+Copyright 2026 Chess.com, LLC and the Stockfish contributors (see AUTHORS).
+License: GNU General Public License version 3; see Copying.txt in this directory.
+Provided without warranty. This engine is separate from Chessism's server engine.
+
+The engine runs only after enabling Stockfish on the Live page. It uses one
+browser worker, 16 MiB hash, up to 250,000 search nodes and three candidate lines.
+It is stopped when disabled, interrupted by a newer position, hidden, or unmounted.
+No browser evaluations are sent to the database or server analysis endpoint.
+Only the .js and .wasm assets are needed during normal use (1,874,201 bytes total).
+
+Source and rebuild materials, served from this same directory:
+  stockfish.js-v19.0.1-source.tar.gz  (upstream source, build scripts and README)
+  nn-61e7af4bb97d.nnue               (matching lite evaluation network)
+  Copying.txt
+  AUTHORS
+
+To rebuild, extract the source archive, copy nn-61e7af4bb97d.nnue into its src/
+directory, and follow its README's Emscripten setup instructions. Upstream pins
+Emscripten 6.0.9. From the extracted root run:
+  node build.js --lite --single-threaded --no-split
+The source archive includes the engine modifications and compilation scripts.
+The extra source/network downloads are optional and are not loaded by Live.
+
+SHA-256 checksums:
+ccb130d7ff29408531c47d859a49f91d59d4f482d05a53eb1a3231a4f624c91a  stockfish-19-lite-single.js
+ee4f115bdb2d32cadf96cada104a05b5ec257d7ad6f57582190b49bc71f096de  stockfish-19-lite-single.wasm
+a18aa8a871f5265014b110b3e07804ff3637899d2e189be6ded2b99e2c17a10e  stockfish.js-v19.0.1-source.tar.gz
+61e7af4bb97d51eeeb25d322916f86513b5cd3a827ce189c98c6e31946f99e5b  nn-61e7af4bb97d.nnue
+
+The JavaScript/WASM hashes match the official release asset digests. The network
+was downloaded from https://tests.stockfishchess.org/api/nn/nn-61e7af4bb97d.nnue
+and its hash prefix matches the filename required by the source's evaluate.h.

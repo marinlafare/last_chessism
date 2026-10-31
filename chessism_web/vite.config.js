@@ -12,6 +12,11 @@ export default defineConfig(({ mode }) => {
       port: 6789,
       strictPort: true,
       allowedHosts: ['chessism.blackcrowlabs.com'],
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'CDN-Cache-Control': 'no-store',
+        'Cloudflare-CDN-Cache-Control': 'no-store'
+      },
       proxy: {
         '/api': {
           target: proxyTarget,

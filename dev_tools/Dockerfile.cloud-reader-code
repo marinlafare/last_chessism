@@ -1,0 +1,4 @@
+# Read-only observability release; no controller or cloud-worker changes.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY stockfish-batch-worker/cloud_billing/ /app/stockfish-batch-worker/cloud_billing/

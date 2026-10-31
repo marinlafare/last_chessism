@@ -1,0 +1,9 @@
+# Code-only update. No dependency, driver or cloud-worker changes.
+ARG BASE_IMAGE=chessism-api:runtime
+FROM scratch AS update
+COPY chessism_api/operations/cuda_summaries/ /app/chessism_api/operations/cuda_summaries/
+COPY chessism_api/operations/player_salience.py chessism_api/operations/player_salience_calculation.py chessism_api/operations/player_move_salience.py chessism_api/operations/relational_salience.py /app/chessism_api/operations/
+COPY chessism_api/appearance_scopes.json /app/chessism_api/appearance_scopes.json
+FROM ${BASE_IMAGE}
+# One overlay layer: the current API image is near Docker's layer-depth limit.
+COPY --from=update /app/chessism_api/ /app/chessism_api/

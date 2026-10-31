@@ -1,0 +1,32 @@
+/* Move only the painted mark. Its pointer target, axes and layout stay fixed. */
+.behavior-hour-mark > :not(.behavior-hour-mark-hit),
+.behavior-weekday-hour > i,
+.score-distribution-bar,
+.blunder-distribution-bar {
+  transition: transform 180ms ease-out;
+}
+.behavior-hour-mark-hit { fill: transparent; cursor: pointer; }
+.behavior-hour-mark > :not(.behavior-hour-mark-hit),
+.behavior-weekday-hour > i,
+.score-distribution-bar,
+.blunder-distribution-bar { pointer-events: none; }
+
+.behavior-hour-mark[aria-disabled="false"]:is(:hover, :focus-visible) > :not(.behavior-hour-mark-hit),
+.behavior-hour-column:has(> .behavior-bar-hitbox:focus-visible) > .behavior-hour-mark:has(> .behavior-hour-mark-hit) > :not(.behavior-hour-mark-hit),
+.behavior-weekday-hour:not(:disabled):is(:hover, :focus-visible) > i,
+.score-distribution-column[aria-disabled="false"]:is(:has(> .score-distribution-hit:hover), :focus-visible) > .score-distribution-bar,
+.blunder-distribution-column[aria-disabled="false"]:is(:has(> .blunder-distribution-hit:hover), :focus-visible) > .blunder-distribution-bar {
+  transform: translateY(-4px);
+}
+/* The row already has space above its bins; don't clip the lifted square. */
+.behavior-weekday-row.expanded .behavior-weekday-stage { overflow: visible; }
+
+@media (prefers-reduced-motion: reduce) {
+  .behavior-hour-mark > :not(.behavior-hour-mark-hit),
+  .behavior-weekday-hour > i,
+  .score-distribution-bar,
+  .blunder-distribution-bar {
+    transition: none;
+    transform: none !important;
+  }
+}

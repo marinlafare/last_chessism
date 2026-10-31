@@ -1,0 +1,41 @@
+.salience-comparison-main { margin: 2rem; color: var(--text, #d8e4e7); }
+.salience-comparison-intro, .salience-variant, .salience-comparison-games { padding: 1.2rem; border: 1px solid var(--border, #294244); border-radius: .8rem; background: var(--panel, #10191b); }
+.salience-comparison-intro h1 { margin: .7rem 0; font-size: 1.6rem; }
+.salience-comparison-intro p { line-height: 1.6; }
+.salience-comparison-intro a { color: var(--accent, #18bd88); }
+.salience-comparison-distributions { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 1rem; margin: 1rem 0; }
+.salience-variant h2 { font-size: 1rem; margin: 0 0 1rem; }
+.salience-variant-summary { display: flex; flex-direction: column; gap: .4rem; font-size: .85rem; }
+.salience-variant svg { display: block; width: 100%; padding: .5rem; border-radius: .4rem; }
+.salience-variant svg text { fill: var(--text-muted,#9eb4be); font-size: 10px; }
+.salience-variant rect { fill: #23b891; transition: filter .15s; }
+.salience-variant:nth-child(2) rect { fill: #7b9ddd; }
+.salience-variant:nth-child(3) rect { fill: #b092d2; }
+.salience-variant rect:hover { filter: brightness(1.25); }
+.salience-comparison-filters, .salience-comparison-pagination { display: flex; align-items: center; flex-wrap: wrap; gap: 1rem; margin-bottom: 1rem; }
+.salience-comparison-pagination { justify-content: space-between; margin: 1rem 0 0; }
+.salience-comparison-main select, .salience-comparison-main button, .salience-experiment-review button { color: inherit; background: #10252a; border: 1px solid #335254; border-radius: .4rem; padding: .55rem .8rem; cursor: pointer; }
+.salience-comparison-main select { margin-left: .4rem; }
+.salience-comparison-main button:disabled { opacity: .5; cursor: default; }
+.salience-table-scroll { overflow: auto; }
+.salience-comparison-table { width: 100%; border-spacing: 0 .3rem; font-variant-numeric: tabular-nums; }
+.salience-comparison-table th, .salience-comparison-table td { padding: .6rem; text-align: left; white-space: nowrap; font-size: .85rem; }
+.salience-comparison-table tbody tr { background: #0b1518; }
+.salience-comparison-table tbody tr[data-highlighted="true"] { background: #173334; }
+.salience-comparison-table td button { text-align: left; background: transparent; border-color: transparent; padding: .2rem; }
+.salience-comparison-table small { display: block; opacity: .7; padding-top: .3rem; }
+.salience-comparison-review .game-review-analysis { display: flex; flex-direction: column; overflow-y: auto; }
+.salience-comparison-review .salience-experiment-review { flex-shrink: 0; }
+.salience-comparison-review .game-review-moves { min-height: 10rem; flex: 1 0 10rem; }
+.salience-experiment-review { padding: .75rem; background: #101c20; border-radius: .5rem; }
+.salience-experiment-review h3 { margin: 0 0 .6rem; font-size: .95rem; }
+.salience-review-scores { display: grid; grid-template-columns: repeat(3,1fr); gap: .4rem; }
+.salience-review-scores > div { display: flex; flex-direction: column; gap: .2rem; background: #0b1518; padding: .5rem; border-radius: .3rem; font-size: .8rem; }
+.salience-position-detail { display: flex; flex-direction: column; gap: .35rem; font-size: .8rem; padding: .8rem 0; }
+.salience-position-detail table { width: 100%; font-variant-numeric: tabular-nums; text-align: left; }
+.salience-experiment-review fieldset { border: 1px solid #335254; border-radius: .4rem; padding: .6rem; display: grid; gap: .4rem; font-size: .8rem; }
+.salience-review-choices { display: flex; flex-wrap: wrap; gap: .3rem; }
+.salience-review-choices button[aria-pressed="true"] { background: #245b4b; border-color: #36c798; }
+.salience-experiment-review textarea { width: 100%; box-sizing: border-box; color: inherit; background: #091317; border: 1px solid #335254; border-radius: .3rem; }
+.salience-comparison-main button:focus-visible, .salience-experiment-review button:focus-visible { outline: 2px solid #47dfad; outline-offset: 2px; }
+@media(max-width:900px) { .salience-comparison-distributions { grid-template-columns: 1fr; } .salience-comparison-main { margin: 1rem; } }

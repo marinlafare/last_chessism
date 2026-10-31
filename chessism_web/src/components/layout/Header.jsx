@@ -1,9 +1,10 @@
-function Header() {
+import { pageStyleTarget } from '../../appearance/styleCore.js'
+function Header({ eyebrow = 'Chess analytics workstation', title = 'Chessism' }) {
   return (
     <header className="site-header">
       <div>
-        <p className="eyebrow">Chess analytics workstation</p>
-        <h1>Chessism</h1>
+        {eyebrow && <p {...pageStyleTarget('text')} className="eyebrow">{eyebrow}</p>}
+        <h1 {...pageStyleTarget('heading')}>{title}</h1>
       </div>
     </header>
   )

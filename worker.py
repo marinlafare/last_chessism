@@ -1,54 +1,78 @@
 # worker.py
 import os
 import constants
-from arq.connections import RedisSettings
-from arq import create_pool 
+from arq import create_pool
+from arq.worker import func
 
-# --- Import the actual job functions from your operations ---
-# These are the tasks the worker is allowed to run.
 from chessism_api.operations.analysis import (
     run_analysis_job, 
-    run_player_analysis_job
+    run_player_analysis_job,
+    run_analysis_loop_job,
+    run_player_games_analysis_job,
 )
-# --- MODIFIED: Import ALL FEN jobs ---
-from chessism_api.operations.fens import (
-    run_fen_generation_job,
+from chessism_api.operations.analysis_backups import (
+    run_fen_analysis_backup_job,
+    run_fen_analysis_restore_job,
+)
+from chessism_api.operations.pending_repetitions import run_pending_repetition_refresh
+from chessism_api.operations.home_summary import run_home_summary_refresh
+from chessism_api.operations.common_positions import run_commonness_refresh
+from chessism_api.operations.common_position_pages import run_commonness_page_refresh
+from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
     run_fen_pipeline,
-    run_fen_insertion_job,
-    run_association_insertion_job
 )
-from chessism_api.operations.games import run_create_player_games_job, run_update_player_games_job
+from chessism_api.operations.ingestion_pipeline.fen_batches import run_fen_batch_job
+from chessism_api.operations.ingestion_pipeline.fen_workers import (
+    run_fen_generation_job,
+    run_fen_insertion_job,
+    run_association_insertion_job,
+)
+from chessism_api.operations.ingestion_pipeline.jobs import (
+    run_create_player_games_job,
+    run_update_player_games_job,
+)
+from chessism_api.operations.tablebase import run_tablebase_analysis_job
+from chessism_api.operations.player_deletion import run_delete_player_job
+from chessism_api.operations.coefficient_research import run_chessism_coefficient_experiment
+from chessism_api.operations.matrix_constructor.jobs import run_matrix_construction_job
+from chessism_api.operations.player_salience import run_player_salience_job
+from chessism_api.operations.database_backups import run_database_backup_job
+from chessism_api.operations.database_restore_tests import (
+    cleanup_stale_restore_workspaces,
+    run_database_restore_test_job,
+)
 
-# --- NEW: Import the database initializer ---
-from chessism_api.database.engine import init_db
-# --- NEW: Import Redis client for the boss job ---
+from chessism_api.database.runtime import init_runtime_db
 from chessism_api.redis_client import redis_settings
 
 
-# --- NEW: Read queue name from environment ---
-# This allows docker-compose to assign different queues to different workers
 WORKER_QUEUE = os.environ.get("QUEUE_NAME", "analysis_queue")
 print(f"--- [WORKER] Starting up, listening on queue: {WORKER_QUEUE} ---", flush=True)
 
 
-# --- NEW: Worker startup function ---
 async def startup(ctx):
     """
     This function is run by arq when the worker starts.
     It initializes the database connection for this process.
     """
     print(f"--- [WORKER] Initializing database connection... ---", flush=True)
+    if WORKER_QUEUE == "backup_queue":
+        removed = cleanup_stale_restore_workspaces()
+        if removed:
+            print(
+                "--- [WORKER] Removed interrupted restore workspaces: "
+                + ", ".join(removed)
+                + " ---",
+                flush=True,
+            )
     if not constants.CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set for worker.")
-    await init_db(constants.CONN_STRING)
+    await init_runtime_db(constants.CONN_STRING)
     print(f"--- [WORKER] Database connection initialized. ---", flush=True)
     
-    # --- NEW: Add a redis pool to the 'boss' worker's context ---
-    # This allows run_fen_pipeline to enqueue jobs
     ctx['redis'] = await create_pool(redis_settings)
 
 
-# --- NEW: Worker shutdown function ---
 async def shutdown(ctx):
     """
     Closes the redis pool on shutdown.
@@ -60,7 +84,15 @@ async def shutdown(ctx):
     print(f"--- [WORKER] Shutdown complete. ---", flush=True)
 
 
-# --- This is the main configuration class for ARQ ---
+async def job_started(ctx):
+    """Actual worker start, independent of mutable per-batch progress payloads."""
+    import time
+    ident = ctx.get('job_id')
+    if ident:
+        key = f'chessism:job_started:{ident}'
+        await ctx['redis'].set(key, str(time.time()), nx=True, ex=7 * 24 * 3600)
+
+
 class WorkerSettings:
     """
     Defines the worker's settings.
@@ -68,29 +100,41 @@ class WorkerSettings:
     and where to connect.
     """
     
-    # --- MODIFIED: Added all FEN jobs ---
     functions = [
+        func(run_home_summary_refresh, timeout=1800, keep_result=0, max_tries=1),
+        func(run_pending_repetition_refresh, timeout=240, keep_result=0, max_tries=1),
+        func(run_commonness_refresh, timeout=600, keep_result=0, max_tries=1),
+        func(run_commonness_page_refresh, timeout=600, keep_result=0, max_tries=1),
         run_analysis_job, 
         run_player_analysis_job,
+        run_analysis_loop_job,
+        run_player_games_analysis_job,
         run_fen_generation_job,
+        run_fen_batch_job,
         run_fen_pipeline,
         run_fen_insertion_job,
         run_association_insertion_job,
         run_create_player_games_job,
-        run_update_player_games_job
+        run_update_player_games_job,
+        run_fen_analysis_backup_job,
+        run_fen_analysis_restore_job,
+        run_tablebase_analysis_job,
+        run_delete_player_job,
+        run_chessism_coefficient_experiment,
+        func(run_matrix_construction_job, timeout=7 * 24 * 60 * 60),
+        run_player_salience_job,
+        func(run_database_backup_job, timeout=7 * 24 * 60 * 60),
+        func(run_database_restore_test_job, timeout=7 * 24 * 60 * 60),
     ]
     
     redis_settings = redis_settings
     
-    # --- MODIFIED: Use the dynamic queue name ---
     queue_name = WORKER_QUEUE
 
-    # --- NEW: Tell arq to run the startup/shutdown functions ---
     on_startup = startup
+    on_job_start = job_started
     on_shutdown = shutdown
 
-    # --- Force the worker to run only one job at a time ---
     max_jobs = 1
 
-    # --- Set the worker's global timeout to 24 hours ---
     job_timeout = 86400

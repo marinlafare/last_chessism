@@ -1,0 +1,261 @@
+CHESSISM CUDA ANALYTICS PROPOSAL
+================================
+
+Purpose
+-------
+
+Build a reusable research layer that can expose Chessism's relational chess data
+to CUDA algorithms without replacing PostgreSQL as the application's source of
+truth. The GPU layer should support experiments such as game similarity,
+clustering, repertoire analysis, anomaly detection, embeddings, and fast
+nearest-neighbor searches.
+
+This is a research and analytics subsystem. It must not be placed in the live
+hero-page request path, and it must not compete with or restart Stockfish jobs.
+
+
+1. Do not create a dense game-by-game SQL matrix
+------------------------------------------------
+
+A dense similarity matrix grows quadratically. For 29,000 games it contains
+841 million cells. Across the complete Chessism database it would become too
+large to store, calculate, or update safely.
+
+Chessism already has the correct sparse source representation:
+
+    game_fen_association
+
+Conceptually it is a sparse matrix in which:
+
+    row    = game
+    column = canonical FEN position
+    value  = the game contains that position
+
+Algorithms should consume this sparse representation and produce compact
+results such as top-k neighbors or cluster assignments. They should not save
+every possible game pair.
+
+
+2. Canonical source data
+------------------------
+
+FEN extraction already uses python-chess and stores only the first four FEN
+fields. The stored fen_fen value is therefore the canonical position identity
+needed by the analytics layer. It does not need to be parsed or validated a
+second time.
+
+Repeated occurrences of the same position within one game must be deduplicated
+for set-based similarity calculations. Ordered and repeated occurrences should
+remain available for sequence-based research.
+
+
+3. Stable integer dictionaries
+------------------------------
+
+GPU arrays should not contain player-name or FEN strings. Each exported snapshot
+should create stable integer dictionaries:
+
+    player_id   -> player_name
+    game_id     -> game.link
+    position_id -> fen.fen
+
+Suggested compute types:
+
+    player_id   int32
+    game_id     int32 when the snapshot permits, otherwise int64
+    position_id int32
+    ply         uint16 or int32
+    color       uint8
+    numeric features float32 unless precision testing requires float64
+
+The dictionaries make results reversible: every GPU result can be translated
+back to the canonical PostgreSQL identifiers.
+
+
+4. Analytics snapshot format
+----------------------------
+
+Create immutable, reproducible snapshots outside the operational tables. A
+snapshot builder should read a consistent PostgreSQL view and write columnar
+files plus compressed sparse arrays.
+
+Core game table:
+
+    game_id
+    white_player_id
+    black_player_id
+    played_at
+    mode
+    ratings
+    result
+    termination
+    move_count
+
+Per-game/player engine features, when available:
+
+    game_id
+    player_id
+    player_color
+    analyzed_player_moves
+    game_accuracy
+    cp_gain
+    cp_loss
+    blunder_count
+    salience
+
+Sparse game-position representation in compressed sparse-row form:
+
+    game_offsets   [number_of_games + 1]
+    position_ids   [number_of_position_appearances]
+    ply_numbers    [number_of_position_appearances]
+    move_colors    [number_of_position_appearances]
+
+Optional aligned position features:
+
+    Stockfish centipawn score
+    WDL values
+    mate score
+    tablebase result
+    piece count
+    clock/reaction-time values
+
+Columnar files such as Parquet or Arrow are appropriate for metadata. Binary
+array files are appropriate for CSR offsets and indices. The snapshot metadata
+must record the database counts and filters used so experiments are reproducible.
+
+
+5. Dedicated GPU worker
+-----------------------
+
+Create a separate GPU research queue and worker/container. Its responsibilities:
+
+    1. Load a named analytics snapshot.
+    2. Run one bounded research algorithm.
+    3. Report durable progress.
+    4. Save compact artifacts and database results.
+    5. Release GPU memory when finished.
+
+The GPU worker must not share a queue with Stockfish, ingestion, FEN extraction,
+or API requests. Stockfish is CPU-based, but snapshot construction can still use
+database I/O and CPU, so export and GPU jobs need explicit concurrency and memory
+limits.
+
+
+6. Suitable CUDA calculations
+-----------------------------
+
+Good initial uses:
+
+    - Sparse game-position similarity.
+    - Top-k nearest games rather than all game pairs.
+    - MinHash or approximate Jaccard similarity.
+    - Opening and repertoire clustering.
+    - Player-style clustering.
+    - Game and position embeddings.
+    - Anomaly and unusual-game detection.
+    - Change-point analysis over a player's chronology.
+    - Approximate nearest-neighbor indexes.
+    - Sparse factorization of the game-position relation.
+
+Sequence experiments can use ordered position_ids and ply arrays. They should
+use padding/masks or packed sequences rather than forcing every game into the
+same dense maximum length.
+
+
+7. Compact result storage
+-------------------------
+
+GPU jobs should write only products the application or research UI can consume.
+Possible result tables:
+
+    game_similarity_neighbor
+        game_link
+        neighbor_game_link
+        similarity
+        rank
+
+    game_cluster
+        game_link
+        cluster_id
+
+    player_style_embedding
+        player_name
+        dimensions or artifact reference
+
+    analytics_artifact
+        experiment name
+        snapshot identifier
+        parameters
+        output path
+        status
+
+Do not store a dense similarity matrix in PostgreSQL.
+
+
+8. Validation strategy
+-----------------------
+
+Every GPU algorithm needs a small deterministic CPU reference implementation.
+For a fixed sample:
+
+    1. Calculate the expected result on CPU.
+    2. Run the GPU implementation on the same arrays.
+    3. Compare within an explicitly defined numeric tolerance.
+    4. Record runtime, peak GPU memory, and transfer time.
+    5. Reject the GPU implementation if transfer/initialization costs eliminate
+       the practical speed advantage.
+
+The SQL/CPU game-salience calculation is a good reference workload, but the
+production salience projection should initially remain in PostgreSQL because it
+is mostly indexed grouping and counting rather than dense numerical work.
+
+
+9. Proposed implementation phases
+---------------------------------
+
+Phase 1: Snapshot foundation
+
+    - Define integer dictionaries.
+    - Export a single player's games and ordered positions.
+    - Build and validate CSR arrays.
+    - Record snapshot metadata and database counts.
+
+Phase 2: First bounded GPU experiment
+
+    - Use Pat_Buchanan as the repetition-heavy validation corpus.
+    - Calculate top-k similar games from position sets.
+    - Compare with a deterministic CPU sample.
+    - Measure end-to-end time, including snapshot loading.
+
+Phase 3: Multi-player research
+
+    - Export selected tracked players.
+    - Add clustering and compact neighbor results.
+    - Add progress and artifact inspection to the superuser Research page.
+
+Phase 4: Reusable analytics service
+
+    - Support named algorithms and parameterized jobs.
+    - Add resource limits, cancellation, resumable artifacts, and retention.
+    - Promote only validated compact results into application-facing endpoints.
+
+
+10. Decisions to make before implementation
+--------------------------------------------
+
+    - Which GPU and available VRAM the worker must target.
+    - Snapshot location and retention policy.
+    - Whether snapshots cover one player, selected players, or the full database.
+    - First production-worthy algorithm after the similarity experiment.
+    - Whether embeddings remain research artifacts or become queryable features.
+    - Maximum database and CPU load allowed while Stockfish analysis is active.
+
+
+Recommended first experiment
+----------------------------
+
+Build one player-level sparse snapshot for Pat_Buchanan and return the 20 most
+similar games for every eligible game. This dataset has obvious repetition, so
+incorrect similarity results should be easy to identify. Keep PostgreSQL/CPU as
+the reference and evaluate CUDA only after the snapshot and expected outputs are
+verified.

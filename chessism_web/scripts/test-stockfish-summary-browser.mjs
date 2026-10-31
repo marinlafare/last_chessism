@@ -1,0 +1,67 @@
+import { browserFixture } from './browser-fixture.mjs'
+
+await browserFixture(9251,async({send,context,evaluate,assert,waitFor})=>{
+  await send('browsingContext.setViewport',{context,viewport:{width:1280,height:900}})
+  await send('browsingContext.navigate',{context,url:'http://localhost:6789/tests/fixtures/stockfishSummary.html',wait:'complete'})
+  const toggle=`document.querySelector('[data-style-id="player.measures.toggle"]')`
+  const accuracy=`document.querySelector('[data-style-id="player.accuracy.toggle"]')`
+  const score=`document.querySelector('.player-score-distribution')`
+  const blunders=`document.querySelector('.player-blunder-distribution')`
+  const scorePlot=`${score}.querySelector('.score-distribution-canvas svg')`
+  const blunderPlot=`${blunders}.querySelector('.blunder-distribution-plot svg')`
+  const aligned=`Math.abs(${scorePlot}.getBoundingClientRect().top-${blunderPlot}.getBoundingClientRect().top)<1 && ${scorePlot}.getBoundingClientRect().height===${blunderPlot}.getBoundingClientRect().height`
+  await waitFor(toggle)
+  await assert('summaryTest.requests.length===0')
+  await evaluate(`${toggle}.click()`)
+  await waitFor(`${score}?.textContent.includes('summary update pending') && ${accuracy}`)
+  await assert(`${accuracy}.disabled && ${accuracy}.querySelector('.player-analysis-disclosure-spinner')`)
+  await assert(`!${score}.querySelector('svg') && summaryTest.unexpected.length===0`)
+  await evaluate('summaryTest.pending=false;summaryTest.ready=true')
+  await waitFor(`${score}.querySelector('svg') && !${accuracy}.disabled`)
+  await waitFor(aligned)
+  await assert(`!${score}.textContent.includes('Checkmates given') && !${blunders}.textContent.includes('Rating-aware') && !${blunders}.textContent.includes('5,774') && !${blunders}.textContent.includes('Complete player-move assessments only')`)
+  const mates=`document.querySelector('[data-style-id="player.scores.mates.toggle"]')`
+  const popup=`document.querySelector('.score-mate-popup')`
+  await assert(`${mates} && !${popup} && !${score}.textContent.includes('Mate in 2')`)
+  await evaluate(`window.closedHeights=[...document.querySelectorAll('.player-stockfish-summary > section')].map(node=>node.getBoundingClientRect().height); ${mates}.click()`)
+  await waitFor(popup)
+  await assert(`${popup}.textContent.includes('Mate in 2') && ${popup}.textContent.includes('Distance unavailable')`)
+  await assert(`${popup}.querySelector('[data-style-id="player.scores.endings"]').textContent.includes('Checkmates given6') && ${popup}.textContent.includes('Other draws3')`)
+  await assert(`${popup}.parentElement===document.body && ${mates}.getAttribute('aria-expanded')==='true'`)
+  await assert(`JSON.stringify(closedHeights)===JSON.stringify([...document.querySelectorAll('.player-stockfish-summary > section')].map(node=>node.getBoundingClientRect().height)) && Math.max(...closedHeights)<260`)
+  await assert(aligned)
+  await assert(`document.querySelector('[data-style-id="player.scores.mates.for"]').textContent==='2'`)
+  await evaluate(`document.body.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}))`)
+  await waitFor(`!${popup}`)
+  await evaluate(`${mates}.click()`)
+  await waitFor(popup)
+  await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`)
+  await waitFor(`!${popup}`)
+  await assert(`document.activeElement===${mates}`)
+  await evaluate(`${mates}.click()`)
+  await waitFor(popup)
+  await evaluate(`window.summaryTest.longMates=true`)
+  await waitFor(`${popup}.querySelectorAll('[role="row"]').length>50`)
+  await assert(`${popup}.querySelector('.score-mate-popup-body').scrollHeight>${popup}.querySelector('.score-mate-popup-body').clientHeight`)
+  await assert(`JSON.stringify(closedHeights)===JSON.stringify([...document.querySelectorAll('.player-stockfish-summary > section')].map(node=>node.getBoundingClientRect().height))`)
+  await send('browsingContext.setViewport',{context,viewport:{width:480,height:700}})
+  await waitFor(`${popup}.getBoundingClientRect().right<=window.innerWidth && ${popup}.getBoundingClientRect().bottom<=window.innerHeight`)
+  await assert(`${popup}.getBoundingClientRect().left>=0 && ${popup}.getBoundingClientRect().top>=0`)
+  await evaluate(`document.querySelector('[data-style-id="player.scores.mates.close"]').click()`)
+  await waitFor(`!${popup}`)
+  await send('browsingContext.setViewport',{context,viewport:{width:1280,height:900}})
+  await evaluate('summaryTest.stale=true')
+  await waitFor(`${score}.textContent.includes('last complete summary')`)
+  await waitFor(aligned)
+  await assert(`${score}.querySelector('svg') && !summaryTest.requests.some(p=>p.includes('quality-calendar')||p.includes('refresh=true')||p.includes('daily-'))`)
+  await evaluate(`${toggle}.click()`)
+  await assert(`!${popup}`)
+  await evaluate('new Promise(resolve=>setTimeout(resolve,400))')
+  const count=await evaluate('summaryTest.requests.length')
+  await evaluate('new Promise(resolve=>setTimeout(resolve,600))')
+  await assert(`summaryTest.requests.length===${count}`)
+  await evaluate(`${toggle}.click();summaryTest.stale=false`)
+  await waitFor(`!${score}.textContent.includes('last complete summary') && summaryTest.requests.length>${count}`)
+  await assert('summaryTest.unexpected.length===0')
+  console.log('PASS: compact aligned plots, endings inside mate popup, no coverage legends, unchanged card heights, outside/Escape/close dismissal, focus return, long-table scrolling, mobile bounds, queued/ready/stale data, no extra requests and hidden polling cancellation.')
+})

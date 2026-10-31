@@ -52,7 +52,7 @@ SELECT
     (MAX(ABS(f.score)) FILTER (WHERE f.score IS NOT NULL))::double precision AS max_abs_score,
     CURRENT_TIMESTAMP AS refreshed_at
 FROM game_fen_association gfa
-JOIN fen f ON f.fen = gfa.fen_fen
+JOIN fen f ON f.fen_id = gfa.fen_id
 GROUP BY gfa.game_link
 ON CONFLICT (link) DO UPDATE SET
     total_positions = EXCLUDED.total_positions,

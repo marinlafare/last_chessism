@@ -1,0 +1,192 @@
+.database-backups-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-width: 0;
+  gap: 16px;
+}
+
+.database-backups-hero,
+.database-backups-panel {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.database-backups-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.database-backups-results {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+}
+
+.database-backups-timestamps {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+}
+
+.database-backups-timestamp {
+  display: grid;
+  gap: 4px;
+  max-width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-1, #0c1218);
+  color: var(--text);
+  font-size: 12px;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.database-backups-timestamp time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.database-backups-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  min-height: 160px;
+}
+
+.database-backup-action {
+  --action-ready-background: #155b3c;
+  --action-running-background: #8a5418;
+  --action-disabled-background: #202930;
+  min-height: 120px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--action-ready-background);
+  color: var(--text);
+  font-family: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+.database-backup-action[data-style-id="backup.test"] { --action-ready-background: #225775; }
+.database-backup-action:disabled { background: var(--action-disabled-background); color: var(--muted); cursor: default; }
+.database-backup-action[data-running="true"] { background: var(--action-running-background); color: #fff; cursor: progress; }
+.database-backup-action:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.database-backups-progress span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.database-backups-progress {
+  font-family: "IBM Plex Mono", monospace;
+}
+
+.database-backups-status-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.database-backups-live-light {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 12px;
+  border: 1px solid rgba(87, 255, 181, 0.8);
+  border-radius: 50%;
+  background: #15c780;
+  box-shadow: 0 0 12px rgba(21, 199, 128, 0.9);
+  animation: database-backup-live-blink 1s ease-in-out infinite;
+}
+
+@keyframes database-backup-live-blink {
+  0%, 100% {
+    opacity: 0.25;
+    box-shadow: 0 0 3px rgba(21, 199, 128, 0.3);
+  }
+
+  50% {
+    opacity: 1;
+    box-shadow: 0 0 14px rgba(21, 199, 128, 0.95);
+  }
+}
+
+.database-backups-progress {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid rgba(21, 199, 128, 0.35);
+  border-radius: var(--radius);
+  background: #070c11;
+}
+
+.database-backups-progress.failed {
+  border-color: rgba(207, 79, 87, 0.55);
+}
+
+.database-backups-progress .database-backups-elapsed {
+  color: #57ffb5;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.08em;
+}
+
+.database-backups-transfer-progress {
+  display: grid;
+  gap: 8px;
+  margin: 5px 0;
+}
+
+.database-backups-transfer-meter {
+  height: 12px;
+  overflow: hidden;
+  border: 1px solid rgba(87, 255, 181, 0.32);
+  border-radius: 999px;
+  background: #020507;
+}
+
+.database-backups-transfer-meter > div {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #138f62, #57ffb5);
+  transition: width 600ms ease;
+}
+
+.database-backups-transfer-meter.indeterminate > div {
+  width: 32%;
+  animation: database-backup-progress-search 1.4s ease-in-out infinite;
+}
+
+.database-backups-transfer-meta {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 6px 16px;
+}
+
+@keyframes database-backup-progress-search {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(330%); }
+}
+
+@media (max-width: 800px) {
+  .database-backups-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .database-backups-live-light,
+  .database-backups-transfer-meter.indeterminate > div {
+    animation: none;
+    opacity: 1;
+  }
+}

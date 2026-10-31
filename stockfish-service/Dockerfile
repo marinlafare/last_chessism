@@ -1,26 +1,16 @@
 # syntax=docker/dockerfile:1
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm@sha256:2333bd330d12de02514770b3585cad313644316047cdee24a7acfdece6de6efb AS engine
+COPY stockfish-batch-worker/scripts/fetch_engine.py /fetch_engine.py
+RUN python /fetch_engine.py /engine
 
-ARG STOCKFISH_VERSION=16.1
-ENV STOCKFISH_URL="https://github.com/official-stockfish/Stockfish/releases/download/sf_${STOCKFISH_VERSION}/stockfish-ubuntu-x86-64-avx2.tar"
-
-RUN set -eux; \
-    apt-get update; \
-    apt-get install -y --no-install-recommends ca-certificates curl; \
-    curl -L -o /tmp/stockfish.tar "${STOCKFISH_URL}"; \
-    mkdir -p /tmp/stockfish; \
-    tar -xf /tmp/stockfish.tar -C /tmp/stockfish; \
-    sf_bin="$(find /tmp/stockfish -type f -name 'stockfish*' -perm /111 | head -n 1)"; \
-    mv "$sf_bin" /usr/local/bin/stockfish; \
-    chmod +x /usr/local/bin/stockfish; \
-    rm -rf /tmp/stockfish /tmp/stockfish.tar; \
-    apt-get clean; \
-    rm -rf /var/lib/apt/lists/*
-
-RUN pip install --no-cache-dir fastapi uvicorn[standard] python-chess redis
+FROM python:3.11-slim-bookworm@sha256:2333bd330d12de02514770b3585cad313644316047cdee24a7acfdece6de6efb
+COPY --from=engine /engine/stockfish /usr/local/bin/stockfish
+COPY --from=engine /engine/source /usr/local/share/stockfish
+RUN pip install --no-cache-dir fastapi uvicorn[standard] python-chess==1.999 chess==1.11.2 redis
 
 WORKDIR /app
-COPY . /app
+COPY stockfish-service /app
+COPY stockfish-batch-worker/stockfish_core /app/stockfish_core
 
 EXPOSE 9999
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "9999"]

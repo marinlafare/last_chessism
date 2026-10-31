@@ -1,0 +1,14 @@
+.fen-explorer-popup { position:fixed; z-index:180; box-sizing:border-box; display:flex; flex-direction:column; gap:10px; max-height:calc(100vh - 24px); overflow:hidden; padding:12px; border:1px solid var(--muted); border-radius:8px; background:var(--surface); color:var(--text); box-shadow:var(--shadow); font-size:12px; }
+.fen-explorer-popup header,.fen-explorer-popup nav { display:flex; flex-shrink:0; align-items:center; gap:8px; justify-content:space-between; }
+.fen-explorer-popup nav { flex-wrap:wrap; }
+.fen-explorer-popup header strong { flex:1; }
+.fen-explorer-popup button { background:var(--surface-2); color:var(--text); border:1px solid var(--border-soft); border-radius:5px; padding:6px; cursor:pointer; font:inherit; }
+.fen-explorer-popup button:focus-visible { outline:2px solid var(--accent); }
+.fen-explorer-popup button:disabled { opacity:.45; cursor:default; }
+.fen-explorer-popup small { display:block; flex-shrink:0; color:var(--muted); }
+.fen-explorer-body { min-height:0; overflow:auto; overscroll-behavior:contain; scrollbar-width:thin; scrollbar-color:var(--muted) transparent; }
+.fen-example-list { display:flex; flex-direction:column; align-items:center; gap:6px; margin:0; padding:2px; list-style:none; }
+.fen-example-thumbnail { padding:6px; border:1px solid var(--border-soft); border-radius:5px; background:var(--surface-2); cursor:default; }
+.fen-example-thumbnail:focus-visible { outline:2px solid var(--accent); outline-offset:1px; }
+.fen-example-board { width:72px; height:72px; pointer-events:none; }
+.fen-thumbnail-preview { position:fixed; z-index:220; padding:12px; border:1px solid var(--border-soft); border-radius:8px; background:var(--surface-2); box-shadow:var(--shadow); pointer-events:none; }

@@ -1,0 +1,752 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
+import { balanceScale, balanceDescription, volumeOpacityScale } from './activityBalance.js'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { formatNumber } from '../../utils/formatters'
+import PlayerModeToggles, {
+  PLAYER_ANALYSIS_MODES,
+  PLAYER_MODE_COLORS,
+} from './PlayerModeToggles'
+import PlayerGameExplorerModal from './PlayerGameExplorerModal'
+import PlayerGameReviewModal from './PlayerGameReviewModal'
+import DailyDateBands from './DailyDateBands'
+import { buildDateScale, periodAtX, dateInPeriod, datePeriodLabel, periodTicks } from './dailyYearNavigation'
+import PlayerAnalysisDisclosure from './PlayerAnalysisDisclosure'
+import PlayerResultsChart from './PlayerResultsChart'
+import PlayerRatingDistribution from './PlayerRatingDistribution'
+import './player-chart-hover.css'
+
+const WIDTH = 1200
+const RATING_SVG_HEIGHT = 156
+const HOURS_SVG_HEIGHT = 210
+const PLOT_LEFT = 120
+const PLOT_RIGHT = 1190
+const PLOT_WIDTH = PLOT_RIGHT - PLOT_LEFT
+const HOUR_STEP = PLOT_WIDTH / 24
+const RATING_TOP = 8
+const RATING_BOTTOM = 118
+const RATING_AXIS_Y = 146
+const HOURLY_TOP = 8
+const HOURLY_HEIGHT = 139
+const HOURLY_BASELINE = HOURLY_TOP + HOURLY_HEIGHT
+const HOURLY_AXIS_Y = 168
+const HOURLY_AXIS_TITLE_Y = 201
+const RESULT_FIELDS = ['games', 'wins', 'draws', 'losses']
+const WEEKDAY_CURTAIN_DURATION_MS = 480
+const WEEKDAY_BIN_UNLOCK_DELAY_MS = 3000
+
+const numeric = (value) => Number(value || 0)
+const hourX = (hour) => PLOT_LEFT + numeric(hour) * HOUR_STEP
+
+function hourResultTooltip(hour, row = {}) {
+  return [
+    `${String(hour).padStart(2, '0')}:00`,
+    `${formatNumber(numeric(row.games))} games`,
+    `${formatNumber(numeric(row.wins))} wins`,
+    `${formatNumber(numeric(row.draws))} draws`,
+    `${formatNumber(numeric(row.losses))} losses`,
+  ].join('\n')
+}
+
+function resultTotals(rows = []) {
+  return rows.reduce((totals, row) => ({
+    games: totals.games + numeric(row.games),
+    wins: totals.wins + numeric(row.wins),
+    draws: totals.draws + numeric(row.draws),
+    losses: totals.losses + numeric(row.losses),
+  }), { games: 0, wins: 0, draws: 0, losses: 0 })
+}
+
+function groupByMode(observations) {
+  const grouped = new Map()
+  observations.forEach((item) => {
+    const current = grouped.get(item.mode) || []
+    current.push(item)
+    grouped.set(item.mode, current)
+  })
+  return Array.from(grouped.entries())
+}
+
+function RatingPoints({ line, radius, onSelect }) {
+  // Disconnected circles in one path per mode keep long histories lightweight.
+  // There is no interpolation or connection between recorded ratings.
+  const path = useMemo(() => line.points.map(point =>
+    `M${(point.x - radius).toFixed(2)},${point.y.toFixed(2)}a${radius},${radius} 0 1,0 ${radius * 2},0a${radius},${radius} 0 1,0 ${-radius * 2},0Z`
+  ).join(' '), [line.points, radius])
+  const color = `var(--chart-color-${{bullet:1,blitz:2,rapid:3}[line.mode]}, ${line.color})`
+  return <>
+    <path className="behavior-rating-point" data-point-radius={radius} pointerEvents="none" d={path} fill={color} />
+    {onSelect ? line.points.map(point => <circle key={point.label}
+      className="behavior-rating-point-hit" cx={point.x} cy={point.y} r="9"
+      data-date={point.label} data-mode={line.mode} style={{ color }}
+      role="button" tabIndex={0}
+      aria-label={`${point.label} · ${line.mode}: ${formatNumber(point.rating)}. Explore this day's ${line.mode} games.`}
+      onClick={() => onSelect(point)} onKeyDown={event => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onSelect(point)
+        }
+      }}>
+      <title>{`${point.label} · ${line.mode}: ${formatNumber(point.rating)}. Explore games.`}</title>
+    </circle>) : null}
+  </>
+}
+
+function buildRatingPlot(ratings, selectedPeriod = 'all') {
+  const observations = (ratings?.series || []).flatMap((series) => (
+    (series.points || [])
+      .filter((point) => (
+        point.last_rating != null
+        && dateInPeriod(point.date, selectedPeriod)
+      ))
+      .map((point) => ({
+        mode: series.mode || 'unknown',
+        rating: numeric(point.last_rating),
+        timestamp: Date.parse(`${point.date}T00:00:00Z`),
+        label: point.date,
+      }))
+  )).filter(point => Number.isFinite(point.timestamp) && Number.isFinite(point.rating))
+  const groups = groupByMode(observations)
+  const { start: domainStart, end: domainEnd, bands: yearBands } = buildDateScale(observations, PLOT_LEFT, PLOT_RIGHT, selectedPeriod)
+
+  const allPoints = groups.flatMap(([, points]) => points)
+  const minimum = allPoints.length ? Math.min(...allPoints.map((item) => item.rating)) : 0
+  const maximum = allPoints.length ? Math.max(...allPoints.map((item) => item.rating)) : 0
+  const ratingSpread = Math.max(1, maximum - minimum)
+  const timeSpread = Math.max(1, domainEnd - domainStart)
+  const chartTop = RATING_TOP
+  const chartBottom = RATING_BOTTOM
+
+  const lines = groups.map(([mode, points]) => ({
+    mode,
+    color: PLAYER_MODE_COLORS[mode] || PLAYER_MODE_COLORS.unknown,
+    points: [...points]
+      .sort((left, right) => left.timestamp - right.timestamp)
+      .map((item) => ({
+        ...item,
+        x: PLOT_LEFT + ((item.timestamp - domainStart) / timeSpread) * PLOT_WIDTH,
+        y: chartBottom - ((item.rating - minimum) / ratingSpread) * (chartBottom - chartTop),
+      })),
+  }))
+
+  return {
+    lines,
+    yearBands,
+    ticks: periodTicks(domainStart, domainEnd, PLOT_LEFT, PLOT_RIGHT, selectedPeriod),
+    minimum,
+    maximum,
+    startLabel: observations.length ? new Date(domainStart).toISOString().slice(0, 10) : null,
+    endLabel: observations.length ? new Date(domainEnd).toISOString().slice(0, 10) : null,
+  }
+}
+
+function activityForModes(activity, activeModes) {
+  if (!activity?.by_mode) return activity || { weekdays: [], hours: [], weekday_hours: [] }
+  const selected = PLAYER_ANALYSIS_MODES
+    .filter((mode) => activeModes.has(mode))
+    .map((mode) => activity.by_mode[mode])
+    .filter(Boolean)
+  const totalGames = selected.reduce((total, mode) => total + numeric(mode.total_games), 0)
+  const combineRows = (key, identity) => {
+    const modeMaps = selected.map((mode) => new Map(
+      (mode[key] || []).map((row) => [identity(row), row])
+    ))
+    return (activity[key] || []).map((template) => {
+      const bucket = { ...template, games: 0, wins: 0, draws: 0, losses: 0 }
+      modeMaps.forEach((modeMap) => {
+        const row = modeMap.get(identity(template)) || {}
+        RESULT_FIELDS.forEach((field) => {
+          bucket[field] += numeric(row[field])
+        })
+      })
+      bucket.proportion = totalGames ? bucket.games / totalGames : 0
+      return bucket
+    })
+  }
+  return {
+    total_games: totalGames,
+    weekdays: combineRows('weekdays', (row) => numeric(row.weekday)),
+    hours: combineRows('hours', (row) => numeric(row.hour)),
+    weekday_hours: combineRows(
+      'weekday_hours',
+      (row) => `${numeric(row.weekday)}-${numeric(row.hour)}`
+    ),
+  }
+}
+
+function WeekdayStartChart({
+  availableModes,
+  onToggleMode,
+  onExplore,
+  timeContext,
+  visibleModes,
+  weekdayHours = [],
+  weekdays = [],
+}) {
+  const [expandedWeekdays, setExpandedWeekdays] = useState(() => new Set())
+  const [interactiveWeekdays, setInteractiveWeekdays] = useState(() => new Set())
+  const weekdayUnlockTimers = useRef(new Map())
+  const timezoneLabel = timeContext?.timezone || 'UTC'
+  const colorFor = useMemo(() => balanceScale(weekdayHours), [weekdayHours])
+  const dayColorFor = useMemo(() => balanceScale(weekdays), [weekdays])
+  const cellsByWeekday = useMemo(() => {
+    const grouped = new Map()
+    weekdayHours.forEach((cell) => {
+      const weekday = numeric(cell.weekday)
+      const current = grouped.get(weekday) || []
+      current.push(cell)
+      grouped.set(weekday, current)
+    })
+    return grouped
+  }, [weekdayHours])
+  useEffect(() => () => {
+    weekdayUnlockTimers.current.forEach((timer) => window.clearTimeout(timer))
+    weekdayUnlockTimers.current.clear()
+  }, [])
+
+  const clearWeekdayUnlockTimer = (weekday) => {
+    const timer = weekdayUnlockTimers.current.get(weekday)
+    if (timer !== undefined) window.clearTimeout(timer)
+    weekdayUnlockTimers.current.delete(weekday)
+  }
+
+  const lockWeekdayBins = (weekday) => {
+    setInteractiveWeekdays((current) => {
+      if (!current.has(weekday)) return current
+      const next = new Set(current)
+      next.delete(weekday)
+      return next
+    })
+  }
+
+  const collapseWeekday = (weekday) => {
+    clearWeekdayUnlockTimer(weekday)
+    lockWeekdayBins(weekday)
+    setExpandedWeekdays((current) => {
+      const next = new Set(current)
+      next.delete(weekday)
+      return next
+    })
+  }
+
+  const selectedModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleModes.has(mode))
+  const expandWeekday = (weekday) => {
+    if (!selectedModes.length) return
+    clearWeekdayUnlockTimer(weekday)
+    lockWeekdayBins(weekday)
+    setExpandedWeekdays((current) => {
+      const next = new Set(current)
+      next.add(weekday)
+      return next
+    })
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    const animationDuration = reducedMotion ? 0 : WEEKDAY_CURTAIN_DURATION_MS
+    const timer = window.setTimeout(() => {
+      weekdayUnlockTimers.current.delete(weekday)
+      setInteractiveWeekdays((current) => {
+        const next = new Set(current)
+        next.add(weekday)
+        return next
+      })
+    }, animationDuration + WEEKDAY_BIN_UNLOCK_DELAY_MS)
+    weekdayUnlockTimers.current.set(weekday, timer)
+  }
+
+  return (
+    <section {...pageStyleTarget('player.days.palette')} className="behavior-weekday-chart" aria-label={`Days by weekday and hour in ${timezoneLabel}`}>
+      <div className="behavior-subchart-heading">
+        <div>
+          <strong {...pageStyleTarget('value')}>Days</strong>
+        </div>
+        <div className="behavior-score-scale" aria-label="Dynamic win–loss balance scale" title="Color intensity reflects win–loss balance. Purple means equal wins and losses. Hour-bin opacity is proportional to games relative to that day's busiest hour in the selected modes.">
+          <div><span>More losses</span><span>Balanced</span><span>More wins</span></div>
+          <i />
+        </div>
+        <PlayerModeToggles
+          activeModes={visibleModes}
+          availableModes={availableModes}
+          styleId="player.days.modes"
+          label="Game types shown in Days"
+          onToggle={onToggleMode}
+        />
+      </div>
+      <div className="behavior-weekday-plot-scroll">
+        <div className="behavior-weekday-plot-canvas">
+          <div className="behavior-weekday-rows">
+            {weekdays.map((weekday) => {
+              const dayPaint = dayColorFor(weekday)
+              const isExpanded = expandedWeekdays.has(weekday.weekday)
+              const binsAreInteractive = interactiveWeekdays.has(weekday.weekday)
+              const cells = cellsByWeekday.get(weekday.weekday) || []
+              const opacityFor = volumeOpacityScale(cells)
+              const cellMap = new Map(cells.map((cell) => [numeric(cell.hour), cell]))
+              const noteId = `weekday-usage-note-${weekday.weekday}`
+              return (
+                <div {...pageStyleTarget('player.days.row')} className={`behavior-weekday-row ${isExpanded ? 'expanded' : ''}`} key={weekday.weekday}>
+                  <div
+                    className="behavior-weekday-summary"
+                  >
+                    <span className="behavior-weekday-identity">
+                    <button {...pageStyleTarget('player.days.label')}
+                      className="behavior-weekday-badge"
+                      type="button"
+                      aria-expanded={isExpanded}
+                      aria-describedby={noteId}
+                      title={isExpanded ? 'Collapse hourly bins' : 'Expand hourly bins'}
+                      onClick={() => (
+                        isExpanded
+                          ? collapseWeekday(weekday.weekday)
+                          : expandWeekday(weekday.weekday)
+                      )}
+                    >
+                      {String(weekday.label).toUpperCase()}
+                    </button>
+                    <span {...pageStyleTarget('player.days.count')}
+                      className="behavior-weekday-count"
+                      aria-label={`${weekday.label}: ${formatNumber(weekday.games)} games`}
+                      title={`${formatNumber(weekday.games)} games`}>
+                      {formatNumber(weekday.games)}
+                    </span>
+                    </span>
+                    <span className="behavior-weekday-stage">
+                      <span className="behavior-weekday-hours" aria-hidden={!isExpanded}>
+                        {Array.from({ length: 24 }, (_, hour) => {
+                          const cell = cellMap.get(hour) || {}
+                          const paint = colorFor(cell)
+                          return (
+                            <button {...pageStyleTarget('player.days.bin')} data-balance={paint.kind}
+                              className="behavior-weekday-hour"
+                              type="button"
+                              disabled={!isExpanded || !binsAreInteractive || !selectedModes.length || paint.kind === 'empty'}
+                              key={hour}
+                              title={`${hourResultTooltip(hour, cell)}\n${balanceDescription(cell)}`}
+                              aria-label={`${weekday.label} at ${hour}:00. Explore games.`}
+                              onClick={() => onExplore({
+                                scope: 'weekday_hour',
+                                weekday: weekday.weekday,
+                                hour,
+                                label: weekday.label,
+                                modes: selectedModes,
+                                analyzed_only: false,
+                              })}
+                            >
+                              <i className="behavior-balance-fill" data-balance={paint.kind}
+                                style={{ '--balance-intensity': `${paint.intensity * 100}%`, opacity: opacityFor(cell) }} />
+                            </button>
+                          )
+                        })}
+                      </span>
+                      <button
+                        className="behavior-weekday-curtain"
+                        type="button"
+                        disabled={isExpanded || !selectedModes.length || dayPaint.kind === 'empty'}
+                        aria-label={`${weekday.label}. Expand hourly bins.`}
+                        onClick={() => expandWeekday(weekday.weekday)}
+                      >
+                        <span className="behavior-weekday-wide-bar" data-balance={dayPaint.kind}>
+                          <i className="behavior-balance-fill" data-balance={dayPaint.kind}
+                            style={{ '--balance-intensity': `${dayPaint.intensity * 100}%` }} />
+                        </span>
+                      </button>
+                    </span>
+                  </div>
+                  <span className="behavior-weekday-note" id={noteId} role="tooltip">
+                    {formatNumber(weekday.games)} games · {formatNumber(weekday.wins)}W, {formatNumber(weekday.draws)}D, {formatNumber(weekday.losses)}L · {balanceDescription(weekday)}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+          <div className="behavior-weekday-axis" aria-hidden="true">
+            <div className="behavior-weekday-axis-content">
+              <div className="behavior-weekday-ticks">
+                {Array.from({ length: 24 }, (_, hour) => (
+                  <span key={hour}>{String(hour).padStart(2, '0')}</span>
+                ))}
+              </div>
+              <strong {...pageStyleTarget('value')}>HRS</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  )
+}
+
+export default function PlayerBehaviouralPanel({
+  activity,
+  playerName,
+  ratings,
+  pending = false,
+  error = '',
+  onRatingOpen,
+  ratingLoading = false,
+  ratingError = '',
+}) {
+  const [resultMode, setResultMode] = useState('all')
+  const [visibleRatingModes, setVisibleRatingModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [visibleHourModes, setVisibleHourModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [visibleDayModes, setVisibleDayModes] = useState(() => new Set(PLAYER_ANALYSIS_MODES))
+  const [selectedRatingPeriod, setSelectedRatingPeriod] = useState('all')
+  const [hoveredRatingYear, setHoveredRatingYear] = useState(null)
+  const [focusedRatingYear, setFocusedRatingYear] = useState(null)
+  const allRatingYearsButton = useRef(null)
+  const ratingYearButton = useRef(null)
+  const ratingMonthView = selectedRatingPeriod.length === 7
+  const [explorerSelection, setExplorerSelection] = useState(null)
+  const [reviewGameId, setReviewGameId] = useState(null)
+  const hourActivity = useMemo(
+    () => activityForModes(activity, visibleHourModes),
+    [activity, visibleHourModes]
+  )
+  const dayActivity = useMemo(
+    () => activityForModes(activity, visibleDayModes),
+    [activity, visibleDayModes]
+  )
+  const hourRows = hourActivity.hours || []
+  const hourMap = useMemo(
+    () => new Map(hourRows.map((row) => [numeric(row.hour), row])),
+    [hourRows]
+  )
+  const hourResultMaximum = Math.max(
+    1,
+    ...hourRows.flatMap((row) => [numeric(row.wins), numeric(row.draws), numeric(row.losses)])
+  )
+  const totals = useMemo(
+    () => resultTotals(activityForModes(activity, new Set(resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode])).hours),
+    [activity, resultMode]
+  )
+  const ratingPlot = useMemo(
+    () => buildRatingPlot(ratings, selectedRatingPeriod),
+    [ratings, selectedRatingPeriod]
+  )
+  const availableRatingModes = useMemo(
+    () => new Set(ratingPlot.lines.map((line) => line.mode)),
+    [ratingPlot.lines]
+  )
+  const availableActivityModes = useMemo(
+    () => new Set(PLAYER_ANALYSIS_MODES.filter((mode) => (
+      !activity?.by_mode || numeric(activity.by_mode[mode]?.total_games) > 0
+    ))),
+    [activity]
+  )
+  const visibleRatingLines = ratingPlot.lines.filter((line) => visibleRatingModes.has(line.mode))
+  const selectedHourModes = PLAYER_ANALYSIS_MODES.filter((mode) => visibleHourModes.has(mode))
+  const timeContext = activity?.time_context || ratings?.time_context || {}
+  const highlightedRatingBand = ratingPlot.yearBands.find(band => band.key === (hoveredRatingYear || focusedRatingYear))
+
+  const selectRatingPeriod = period => {
+    setSelectedRatingPeriod(period)
+    setHoveredRatingYear(null)
+    setFocusedRatingYear(null)
+    const focusTarget = period.length === 7 ? ratingYearButton : allRatingYearsButton
+    focusTarget.current?.focus({ preventScroll: true })
+  }
+  const hoverRatingYear = event => {
+    if (ratingMonthView || event.pointerType === 'touch') return
+    const svg = event.currentTarget
+    const transform = svg.getScreenCTM()
+    if (!transform) return
+    const cursor = svg.createSVGPoint()
+    cursor.x = event.clientX
+    cursor.y = event.clientY
+    const point = cursor.matrixTransform(transform.inverse())
+    setHoveredRatingYear(point.y >= RATING_TOP && point.y <= RATING_AXIS_Y + 8
+      ? periodAtX(ratingPlot.yearBands, point.x) : null)
+  }
+
+  useEffect(() => {
+    setVisibleRatingModes(new Set(PLAYER_ANALYSIS_MODES))
+    setSelectedRatingPeriod('all')
+    setHoveredRatingYear(null)
+    setFocusedRatingYear(null)
+  }, [playerName])
+
+  useEffect(() => {
+    setVisibleHourModes(new Set(PLAYER_ANALYSIS_MODES))
+    setVisibleDayModes(new Set(PLAYER_ANALYSIS_MODES))
+  }, [playerName])
+
+  useEffect(() => {
+    setExplorerSelection(null)
+    setReviewGameId(null)
+    setResultMode('all')
+  }, [playerName])
+
+  const toggleMode = (setter, mode) => {
+    setter((current) => {
+      const next = new Set(current)
+      if (next.has(mode)) next.delete(mode)
+      else next.add(mode)
+      return next
+    })
+  }
+
+  return (
+    <>
+      <div className="behavior-dashboard">
+      <div className="behavior-summary" aria-label="Behavioral selection summary">
+        {!activity ? <div {...pageStyleTarget('chart.results')} className="behavior-results-summary" aria-busy={!error}>
+          <span {...pageStyleTarget('label')}>Results</span>
+          <p {...pageStyleTarget('text')} role="status">{error ? 'Results could not be loaded.' : 'Loading results…'}</p>
+        </div> : <PlayerResultsChart totals={totals} mode={resultMode} onModeChange={setResultMode}
+          onExplore={result => setExplorerSelection({
+            scope: 'result', result, analyzed_only: false,
+            modes: resultMode === 'all' ? PLAYER_ANALYSIS_MODES : [resultMode],
+          })} />}
+        <PlayerRatingDistribution key={playerName} playerName={playerName} summaryRevision={activity?.summary_revision} onExplore={setExplorerSelection} />
+      </div>
+
+      <div className="player-analysis-chart-list">
+        <PlayerAnalysisDisclosure label="Rating" buttonTarget="player.rating.toggle" disabled={pending}
+          onOpen={onRatingOpen} loading={ratingLoading}>
+        {ratingError ? <p role="alert">{ratingError}</p> : null}
+        <div className="behavior-graph-scroll">
+          <div className="behavior-graph-canvas">
+            <section {...pageStyleTarget('chart.ratingModes')} className="behavior-chart-section" aria-label="Rating chart">
+              <div className="behavior-subchart-heading behavior-rating-heading">
+                <div>
+                  <strong {...pageStyleTarget('value')}>Rating</strong>
+                </div>
+                <div className="behavior-rating-years" aria-label="Rating date range">
+                  <button {...pageStyleTarget('button')}
+                    ref={allRatingYearsButton}
+                    type="button"
+                    className={selectedRatingPeriod === 'all' ? 'active' : ''}
+                    aria-pressed={selectedRatingPeriod === 'all'}
+                    aria-label="Show all rating years"
+                    onClick={() => selectRatingPeriod('all')}
+                  >All</button>
+                  {selectedRatingPeriod !== 'all' && <button {...pageStyleTarget('button')} ref={ratingYearButton} type="button"
+                    className={!ratingMonthView ? 'active' : ''} aria-pressed={!ratingMonthView}
+                    aria-label={`Show all of ${selectedRatingPeriod.slice(0, 4)}`} onClick={() => selectRatingPeriod(selectedRatingPeriod.slice(0, 4))}
+                  >{selectedRatingPeriod.slice(0, 4)}</button>}
+                  {ratingMonthView && <span {...pageStyleTarget('label')} className="daily-period-current" aria-current="date">{datePeriodLabel(selectedRatingPeriod).split(' ')[0]}</span>}
+                </div>
+                <PlayerModeToggles
+                  activeModes={visibleRatingModes}
+                  availableModes={availableRatingModes}
+                  colored
+                  label="Game types shown in Rating"
+                  onToggle={(mode) => toggleMode(setVisibleRatingModes, mode)}
+                />
+              </div>
+              <svg
+                className="behavior-graph"
+                data-date-zoom={ratingMonthView ? 'month' : selectedRatingPeriod === 'all' ? 'all' : 'year'}
+                viewBox={`0 0 ${WIDTH} ${RATING_SVG_HEIGHT}`}
+                role="group"
+                aria-label={`Daily last ratings for the selected game types — ${datePeriodLabel(selectedRatingPeriod)}`}
+                onPointerMove={hoverRatingYear}
+                onPointerLeave={() => setHoveredRatingYear(null)}
+              >
+                {!ratingMonthView ? <DailyDateBands
+                  bands={ratingPlot.yearBands}
+                  activePeriod={highlightedRatingBand?.key}
+                  top={RATING_TOP}
+                  bottom={RATING_AXIS_Y + 8}
+                  onSelect={selectRatingPeriod}
+                  onFocusPeriod={setFocusedRatingYear}
+                /> : null}
+                {[0, 1 / 3, 2 / 3, 1].map((ratio) => {
+                  const y = RATING_BOTTOM - ratio * (RATING_BOTTOM - RATING_TOP)
+                  const value = ratingPlot.minimum + ratio * (ratingPlot.maximum - ratingPlot.minimum)
+                  return (
+                    <g key={`rating-grid-${ratio}`} pointerEvents="none">
+                      <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} />
+                      <text className="graph-rating-label" x={PLOT_LEFT - 10} y={y + 3} textAnchor="end">
+                        {ratingPlot.lines.length ? formatNumber(Math.round(value)) : 'N/A'}
+                      </text>
+                    </g>
+                  )
+                })}
+                {visibleRatingLines.map((line) => (
+                  <RatingPoints key={line.mode} line={line} radius={ratingMonthView ? 4 : selectedRatingPeriod === 'all' ? 1.8 : 2.5}
+                    onSelect={ratingMonthView && !ratingLoading && !ratingError ? point => setExplorerSelection({
+                      scope: 'date', date: point.label, label: point.label,
+                      modes: [point.mode], analyzed_only: false,
+                    }) : null} />
+                ))}
+                {ratingPlot.ticks.length ? ratingPlot.ticks.map(tick => <text className="graph-axis-label" pointerEvents="none" key={tick.label}
+                  x={tick.x} y={RATING_AXIS_Y} textAnchor="middle">{tick.label}</text>) : <>
+                  <text className="graph-axis-label" pointerEvents="none" x={PLOT_LEFT} y={RATING_AXIS_Y}>{ratingPlot.startLabel || 'First game'}</text>
+                  <text className="graph-axis-label" pointerEvents="none" x={PLOT_RIGHT} y={RATING_AXIS_Y} textAnchor="end">{ratingPlot.endLabel || 'Latest game'}</text>
+                </>}
+                {!ratingPlot.lines.length ? (
+                  <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={(RATING_TOP + RATING_BOTTOM) / 2} textAnchor="middle">No rating observations.</text>
+                ) : null}
+                {highlightedRatingBand ? <text className="daily-year-label" pointerEvents="none"
+                  x={(highlightedRatingBand.left + highlightedRatingBand.right) / 2}
+                  y={RATING_TOP + 18} textAnchor="middle" aria-hidden="true">{highlightedRatingBand.label}</text> : null}
+              </svg>
+            </section>
+          </div>
+        </div>
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Hours" buttonTarget="player.activityHours.toggle" disabled={pending}>
+        <div className="behavior-graph-scroll">
+          <div className="behavior-graph-canvas">
+            <section {...pageStyleTarget('chart.outcomes')} className="behavior-chart-section behavior-hours-chart" aria-label="Hours chart">
+              <div className="behavior-subchart-heading">
+                <div>
+                  <strong {...pageStyleTarget('value')}>Hours</strong>
+                </div>
+                <div className="behavior-result-legend" aria-label="Result colors">
+                  <span><i className="wins" />Wins</span>
+                  <span><i className="draws" />Draws</span>
+                  <span><i className="losses" />Losses</span>
+                </div>
+                <PlayerModeToggles
+                  activeModes={visibleHourModes}
+                  availableModes={availableActivityModes}
+                  styleId="player.hours.modes"
+                  label="Game types shown in Hours"
+                  onToggle={(mode) => toggleMode(setVisibleHourModes, mode)}
+                />
+              </div>
+              <svg
+                className="behavior-graph"
+                viewBox={`0 0 ${WIDTH} ${HOURS_SVG_HEIGHT}`}
+                role="img"
+                aria-label="Hourly results for the selected game types"
+              >
+                {[0, 0.5, 1].map((ratio) => {
+                  const y = HOURLY_BASELINE - ratio * HOURLY_HEIGHT
+                  return (
+                    <g key={`hour-grid-${ratio}`}>
+                      <line className="graph-grid-line" x1={PLOT_LEFT} x2={PLOT_RIGHT} y1={y} y2={y} />
+                      <text className="graph-axis-label hourly-y-tick" x={PLOT_LEFT - 10} y={y + 3} textAnchor="end">
+                        {formatNumber(Math.round(hourResultMaximum * ratio))}
+                      </text>
+                    </g>
+                  )
+                })}
+                {Array.from({ length: 24 }, (_, hour) => {
+                  const row = hourMap.get(hour) || {}
+                  const binX = hourX(hour)
+                  const sideBarWidth = HOUR_STEP * 0.55
+                  const drawBarWidth = HOUR_STEP * 0.75
+                  const winX = binX + HOUR_STEP * 0.1
+                  const lossX = binX + HOUR_STEP * 0.9 - sideBarWidth
+                  const drawX = binX + (HOUR_STEP - drawBarWidth) / 2
+                  const scale = HOURLY_HEIGHT / hourResultMaximum
+                  const lossHeight = numeric(row.losses) * scale
+                  const drawHeight = numeric(row.draws) * scale
+                  const winHeight = numeric(row.wins) * scale
+                  const openHour = (result = null) => selectedHourModes.length && setExplorerSelection({
+                    scope: 'hour', hour, label: `${hour}:00`, modes: selectedHourModes, analyzed_only: false,
+                    result,
+                  })
+                  return (
+                    <g className="behavior-hour-column" key={`hour-bar-${hour}`} onClick={event => {
+                      event.currentTarget.querySelector('.behavior-bar-hitbox')?.focus({ preventScroll: true })
+                      openHour()
+                    }}>
+                      <title>{hourResultTooltip(hour, row)}</title>
+                      <rect
+                        className="behavior-bar-hitbox"
+                        x={binX}
+                        y={HOURLY_TOP}
+                        width={HOUR_STEP}
+                        height={HOURLY_HEIGHT}
+                        role="button"
+                        tabIndex="0"
+                        aria-label={`${hour}:00. Explore games.`}
+                        onKeyDown={(event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault()
+                            openHour()
+                          }
+                        }}
+                      >
+                        <title>{hourResultTooltip(hour, row)}</title>
+                      </rect>
+                      {[
+                        ['win', winX, sideBarWidth, winHeight],
+                        ['loss', lossX, sideBarWidth, lossHeight],
+                        ['draw', drawX, drawBarWidth, drawHeight],
+                      ].map(([result, x, width, height]) => <g className="behavior-hour-mark" key={result}
+                        role="button" tabIndex={height > 0 ? 0 : -1} aria-disabled={height <= 0}
+                        aria-label={`${hour}:00. Explore ${result === 'win' ? 'won' : result === 'loss' ? 'lost' : 'drawn'} games.`}
+                        onClick={event => {
+                          event.stopPropagation()
+                          if (height <= 0) return
+                          event.currentTarget.focus({ preventScroll: true })
+                          openHour(result)
+                        }} onKeyDown={event => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault(); event.stopPropagation()
+                            if (height > 0) openHour(result)
+                          }
+                        }}>
+                        {height > 0 ? <rect className="behavior-hour-mark-hit" x={x} y={HOURLY_BASELINE - height - 4}
+                          width={width} height={height + 4} /> : null}
+                        <rect className={`behavior-bar-${result}`} x={x} y={HOURLY_BASELINE - height} width={width} height={height} />
+                      </g>)}
+                      <text className="graph-axis-label hourly-axis-tick" x={binX + HOUR_STEP / 2} y={HOURLY_AXIS_Y} textAnchor="middle">
+                        {String(hour).padStart(2, '0')}
+                      </text>
+                    </g>
+                  )
+                })}
+                {Array.from({ length: 25 }, (_, boundary) => (
+                  <line
+                    className="hourly-bin-divider"
+                    x1={PLOT_LEFT + boundary * HOUR_STEP}
+                    x2={PLOT_LEFT + boundary * HOUR_STEP}
+                    y1={HOURLY_TOP}
+                    y2={HOURLY_BASELINE}
+                    key={`hour-boundary-${boundary}`}
+                  />
+                ))}
+                {!hourRows.some((row) => numeric(row.games)) ? (
+                  <text className="graph-empty-label" x={(PLOT_LEFT + PLOT_RIGHT) / 2} y={HOURLY_TOP + HOURLY_HEIGHT / 2} textAnchor="middle">
+                    No games were initialized in this selection.
+                  </text>
+                ) : null}
+                <text
+                  className="graph-axis-label hourly-axis-title"
+                  x={(PLOT_LEFT + PLOT_RIGHT) / 2}
+                  y={HOURLY_AXIS_TITLE_Y}
+                  textAnchor="middle"
+                >
+                  HRS
+                </text>
+              </svg>
+            </section>
+          </div>
+        </div>
+        </PlayerAnalysisDisclosure>
+        <PlayerAnalysisDisclosure label="Days" buttonTarget="player.activityDays.toggle" disabled={pending}>
+        <WeekdayStartChart
+          availableModes={availableActivityModes}
+          onExplore={setExplorerSelection}
+          onToggleMode={(mode) => toggleMode(setVisibleDayModes, mode)}
+          timeContext={timeContext}
+          visibleModes={visibleDayModes}
+          weekdays={dayActivity.weekdays}
+          weekdayHours={dayActivity.weekday_hours}
+        />
+        </PlayerAnalysisDisclosure>
+      </div>
+      </div>
+      {!reviewGameId ? (
+        <PlayerGameExplorerModal
+          playerName={playerName}
+          selection={explorerSelection}
+          onSelectionChange={setExplorerSelection}
+          onClose={() => setExplorerSelection(null)}
+          onOpenGame={setReviewGameId}
+        />
+      ) : null}
+      <PlayerGameReviewModal
+        gameId={reviewGameId}
+        playerName={playerName}
+        onBack={() => setReviewGameId(null)}
+        onClose={() => {
+          setReviewGameId(null)
+          setExplorerSelection(null)
+        }}
+      />
+    </>
+  )
+}

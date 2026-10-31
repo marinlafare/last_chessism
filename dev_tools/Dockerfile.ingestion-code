@@ -1,0 +1,8 @@
+# Code-only ingestion release on a preserved local dependency image.
+# Overlay only tested ingestion modules; keep unrelated runtime code intact.
+# Use the current API base for API releases, the current worker base for workers.
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+COPY chessism_api/operations/ingestion_pipeline/fen_batches.py chessism_api/operations/ingestion_pipeline/fen_bulk.py chessism_api/operations/ingestion_pipeline/fen_orchestrator.py chessism_api/operations/ingestion_pipeline/steps.py chessism_api/operations/ingestion_pipeline/README.md /app/chessism_api/operations/ingestion_pipeline/
+COPY chessism_api/operations/tablebase.py chessism_api/operations/tablebase_probe.py chessism_api/operations/tablebase_parallel.py /app/chessism_api/operations/
+COPY chessism_api/routers/analysis.py /app/chessism_api/routers/analysis.py

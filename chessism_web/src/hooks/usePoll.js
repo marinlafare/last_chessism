@@ -1,55 +1,28 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { watchStatus } from '../services/statusPolling.js'
 
 export function usePoll(fetcher, intervalMs = 8000, options = {}) {
-  const { maxBackoffMs = 30000 } = options
+  const { maxBackoffMs = 30000, requestTimeoutMs = 0, pauseWhenHidden = false } = options
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
   const [lastSuccessAt, setLastSuccessAt] = useState(null)
-  const abortRef = useRef(null)
+  const [revision, setRevision] = useState(0)
+  const refresh = useCallback(() => setRevision(value => value + 1), [])
 
-  useEffect(() => {
-    let stopped = false
-    let timeoutId = null
-    let delayMs = intervalMs
+  useEffect(() => watchStatus({
+    fetcher, intervalMs, maxBackoffMs, requestTimeoutMs, pauseWhenHidden,
+    onData(result) {
+      setData(result)
+      setError(null)
+      setLoading(false)
+      setLastSuccessAt(Date.now())
+    },
+    onError(reason) {
+      setError(reason)
+      setLoading(false)
+    },
+  }), [fetcher, intervalMs, maxBackoffMs, requestTimeoutMs, pauseWhenHidden, revision])
 
-    const run = async () => {
-      if (stopped) return
-
-      abortRef.current?.abort()
-      const controller = new AbortController()
-      abortRef.current = controller
-
-      try {
-        const result = await fetcher({ signal: controller.signal })
-        if (stopped) return
-
-        setData(result)
-        setError(null)
-        setLoading(false)
-        setLastSuccessAt(Date.now())
-        delayMs = intervalMs
-      } catch (err) {
-        if (stopped || err?.name === 'AbortError') return
-
-        setError(err)
-        setLoading(false)
-        delayMs = Math.min(maxBackoffMs, Math.max(intervalMs, delayMs * 2))
-      } finally {
-        if (!stopped) {
-          timeoutId = setTimeout(run, delayMs)
-        }
-      }
-    }
-
-    run()
-
-    return () => {
-      stopped = true
-      abortRef.current?.abort()
-      if (timeoutId) clearTimeout(timeoutId)
-    }
-  }, [fetcher, intervalMs, maxBackoffMs])
-
-  return { data, loading, error, lastSuccessAt }
+  return { data, loading, error, lastSuccessAt, refresh }
 }

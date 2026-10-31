@@ -1,0 +1,122 @@
+import { pageStyleTarget } from '../../appearance/styleCore.js'
+import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
+import ProcessTiming from './ProcessTiming.jsx'
+import {
+  formatCountdown,
+  formatNumber,
+  getAnalysisJobProgress,
+  getLoopScopeLabel,
+  getProgressSnapshot,
+  getTrackedJobPhase,
+  isAnalysisJobKey,
+  isLoopJobKey,
+} from './positionPageSupport'
+
+export function EstimatedTime({ jobId, progress, status, etaClockMs, etaEstimatesRef }) {
+  const phase = getTrackedJobPhase({ status: { status, progress } })
+  if (
+    !jobId || phase === 'queued' || phase === 'deferred' || phase === 'complete' ||
+    phase === 'failed' || phase === 'not_found'
+  ) return null
+
+  const snapshot = getProgressSnapshot(progress)
+  if (!snapshot || snapshot.processed >= snapshot.total) return null
+
+  const estimate = etaEstimatesRef.current.get(String(jobId))
+  const hasRate = Number.isFinite(estimate?.rate) && estimate.rate > 0
+  let countdown = null
+  if (hasRate) {
+    const remainingAtSample = Math.max(0, estimate.total - estimate.processed) / estimate.rate
+    const secondsSinceSample = Math.max(0, (etaClockMs / 1000) - estimate.sampleAt)
+    countdown = Math.max(1, remainingAtSample - secondsSinceSample)
+  }
+
+  return (
+    <div className={`job-progress-eta ${hasRate ? '' : 'is-calculating'}`}>
+      <span>Estimated time left</span>
+      <strong {...pageStyleTarget('local.job.eta.value')}>{hasRate ? formatCountdown(countdown) : 'Calculating…'}</strong>
+    </div>
+  )
+}
+
+function JobProgress({ mode, state, status, etaClockMs, etaEstimatesRef }) {
+  const progress = state.progress
+  const processed = mode === 'fen' ? progress.extracted : progress.analyzed
+
+  return (
+    <div className="job-progress">
+      <div className="job-progress-head">
+        <span>{formatNumber(processed)} / {formatNumber(progress.target)}</span>
+        <strong {...pageStyleTarget('local.job.percent')}>{progress.percent}%</strong>
+      </div>
+      <ProgressMeter className="job-progress-track" fillClassName="job-progress-fill"
+        value={progress.percent} aria-label={mode === 'fen' ? 'FEN extraction' : 'Local analysis'}
+        aria-valuetext={`${formatNumber(processed)} of ${formatNumber(progress.target)}, ${progress.percent}%`} />
+      {progress.phase ? (
+        <small {...pageStyleTarget('local.job.detail')}>{progress.phase}{progress.detail ? ` | ${progress.detail}` : ''}</small>
+      ) : null}
+      <EstimatedTime
+        jobId={state.jobId}
+        progress={state.status?.progress || progress}
+        status={state.status?.status || status}
+        etaClockMs={etaClockMs}
+        etaEstimatesRef={etaEstimatesRef}
+      />
+    </div>
+  )
+}
+
+export function JobStatus({ jobKey, page }) {
+  const state = page.jobState[jobKey] || {}
+  if (!state.payload) return state.error ? <div className="status-banner warn">{state.error}</div> : null
+
+  const status = getTrackedJobPhase(state)
+  const info = state.status?.info
+  const resultInfo = state.status?.result
+  const functionName = info?.function || resultInfo?.queue_name || state.status?.queue_name || 'job'
+  const canDelete = isAnalysisJobKey(jobKey) && (status === 'queued' || status === 'deferred')
+
+  return (
+    <div
+      className={`job-result ${state.fading ? 'job-result-fading' : ''}`}
+      ref={page.setJobCardRef(jobKey)}
+    >
+      {state.error && <div className="status-banner warn" role="alert">{state.error}</div>}
+      <span>{status.replace('_', ' ')}</span>
+      <small {...pageStyleTarget('local.job.function')}>{functionName}</small>
+      <ProcessTiming {...pageStyleTarget('local.job.detail')}
+        started={resultInfo?.start_time || state.status?.progress?.started_at}
+        finished={resultInfo?.finish_time} pending={['queued', 'deferred'].includes(status)}
+        active={!['queued', 'deferred', 'complete', 'failed', 'not_found'].includes(status)} />
+      {isLoopJobKey(jobKey) ? (
+        <strong {...pageStyleTarget('local.job.loop-scope')} className="job-scope-label">Running scope: {getLoopScopeLabel(state)}</strong>
+      ) : null}
+      {jobKey === 'gameCompletion' ? (
+        <strong {...pageStyleTarget('local.job.games-scope')} className="job-scope-label">
+          Completing games for {state.status?.info?.kwargs?.player_name || state.payload?.player_name || 'player'}
+        </strong>
+      ) : null}
+      {canDelete ? (
+        <button {...pageStyleTarget('local.job.delete')}
+          className="btn job-delete-queued"
+          type="button"
+          disabled={state.deleting}
+          onClick={() => page.handleDeleteQueuedAnalysis(jobKey)}
+        >
+          {state.deleting ? 'Deleting' : 'Delete queued analysis'}
+        </button>
+      ) : null}
+      {jobKey === 'fen' && state.progress ? (
+        <JobProgress mode="fen" state={state} status={status} {...page} />
+      ) : null}
+      {(isAnalysisJobKey(jobKey) || jobKey === 'tablebase') && state.progress ? (
+        <JobProgress
+          mode="analysis"
+          state={isAnalysisJobKey(jobKey) ? { ...state, progress: getAnalysisJobProgress(state) } : state}
+          status={status}
+          {...page}
+        />
+      ) : null}
+    </div>
+  )
+}

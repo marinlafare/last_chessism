@@ -1,0 +1,63 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Daily salience isolated UI test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import PlayerDailyEfficiencyChart from '/src/pages/players/PlayerDailyEfficiencyChart.jsx'
+import AppearanceProvider, { AppearanceControls } from '/src/appearance/AppearanceProvider.jsx'
+import '/src/index.css'
+import '/src/pages/players/player-hero-analytics.css'
+import '/src/pages/players/player-measures.css'
+
+const points = [
+  // Daily sums are deliberately not ordered: only per-game averages are.
+  ['2024-01-01', 60, 61, 2, 10],
+  ['2024-01-02', 75, 76, 7, 20],
+  ['2024-01-03', 80, 81, 4.5, 10],
+  ['2024-01-04', 90, 91, 22, 40],
+  ['2025-01-01', 95, 96, 14, 20],
+]
+const state = window.salienceTest = { requests: [], selections: [] }
+const appearance = new URLSearchParams(location.search).has('appearance')
+if (appearance) history.replaceState(null, '', '/')
+window.prompt = () => 'Salience test preset'
+window.fetch = async (url, options = {}) => {
+  const path = new URL(url, location.origin).pathname
+  state.requests.push({ path, method: options.method || 'GET' })
+  if (appearance && (path.endsWith('/appearance') || path.endsWith('/appearance/save'))) {
+    let saved = { revision: 0, active_preset_id: null, presets: [], overrides: [],
+      ...JSON.parse(localStorage.getItem('salience-styles-fixture') || 'null') }
+    if (path.endsWith('/save') && options.method === 'POST') {
+      const payload = JSON.parse(options.body)
+      saved = { ...saved, revision: saved.revision + 1, active_preset_id: 'test',
+        presets: [{ id: 'test', name: 'Salience test preset' }], overrides: payload.overrides }
+      localStorage.setItem('salience-styles-fixture', JSON.stringify(saved))
+    }
+    return new Response(JSON.stringify({ ...saved, registry: window.salienceRegistry }), { headers: { 'Content-Type': 'application/json' } })
+  }
+  if (!path.includes('/analysis/measures/daily-')) throw new Error('Unexpected request: ' + path)
+  const missing = path.includes('/missing/')
+  const rows = path.includes('/dense/') ? Array.from({length:3000}, (_, i) => [
+    new Date(Date.UTC(2010, 0, i + 1)).toISOString().slice(0, 10), 60 + i % 36, 80, (i % 200) / 10, 20,
+  ]) : path.includes('/empty/') ? [] : path.includes('/equal/')
+    ? points.map(p => [...p.slice(0, 3), p[4] * 0.5, p[4]])
+    : path.includes('/single/') ? [points[0]] : points
+  const data = path.endsWith('/daily-efficiency')
+    ? { points: rows.map(p => p.slice(0, 2)) }
+    : { points: rows, salience: { status: missing ? 'missing' : 'ready' } }
+  return new Response(JSON.stringify(data), { status: 200, headers: { 'Content-Type': 'application/json' } })
+}
+const root = createRoot(document.getElementById('root'))
+state.show = (player = 'example') => {
+  const chart = React.createElement('main', {
+  style: { padding: '24px', maxWidth: '1400px', margin: 'auto' },
+}, React.createElement('h2', null, 'Position quality'), React.createElement('div', { className: 'measure-chart-card' },
+  React.createElement(PlayerDailyEfficiencyChart, {
+    playerName: player, availableModes: new Set(['bullet', 'blitz', 'rapid']),
+    onSelectPoint: point => state.selections.push(point),
+  })))
+  root.render(appearance ? React.createElement(AppearanceProvider, { account: {role:'admin'}, pageKey: '/' },
+    React.createElement(AppearanceControls), chart) : chart)
+}
+state.show()
+</script></body></html>

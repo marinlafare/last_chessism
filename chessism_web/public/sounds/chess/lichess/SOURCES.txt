@@ -1,0 +1,35 @@
+Lichess board sound themes: Piano, NES, SFX, Futuristic
+
+Author: Enigmahack, as credited by Lichess.
+License: GNU Affero General Public License, version 3 or later (AGPL-3.0-or-later).
+These independent audio assets retain their upstream license. See LICENSE.txt.
+Provided without warranty. The original recordings are distributed unchanged.
+
+Upstream repository: https://github.com/lichess-org/lila
+Pinned revision: 79bf4470f703c40c53973c6092b5363006ed3df2
+Retrieved: 2026-10-20
+
+Source directories:
+  public/sound/piano/
+  public/sound/nes/
+  public/sound/sfx/
+  public/sound/futuristic/
+
+Each local theme contains the original Move.mp3, Capture.mp3 and Check.mp3
+from its source directory. No audio has been edited or re-encoded.
+The corresponding upstream Checkmate.mp3 is a symlink to Check.mp3;
+Chessism resolves that alias in its sound catalog. Castling uses Move.mp3.
+
+Upstream sound selection catalog:
+https://github.com/lichess-org/lila/blob/79bf4470f703c40c53973c6092b5363006ed3df2/modules/pref/src/main/SoundSet.scala
+
+Upstream attribution and licensing:
+https://github.com/lichess-org/lila/blob/79bf4470f703c40c53973c6092b5363006ed3df2/COPYING.md
+The licensing table refers to public/sounds/<theme>; the actual asset
+directories in that same revision are public/sound/<theme>.
+
+Original audio/source downloads:
+https://github.com/lichess-org/lila/tree/79bf4470f703c40c53973c6092b5363006ed3df2/public/sound
+
+The selected audio files are also served directly with this application under
+/sounds/chess/lichess/<theme>/<filename>.mp3. Checksums are in manifest.json.

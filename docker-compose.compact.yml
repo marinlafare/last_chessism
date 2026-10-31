@@ -1,0 +1,35 @@
+# Only for the explicitly approved compact-schema maintenance operation.
+# No ordinary app service, cloud credentials, Docker socket or backup writes.
+services:
+  compact-migration:
+    image: chessism-backup-worker:compact-v3-001
+    profiles: [maintenance]
+    user: postgres
+    working_dir: /candidate
+    entrypoint: [python, scripts/migrate_compact_db.py]
+    command: [--help]
+    restart: "no"
+    init: true
+    stop_grace_period: 2m
+    read_only: true
+    cpus: "2.0"
+    mem_limit: 4g
+    tmpfs:
+      - /tmp:rw,nosuid,size=128m,mode=1777
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_HOST: ${REDIS_HOST}
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHON_DOTENV_DISABLED: "1"
+      PYTHONPATH: /candidate:/candidate/stockfish-batch-worker
+      BACKUP_VOLUME_ROOT: /backup-volume
+    volumes:
+      - .:/candidate:ro
+      - ./.local-migrations/db-refactor:/reports
+      - ./db_data:/var/lib/postgresql/data:ro
+      - /main-monitor-db-backups:/backup-volume:ro
+    networks: [chessism_net]
+networks:
+  chessism_net:
+    external: true
+    name: last_chessism_chessism_net

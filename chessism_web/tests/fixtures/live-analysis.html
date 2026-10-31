@@ -1,0 +1,46 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Browser-only Live analysis test</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import LiveAnalysis from '/src/pages/LiveAnalysis.jsx'
+import { BrowserStockfish } from '/src/pages/live-analysis/browserStockfish.js'
+import '/src/index.css'
+
+const state = window.liveTest = { requests: [], errors: [], workers: [] }
+window.addEventListener('error', e => state.errors.push(e.message))
+window.addEventListener('unhandledrejection', e => state.errors.push(String(e.reason)))
+// No application API calls are permitted. Real worker assets are local static files.
+window.fetch = async input => { state.requests.push(String(input)); throw Error('API access forbidden in browser-only Live test') }
+const NativeWorker = window.Worker
+if (new URLSearchParams(location.search).has('controlled')) {
+  state.pending = []
+  BrowserStockfish.prototype.analyze = function(fen, options) {
+    return new Promise((resolve, reject) => {
+      const pending = { fen, options, resolve, reject }
+      state.pending.push(pending)
+      options.onStatus?.('analyzing')
+      options.signal.addEventListener('abort', () => reject(new DOMException('Cancelled', 'AbortError')), { once: true })
+    })
+  }
+  state.publish = (score, index = state.pending.length - 1) => {
+    const pending = state.pending[index]
+    pending.options.onUpdate({ fen: pending.fen, analysis: [{ multipv: 1, score, depth: 12, pv: ['e2e4'] }] })
+  }
+}
+window.Worker = class extends NativeWorker {
+  constructor(url, options) {
+    if (!String(url).startsWith('/engines/stockfish-19.0.1/')) throw Error('Unexpected worker URL')
+    super(url, options)
+    this.record = { url: String(url), commands: [], messages: [], terminated: false }
+    state.workers.push(this.record)
+    this.addEventListener('message', e => this.record.messages.push(e.data))
+  }
+  postMessage(command) { this.record.commands.push(command); super.postMessage(command) }
+  terminate() { this.record.terminated = true; super.terminate() }
+}
+const root = createRoot(document.getElementById('root'))
+state.unmount = () => root.unmount()
+state.engine = () => new BrowserStockfish()
+root.render(React.createElement(React.StrictMode, null, React.createElement(LiveAnalysis)))
+</script></body></html>

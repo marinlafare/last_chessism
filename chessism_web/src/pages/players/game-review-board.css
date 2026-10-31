@@ -1,0 +1,56 @@
+.game-review-board { overflow: hidden; }
+.game-review-square { position: relative; box-sizing: border-box; }
+.game-review-square.white { background: #f0d9b5; color: #b58863; }
+.game-review-square.black { background: #b58863; color: #f0d9b5; }
+.game-review-board-renderer { position: relative; }
+.game-review-piece-skin { position: relative; z-index: 4; display: block; width: 100%; height: 100%; }
+.game-review-capture-layer { position: absolute; inset: 0; pointer-events: none; }
+/* Disable the library's timer-based slide, including its zero-duration source
+   transform. The skins are animated independently with the Web Animations API. */
+.game-review-board [data-piece] { transform: none !important; transition: none !important; }
+.game-review-piece-skin > [data-piece] > svg { max-width: 100%; max-height: 100%; }
+.game-review-coordinate {
+  position: absolute;
+  z-index: 3;
+  font-family: Arial, sans-serif;
+  font-size: var(--review-coordinate-size);
+  line-height: 1.2;
+  user-select: none;
+}
+.game-review-coordinate.rank { top: 1px; left: 1px; }
+.game-review-coordinate.file { bottom: 1px; right: 1px; }
+.game-review-badge-square {
+  position: absolute;
+  width: 12.5%;
+  height: 12.5%;
+  z-index: 8;
+  pointer-events: none;
+}
+.game-review-quality-badge {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: var(--review-badge-size);
+  height: var(--review-badge-size);
+  padding: 0;
+  border: 1px solid #ffffffa6;
+  border-radius: 50%;
+  color: #fff;
+  font: 800 calc(var(--review-badge-size) * .62) / 1 Arial, sans-serif;
+  box-shadow: 0 1px 3px #0008;
+  pointer-events: auto;
+  user-select: none;
+}
+.game-review-quality-badge.best { background: #19885d; }
+.game-review-quality-badge.good { background: #557b31; }
+.game-review-quality-badge.inaccuracy { background: #c9a84c; color: #17130b; }
+.game-review-quality-badge.mistake { background: #db8b45; color: #21150a; }
+.game-review-quality-badge.blunder { background: #b63636; }
+.game-review-quality-badge.book { background: #976c3c; }
+.game-review-quality-badge > svg { width: 78%; height: 78%; }
+.game-review-quality-badge.secondary { right: auto; left: 2px; }
+.game-review-move-annotation.book { color: #d3aa73; }
+.game-review-move-annotation.book svg { width: 14px; height: 14px; }
