@@ -5,10 +5,10 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 import test_cloud_analysis_database as existing
 from sqlalchemy import select, text, func
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudResultBatch, CloudFenClaim, Fen
-from chessism_api.database.cloud_codec import read_document, checksum
-from chessism_api.database.cloud_migration import migrate, repair_cleanup_resources
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudResultBatch, CloudFenClaim, Fen
+from chessism_api.database.postgresql.cloud_codec import read_document, checksum
+from chessism_api.database.postgresql.cloud_migration import migrate, repair_cleanup_resources
 from chessism_api.operations.cloud_analysis import controller, importer, history
 
 

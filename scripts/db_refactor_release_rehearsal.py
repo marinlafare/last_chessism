@@ -11,8 +11,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database import runtime
-from chessism_api.database.relational_storage import storage_for, describe_contract
+from chessism_api.database.postgresql import runtime
+from chessism_api.database.postgresql.relational_storage import storage_for, describe_contract
 from scripts.db_refactor_candidate import guard, C, A
 from scripts.db_refactor_cutover import inspect_cutover
 from scripts.db_refactor_sequences import preserve_sequence
@@ -38,7 +38,7 @@ async def rejected_startup(url, profile, expected):
 
 async def check_runtime(socket, pgdata, *, database='chessism_db'):
     """Same DB initializers as services, without starting queues/cloud calls."""
-    from chessism_api.database import engine as database_engine
+    from chessism_api.database.postgresql import engine as database_engine
     url = private_url(socket, database)
     checks = []
     # The caller cannot use this utility against a live/remote URL.

@@ -10,7 +10,7 @@ from datetime import datetime
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_balanced_sampling as balanced, blunder_balanced_source as old_source
 from . import blunder_v2_source as source

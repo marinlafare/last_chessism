@@ -13,7 +13,7 @@ async def main():
     import asyncpg
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import create_async_engine
-    from chessism_api.database.models import Base
+    from chessism_api.database.postgresql.models import Base
     from chessism_api.operations import database_restore_tests as restore
     from tests.check_relational_application_postgres import setup
     from tests.check_db_refactor_candidate_postgres import command

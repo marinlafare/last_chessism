@@ -7,8 +7,8 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.salience_staging import stage_game_positions
 
 

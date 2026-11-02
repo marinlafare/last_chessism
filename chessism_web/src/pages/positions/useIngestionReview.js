@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
+import { graphIngestionActive } from './pipelineProgress.js'
 
 const STORAGE_KEY = 'chessism.ingestion-progress.review.v1'
-const finished = run => Boolean(run?.run_id && [
+const finished = run => Boolean(run?.run_id && !graphIngestionActive(run) && [
   'complete', 'failed', 'error', 'warning', 'cancelled', 'canceled', 'partial',
 ].includes(run.status))
 // A retried run can reuse its ID; acknowledge only this completed attempt.

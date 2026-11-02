@@ -5,9 +5,9 @@ from typing import Literal
 from fastapi import APIRouter, Query
 from sqlalchemy import func, select, text
 
-from chessism_api.database.cloud_columns import TABLES
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudGameDraft, CloudGameDraftEntry
+from chessism_api.database.postgresql.cloud_columns import TABLES
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudGameDraft, CloudGameDraftEntry
 
 router = APIRouter()
 

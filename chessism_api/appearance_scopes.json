@@ -1,5 +1,15 @@
 {
   "common_targets": {
+    "ingestion.neo4j.group": {"label":"Neo4j ingestion group title","properties":["color","fontSize","fontFamily","textAlign"]},
+    "ingestion.neo4j.card": {"label":"Neo4j ingestion progress container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+    "ingestion.neo4j.title": {"label":"Neo4j ingestion title","properties":["color","fontSize","fontFamily","textAlign"]},
+    "ingestion.neo4j.value": {"label":"Neo4j ingestion counts","properties":["background","color","fontSize","fontFamily","textAlign"]},
+    "ingestion.neo4j.track": {"label":"Neo4j ingestion progress track","properties":["background","borderColor","borderWidth","radius"]},
+    "ingestion.neo4j.fill": {"label":"Neo4j ingestion progress fill","properties":["background","borderColor","borderWidth","radius"]},
+    "ingestion.neo4j.light": {"label":"Neo4j ingestion status indicator","properties":["background","borderColor","borderWidth","radius"]},
+    "ingestion.neo4j.text": {"label":"Neo4j ingestion timing and status","properties":["color","fontSize","fontFamily","textAlign"]},
+    "ingestion.neo4j.detail": {"label":"Neo4j ingestion detail","properties":["color","fontSize","fontFamily","textAlign"]},
+    "ingestion.neo4j.heartbeat": {"label":"Neo4j ingestion heartbeat","properties":["color","fontSize","fontFamily","textAlign"]},
     "page": {
       "label": "Page background",
       "properties": [
@@ -1384,6 +1394,15 @@
         "cloud.recovery.text": {"label":"Cloud recovery message","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","padding"]},
         "cloud.recovery.button": {"label":"Recover cloud job button","properties":["background","hoverBackground","color","hoverColor","fontFamily","fontSize","textAlign","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
         "times.panel": {"label":"Timing container","properties":["background","borderColor","borderWidth","radius","padding"]},
+        "graph.panel": {"label":"Graph synchronization container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "graph.title": {"label":"Graph synchronization title","properties":["color","fontFamily","fontSize","textAlign"]},
+        "graph.status": {"label":"Graph synchronization state","properties":["color","background","fontSize","textAlign"]},
+        "graph.counts": {"label":"Graph counts","properties":["color","background","fontSize","textAlign"]},
+        "graph.detail": {"label":"Graph progress detail","properties":["color","background","fontSize","textAlign"]},
+        "graph.backfill": {"label":"Graph backfill row","properties":["color","background","borderColor","borderWidth","radius","padding"]},
+        "graph.progress": {"label":"Graph import progress","properties":["color","background","borderColor","borderWidth","radius"]},
+        "graph.scope": {"label":"Graph count scope","properties":["color","fontSize","textAlign"]},
+        "graph.retry": {"label":"Retry graph synchronization","properties":["color","background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
         "times.toggle": {"label":"Times button","properties":["background","color","fontSize","fontFamily","borderColor","borderWidth","radius","padding","hoverBackground","hoverColor"]},
         "local.panel": {
           "label": "Local system status",
@@ -1424,6 +1443,31 @@
         "/download_new_games"
       ],
       "targets": {
+        "ingestion.summary": {"label":"Ingestion progress overview","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.player": {"label":"Current ingestion player","initialStyleFrom":"title","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "ingestion.details": {"label":"Ingestion technical details container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.details.toggle": {"label":"Ingestion details disclosure","initialStyleFrom":"button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "ingestion.details.row": {"label":"Ingestion technical detail row","initialStyleFrom":"text","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "ingestion.previous": {"label":"Previous ingestion results container","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.previous.toggle": {"label":"Previous ingestion results disclosure","initialStyleFrom":"button","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding","color","hoverColor","fontSize","fontFamily","textAlign"]},
+        "ingestion.games.card": {"label":"Ingestion games card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"initialStyleFrom":"card"},
+        "ingestion.games.title": {"label":"Ingestion games title","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"title"},
+        "ingestion.games.value": {"label":"Ingestion games value","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value"},
+        "ingestion.games.track": {"label":"Ingestion games track","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.games.fill": {"label":"Ingestion games fill","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.games.light": {"label":"Ingestion games light","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.games.text": {"label":"Ingestion games text","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+        "ingestion.games.heartbeat": {"label":"Ingestion games heartbeat","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+        "ingestion.games.detail": {"label":"Ingestion games detail","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+        "ingestion.positions.card": {"label":"Ingestion positions card","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"],"initialStyleFrom":"card"},
+        "ingestion.positions.title": {"label":"Ingestion positions title","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"title"},
+        "ingestion.positions.value": {"label":"Ingestion positions value","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"value"},
+        "ingestion.positions.track": {"label":"Ingestion positions track","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.positions.fill": {"label":"Ingestion positions fill","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.positions.light": {"label":"Ingestion positions light","properties":["background","hoverBackground","borderColor","hoverBorderColor","borderWidth","radius","padding"]},
+        "ingestion.positions.text": {"label":"Ingestion positions text","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+        "ingestion.positions.heartbeat": {"label":"Ingestion positions heartbeat","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
+        "ingestion.positions.detail": {"label":"Ingestion positions detail","properties":["background","hoverBackground","color","hoverColor","fontSize","fontFamily","textAlign"],"initialStyleFrom":"text"},
         "download.panel": {
           "label": "Download games",
           "properties": [
@@ -2297,6 +2341,11 @@
           "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
           "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
         },
+        "cloud.step.progress.neo4j": {
+          "label": "Synchronize evaluations to Neo4j · progress bar", "editorParent": "cloud.steps",
+          "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
+          "properties": ["chartColor1","barHoverColor","background","hoverBackground","summaryBarHeight","borderColor","hoverBorderColor","borderWidth","radius","padding"]
+        },
         "cloud.step.progress.stop-stopping": {
           "label": "Stop · cloud workers · progress bar", "editorParent": "cloud.steps",
           "propertyLabels": {"chartColor1":"Progress fill","barHoverColor":"Hover progress fill","background":"Track background","hoverBackground":"Hover track background","summaryBarHeight":"Bar height"},
@@ -2676,6 +2725,20 @@
         "commonness.paging": {"label":"Commonness paging background","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
         "explorer.close": {"label":"Position list close button","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
         "explorer.paging": {"label":"Position list paging buttons","properties":["background","hoverBackground","color","hoverColor","borderColor","borderWidth","radius","padding","fontSize","fontFamily"]},
+        "commonPositions.panel": {
+          "label": "Most common positions section",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
+        "commonPositions.toggle": {
+          "label": "Most common positions button",
+          "editorParent": "commonPositions.panel",
+          "properties": ["background", "hoverBackground", "color", "hoverColor", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding", "fontSize", "fontFamily", "textAlign"]
+        },
+        "commonPositions.content": {
+          "label": "Most common positions content",
+          "editorParent": "commonPositions.panel",
+          "properties": ["background", "hoverBackground", "borderColor", "hoverBorderColor", "borderWidth", "radius", "padding"]
+        },
         "rating.toggle": {
           "label": "Rating groups button",
           "initialStyleFrom": "chart.disclosure",

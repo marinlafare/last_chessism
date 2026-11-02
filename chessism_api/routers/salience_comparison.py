@@ -4,7 +4,7 @@ from fastapi import APIRouter,Depends,HTTPException,Query
 from pydantic import BaseModel,Field
 from starlette.concurrency import run_in_threadpool
 from chessism_api.auth import require_superuser,get_current_account
-from chessism_api.database.models import Account
+from chessism_api.database.postgresql.models import Account
 from chessism_api.operations.salience_comparison import artifacts,readers
 
 router=APIRouter(dependencies=[Depends(require_superuser)])

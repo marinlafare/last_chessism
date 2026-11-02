@@ -5,7 +5,7 @@ import json
 
 from sqlalchemy import select
 
-from chessism_api.database.models import MatrixDefinition
+from chessism_api.database.postgresql.models import MatrixDefinition
 
 
 def definition_fingerprint(records: list[dict]) -> dict:

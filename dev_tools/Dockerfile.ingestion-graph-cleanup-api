@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=chessism-api:ingestion-overview-20261101
+FROM ${BASE_IMAGE}
+# Targeted backend release: preserve unrelated application code and dependencies.
+COPY chessism_api/operations/ingestion_pipeline/timing.py /app/chessism_api/operations/ingestion_pipeline/timing.py
+COPY chessism_api/operations/tablebase.py /app/chessism_api/operations/tablebase.py
+# Publication instrumentation belongs to the separate neo4j-sync image. The API
+# only needs these read-side progress changes and its existing graph modules.
+COPY chessism_api/database/neo4j/sync_ingestion.py chessism_api/database/neo4j/sync_cloud.py /app/chessism_api/database/neo4j/
+RUN python -c "from chessism_api.operations.ingestion_pipeline.timing import reconcile_step_snapshots; from chessism_api.database.neo4j.sync_cloud import cloud_progress"

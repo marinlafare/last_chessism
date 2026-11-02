@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 
 async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, Any]:

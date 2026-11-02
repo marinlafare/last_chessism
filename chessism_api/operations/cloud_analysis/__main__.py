@@ -10,9 +10,9 @@ from sqlalchemy import text
 from . import runtime
 from cloud_job.launch import Client
 from .read_recovery import RecoveringClient
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine
-from chessism_api.database.models import CloudControllerHeartbeat
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.models import CloudControllerHeartbeat
 
 CONTROLLER_LOCK = 731946219
 

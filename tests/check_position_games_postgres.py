@@ -9,7 +9,7 @@ os.environ.setdefault('DATABASE_URL','postgresql+asyncpg://test@127.0.0.1:1/test
 import asyncpg
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
-from chessism_api.database.relational_storage import RelationalStorage,SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage,SESSION_KEY
 from chessism_api.operations import player_position_games as pages
 from tests.check_opening_book_postgres import command
 

@@ -6,10 +6,10 @@ All cloud deletion uses saved, identity-checked plans after quiescence.
 import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation,
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation,
     CloudBatchUnit, CloudSequenceControl, CloudResultBatch, CloudFenClaim)
-from chessism_api.database import cloud_columns
+from chessism_api.database.postgresql import cloud_columns
 from . import runtime, history
 from .cancellation_cloud import stop_batch, stop_run
 from .ingestion import ingest_ready

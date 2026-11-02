@@ -10,7 +10,7 @@ import uuid
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_full_source as source, blunder_full_compute as compute
 from . import blunder_full_diagnostics as diagnostics

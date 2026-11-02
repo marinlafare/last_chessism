@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select, text
 
 from chessism_api.auth import get_current_account
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Account, AlgorithmDefinition, AlgorithmRun, MatrixDefinition
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Account, AlgorithmDefinition, AlgorithmRun, MatrixDefinition
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.matrix_constructor.storage import matrix_catalog_lock, MatrixCatalogBusy
 from chessism_api.operations.matrix_constructor.definitions import estimate_definition, resolve_definition

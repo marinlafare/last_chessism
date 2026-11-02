@@ -1,0 +1,24 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><title>Isolated graph synchronization UI</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import GraphSyncPanel from '/src/pages/system-status/GraphSyncPanel.jsx'
+import '/src/index.css'
+import '/src/pages/system-status/systemStatus.css'
+history.replaceState({}, '', '/system_status')
+const state=window.graphTest={requests:[],errors:[],retry:0}
+window.addEventListener('error',e=>state.errors.push(e.message))
+window.addEventListener('unhandledrejection',e=>state.errors.push(String(e.reason)))
+window.fetch=async(input, options={})=>{
+  const path=new URL(input,location.origin).pathname
+  state.requests.push(path)
+  if(path.endsWith('/graph-sync/retry')) state.retry++
+  else if(!path.endsWith('/graph-sync')) throw Error('Unexpected request: '+path)
+  return new Response(JSON.stringify({installed:true,enabled:true,phase:state.retry?'current':'retrying',
+    heartbeat:new Date().toISOString(),games:125,positions:4000,pending_items:state.retry?0:4875,
+    failed_events:state.retry?0:1,detail:'Synthetic graph progress',backfills:[{id:'test',player_name:'lafareto',
+      total_games:5000,processed_games:125}]}),{status:200,headers:{'Content-Type':'application/json'}})
+}
+createRoot(document.getElementById('root')).render(React.createElement('main',{className:'system-status-page'},React.createElement(GraphSyncPanel)))
+</script></body></html>

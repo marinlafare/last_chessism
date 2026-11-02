@@ -1,9 +1,27 @@
 // Compute success and 100% imported are not workflow completion: cleanup and
 // the final database-summary refresh must also finish.
 import { uploadStepProgress } from './cloudUploadProgress.js'
-export function cloudJobDone(job) {
+export function cloudWorkDone(job) {
   return ['complete', 'limit_reached'].includes(job.status)
     && Array.isArray(job.runs) && job.runs.every((run) => run.status === 'complete')
+}
+export const graphSyncPending = job => Boolean(job.graph_sync && job.graph_sync.status !== 'complete')
+export const cloudJobDone = job => cloudWorkDone(job) && !graphSyncPending(job)
+
+function withGraph(job, result) {
+  const graph = job.graph_sync
+  if (!graph) return result
+  const state = graph.status === 'complete' ? 'complete' : graph.status === 'pending' ? 'pending'
+    : ['retrying', 'unavailable'].includes(graph.status) ? 'attention' : 'current'
+  const steps = [...result.steps]
+  const last = steps.length - 1
+  const cloudFinished = cloudWorkDone(job) || (job.status === 'cancelled' && job.stop_cleanup?.phase === 'complete')
+  if (cloudFinished && graphSyncPending(job)) steps[last] = { ...steps[last], state: 'pending' }
+  steps.splice(last, 0, { id: 'neo4j', title: 'Synchronize evaluations to Neo4j', state })
+  return { ...result, steps, done: result.done && !graphSyncPending(job),
+    label: cloudFinished && graphSyncPending(job)
+      ? `Cloud processing finished — ${state === 'attention' ? 'Neo4j synchronization needs attention' : 'synchronizing evaluations to Neo4j'}`
+      : result.label }
 }
 
 export const CLOUD_JOB_STEPS = [
@@ -82,11 +100,11 @@ export function cloudJobProgress(job) {
       'Clean up cloud resources', 'Clean up eligible logs', 'Refresh database totals', 'Release unfinished FENs', 'Cancelled — cleaned']
     const current = Math.max(0, phases.indexOf(job.stop_cleanup.phase))
     const finished = job.status === 'cancelled' && job.stop_cleanup.phase === 'complete'
-    return { done: false, label: `${job.status === 'paused' ? 'Paused — ' : ''}${names[current]}`,
+    return withGraph(job, { done: false, label: `${job.status === 'paused' ? 'Paused — ' : ''}${names[current]}`,
       steps: names.map((title, index) => ({ id: `stop-${phases[index]}`, title, state: finished || index < current ? 'complete'
-        : index === current ? job.status === 'paused' ? 'attention' : 'current' : 'pending' })) }
+        : index === current ? job.status === 'paused' ? 'attention' : 'current' : 'pending' })) })
   }
-  const done = cloudJobDone(job)
+  const done = cloudWorkDone(job)
   const runs = job.runs || []
   const active = runs.find((run) => run.status !== 'complete')
   let phase = job.sequence?.automatic ? job.sequence.phase : active?.status
@@ -110,7 +128,7 @@ export function cloudJobProgress(job) {
   const attention = { paused: 'Paused', failed: 'Failed', waiting: 'Waiting', cancelled: 'Cancelled' }[job.status]
   const label = done ? job.status === 'limit_reached' ? 'Done — available FENs only' : 'Done'
     : attention ? `${attention} — ${CLOUD_JOB_STEPS[step]}` : CLOUD_JOB_STEPS[step]
-  return {
+  return withGraph(job, {
     done, label,
     steps: CLOUD_JOB_STEPS.map((title, index) => ({
       id: CLOUD_JOB_STEP_IDS[index],
@@ -118,10 +136,16 @@ export function cloudJobProgress(job) {
       state: done || index < step ? 'complete'
         : index === step ? interrupted ? 'attention' : 'current' : 'pending',
     })),
-  }
+  })
 }
 
 export function cloudStepProgress(job, step) {
+  if (step.id === 'neo4j') {
+    const graph = job.graph_sync || {}
+    return { value: graph.status === 'complete' ? 100 : Number.isFinite(graph.total) && graph.total > 0
+      ? Math.min(100, graph.processed / graph.total * 100) : null,
+      detail: graph.detail || 'Waiting for evaluation imports.', showDetail: true }
+  }
   const upload = uploadStepProgress(job, step)
   if (upload) return upload
   if (step.state === 'complete') return { value: 100, detail: 'Complete' }
@@ -169,6 +193,9 @@ export function cloudStepProgress(job, step) {
 
 export function cloudJobIndicator(job) {
   const { done, label } = cloudJobProgress(job)
+  if (graphSyncPending(job) && (cloudWorkDone(job) || job.status === 'cancelled')) {
+    return { state: ['retrying','unavailable'].includes(job.graph_sync.status) ? 'attention' : 'running', label }
+  }
   if (job.status === 'cancelled') return { state: 'idle', label: job.stop_cleanup?.phase === 'complete' ? 'Cancelled — cleaned; saved results retained' : 'Cancelled' }
   if (done) return {
     state: 'success',

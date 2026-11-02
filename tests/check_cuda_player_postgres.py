@@ -21,7 +21,7 @@ async def main():
     from chessism_api.operations.player_stockfish_summary import empty_modes
     from chessism_api.operations.research_algorithms import score_validation_job as job, summary_validation as val
     from chessism_api.operations.research_algorithms.score_stream import DTYPE, cpu_reference
-    from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
     from chessism_api.operations.matrix_constructor.queries import matrix_sql
     root = Path(tempfile.mkdtemp(prefix='cuda-player-', dir='/restore-test'))
     socket = root/'socket'; socket.mkdir()

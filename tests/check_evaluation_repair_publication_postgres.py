@@ -152,7 +152,7 @@ async def check(factory, connection, layout):
     recovered = await fen_summary_recovery.recover_batch(factory=factory, refresh=refresh)
     assert recovered == {'processed': 3, 'pending': 0, 'error': None}, recovered
     # Test changed-score/WDL publication with genuine global summary tables.
-    from chessism_api.database.models import ScoredPositionSummary
+    from chessism_api.database.postgresql.models import ScoredPositionSummary
     from sqlalchemy.schema import CreateTable
     from sqlalchemy.dialects.postgresql import dialect
     await connection.execute(str(CreateTable(ScoredPositionSummary.__table__).compile(dialect=dialect())))

@@ -20,8 +20,8 @@ import pyarrow.parquet as pq
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations.exports import config, files, jobs, service
 from chessism_api.operations.exports.auth import token_hash
 from chessism_api.operations.exports.catalog import SOURCES, tables_for

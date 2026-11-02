@@ -9,6 +9,9 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - CHESSISM_NEO4J_URI=bolt://neo4j:7687
+      - CHESSISM_NEO4J_DATABASE=neo4j
+      - CHESSISM_NEO4J_AUTH_FILE=/run/secrets/chessism_neo4j_auth
       - CHESSISM_PLAYER_SUMMARIES=${CHESSISM_PLAYER_SUMMARIES:-0}
       - CHESSISM_STOCKFISH_SUMMARIES=${CHESSISM_STOCKFISH_SUMMARIES:-0}
       - CHESSISM_CANONICAL_BLUNDERS=${CHESSISM_CANONICAL_BLUNDERS:-0}
@@ -46,6 +49,8 @@ services:
         condition: service_started
       redis:
         condition: service_healthy
+    secrets:
+      - chessism_neo4j_auth
     volumes:
       - ./research_data:/research-data
       - ./api_logs:/app/logs
@@ -304,6 +309,82 @@ services:
       timeout: 5s
       retries: 5
 
+  # Derived chess graph. Independent of PostgreSQL startup and existing jobs.
+  neo4j-sync:
+    build:
+      context: .
+      dockerfile: dev_tools/Dockerfile.neo4j-sync-bulk
+    image: chessism-neo4j-sync:runtime
+    command: python -m chessism_api.database.neo4j.sync_worker
+    init: true
+    restart: unless-stopped
+    cpus: "2.0"
+    mem_limit: 2g
+    stop_grace_period: 120s
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
+      - CHESSISM_NEO4J_URI=bolt://neo4j:7687
+      - CHESSISM_NEO4J_DATABASE=neo4j
+      - CHESSISM_NEO4J_AUTH_FILE=/run/secrets/chessism_neo4j_auth
+    secrets:
+      - chessism_neo4j_auth
+    networks:
+      - chessism_net
+    depends_on:
+      db:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+
+  # Bootstrap credentials: python -m chessism_api.database.neo4j.manage init-secret
+  neo4j:
+    image: neo4j:2026.10.1@sha256:44ad2a2504fd7d27df1d1e976f2d481e4266a0814d3657f2d5df62124ce657f1
+    init: true
+    entrypoint: ["/bin/bash", "/startup/chessism-entrypoint.sh"]
+    command: ["neo4j"]
+    restart: unless-stopped
+    stop_grace_period: 60s
+    cpus: "4.0"
+    # Allow 2 GiB heap + 4 GiB graph cache, with room for JVM/native memory.
+    mem_limit: 8g
+    memswap_limit: 8g
+    pids_limit: 256
+    environment:
+      NEO4J_AUTH_FILE: /run/secrets/chessism_neo4j_auth
+      NEO4J_server_memory_heap_initial__size: 2g
+      NEO4J_server_memory_heap_max__size: 2g
+      NEO4J_server_memory_pagecache_size: 4g
+      NEO4J_db_transaction_timeout: 10s
+      NEO4J_server_bolt_advertised__address: localhost:7687
+      NEO4J_dbms_usage__report_enabled: "false"
+      NEO4J_client_allow__telemetry: "false"
+      NEO4J_dbms_fleet__manager_enabled: "false"
+      NEO4J_server_fleet__discovery_enabled: "false"
+      NEO4J_server_http_x__forward_enabled: "false"
+    ports:
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    secrets:
+      - chessism_neo4j_auth
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - ./docker/neo4j/entrypoint.sh:/startup/chessism-entrypoint.sh:ro
+    networks:
+      - chessism_net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "2"
+
   redis:
     image: redis:7-alpine
     container_name: redis
@@ -449,11 +530,16 @@ services:
       - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
+      - CHESSISM_NEO4J_URI=bolt://neo4j:7687
+      - CHESSISM_NEO4J_DATABASE=neo4j
+      - CHESSISM_NEO4J_AUTH_FILE=/run/secrets/chessism_neo4j_auth
       - ALGORITHM_FREE_FLOOR_BYTES=20000000000
       - OPENBLAS_NUM_THREADS=1
       - OMP_NUM_THREADS=1
       - MKL_NUM_THREADS=1
       - NUMEXPR_NUM_THREADS=1
+    secrets:
+      - chessism_neo4j_auth
     volumes:
       - ./research_data:/research-data
     networks:
@@ -514,6 +600,7 @@ services:
       - DATABASE_RESTORE_TEST_TIMEOUT_SECONDS=21600
       - RESTORE_TEST_DB_USER=${POSTGRES_USER}
       - RESTORE_TEST_DB_NAME=${POSTGRES_DB}
+      - CHESSISM_NEO4J_BACKUP_RPC=/neo4j-backup-rpc
     volumes:
       - ./research_data:/research-data:ro
       - ./db_data:/var/lib/postgresql/data:ro
@@ -521,6 +608,7 @@ services:
       - pgbackrest_spool:/var/spool/pgbackrest
       - postgres_socket:/var/run/postgresql
       - database_restore_test:/restore-test
+      - neo4j_backup_rpc:/neo4j-backup-rpc
     networks:
       - chessism_net
     depends_on:
@@ -528,6 +616,43 @@ services:
         condition: service_healthy
       db:
         condition: service_healthy
+      neo4j-backup:
+        condition: service_healthy
+
+  # Privileged, single-purpose controller. No network, API route or cloud access.
+  # Only this service receives Docker control; the backup worker remains postgres.
+  neo4j-backup:
+    build:
+      context: .
+      dockerfile: docker/neo4j-backup/Dockerfile
+    image: chessism-neo4j-backup:latest
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 300s
+    network_mode: none
+    cpus: "0.5"
+    mem_limit: 256m
+    pids_limit: 64
+    environment:
+      CHESSISM_COMPOSE_PROJECT: ${COMPOSE_PROJECT_NAME:-last_chessism}
+      BACKUP_VOLUME_UUID: 1ebffac6-4b7a-4906-9e07-9586060d3825
+      BACKUP_FREE_FLOOR_BYTES: "150000000000"
+      DATABASE_BACKUP_QUOTA_BYTES: "200000000000"
+    volumes:
+      - type: bind
+        source: ${CLOUD_DOCKER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        read_only: true
+        bind:
+          create_host_path: false
+      - /main-monitor-db-backups:/backup-volume
+      - neo4j_backup_rpc:/neo4j-backup-rpc
+      - neo4j_backup_scratch:/scratch-space
+    healthcheck:
+      test: ["CMD", "python", "-c", "import pathlib,time; assert time.time()-pathlib.Path('/neo4j-backup-rpc/heartbeat').stat().st_mtime < 45"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
 
   fen-worker-1:
     build: .
@@ -648,10 +773,16 @@ networks:
     internal: true
 
 secrets:
+  chessism_neo4j_auth:
+    file: ./.local-secrets/neo4j-auth
   chessism_export_reader:
     file: ./research_data/integrations/export-reader.json
 
 volumes:
+  neo4j_backup_rpc:
+  neo4j_backup_scratch:
+  neo4j_data:
+  neo4j_logs:
   redis_data:
   db_data:
   chessism_web_node_modules:

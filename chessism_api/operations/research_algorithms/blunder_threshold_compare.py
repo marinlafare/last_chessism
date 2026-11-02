@@ -12,7 +12,7 @@ import uuid
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_shadow_compute as compute, blunder_shadow_source as source
 from . import blunder_fixed, blunder_v2_model as model

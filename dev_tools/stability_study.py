@@ -8,7 +8,7 @@ from typing import List, Dict, Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import constants
-from chessism_api.database.engine import init_db, AsyncDBSession
+from chessism_api.database.postgresql.engine import init_db, AsyncDBSession
 from sqlalchemy import text
 
 from stockfish_test import analyze_fens

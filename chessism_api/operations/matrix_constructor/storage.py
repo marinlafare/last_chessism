@@ -7,7 +7,7 @@ import uuid
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 
 ARTIFACT_ROOT = Path(os.getenv(

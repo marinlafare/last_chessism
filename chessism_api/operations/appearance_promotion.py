@@ -14,8 +14,8 @@ from pathlib import Path
 
 from sqlalchemy import select, func, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import AppearancePreset as Preset, AppearanceSetting as Setting, AppearanceOverride as Override
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import AppearancePreset as Preset, AppearanceSetting as Setting, AppearanceOverride as Override
 from chessism_api.operations.appearance import snapshot, preset_name, AppearanceConflict
 
 

@@ -7,7 +7,7 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.fen_claims import unclaimed_locked_fens, locked_eligible_fens
+from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens, locked_eligible_fens
 from chessism_api.operations.cloud_analysis.preflight import parallel_checks, verify_clean_workspace
 from chessism_api.operations.cloud_analysis.preparation import PreparationTimings
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet

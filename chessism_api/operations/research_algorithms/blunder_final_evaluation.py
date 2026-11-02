@@ -16,7 +16,7 @@ import uuid
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_development_reuse as reuse, blunder_balanced_source as balanced_source
 from . import blunder_v2_source as source, blunder_v2_model as model

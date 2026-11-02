@@ -1,4 +1,4 @@
-# chessism_api/database/models.py
+# chessism_api/database/postgresql/models.py
 import enum
 from typing import Any, Dict
 from sqlalchemy import (

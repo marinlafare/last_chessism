@@ -11,8 +11,8 @@ import test_cloud_analysis_database as existing
 import test_cloud_auto_sequences_database as auto_tests
 import test_cloud_work_units_database as unit_tests
 from test_cloud_game_drafts import plan
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudBatchSequence,
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudBatchSequence,
     CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame, CloudControllerHeartbeat,
     CloudFenClaim, Fen, Game, Player, GameFenAssociation, GameAnalysisSummary)
 from chessism_api.routers.cloud_game_drafts import (create_draft, current_draft, save_entry,

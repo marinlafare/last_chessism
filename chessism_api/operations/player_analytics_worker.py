@@ -3,8 +3,8 @@ import argparse
 import asyncio
 import logging
 
-from chessism_api.database.runtime import bind_runtime_engine, configured_storage
-from chessism_api.database.player_analytics_schema import install_player_analytics
+from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.player_analytics_schema import install_player_analytics
 from .player_analytics_summary import refresh_pending
 
 

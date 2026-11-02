@@ -10,7 +10,7 @@ from unittest.mock import AsyncMock, patch
 async def verify(connection, engine):
     import numpy as np
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
     from chessism_api.operations.research_algorithms import blunder_cohort_job as job, blunder_cohort_source as source
     from chessism_api.operations.research_algorithms.repository import RunCancelled
     from tests.test_blunder_shadow import FITS

@@ -14,8 +14,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_reads import player_rows_sql
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_reads import player_rows_sql
 
 CACHE_SECONDS = 60
 BIN_WIDTH = 10

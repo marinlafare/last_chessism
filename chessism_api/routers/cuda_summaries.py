@@ -4,7 +4,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import text
 from chessism_api.auth import require_superuser
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.cuda_summaries import runs
 from chessism_api.operations.canonical_blunders.scheduler import schedule

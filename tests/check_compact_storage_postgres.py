@@ -16,9 +16,9 @@ from sqlalchemy.schema import CreateTable
 from sqlalchemy.dialects.postgresql import dialect
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from chessism_api.database.models import Player, PlayerStats, Month, MainCharacterModeSummary, HomeTitledPlayerSummary, Fen, FenContinuation, Move, GameFenAssociation
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
-from chessism_api.database.compact_storage import require_compact_contract
+from chessism_api.database.postgresql.models import Player, PlayerStats, Month, MainCharacterModeSummary, HomeTitledPlayerSummary, Fen, FenContinuation, Move, GameFenAssociation
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.compact_storage import require_compact_contract
 from chessism_api.operations import database_restore_tests as restore
 from scripts.compact_db_migration import migrate_private
 
@@ -69,8 +69,8 @@ async def fixture(conn):
 
 
 async def exercise(socket, conn):
-    from chessism_api.database import db_interface
-    from chessism_api.database.db_interface import DBInterface
+    from chessism_api.database.postgresql import db_interface
+    from chessism_api.database.postgresql.db_interface import DBInterface
     from chessism_api.operations.compact_writes import insert_associations
     from chessism_api.operations.compact_summaries import refresh_mode_summary
     from chessism_api.operations.fen_results import stage_fen_results

@@ -3,8 +3,8 @@ from typing import Any, List, Dict, TypeVar
 from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData, column, values, cast, null
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     Base,
     Fen,
     GameFenAssociation,
@@ -15,9 +15,9 @@ from chessism_api.database.models import (
     to_dict,
 )
 from sqlalchemy.dialects.postgresql import insert as pg_insert
-from chessism_api.database.fen_references import association_rows
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
+from chessism_api.database.postgresql.fen_references import association_rows
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.compact_storage import compact_for, compact_table, integer_result
 
 _ModelType = TypeVar("_ModelType", bound=Base)
 

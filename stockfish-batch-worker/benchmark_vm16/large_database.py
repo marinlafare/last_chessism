@@ -26,7 +26,7 @@ async def database(*, statement_timeout_ms=120000):
     values = dotenv_values(ROOT.parent / '.env')
     url = host_database_url(values.get('DATABASE_URL'))
     os.environ['DATABASE_URL'] = url
-    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.postgresql.engine import AsyncDBSession
     engine = create_async_engine(url, pool_pre_ping=True,
         connect_args={'ssl': False, 'server_settings': {'statement_timeout': str(statement_timeout_ms), 'lock_timeout': '10000'}})
     AsyncDBSession.configure(bind=engine)
@@ -38,8 +38,8 @@ async def database(*, statement_timeout_ms=120000):
 
 async def reserve(plan, config):
     async with database() as sessions:
-        from chessism_api.database.ask_db import get_fens_for_analysis
-        from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
+        from chessism_api.database.postgresql.ask_db import get_fens_for_analysis
+        from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
         from chessism_api.operations.cloud_analysis.admission import require_available
         from sqlalchemy import insert
         session, fens = await get_fens_for_analysis(config.max_positions, raise_errors=True)
@@ -72,7 +72,7 @@ async def reserve(plan, config):
 
 async def check(plan, *, submitted=False):
     async with database() as sessions, sessions() as session:
-        from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
+        from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
         from chessism_api.operations.cloud_analysis.admission import require_available
         await require_available(session, own_job_id=plan['db_job_id'])
         job = await session.get(CloudAnalysisJob, plan['db_job_id'])
@@ -91,7 +91,7 @@ async def check(plan, *, submitted=False):
 
 async def record_submission(plan, job):
     async with database() as sessions, sessions() as session, session.begin():
-        from chessism_api.database.models import CloudAnalysisRun
+        from chessism_api.database.postgresql.models import CloudAnalysisRun
         run = await session.get(CloudAnalysisRun, plan['db_run_id'], with_for_update=True)
         require(run is not None and run.launch.get('benchmark_id') == plan['id'], 'Foreign database run')
         run.launch = {**run.launch, 'jobs': [plan['job']], 'uid': job['uid'], 'spec': plan['specification']}
@@ -124,7 +124,7 @@ async def finalize_import(directory, plan):
             and report.get('id') == plan['id'] and report.get('positions') == plan['count'], 'Invalid report')
     await check(plan, submitted=True)
     async with database(statement_timeout_ms=900000) as sessions:
-        from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
+        from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
         from chessism_api.operations.cloud_analysis.importer import (
             refresh_projections, refresh_global_projections, validate_manifest,
         )
@@ -161,7 +161,7 @@ def execute(action, *args, **kwargs):
 
 async def verify_import(directory, plan, *, cleanup=None):
     """Recheck durable receipts and actual scores before deletion; finalize afterwards."""
-    from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen
+    from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen
     from chessism_api.operations.cloud_analysis.importer import validate_manifest
     receipt = json.loads((directory / 'import-receipt.json').read_bytes())
     manifest_raw = (directory / 'download/manifest.json').read_bytes()
@@ -200,8 +200,8 @@ async def verify_import(directory, plan, *, cleanup=None):
 
 async def import_receipt_ready(plan, receipt):
     """Wait for the commit after the local receipt write, without loading FEN data."""
-    from chessism_api.database.models import CloudAnalysisRun
-    from chessism_api.database.cloud_codec import read_projection
+    from chessism_api.database.postgresql.models import CloudAnalysisRun
+    from chessism_api.database.postgresql.cloud_codec import read_projection
     async with database() as sessions, sessions() as session:
         ref = await session.scalar(select(CloudAnalysisRun._launch_ref).where(
             CloudAnalysisRun.id == plan['db_run_id'], CloudAnalysisRun.job_id == plan['db_job_id']))

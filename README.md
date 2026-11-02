@@ -25,7 +25,7 @@ This project is not a single application, but a collection of services managed b
   2. **(Reduce)**: The `pipeline-worker` (boss) collects and aggregates millions of data points into a unique set of FENs and associations (Memory-bound).
   3. **(Write)**: The boss splits the aggregated data and enqueues 3 parallel insertion jobs, which the `fen-worker`s execute to write the data to the database (I/O-bound).
 * **CPU Analysis**: Enqueue analysis jobs to the analysis queue. The analysis worker handles the database logic and calls Stockfish for engine evaluation.
-* **Database Backups**: The application uses pgBackRest recovery points and isolated restore rehearsals. `backup.sh` and `restore_db_from_backup.sh` are legacy manual tools, not the normal backup pipeline.
+* **Database Backups**: Backup creates compressed PostgreSQL snapshots plus native Neo4j graph/system dumps. Test backup restores and validates both in isolation before retiring the previous recovery point. Neo4j alone pauses briefly for its offline dump. See [database backup details](chessism_api/database/README.md#backup-and-test-backup). `backup.sh` and `restore_db_from_backup.sh` are legacy PostgreSQL-only manual tools, not the normal backup pipeline.
 
 ### Maintenance safeguards
 
@@ -59,7 +59,7 @@ it never silently selects the newest dump.
 2. **Robust FEN Pipeline (MapReduce)**: The final pipeline architecture (Map -> Reduce -> Parallel FEN Write -> Parallel Assoc Write) is excellent. It correctly parallelizes both CPU-bound and I/O-bound tasks and, by waiting for FEN insertion to finish, guarantees data integrity by preventing `ForeignKeyViolationError`.
 3. **Decoupled Analysis Service**: Isolating the engine in its own `stockfish-service` microservice is a very strong design choice. It keeps the main API and workers lightweight and allows the analysis service to be managed and scaled independently.
 4. **Analysis Worker Separation**: The `docker-compose.yml` and ARQ configuration isolate analysis work in a dedicated worker and queue, keeping the API responsive.
-5. **Database Resiliency**: The database startup logic in `chessism_api/database/engine.py` includes a retry-loop, which makes the worker services resilient to database startup delays, preventing "connection refused" race conditions.
+5. **Database Resiliency**: The database startup logic in `chessism_api/database/postgresql/engine.py` includes a retry-loop, which makes the worker services resilient to database startup delays, preventing "connection refused" race conditions.
 
 ### Possible Areas of Upgrade
 

@@ -1,0 +1,3 @@
+FROM chessism-api:opening-map-20261101
+COPY chessism_api/ /app/chessism_api/
+COPY main.py /app/main.py

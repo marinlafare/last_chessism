@@ -1,7 +1,7 @@
 """Numeric-ID summary writes; legacy response names are supplied by read views."""
 from sqlalchemy import text
 
-from chessism_api.database.compact_storage import compact_for
+from chessism_api.database.postgresql.compact_storage import compact_for
 
 
 async def refresh_mode_summary(session, players=None):

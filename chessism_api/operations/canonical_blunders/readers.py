@@ -1,6 +1,6 @@
 """Read published CUDA results only. Missing/unassessed is never zero."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from .schema import table, installed
 from .assessment import POLICY, empty_mode
 

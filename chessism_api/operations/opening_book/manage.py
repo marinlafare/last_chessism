@@ -15,8 +15,8 @@ async def main(args):
               'book_moves': len(catalog.records)}
     if args.install:
         from sqlalchemy import text
-        from chessism_api.database.runtime import bind_runtime_engine
-        from chessism_api.database.engine import AsyncDBSession
+        from chessism_api.database.postgresql.runtime import bind_runtime_engine
+        from chessism_api.database.postgresql.engine import AsyncDBSession
         from .store import publish, TABLE
         engine = await bind_runtime_engine(os.environ['DATABASE_URL'])
         try:

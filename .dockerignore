@@ -1,4 +1,5 @@
 .git
+.local-secrets/
 .codex
 .local-migrations/
 __pycache__/

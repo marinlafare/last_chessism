@@ -59,6 +59,18 @@ Supporting modules:
 
 ## Parallelism and batching
 
+Progress reads reconcile Redis snapshots with durable stage timings by the
+last work-update timestamp (not the heartbeat timestamp). An older snapshot
+cannot reopen a completed/failed stage or replace its committed counters. A
+newer retry can still report live work; Redis supplies display units not stored
+in the timing table. Durable progress remains available when Redis is absent.
+
+Shared tablebase jobs and ingestion-specific follow-ups use one normalized
+enqueue contract: the pipeline queue, cleaned game IDs, bounded batch size and
+the ingestion run ID. A scoped follow-up never replaces or releases another
+job's coordination lease. This refactor does not change score/provenance rules
+or automatically launch CUDA summaries.
+
 Chessism runs multiple FEN worker processes. SAN replay through `python-chess`
 is Python CPU work, so each process handles its games sequentially; spawning
 hundreds of `to_thread` calls would add overhead without escaping the GIL.
@@ -267,3 +279,44 @@ using only the disposable database.
 `tests/test_ingestion_steps.py` and the web `pipelineProgress.test.mjs` cover
 unknown totals, cumulative batch counts, failure, heartbeat and stale-run
 isolation. No core schema migration is needed for this implementation.
+
+## Shared endgame completion
+
+An ingestion must retain its own completion path when an automatic/shared
+tablebase job is already queued or running. `ensure_tablebase_analysis_enqueued`
+queues a run-scoped follow-up on the single pipeline worker in that case, without
+replacing the shared job's coordination owner. It discovers only still-unscored
+eligible positions, reuses committed shared results, and closes the correct
+ingestion stage/run. Global requests still reuse the existing shared job.
+
+For an older orphaned record, `dev_tools/reconcile_ingestion_endgames.py` is an
+explicit dry-run-first repair. It requires a retained successful unrestricted
+tablebase job, compatible timestamps, no active pipeline work, no other unfinished
+ingestion stages, and no eligible endgames remaining. It records the original
+finish time, never restarts analysis, and does not invent per-player FEN counts
+from a global result. The UI retains the verified aggregate endgame completion
+when detailed per-run endgame steps were never recorded.
+
+## Ingestion/graph cleanup release — 2026-11-02 UTC
+
+Deployed after Philippians46 completed: 20,770 graph games and 39,442 evaluation
+updates, with no pending outbox events. The API, graph sync worker and idle
+pipeline coordinator were the only services recreated for the code cleanup.
+PostgreSQL, Redis, cloud, FEN and CUDA workers kept their existing start times.
+Graph totals were unchanged: 80,332 games, 5,028,174 positions, 5,920,645
+occurrences and 5,070,883 moves. These are graph-wide totals, not player totals.
+
+The persistent runtime tags reference `chessism-api:backend-cleanup-20261101`
+(`cfd0fe4b780a`), `chessism-neo4j-sync:cleanup-20261101` (`9525d718c0a8`) and
+`chessism-ingestion:cleanup-20261101` (`e6a768a87fb6`). Previous release tags
+remain available. The API overlay contains only read-side graph progress,
+ingestion timing and tablebase admission; publication code stays in the graph
+worker image. The ingestion worker preserves its older database import layout
+and single engine/session binding until that image is migrated separately.
+
+Checks passed against packaged code: 76 API tests, 23 ingestion-worker tests,
+and 45 graph-worker tests. The graph database integration test, skipped in the
+network-disabled package check, passed separately against disposable PostgreSQL
+and Neo4j: replay, score changes, deletion/correction counters, rollback, backup
+waiting, query timings and retry recovery. Synthetic test containers, volumes
+and their private network were removed afterward; no live records were removed.

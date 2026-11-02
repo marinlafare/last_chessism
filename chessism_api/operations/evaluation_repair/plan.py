@@ -1,6 +1,6 @@
 """Index-bounded snapshots and impact checks, under READ ONLY transactions."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from .artifacts import VERSION, MAX_FENS, MAX_REFERENCES, MAX_CONTINUATIONS, seal, verify, snapshot_digest
 
 MAX_WINDOW = 100_000

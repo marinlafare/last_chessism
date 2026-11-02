@@ -45,6 +45,12 @@ async def retire_superseded(backup_id: str, *, archive_mode: str) -> dict:
             or await asyncio.to_thread(b._sha256, archive) != newest.get("archive_sha256")
             or newest.get("archive_sha256") != manifest.get("archive_sha256")):
         raise RuntimeError("Verified replacement archive failed its cleanup integrity check")
+    from chessism_api.database.neo4j.backup import archive_directory, archive_files, verify_archives
+    if manifest.get("neo4j") or int(manifest.get("backup_format_version", 0)) >= 4:
+        if (manifest.get("restore_test_validation", {}).get("neo4j", {}).get("status") != "success"
+                or newest.get("neo4j") != manifest.get("neo4j")):
+            raise RuntimeError("Cleanup requires a successfully restored Neo4j companion")
+        await asyncio.to_thread(verify_archives, b.DATABASE_BACKUP_ROOT, backup_id, manifest.get("neo4j", {}))
 
     journal_path = b.DATABASE_BACKUP_ROOT / "snapshot-cleanup.json"
     previous = b._read_json(journal_path, {})
@@ -57,9 +63,15 @@ async def retire_superseded(backup_id: str, *, archive_mode: str) -> dict:
     obsolete = []
     files = []
     legacy_rows = []
+    graph_directories = []
     for row in rows[1:]:
         key = str(row.get("backup_id") or "")
         if row.get("storage_mode") == STORAGE_MODE:
+            if row.get("neo4j"):
+                if not manifest.get("neo4j"):
+                    raise RuntimeError("A PostgreSQL-only backup cannot replace a Neo4j recovery point")
+                files.extend(archive_files(b.DATABASE_BACKUP_ROOT, key))
+                graph_directories.append(archive_directory(b.DATABASE_BACKUP_ROOT, key))
             files.append(snapshot_path(key))
             obsolete.append(key)
         elif LEGACY_ID.fullmatch(key):
@@ -89,6 +101,9 @@ async def retire_superseded(backup_id: str, *, archive_mode: str) -> dict:
     try:
         for path in files:
             path.unlink(missing_ok=True)
+        for directory in graph_directories:
+            if directory.exists():
+                directory.rmdir()  # Only known archives; never recursively erase unknown contents.
         if remove_repository:
             await asyncio.to_thread(shutil.rmtree, repository)
         after = await asyncio.to_thread(b.record_application_usage)
@@ -106,7 +121,7 @@ async def retire_superseded(backup_id: str, *, archive_mode: str) -> dict:
 
 
 async def retire_after_restore(backup_id):
-    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.postgresql.engine import AsyncDBSession
     async with AsyncDBSession() as session:
         mode = await session.scalar(text("SHOW archive_mode"))
     return await retire_superseded(backup_id, archive_mode=mode)

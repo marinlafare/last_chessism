@@ -7,8 +7,8 @@ from pathlib import Path
 
 from sqlalchemy import select, delete, func, text
 from sqlalchemy.dialects.postgresql import insert
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import AppearancePreset as Preset, AppearanceSetting as Setting, AppearanceOverride as Override
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import AppearancePreset as Preset, AppearanceSetting as Setting, AppearanceOverride as Override
 
 REGISTRY = json.loads((Path(__file__).parents[1] / 'appearance_registry.json').read_text())
 _SCOPES = json.loads((Path(__file__).parents[1] / 'appearance_scopes.json').read_text())
@@ -22,6 +22,8 @@ REGISTRY['scopes'] = {
 REGISTRY['scopes'][REGISTRY['scope']]['targets'].update(REGISTRY['targets'])
 from .salience_comparison.styles import register as register_salience_comparison_styles
 register_salience_comparison_styles(REGISTRY)
+from chessism_api.database.neo4j.explorer_styles import register as register_graph_explorer_styles
+register_graph_explorer_styles(REGISTRY)
 # Explicit selectors describe painted data, never axes, labels or invisible hit
 # areas. Styles remain scoped to the existing chart identity and page. Additive
 # properties keep old presets valid and do not change their appearance.

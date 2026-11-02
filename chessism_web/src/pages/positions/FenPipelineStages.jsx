@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import ProgressMeter from '../../components/progress/ProgressMeter.jsx'
 import { formatNumber } from './positionPageSupport'
-import { pipelineSteps, stepEstimate } from './pipelineProgress.js'
+import { pipelineSteps, compactPipelineSteps, stepEstimate, graphIngestionActive } from './pipelineProgress.js'
 import './fenIngestion.css'
 
 function duration(seconds) {
@@ -15,65 +15,87 @@ function duration(seconds) {
 
 export default function FenPipelineStages({ jobState, ingestionTiming }) {
   const [now, setNow] = useState(Date.now() / 1000)
+  const [details, setDetails] = useState(false)
   const steps = pipelineSteps(ingestionTiming, jobState)
-  const running = ingestionTiming ? ingestionTiming.status === 'running'
+  const summary = compactPipelineSteps(ingestionTiming, jobState)
+  const running = ingestionTiming ? ingestionTiming.status === 'running' || graphIngestionActive(ingestionTiming)
     : steps.some(step => ['working', 'running'].includes(step.status))
+  useEffect(() => { setDetails(false) }, [ingestionTiming?.run_id])
   useEffect(() => {
     if (!running) return undefined
     const timer = window.setInterval(() => setNow(Date.now() / 1000), 1000)
     return () => window.clearInterval(timer)
   }, [running])
-  const groups = [...new Set(steps.map(step => step.group || 'Ingestion'))]
   if (!steps.length) return <p className="fen-pipeline-empty">No ingestion run recorded.</p>
   return (
-    <div className="fen-pipeline-groups">
-      {groups.map(group => (
-        <div className="fen-pipeline-group" key={group}>
-          <h3 {...pageStyleTarget('title')}>{group}</h3>
-          {steps.filter(step => (step.group || 'Ingestion') === group).map(step => {
+    <div className="fen-pipeline-overview">
+      <div {...pageStyleTarget('ingestion.summary')} className="fen-pipeline-summary">
+          {summary.map(step => {
             const working = running && ['working', 'running'].includes(step.status)
+            const target = part => pageStyleTarget(`ingestion.${step.step}.${part}`)
             const status = working ? 'working'
               : ['working', 'running'].includes(step.status) ? 'stopped' : step.status
+            const complete = ['complete', 'skipped'].includes(status)
+            const unknown = !complete && !(step.total > 0)
             const heartbeatAge = step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : null
             const stale = working && heartbeatAge != null && heartbeatAge > 30
-            const elapsed = step.elapsed_seconds + (
-              working && step.heartbeat_at ? Math.max(0, now - step.heartbeat_at) : 0
+            const elapsed = (step.elapsed_seconds || 0) + (
+              working && (step.elapsed_at || step.heartbeat_at) ? Math.max(0, now - (step.elapsed_at || step.heartbeat_at)) : 0
             )
             const estimate = stepEstimate(step)
+            const label = complete ? (status === 'skipped' ? 'Not needed' : 'Complete')
+              : step.currentLabel && step.currentStep !== 'neo4j_ingestion' ? step.currentLabel
+                : status === 'pending' ? 'Waiting to start' : 'Synchronize games and evaluations'
             return (
-              <article {...pageStyleTarget('card')} key={step.step}
+              <article {...target('card')} key={step.step} data-ingestion-stage={step.step}
                 className={`fen-pipeline-stage is-${status}`}>
                 <div className="fen-pipeline-stage-head">
-                  <span>{step.label}</span>
-                  <i className="fen-pipeline-live-light" title={status} aria-label={status} />
+                  <span {...target('title')}>{step.label}</span>
+                  <i {...target('light')} className="fen-pipeline-live-light" title={status} aria-label={status} />
                 </div>
-                <strong {...pageStyleTarget('value')}>
-                  {formatNumber(step.processed)}
+                <span {...target('text')} className="fen-pipeline-operation">{label}</span>
+                <ProgressMeter {...target('track')}
+                  className={`fen-pipeline-stage-track${unknown ? ' is-indeterminate' : ''}`}
+                  fillProps={target('fill')} aria-label={`${step.label}: ${label}`}
+                  aria-valuetext={unknown ? 'Completion percentage not yet available' : undefined}
+                  max={step.total > 0 ? step.total : complete ? 1 : null}
+                  value={complete ? step.total > 0 ? step.total : 1 : unknown ? undefined : step.processed}
+                  indeterminateWidth={working ? 30 : 0} />
+                <strong {...target('value')}>
+                  {formatNumber(step.processed || 0)}
                   {step.total != null ? ` / ${formatNumber(step.total)}` : ''}
                   {' '}<span className="fen-pipeline-unit">{step.unit || 'items'}</span>
                 </strong>
-                {step.total > 0 && (
-                  <ProgressMeter className="fen-pipeline-stage-track"
-                    aria-label={step.label} max={step.total} value={step.processed} />
-                )}
-                <div {...pageStyleTarget('text')} className="fen-pipeline-step-meta">
+                <div {...target('text')} className="fen-pipeline-step-meta">
                   <span>{status === 'waiting' ? 'Between batches' : status}</span>
                   <span>{duration(elapsed)}</span>
-                  {step.rate > 0 && <span>{formatNumber(Math.round(step.rate))} {step.unit || 'items'}/s</span>}
                   {estimate != null && <span>~{duration(estimate)} left</span>}
                 </div>
                 {working && (
-                  <small {...pageStyleTarget('text')} className={stale ? 'is-stale' : ''}>
+                  <small {...target('heartbeat')} className={stale ? 'is-stale' : ''}>
                     {stale ? 'Worker heartbeat delayed — checking status' : 'Worker active'}
                     {step.updated_at ? ` · progress ${duration(now - step.updated_at)} ago` : ''}
                   </small>
                 )}
-                {step.detail && <small {...pageStyleTarget('text')} title={step.detail}>{step.detail}</small>}
+                {(!complete || step.step === 'neo4j') && step.detail && <small {...target('detail')} title={step.detail}>{step.detail}</small>}
               </article>
             )
           })}
-        </div>
-      ))}
+      </div>
+      <details {...pageStyleTarget('ingestion.details')} className="fen-pipeline-details" open={details}
+        onToggle={event => setDetails(event.currentTarget.open)}>
+        <summary {...pageStyleTarget('ingestion.details.toggle')}>Details ({steps.length} steps)</summary>
+        {details && <div className="fen-pipeline-details-list">
+          {steps.map(step => (
+            <div {...pageStyleTarget('ingestion.details.row')} className="fen-pipeline-detail-row" key={step.step}>
+              <span>{step.label || step.step}</span><span>{step.status}</span>
+              <span>{formatNumber(step.processed || 0)}{step.total != null ? ` / ${formatNumber(step.total)}` : ''} {step.unit || 'items'}</span>
+              <span>{duration(step.elapsed_seconds)}</span>
+              {step.detail && <small>{step.detail}</small>}
+            </div>
+          ))}
+        </div>}
+      </details>
     </div>
   )
 }

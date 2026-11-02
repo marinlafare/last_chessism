@@ -11,7 +11,7 @@ from collections import Counter
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_strength_source as source, blunder_strength_compute as compute
 from . import blunder_cohort_source as cohort, blunder_shadow_source as extraction

@@ -8,7 +8,7 @@ import json
 
 from sqlalchemy import text
 
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_cohort_source as cohort, blunder_development_reuse as history
 from .blunder_cohort_job import file_sha
@@ -163,7 +163,7 @@ async def load_metadata(session, selected, reporter):
 
 
 async def reserve(source, reporter):
-    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.postgresql.engine import AsyncDBSession
     from .repository import RunCancelled
     await reporter.check()
     payload = {'format': RESERVATION, 'source': source, 'canonical': False, 'production_changed': False}

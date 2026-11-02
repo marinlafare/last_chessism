@@ -6,8 +6,8 @@ and claimed until their turn; no browser timers or live reselection between loop
 from datetime import datetime, timezone
 from uuid import uuid4
 from sqlalchemy import select, delete, func
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     CloudAnalysisJob, CloudAnalysisRun, CloudBatchSequence, CloudBatchCycle,
     CloudBatchUnit, CloudFenClaim, CloudPhaseTiming,
 )

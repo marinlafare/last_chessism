@@ -1,6 +1,6 @@
 """Atomic read-policy upgrade using saved results; never re-fit or run CUDA."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..fen_summary_recovery import install as install_recovery
 from . import schema, assessment, publication
 

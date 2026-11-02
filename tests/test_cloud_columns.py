@@ -10,9 +10,9 @@ import unittest
 from unittest.mock import AsyncMock, Mock
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.models import Base, CloudAnalysisJob, CloudAnalysisRun
-from chessism_api.database.cloud_codec import encode_document, decode_document, checksum
-from chessism_api.database import cloud_columns
+from chessism_api.database.postgresql.models import Base, CloudAnalysisJob, CloudAnalysisRun
+from chessism_api.database.postgresql.cloud_codec import encode_document, decode_document, checksum
+from chessism_api.database.postgresql import cloud_columns
 from chessism_api.operations.cloud_analysis.ingestion import ingest_ready
 
 

@@ -5,8 +5,8 @@ import logging
 import time
 
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudPhaseTiming
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudPhaseTiming
 
 logger = logging.getLogger(__name__)
 

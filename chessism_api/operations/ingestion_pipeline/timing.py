@@ -2,17 +2,20 @@
 
 from collections import defaultdict
 from datetime import datetime, timezone
+import logging
 from typing import Any
 from uuid import uuid4
 
 from sqlalchemy import desc, select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     IngestionPipelineRun,
     IngestionPipelineStageTiming,
 )
 from .stages import STAGE_ORDER
+
+LOG = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
@@ -207,6 +210,25 @@ async def fail_running_ingestion_stages(
         )
 
 
+def reconcile_step_snapshots(durable_steps, live_steps):
+    """A stale Redis heartbeat cannot reopen a durably completed step.
+
+    Newer live work still wins (for example a retry). Preserve live display units
+    when the durable table, which stores counts/timing, has no unit column.
+    """
+    combined = {row['step']: dict(row) for row in durable_steps}
+    for live in live_steps:
+        stored = combined.get(live['step'])
+        if not stored or live.get('updated_at', 0) > stored.get('updated_at', 0):
+            combined[live['step']] = dict(live)
+            continue
+        item = {**live, **stored, 'unit': live.get('unit', stored.get('unit', 'items'))}
+        elapsed = item.get('elapsed_seconds') or 0
+        item['rate'] = item.get('processed', 0) / elapsed if elapsed else None
+        combined[live['step']] = item
+    return combined
+
+
 async def get_latest_ingestion_timing() -> dict[str, Any] | None:
     """Return the latest run with repeated stage executions aggregated."""
     async with AsyncDBSession() as session:
@@ -249,11 +271,21 @@ async def get_latest_ingestion_timing() -> dict[str, Any] | None:
          "detail": row.detail}
         for row in stage_rows if row.stage in STEP_LABELS
     ])
-    combined = {row["step"]: row for row in completed_steps}
-    combined.update({row["step"]: row for row in live_steps})
+    combined = reconcile_step_snapshots(completed_steps, live_steps)
+
+    from chessism_api.database.neo4j.sync_ingestion import ingestion_progress
+    try:
+        graph_progress = await ingestion_progress(run)
+    except Exception:
+        # Failure to read a secondary projection must not hide ingestion status.
+        LOG.warning('Could not read Neo4j ingestion progress', exc_info=True)
+        graph_progress = {'step':'neo4j_ingestion','label':'Neo4j ingestion','group':'Graph',
+            'status':'unavailable','processed':0,'total':None,'unit':'updates','elapsed_seconds':0,
+            'detail':'Neo4j progress is temporarily unavailable; checking again.'}
 
     return {
         "run_id": run.run_id,
+        "graph_sync": graph_progress,
         "player_name": run.player_name,
         "trigger": run.trigger,
         "status": run.status,

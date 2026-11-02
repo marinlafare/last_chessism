@@ -6,7 +6,7 @@ from unittest.mock import patch
 import numpy as np
 from sqlalchemy import text
 from tests import check_canonical_blunders_postgres as base
-from chessism_api.database.stockfish_summary_schema import install_stockfish_summaries
+from chessism_api.database.postgresql.stockfish_summary_schema import install_stockfish_summaries
 from chessism_api.operations.cuda_summaries import schema, runs, score_runs, shared_source, shared_worker, score_compute, score_publication
 from chessism_api.operations.cuda_summaries import batch_budget, blunder_compute, device_inputs, input_snapshot, blunder_summary, snapshot_flow
 from chessism_api.operations.canonical_blunders import source, worker, compute, publication

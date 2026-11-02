@@ -1,0 +1,2 @@
+FROM chessism-api:neo4j-sync-20261030
+COPY chessism_api/ /app/chessism_api/

@@ -1,0 +1,3 @@
+FROM chessism-algorithms:position-frequencies-20261030
+RUN pip install --no-cache-dir neo4j==6.3.0
+COPY chessism_api/ /app/chessism_api/

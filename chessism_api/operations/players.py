@@ -2,10 +2,10 @@ import asyncio
 from typing import Optional, Dict, Any, List
 from sqlalchemy.exc import IntegrityError
 
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.models import Player, PlayerStats
-from chessism_api.database.ask_db import open_async_request
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.models import Player, PlayerStats
+from chessism_api.database.postgresql.ask_db import open_async_request
+from chessism_api.database.postgresql.ask_db import (
     get_main_character_time_control_counts,
     get_top_main_characters_by_time_control
 )

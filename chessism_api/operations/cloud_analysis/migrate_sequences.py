@@ -3,7 +3,7 @@ import asyncio
 import os
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.models import CloudBatchSequence, CloudBatchCycle
+from chessism_api.database.postgresql.models import CloudBatchSequence, CloudBatchCycle
 
 
 def upgrade(connection):

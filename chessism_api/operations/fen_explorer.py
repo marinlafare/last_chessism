@@ -5,8 +5,8 @@ import re
 import uuid
 import chess
 from sqlalchemy import text
-from chessism_api.database.compact_storage import compact_for
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.compact_storage import compact_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.common_positions import move_label, verified_example_line
 
 TTL = 900

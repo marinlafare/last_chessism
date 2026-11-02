@@ -5,7 +5,7 @@ The CLI owns backup-lane exclusion and invalidation before the first commit.
 """
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from . import aggregates, rating_delta, legacy_policy as policy
 from .artifacts import digest
 from .plan import require_idle

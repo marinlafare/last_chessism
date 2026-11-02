@@ -3,8 +3,8 @@ import argparse
 import asyncio
 import json
 import os
-from chessism_api.database.runtime import bind_runtime_engine, configured_storage
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from . import schema, runs
 
 

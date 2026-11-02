@@ -4,8 +4,8 @@ from typing import Any
 import chess
 from sqlalchemy import delete, desc, func, insert, select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import AnalysisTime
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import AnalysisTime
 
 MAX_ANALYSIS_TIME_SAMPLES = 10
 

@@ -13,8 +13,8 @@ from uuid import uuid4
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 from sqlalchemy import select, text, update
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen, FenContinuation
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.operations.fen_backup import archive, catalog, database, jobs
 from chessism_api.operations.fen_backup.progress import Progress
 from chessism_api.operations.backup_files import atomic_write_json

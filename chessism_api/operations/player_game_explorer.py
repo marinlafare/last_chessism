@@ -10,7 +10,7 @@ from typing import Any
 import chess
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.player_game_scores import (
     lichess_move_accuracy,
     lichess_win_percent,

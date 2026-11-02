@@ -5,8 +5,8 @@ from types import SimpleNamespace
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from chessism_api.database import runtime
-from chessism_api.database.relational_storage import create_relational_engine
+from chessism_api.database.postgresql import runtime
+from chessism_api.database.postgresql.relational_storage import create_relational_engine
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -30,7 +30,7 @@ class ProfileTests(unittest.TestCase):
                         if lines[index].strip().startswith('-') else
                         '      CHESSISM_DATABASE_PROFILE: ${CHESSISM_DATABASE_PROFILE:-legacy}')
             self.assertEqual(lines[index+1],expected)
-        self.assertEqual(len(consumers),13)
+        self.assertEqual(len(consumers),16)
 
     def test_services_use_shared_initializers(self):
         for path, initializer in (
@@ -51,7 +51,7 @@ class ProfileTests(unittest.TestCase):
 class RuntimeStartupTests(unittest.IsolatedAsyncioTestCase):
     async def test_runtime_initialization_passes_same_explicit_layout(self):
         with patch.dict(os.environ,{runtime.PROFILE_ENV:'relational_v2'}), \
-             patch('chessism_api.database.engine.init_db',new_callable=AsyncMock) as init:
+             patch('chessism_api.database.postgresql.engine.init_db',new_callable=AsyncMock) as init:
             await runtime.init_runtime_db('unused')
             init.assert_awaited_once_with('unused', relational_storage=runtime.CANONICAL)
 
@@ -63,7 +63,7 @@ class RuntimeStartupTests(unittest.IsolatedAsyncioTestCase):
         engine.connect.return_value.__aexit__=AsyncMock(return_value=None)
         options={'ssl':False,'server_settings':{'statement_timeout':'1000'}}
         with patch('sqlalchemy.ext.asyncio.create_async_engine',return_value=engine) as create, \
-             patch('chessism_api.database.relational_storage.require_storage_contract',new_callable=AsyncMock):
+             patch('chessism_api.database.postgresql.relational_storage.require_storage_contract',new_callable=AsyncMock):
             self.assertIs(await create_relational_engine('unused',runtime.CANONICAL,connect_args=options,pool_pre_ping=True),engine)
             args=create.call_args.kwargs
             self.assertFalse(args['connect_args']['ssl'])

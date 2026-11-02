@@ -27,7 +27,7 @@ async def run(args):
     require_migration(json.loads((args.migration/'status.json').read_text()))
     if args.output.exists():
         raise ValueError('Choose a fresh report directory; previous results must remain intact')
-    from chessism_api.database.runtime import bind_runtime_engine,configured_storage,COMPACT
+    from chessism_api.database.postgresql.runtime import bind_runtime_engine,configured_storage,COMPACT
     from chessism_api.operations import database_backups as backup
     from chessism_api.operations.database_backup_job import run_database_backup_job
     from chessism_api.operations.database_restore_tests import run_database_restore_test_job,latest_backup_for_restore_test

@@ -5,8 +5,8 @@ import re
 
 from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudCleanupProgress
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudCleanupProgress
 
 
 async def record(job_id, plan_sha256, phase, total, removed):

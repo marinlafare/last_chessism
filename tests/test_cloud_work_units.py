@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, Mock, patch
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 from cloud_job import batch_spot, work_units
 from cleaning_job.cleanup import prefixes
-from chessism_api.database.cloud_codec import encode_document, decode_document
+from chessism_api.database.postgresql.cloud_codec import encode_document, decode_document
 from chessism_api.operations.cloud_analysis import controller
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet
 from chessism_api.operations.cloud_analysis import work_units_results as results

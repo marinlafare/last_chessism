@@ -7,8 +7,8 @@ from sqlalchemy import text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.relational_storage import RelationalStorage,require_storage_contract
-from chessism_api.database.home_summary_schema import install_relational_home_triggers
+from chessism_api.database.postgresql.relational_storage import RelationalStorage,require_storage_contract
+from chessism_api.database.postgresql.home_summary_schema import install_relational_home_triggers
 from scripts.db_refactor_candidate import C,A,V,guard,qi
 from scripts.db_refactor_cutover import TABLE_MAP,NEW_TABLES,inspect_cutover
 from scripts.db_refactor_workload import digest

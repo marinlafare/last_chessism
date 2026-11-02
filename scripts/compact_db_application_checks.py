@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 LAYOUT=RelationalStorage('public','chessism_archive','chessism_reads','relational_v3')
 
@@ -31,9 +31,9 @@ async def application_checks(conn, socket, database, passed):
     if not database.startswith('compact_acceptance_'):
         raise RuntimeError('Application probes require the owned empty schema clone')
     from scripts.db_refactor_write_checks import fixture_bundle,PLAYER,OTHER,LINKS
-    from chessism_api.database import ask_db,db_interface
-    from chessism_api.database.db_interface import DBInterface
-    from chessism_api.database.models import Fen,GameFenAssociation,PlayerStats,CloudAnalysisJob,CloudAnalysisRun,DatabaseSummary
+    from chessism_api.database.postgresql import ask_db,db_interface
+    from chessism_api.database.postgresql.db_interface import DBInterface
+    from chessism_api.database.postgresql.models import Fen,GameFenAssociation,PlayerStats,CloudAnalysisJob,CloudAnalysisRun,DatabaseSummary
     from chessism_api.operations.ingestion_pipeline import game_repository,fen_repository
     from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync,aggregate_fen_data
     from chessism_api.operations import home_summary,player_game_scores
@@ -43,7 +43,7 @@ async def application_checks(conn, socket, database, passed):
     from chessism_api.operations.fen_backup import database as fen_backup
     from chessism_api.operations.fen_backup.archive import validate_record
     from chessism_api.operations.tablebase import _save_tablebase_batch
-    from chessism_api.database.relational_storage import describe_contract,create_relational_engine
+    from chessism_api.database.postgresql.relational_storage import describe_contract,create_relational_engine
     engine,factory=factory_for(socket,database)
     try:
         async with engine.connect() as connection:

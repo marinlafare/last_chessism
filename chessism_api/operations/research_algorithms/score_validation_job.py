@@ -11,7 +11,7 @@ import time
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..mate_distance import mate_distance_sql
 from ..matrix_constructor.artifact_files import file_operation
 from ..matrix_constructor.defaults import default_formula

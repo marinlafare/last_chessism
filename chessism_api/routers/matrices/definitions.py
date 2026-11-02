@@ -8,8 +8,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.auth import get_current_account
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Account, MatrixArtifact, MatrixDefinition
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Account, MatrixArtifact, MatrixDefinition
 from chessism_api.operations.matrix_constructor.catalog import matrix_catalog
 from chessism_api.operations.matrix_constructor.definitions import definition_config, definition_payload, estimate_definition
 from chessism_api.operations.matrix_constructor.defaults import default_formula, default_formulas

@@ -9,7 +9,7 @@ import uuid
 from fastapi import FastAPI, HTTPException
 import httpx
 
-from chessism_api.database.models import MatrixDefinition
+from chessism_api.database.postgresql.models import MatrixDefinition
 from chessism_api.operations.matrix_constructor import definitions, live_preview
 from chessism_api.operations.matrix_constructor.definition_backups import definition_fingerprint, validate_definition_backup
 from chessism_api.routers.matrices import definitions as routes, legacy_snapshots

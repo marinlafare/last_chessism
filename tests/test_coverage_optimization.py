@@ -2,8 +2,8 @@
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from chessism_api.database import ask_db
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql import ask_db
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_game_scores
 from chessism_api.operations.relational_coverage import coverage_source_sql, refresh_coverage
 

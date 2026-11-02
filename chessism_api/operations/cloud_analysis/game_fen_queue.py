@@ -12,10 +12,10 @@ import json
 from sqlalchemy import delete, text
 from sqlalchemy.dialects.postgresql import insert
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudGameFenQueue
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.fen_claims import unclaimed_locked_fens
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudGameFenQueue
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
 
 MAX_PAGE_SIZE = 50_000
 

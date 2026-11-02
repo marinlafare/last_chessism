@@ -19,8 +19,8 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from cloud_job.run_host import host_database_url, gcloud_executable
 from cloud_job.sequencing import MODE
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudBatchCycle, CloudBatchSequence, CloudSequenceControl
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudBatchCycle, CloudBatchSequence, CloudSequenceControl
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from chessism_api.operations.cloud_analysis.admission import require_available
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest

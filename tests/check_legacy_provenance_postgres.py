@@ -37,7 +37,7 @@ async def check(factory, connection, layout):
         INSERT INTO database_summary VALUES(1,4,1,4,4,now());
         CREATE TABLE scored_rating_summary(id int,groups_payload jsonb,ratings_payload jsonb,refreshed_at timestamptz);
         ''')
-    from chessism_api.database.models import ScoredPositionSummary
+    from chessism_api.database.postgresql.models import ScoredPositionSummary
     from sqlalchemy.schema import CreateTable
     from sqlalchemy.dialects.postgresql import dialect
     await connection.execute(str(CreateTable(ScoredPositionSummary.__table__).compile(dialect=dialect())))

@@ -19,29 +19,6 @@ import {
   fetchGameJobStatus,
 } from './download-new-games/downloadNewGamesApi'
 
-function renderDownloadProgress(status) {
-  const progress = status?.progress
-  if (!progress || isTerminalJobStatus(status)) return null
-
-  const total = Math.max(1, Number(progress.total || 1))
-  const processed = Math.min(total, Number(progress.processed || 0))
-  const percent = Math.min(100, Math.round((processed / total) * 100))
-  const phase = progress.phase || status.status || 'working'
-
-  return (
-    <div className="job-progress" aria-label="Download progress">
-      <div className="job-progress-head">
-        <strong {...pageStyleTarget('value')}>{phase}</strong>
-        <span>{percent}%</span>
-      </div>
-      <div className="job-progress-track">
-        <div className="job-progress-fill" style={{ width: `${percent}%` }} />
-      </div>
-      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || `${processed} of ${total}`}</p>
-    </div>
-  )
-}
-
 function DownloadNewGames() {
   const [downloadPlayer, setDownloadPlayer] = useState('')
   const [downloadResult, setDownloadResult] = useState('')
@@ -197,7 +174,6 @@ function DownloadNewGames() {
               <button {...pageStyleTarget('button')} className="btn btn-primary" type="button" onClick={handleDownload} disabled={actionBusy}>
                 {downloadLoading ? 'Queueing...' : downloadJobActive ? 'Downloading...' : actionBusy ? 'Busy...' : 'Download Games'}
               </button>
-              {renderDownloadProgress(downloadJobStatus)}
               <p {...pageStyleTarget('text')} className="result-line">{downloadResult || '-'}</p>
             </article>
           </section>

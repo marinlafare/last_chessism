@@ -19,9 +19,9 @@ import time
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from chessism_api.operations.player_score_distribution import MODES, games_sql, positions_sql, prepare
 from chessism_api.operations.player_score_histogram import BATCH_GAMES, BATCH_SELECTION
 from chessism_api.operations.player_stockfish_summary import read_saved
@@ -300,7 +300,7 @@ async def run(emit):
 
 async def main(output):
     from constants import CONN_STRING
-    from chessism_api.database.runtime import bind_runtime_engine
+    from chessism_api.database.postgresql.runtime import bind_runtime_engine
     # Exclusive creation: never overwrite an earlier report.
     output.parent.mkdir(parents=True, exist_ok=True)
     with output.open('x') as evidence:

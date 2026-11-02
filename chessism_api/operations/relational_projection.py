@@ -1,6 +1,6 @@
 """Rebuild compact ownership/opening projections without legacy wide writes."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for, INGESTION_COMMIT_LOCK
+from chessism_api.database.postgresql.relational_storage import storage_for, INGESTION_COMMIT_LOCK
 
 
 async def sync_projection(session, links):

@@ -7,8 +7,8 @@ import uuid
 from fastapi import APIRouter, HTTPException, Query
 from sqlalchemy import select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import MatrixArtifact
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import MatrixArtifact
 from chessism_api.operations.matrix_constructor.artifact_files import file_operation
 from chessism_api.operations.matrix_constructor.storage import (
     ARTIFACT_ROOT, MatrixCatalogBusy, display_manifest_path, matrix_catalog_lock,

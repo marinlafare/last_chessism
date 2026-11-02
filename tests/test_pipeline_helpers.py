@@ -18,7 +18,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stockfish-service"
 
 import chess
 import operations.engine as stockfish_engine
-from chessism_api.database import ask_db, models
+from chessism_api.database.postgresql import ask_db, models
 from chessism_api.operations import (
     analysis,
     analysis_backups,
@@ -36,7 +36,7 @@ from chessism_api.operations import (
 from chessism_api.operations.ingestion_pipeline import fen_orchestrator as fens
 from chessism_api.operations.ingestion_pipeline import jobs as games
 from chessism_api.operations.player_timezone import resolve_player_timezone
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     _player_fens_for_analysis_stmt,
     fair_sample_player_games_by_month,
     get_player_fen_score_counts,
@@ -2207,7 +2207,7 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         session_context.__aexit__ = AsyncMock(return_value=False)
 
         with patch(
-            "chessism_api.database.ask_db.AsyncDBSession",
+            "chessism_api.database.postgresql.ask_db.AsyncDBSession",
             return_value=session_context,
         ):
             coverage = await get_player_fen_score_counts("hikaru")
@@ -2230,7 +2230,7 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         expected = [{"fen": "8/8/8/8/8/8/8/K6k w - - 0 1", "n_games": 10, "score": None}]
 
         with patch(
-            "chessism_api.database.ask_db.open_async_request",
+            "chessism_api.database.postgresql.ask_db.open_async_request",
             new=AsyncMock(return_value=expected),
         ) as request:
             result = await get_top_fens_unscored(6, offset=5)

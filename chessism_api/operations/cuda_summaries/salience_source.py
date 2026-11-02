@@ -1,7 +1,7 @@
 """Bounded binary extraction of early positions, without scores/FEN text."""
 import numpy as np
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for, driver_connection
+from chessism_api.database.postgresql.relational_storage import storage_for, driver_connection
 from ..canonical_blunders.binary_source import HEADER
 from ..matrix_constructor.artifact_files import file_operation
 from .salience_store import SCOPE

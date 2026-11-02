@@ -18,7 +18,7 @@ import uuid
 from sqlalchemy import text
 
 STORAGE_MODE = "compressed_snapshot_v1"
-FORMAT_VERSION = 3
+FORMAT_VERSION = 4
 SAFE_ID = re.compile(r"^snapshot-[0-9]{8}T[0-9]{6}-[a-f0-9]{12}$")
 TIMEOUT = 6 * 60 * 60
 
@@ -93,9 +93,9 @@ async def snapshot_metadata(session, publish):
     from .matrix_constructor.definition_backups import definition_backup_manifest
     from .research_algorithms.backups import algorithm_backup_manifest
     from .matrix_backups import backup_completed_matrices
-    from chessism_api.database.fen_identity import SHAPE_SQL, schema_version
-    from chessism_api.database.relational_storage import storage_for, describe_contract
-    from chessism_api.database.fen_reference_identity import (
+    from chessism_api.database.postgresql.fen_identity import SHAPE_SQL, schema_version
+    from chessism_api.database.postgresql.relational_storage import storage_for, describe_contract
+    from chessism_api.database.postgresql.fen_reference_identity import (
         SHAPE_SQL as REF_SQL, schema_version as reference_version,
     )
     layout = storage_for(session)
@@ -178,6 +178,17 @@ async def run_snapshot_backup(ctx, session):
         metadata = await snapshot_metadata(session, publish)
         baseline_bytes += metadata["matrices"]["bytes_added"]
 
+        from chessism_api.database.neo4j.backup import request as graph_request
+        async def graph_progress(detail):
+            await publish(phase="backing_up_neo4j", detail=detail)
+        metadata["neo4j"] = await graph_request(
+            "dump", backup_id, progress=graph_progress, baseline_bytes=baseline_bytes,
+        )
+        if ctx.get('graph_backup_release'):
+            await ctx['graph_backup_release']()
+        graph_bytes = sum(item["bytes"] for item in metadata["neo4j"]["archives"].values())
+        baseline_bytes += graph_bytes
+
         def capacity():
             size = partial.stat().st_size if partial.exists() else 0
             if shutil.disk_usage(b.BACKUP_VOLUME_ROOT).free <= b.FREE_FLOOR_BYTES + b.STOP_MARGIN_BYTES:
@@ -206,6 +217,8 @@ async def run_snapshot_backup(ctx, session):
                "backup_format_version": FORMAT_VERSION, "database_bytes": metadata["database_bytes"],
                "database_delta_bytes": metadata["database_bytes"], "repository_bytes": size,
                "repository_delta_bytes": size, "restore_tested": False, "archive_sha256": digest}
+        row.update(neo4j=metadata["neo4j"], neo4j_bytes=graph_bytes,
+                   total_archive_bytes=size + graph_bytes, databases=["postgresql", "neo4j"])
         manifest = {**metadata, **row, "format": "chessism-pg-dump-custom", "app_id": b.APP_ID,
                     "trigger": "manual", "destination_uuid": b.EXPECTED_VOLUME_UUID,
                     "archive_file": target.name, "compression": "gzip-6",
@@ -218,14 +231,20 @@ async def run_snapshot_backup(ctx, session):
                   "application_bytes": usage, "matrices": metadata["matrices"],
                   "matrix_definitions": metadata["matrix_definitions"], "removed_backup_ids": []}
         status.update(status="success", completed_at=completed, total_bytes=usage,
-                      bytes_added=size, artifact_count=1 + metadata["matrices"]["count"],
+                      bytes_added=size + graph_bytes, artifact_count=3 + metadata["matrices"]["count"],
                       manifest_sha256=result["manifest_sha256"], last_verified_at=completed)
-        await publish(phase="complete", detail="Compressed snapshot saved. Test backup before retiring the previous recovery point.")
+        await publish(phase="complete", detail="PostgreSQL and Neo4j snapshots saved. Test backup validates both before retiring the previous recovery point.")
         await b._write_progress(ctx.get("redis"), ctx["job_id"], phase="complete", detail=status["detail"], result=result)
         return result
     except BaseException as error:
         # The only disposable file here is THIS operation's unpublished output.
         partial.unlink(missing_ok=True)
+        # Publication is the boundary: never remove a cataloged recovery point.
+        cataloged = b._read_json(b.BACKUP_CATALOG_PATH, {}).get("backups", [])
+        if not any(row.get("backup_id") == backup_id for row in cataloged):
+            from chessism_api.database.neo4j.backup import discard_unpublished
+            with suppress(OSError):
+                discard_unpublished(b.DATABASE_BACKUP_ROOT, backup_id)
         if b.storage_snapshot().get("marker_matches"):
             status.update(status="failed", completed_at=b._iso_now(), error_code=type(error).__name__, error_message=str(error))
             await publish(phase="failed", detail=str(error))

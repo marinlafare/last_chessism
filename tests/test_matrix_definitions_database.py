@@ -8,9 +8,9 @@ import uuid
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.matrix_definitions import import_snapshot_definitions
-from chessism_api.database.models import MatrixArtifact, MatrixDefinition
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.matrix_definitions import import_snapshot_definitions
+from chessism_api.database.postgresql.models import MatrixArtifact, MatrixDefinition
 from chessism_api.operations.matrix_constructor.definition_backups import (
     definition_backup_manifest, validate_definition_backup,
 )

@@ -4,7 +4,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 
 PLAYER_ANALYTICS_CACHE_VERSION = "v1"

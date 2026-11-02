@@ -6,8 +6,8 @@ from uuid import uuid4
 from sqlalchemy import select, text
 import test_cloud_analysis_database as existing
 import test_cloud_game_drafts_database as fixtures
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudGameDraftEntry, CloudGameDraftGame
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudGameDraftEntry, CloudGameDraftGame
 from chessism_api.operations.cloud_analysis import draft_cache, game_drafts
 
 

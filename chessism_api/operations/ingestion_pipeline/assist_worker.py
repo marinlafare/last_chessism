@@ -14,8 +14,8 @@ from uuid import UUID
 from arq.jobs import Job
 from arq.worker import Worker, func
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.redis_client import redis_settings
 from .fen_orchestrator import run_fen_pipeline
 from ..tablebase import run_tablebase_analysis_job

@@ -10,7 +10,7 @@ import json
 import time
 
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .repository import RunCancelled
 
 FORMAT = 'chessism_blunder_shadow_checkpoint_v1'

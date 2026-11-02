@@ -2,7 +2,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
-from chessism_api.database.relational_storage import RelationalStorage,SESSION_KEY,storage_for,identifier
+from chessism_api.database.postgresql.relational_storage import RelationalStorage,SESSION_KEY,storage_for,identifier
 from chessism_api.operations.ingestion_pipeline.relational_repository import standard_game,short_eco,START
 from chessism_api.operations.matrix_constructor.config import normalize_matrix_config
 from chessism_api.operations.matrix_constructor.queries import matrix_sql

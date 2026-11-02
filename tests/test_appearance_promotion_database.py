@@ -8,8 +8,8 @@ from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, Account, AppearancePreset, AppearanceSetting, AppearanceOverride
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Base, Account, AppearancePreset, AppearanceSetting, AppearanceOverride
 from chessism_api.operations.appearance import read_appearance, change_appearance, AppearanceConflict
 from chessism_api.operations.appearance_promotion import promote_default
 

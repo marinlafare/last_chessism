@@ -5,6 +5,7 @@ import SideRail from '../components/layout/SideRail'
 import StatusPanel from './system-status/StatusPanel'
 import CloudStatusPanel from './system-status/CloudStatusPanel'
 import CloudBillingPanel from './system-status/CloudBillingPanel'
+import GraphSyncPanel from './system-status/GraphSyncPanel'
 import { fetchStatus, fetchCloudStatus } from './system-status/systemStatusApi'
 import { usePoll } from '../hooks/usePoll'
 
@@ -24,6 +25,7 @@ export default function SystemStatus({ initialTimesOpen = false }) {
           <StatusPanel {...status} />
           <CloudStatusPanel {...cloudStatus} />
         </div>
+        <GraphSyncPanel />
         <section {...pageStyleTarget('times.panel')} className="system-times" id="analysis-times">
           <h2><button {...pageStyleTarget('times.toggle')} type="button" className="system-times-toggle"
             id="system-times-toggle" aria-expanded={timesOpen} aria-controls="system-times-content"

@@ -23,6 +23,7 @@ const phases = {
 }
 
 export function cloudStepTiming(job, step, runId) {
+  if (step.id === 'neo4j') return { started: job.graph_sync?.started_at, finished: job.graph_sync?.finished_at }
   if (step.state === 'pending') return {}
   const names = phases[step.id] || [step.id.replace('stop-', 'cancel_')]
   const rows = (job.phase_timings || []).filter(row => names.includes(row.phase)

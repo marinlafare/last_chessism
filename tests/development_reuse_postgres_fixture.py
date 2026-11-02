@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 async def verify(connection, engine, historic, metadata):
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage
     from chessism_api.operations.research_algorithms import blunder_development_reuse as reuse
     from chessism_api.operations.research_algorithms import blunder_refinement, blunder_v2_source as source
     from chessism_api.operations.research_algorithms.blunder_v2_job import configuration

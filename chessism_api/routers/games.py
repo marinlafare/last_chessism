@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.ingestion_pipeline.jobs import read_game
 from chessism_api.operations.player_game_explorer import get_game_score
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     get_player_performance_summary,
     get_player_games_page,
     get_player_game_summary,

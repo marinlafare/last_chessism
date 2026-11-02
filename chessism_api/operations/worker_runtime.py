@@ -1,6 +1,6 @@
 """No-DDL database lifecycle for independently deployed queue workers."""
 import os
-from chessism_api.database.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 
 
 async def startup(ctx):

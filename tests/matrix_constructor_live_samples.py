@@ -16,8 +16,8 @@ import constants
 from arq import create_pool
 from sqlalchemy import select
 
-from chessism_api.database.engine import AsyncDBSession, init_db
-from chessism_api.database.models import MatrixArtifact
+from chessism_api.database.postgresql.engine import AsyncDBSession, init_db
+from chessism_api.database.postgresql.models import MatrixArtifact
 from chessism_api.operations.matrix_constructor.jobs import run_matrix_construction_job
 from chessism_api.operations.matrix_constructor.storage import ARTIFACT_ROOT, matrix_catalog_lock
 from chessism_api.operations.matrix_constructor.config import normalize_matrix_config

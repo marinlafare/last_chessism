@@ -1,5 +1,5 @@
 """Indexed ownership/date selection before saved engine-summary lookups."""
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 
 
 def normalized_candidates(session, *, date_window, selection_sql, minimum_moves_filter):

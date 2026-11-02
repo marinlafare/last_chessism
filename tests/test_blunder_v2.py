@@ -10,7 +10,7 @@ import numpy as np
 from fastapi import Depends, FastAPI
 
 from chessism_api.auth import get_current_account, require_superuser
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 from chessism_api.operations.research_algorithms import blunder_v2_model as m, blunder_v2_source as s
 from chessism_api.operations.research_algorithms import blunder_v2_validation as v, blunder_v2_job as job
 from chessism_api.operations.research_algorithms import blunder_v2_calibration as calibration

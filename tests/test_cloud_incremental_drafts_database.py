@@ -6,8 +6,8 @@ from fastapi import HTTPException
 from sqlalchemy import func, select
 import test_cloud_analysis_database as existing
 import test_cloud_game_drafts_database as drafts_tests
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     CloudGameDraft, CloudGameDraftCache, CloudGameDraftFen, CloudGameDraftEntryFen,
     CloudGameDraftEntry, Fen, CloudFenClaim, CloudAnalysisRun, GameFenAssociation,
 )

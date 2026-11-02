@@ -7,8 +7,8 @@ import time
 
 import numpy as np
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import AlgorithmRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import AlgorithmRun
 from ..matrix_constructor.artifact_files import file_operation
 from ..matrix_constructor.storage import matrix_catalog_lock, MatrixCatalogBusy
 from .config import BATCH_ROWS, SCATTER_LIMIT, VERSION, normalize_algorithm

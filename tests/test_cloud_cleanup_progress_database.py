@@ -3,8 +3,8 @@ import asyncio
 import unittest
 from sqlalchemy import select
 import test_cloud_analysis_database as existing
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudCleanupProgress
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudCleanupProgress
 from chessism_api.operations.cloud_analysis.cleanup_progress import observe, record
 from chessism_api.routers.cloud_analysis import cloud_jobs
 

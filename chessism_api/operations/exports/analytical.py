@@ -77,7 +77,7 @@ async def construct(job, spec, document):
     from .jobs import checkpoint, disk_work
     from .auth import authorize_spec
     from .models import ExportClient
-    from chessism_api.database.engine import AsyncDBSession
+    from chessism_api.database.postgresql.engine import AsyncDBSession
     async with AsyncDBSession() as session:
         authorize_spec(await session.get(ExportClient,job.client_id),spec)
     directory=files.job_dir(job.id); temporary=directory/'data.parquet.building'

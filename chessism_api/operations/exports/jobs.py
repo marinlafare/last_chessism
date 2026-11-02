@@ -10,8 +10,8 @@ from arq import cron
 from arq.worker import func
 from sqlalchemy import select, text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.redis_client import redis_settings
 from . import config, files
 from .catalog import SOURCES, tables_for

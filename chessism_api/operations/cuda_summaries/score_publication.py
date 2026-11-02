@@ -1,8 +1,8 @@
 """Atomic per-player publication after all shared batches have been staged."""
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from ..player_stockfish_summary import empty_modes
 from ..matrix_constructor.artifact_files import file_operation
 from . import score_runs as scope, score_compute
@@ -24,6 +24,9 @@ async def finalize(factory, run, xp):
                 return {'status':'building','remaining':1}
             from . import metadata_worker
             if await metadata_worker.tick(factory,run,xp):
+                return {'status':'building','remaining':1}
+            from . import ply_map_worker
+            if await ply_map_worker.tick(factory,run,xp):
                 return {'status':'building','remaining':1}
             async with session.begin():
                 await scope.complete(session, run)

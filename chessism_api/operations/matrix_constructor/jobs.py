@@ -17,8 +17,8 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import MatrixArtifact
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import MatrixArtifact
 
 from .arrays import TypedArrayWriter, validate_typed_arrays
 from .catalog import ROW_TYPES

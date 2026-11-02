@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock
 from test_common_positions import E4, NOW, result
 from chessism_api.operations import common_positions as positions
 from chessism_api.operations import common_position_descriptions as cache
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 TOP = [{'fen': E4, 'fen_id': 123, 'appearances': 42}]
 LAYOUT = RelationalStorage('public', 'chessism_archive', 'chessism_reads', 'relational_v3')

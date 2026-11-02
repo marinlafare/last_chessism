@@ -5,7 +5,7 @@ import unittest
 
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.matrix_constructor.storage import MatrixCatalogBusy, matrix_catalog_lock
 
 

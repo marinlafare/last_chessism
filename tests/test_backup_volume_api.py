@@ -11,7 +11,7 @@ for key, value in {'AUTH_COOKIE_NAME': 'test_session', 'AUTH_GATE_COOKIE_NAME': 
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from chessism_api.auth import get_current_account, require_superuser
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 from chessism_api.routers import backups
 
 

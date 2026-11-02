@@ -6,10 +6,10 @@ from sqlalchemy import delete, insert, select, text
 
 from chessism_api.evaluations import integer, validate_batch
 
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.models import Fen, FenContinuation
-from chessism_api.database.fen_references import resolve_fen_ids
-from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.models import Fen, FenContinuation
+from chessism_api.database.postgresql.fen_references import resolve_fen_ids
+from chessism_api.database.postgresql.compact_storage import compact_for, compact_table, integer_result
 
 
 async def replace_fen_continuations(session, fens, continuations, *, fen_ids=None):

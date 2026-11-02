@@ -5,8 +5,8 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from sqlalchemy import select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Month
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Month
 from chessism_api.operations import players as player_operations
 
 

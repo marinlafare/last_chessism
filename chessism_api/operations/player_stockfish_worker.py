@@ -4,9 +4,9 @@ import asyncio
 import logging
 
 from sqlalchemy import text
-from chessism_api.database.runtime import bind_runtime_engine, configured_storage
-from chessism_api.database.stockfish_summary_schema import install_stockfish_summaries
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.stockfish_summary_schema import install_stockfish_summaries
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .player_stockfish_summary import refresh_pending
 
 

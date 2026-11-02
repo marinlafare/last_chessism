@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import bindparam, text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 MAX_TABLES = 2000
 MAX_COLUMNS = 50000

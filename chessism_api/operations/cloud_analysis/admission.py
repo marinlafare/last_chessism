@@ -2,7 +2,7 @@
 from fastapi import HTTPException
 from sqlalchemy import select, text
 
-from chessism_api.database.models import CloudAnalysisJob
+from chessism_api.database.postgresql.models import CloudAnalysisJob
 
 OPEN_STATES = ("queued", "running", "paused", "waiting", "failed")
 ADMISSION_LOCK = 731946220

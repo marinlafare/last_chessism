@@ -15,8 +15,8 @@ import chess.syzygy
 from arq.connections import create_pool, RedisSettings
 from sqlalchemy import text
 
-from chessism_api.database.runtime import bind_runtime_engine
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.backup_files import atomic_write_json
 from chessism_api.operations.backup_coordination import ensure_backup_reservation, release_backup
 from chessism_api.operations.fen_backup.catalog import invalidate_after_restore

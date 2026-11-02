@@ -3,7 +3,7 @@ import asyncio
 import json
 import time
 from sqlalchemy import text
-from chessism_api.database.relational_storage import driver_connection
+from chessism_api.database.postgresql.relational_storage import driver_connection
 from ..canonical_blunders import source
 from ..matrix_constructor.artifact_files import file_operation
 from . import score_runs, shared_source, input_snapshot, runs

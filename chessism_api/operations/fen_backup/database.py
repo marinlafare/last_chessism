@@ -2,10 +2,10 @@
 from datetime import datetime
 
 from sqlalchemy import bindparam, select, text, update
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen, FenContinuation
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.operations.fen_results import resolve_fen_ids, replace_fen_continuations
-from chessism_api.database.compact_storage import compact_for, compact_table, integer_result
+from chessism_api.database.postgresql.compact_storage import compact_for, compact_table, integer_result
 
 FIELDS = ('fen', 'score', 'next_moves', 'wdl_win', 'wdl_draw', 'wdl_loss',
           'piece_count', 'analysis_source', 'tablebase_wdl', 'tablebase_dtz', 'analyzed_at')

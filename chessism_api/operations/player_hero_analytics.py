@@ -11,7 +11,7 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.player_game_scores import (
     lichess_winning_chances,
     refresh_game_player_engine_summaries,
@@ -169,7 +169,7 @@ async def get_player_behavioural_activity(
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
-        from chessism_api.database.relational_reads import player_rows_sql
+        from chessism_api.database.postgresql.relational_reads import player_rows_sql
         from .player_analytics_summary import read_snapshot
         mode = scope.mode
         saved = await read_snapshot(session, scope.player, 'activity_daily' if date_from or date_to else 'activity')
@@ -254,7 +254,7 @@ async def get_player_behavioural_ratings(
                      'played_at_utc': row['played_at'], 'played_at_local': row['played_at_local']}
                     for row in rows if row['mode'] == selected]}
                     for selected in ([mode] if mode != 'all' else CHART_MODES)]}
-        from chessism_api.database.relational_reads import player_ratings_sql
+        from chessism_api.database.postgresql.relational_reads import player_ratings_sql
         result = await session.execute(
             player_ratings_sql(session, query, local_timestamp_sql=player_local_timestamp_sql('g')),
             scope.params(),

@@ -76,6 +76,11 @@ window.fetch = async (input, options = {}) => {
   state.requests.push({ pathname, method })
   if (method !== 'GET') throw new Error('No writes allowed in this test')
   const reply = value => new Response(JSON.stringify(value), { headers: { 'Content-Type': 'application/json' } })
+  if (pathname === '/graph-explorer/players') return reply({rows:[]})
+  if (pathname === '/graph-explorer/ply-map') return reply({status:{pending:true},snapshot:null,nodes:[],connections:[]})
+  if (pathname === '/graph-explorer/map') return reply({nodes:[],edges:[],slots:['all','a','b','both'],revision:'empty',players:['lafareto','hikaru'],coverage:{games:[0,0,0,0],sample_games:0},limits:{}})
+  if (pathname === '/graph-explorer/position') return reply({detail:'No imported positions'},404)
+  if (pathname === '/graph-explorer/positions') return reply({rows:[],coverage:{games:0},has_more:false,offset:0,query_ms:0})
   if (pathname === '/jobs/active') {
     if (state.failPipeline) return new Response(JSON.stringify({detail:'Pipeline status unavailable'}), {status:503})
     return reply({jobs: state.pipelineActive ? [state.pipelineJob()] : []})

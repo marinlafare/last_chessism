@@ -12,7 +12,7 @@ import pyarrow.parquet as pq
 from sqlalchemy import text
 
 from tests.test_exports_database import ExportDatabaseFixture, SCHEMA
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.exports import analytical_admin, analytical_reader, jobs, service
 from chessism_api.operations.exports.catalog import tables_for
 from chessism_api.operations.exports.analytical_spec import SQLExportSpec, MoveMatrixSpec, StoredLegacyMoveMatrixSpec

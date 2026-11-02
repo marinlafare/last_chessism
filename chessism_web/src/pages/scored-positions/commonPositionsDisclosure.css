@@ -1,0 +1,24 @@
+.scored-positions-panel.common-positions-panel { padding: 0; min-width: 0; }
+.common-positions-heading { margin: 0; }
+.common-positions-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-sizing: border-box;
+  width: 100%;
+  padding: 18px;
+  border: 0 solid var(--border-soft);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+.common-positions-toggle:hover { background: var(--surface-2); }
+.common-positions-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+.common-positions-toggle > span { flex: 1; min-width: 0; text-align: inherit; }
+.common-positions-toggle svg { flex: 0 0 20px; width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; }
+.common-positions-toggle[aria-expanded="true"] svg { transform: rotate(180deg); }
+.common-positions-content:not([hidden]) { min-height: 140px; border-radius: var(--radius); }

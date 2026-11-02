@@ -15,8 +15,8 @@ from uuid import uuid4
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen, FenContinuation
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.operations.fen_backup import jobs, archive, catalog
 
 

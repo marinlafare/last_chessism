@@ -3,10 +3,10 @@ import httpx
 from sqlalchemy import select, text
 from fastapi import HTTPException
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudBatchUnit
-from chessism_api.database.cloud_columns import TABLES
-from chessism_api.database.cloud_codec import read_projections
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudBatchUnit
+from chessism_api.database.postgresql.cloud_columns import TABLES
+from chessism_api.database.postgresql.cloud_codec import read_projections
 
 AFTER_UPLOAD = {'submitting', 'run_creating', 'run_start', 'run_discover', 'running',
                 'cloud_queued', 'finalizing', 'cleanup_planning', 'cleaning',

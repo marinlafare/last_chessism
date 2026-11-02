@@ -9,9 +9,9 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.compact_storage import compact_for
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.compact_storage import compact_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES as TITLES
 
 LOG = logging.getLogger(__name__)

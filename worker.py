@@ -42,7 +42,7 @@ from chessism_api.operations.database_restore_tests import (
     run_database_restore_test_job,
 )
 
-from chessism_api.database.runtime import init_runtime_db
+from chessism_api.database.postgresql.runtime import init_runtime_db
 from chessism_api.redis_client import redis_settings
 
 

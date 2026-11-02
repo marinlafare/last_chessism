@@ -14,7 +14,7 @@ async def main():
     import numpy as np
     from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage
     from chessism_api.operations.research_algorithms.blunder_v2_job import configuration
     from chessism_api.operations.research_algorithms.blunder_v2_source import freeze
     from chessism_api.operations.research_algorithms.blunder_v2_model import DTYPE

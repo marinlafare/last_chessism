@@ -8,8 +8,8 @@ import json
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_balanced_sampling as balance, blunder_development_reuse as history
 from . import blunder_v2_source as source, blunder_v2_model as model, blunder_cohort_source as cohort

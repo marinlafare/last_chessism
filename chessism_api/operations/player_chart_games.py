@@ -7,8 +7,8 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_reads import player_rows_sql
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_reads import player_rows_sql
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 from chessism_api.operations.player_game_catalog import OPENING_KEY_SQL
 

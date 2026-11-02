@@ -11,7 +11,7 @@ from sqlalchemy import text
 from stockfish_core import PROFILE_ID, ENGINE_SHA256, NODES, THREADS, HASH_MIB, MULTIPV
 from stockfish_core.analysis import board_from_fen
 
-from chessism_api.database.relational_storage import identifier, storage_for
+from chessism_api.database.postgresql.relational_storage import identifier, storage_for
 from chessism_api.evaluations import score_kind, validate_result
 from chessism_api.operations.fen_results import stage_fen_results
 from .artifacts import VERSION, MAX_FENS, digest, verify

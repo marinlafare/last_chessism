@@ -2,8 +2,8 @@
 import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import select
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudPhaseTiming
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudPhaseTiming
 from cleaning_job.cleanup import prepare
 from . import batch_cleanup
 from . import history, runtime, work_units_results as results

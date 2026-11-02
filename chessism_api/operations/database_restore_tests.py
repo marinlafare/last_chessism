@@ -389,7 +389,7 @@ def _create_restore_socket_directory() -> Path:
 
 
 async def _validate_fen_identity(socket_dir, manifest):
-    from chessism_api.database.fen_identity import validate_identity
+    from chessism_api.database.postgresql.fen_identity import validate_identity
     expected = manifest.get('fen_identity_version')
     connection = await asyncpg.connect(host=str(socket_dir), port=55432,
                                       user=RESTORE_USER, database=RESTORE_DATABASE,
@@ -398,7 +398,7 @@ async def _validate_fen_identity(socket_dir, manifest):
         result = await validate_identity(connection, allow_legacy=expected is None)
         if expected is not None and result['version'] != expected:
             raise RuntimeError('Restored FEN identity differs from its backup manifest')
-        from chessism_api.database.fen_reference_identity import validate_references
+        from chessism_api.database.postgresql.fen_reference_identity import validate_references
         reference_expected = manifest.get('fen_reference_version')
         if int(manifest.get('schema_version') or 0) >= 7:
             if reference_expected not in ('relational_v2', 'relational_v3'):
@@ -406,7 +406,7 @@ async def _validate_fen_identity(socket_dir, manifest):
             if (manifest.get('relational_storage') or {}).get('version') != reference_expected:
                 raise RuntimeError('Backup storage versions disagree')
             from sqlalchemy.engine import URL
-            from chessism_api.database.relational_storage import validate_backup_contract
+            from chessism_api.database.postgresql.relational_storage import validate_backup_contract
             result['references'] = await validate_backup_contract(
                 URL.create('postgresql+asyncpg',username=RESTORE_USER,database=RESTORE_DATABASE,
                            port=55432,query={'host':str(socket_dir)}),manifest.get('relational_storage'))
@@ -739,9 +739,21 @@ async def _run_database_restore_test_job(
         # remove our empty directory; never recursively delete socket paths.
         socket_dir.rmdir()
         socket_dir = None
+        # PostgreSQL's disposable copy has been removed: Neo4j does not compete
+        # for restore disk/RAM and cannot affect the running graph service.
+        from chessism_api.database.neo4j.backup import test_companion
+        async def graph_progress(detail):
+            running_status.update(phase="testing_neo4j", detail=detail, progress_updated_at=_iso_now())
+            _atomic_write_json(RESTORE_TEST_STATUS_PATH, running_status)
+            await _write_progress(redis, job_id, phase="testing_neo4j", detail=detail)
+        validation["neo4j"] = await test_companion(backup_manifest, graph_progress)
         elapsed_seconds = time.monotonic() - started_monotonic
         completed_at = _iso_now()
         detail = f"Restored and validated backup {backup_id}; temporary data was removed."
+        if validation["neo4j"]["status"] == "not_included":
+            detail += " Legacy PostgreSQL-only backup; Neo4j is not included."
+        else:
+            detail += " PostgreSQL and Neo4j both passed."
         _catalog_with_restore_result(
             backup_id=backup_id,
             status="success",

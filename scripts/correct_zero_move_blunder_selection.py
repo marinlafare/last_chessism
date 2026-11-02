@@ -3,8 +3,8 @@ import argparse
 import asyncio
 import json
 import os
-from chessism_api.database.runtime import bind_runtime_engine
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.research_algorithms.cuda_runtime import cuda_backend
 from chessism_api.operations.cuda_summaries.no_move_upgrade import upgrade
 

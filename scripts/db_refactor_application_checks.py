@@ -14,7 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from scripts.db_refactor_candidate import C, A, R, V, guard
 from scripts.db_refactor_sequences import preserve_sequence
 from scripts.db_refactor_workload import digest, literal_sql
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 
 TIMESTAMP_RESPONSES = frozenset(('get_player_behavioural_activity','get_player_behavioural_ratings',
@@ -110,7 +110,7 @@ async def prepare_application_copy(conn, pgdata, publish):
 
 
 def read_cases(players):
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations import player_analytics, player_hero_analytics
     result = []
     for player in players:
@@ -145,7 +145,7 @@ def rating_read_cases(players):
 async def measure_application_reads(socket, players, publish, save, *, database='chessism_db', repeats=3,
                                     methods=None, capture_plans=False, ratings_only=False, analyze_plans=False):
     """Interleave old/new calls; preserve strict output values and array order."""
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations import player_analytics, player_hero_analytics
     modules = (ask_db, player_analytics, player_hero_analytics)
     # The retained reference associations are text-keyed. Use the deployed
@@ -248,7 +248,7 @@ async def measure_application_reads(socket, players, publish, save, *, database=
 async def application_writes(conn, socket, publish, *, database='chessism_db'):
     """Bounded committed probes in the disposable copy, not the retained source."""
     from scripts.db_refactor_write_checks import fixture_bundle, PLAYER, OTHER, LINKS
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations.ingestion_pipeline import game_repository
     from chessism_api.operations import player_game_scores, player_salience, player_salience_calculation
     engine, factory = factory_for(socket, normalized=True, database=database)

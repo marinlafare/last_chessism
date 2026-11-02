@@ -7,9 +7,9 @@ from arq import cron
 from ..canonical_blunders import scheduler as canonical
 from sqlalchemy import select, update
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import init_runtime_db
-from chessism_api.database.models import AlgorithmRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import init_runtime_db
+from chessism_api.database.postgresql.models import AlgorithmRun
 from chessism_api.redis_client import redis_settings
 from .config import QUEUE
 from .jobs import run_algorithm_job

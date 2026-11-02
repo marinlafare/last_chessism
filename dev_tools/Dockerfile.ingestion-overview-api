@@ -1,0 +1,2 @@
+FROM chessism-api:graph-progress-20261101
+COPY chessism_api/appearance_scopes.json /app/chessism_api/appearance_scopes.json

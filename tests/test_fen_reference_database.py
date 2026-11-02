@@ -5,10 +5,10 @@ from sqlalchemy.orm import selectinload
 
 import test_cloud_analysis_database as base
 from test_cloud_game_drafts_database import DraftDatabaseTests
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen,Game,GameFenAssociation,GameAnalysisSummary
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.ask_db import count_game_set_fens_for_analysis,refresh_game_analysis_summary,increment_game_analysis_summary_for_scored_fens
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen,Game,GameFenAssociation,GameAnalysisSummary
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.ask_db import count_game_set_fens_for_analysis,refresh_game_analysis_summary,increment_game_analysis_summary_for_scored_fens
 from chessism_api.operations.ingestion_pipeline.fen_repository import refresh_fen_occurrence_counts
 from chessism_api.operations.cloud_analysis.importer import refresh_projections
 from chessism_api.operations.fen_explorer import position_games,describe_examples

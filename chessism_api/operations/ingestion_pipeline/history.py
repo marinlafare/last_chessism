@@ -7,8 +7,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from sqlalchemy import Date, cast, func, select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import IngestionPipelineRun, IngestionPipelineStageTiming
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import IngestionPipelineRun, IngestionPipelineStageTiming
 from .stages import STAGE_ORDER
 from .steps import STEP_LABELS
 

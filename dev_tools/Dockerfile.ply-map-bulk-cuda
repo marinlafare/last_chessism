@@ -1,0 +1,2 @@
+FROM chessism-algorithms:ply-map-20261101
+COPY chessism_api/ /app/chessism_api/

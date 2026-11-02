@@ -1,0 +1,69 @@
+.common-graph-explorer { padding: 1rem; min-width: 0; }
+.common-graph-explorer *, .common-graph-games * { box-sizing: border-box; }
+.common-graph-toolbar { display: flex; flex-wrap: wrap; gap: .75rem; align-items: end; padding: .75rem; border-radius: .6rem; background: #101a20; }
+.common-graph-toolbar label { display: flex; flex-direction: column; gap: .35rem; font-size: .8rem; }
+.common-graph-toolbar input, .common-graph-toolbar select { width: 100%; max-width: 15rem; padding: .55rem; background: #081216; color: #d7e4e8; border: 1px solid #365354; border-radius: .4rem; }
+.common-graph-explorer button, .common-graph-games button { font: inherit; color: #d7e4e8; background: #142729; border: 1px solid #365354; border-radius: .4rem; padding: .45rem .65rem; cursor: pointer; }
+.common-graph-explorer button:disabled, .common-graph-games button:disabled { opacity: .4; cursor: default; }
+.common-graph-explorer button:not(:disabled):not(.common-graph-bar-row):not(.common-graph-node):hover,
+.common-graph-games button:not(:disabled):not([data-graph-game]):hover { background: #1c3a35; }
+.common-graph-explorer button:focus-visible, .common-graph-games button:focus-visible { outline: 2px solid #42d4ac; outline-offset: 2px; }
+.common-graph-explorer > p { color: #a1b9be; font-size: .85rem; }
+.common-graph-layout { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(200px, .8fr) minmax(360px, 1.65fr); gap: 1rem; align-items: start; }
+.common-graph-layout > section { min-width: 0; padding: .75rem; background: #0b1418; border: 1px solid #233b3e; border-radius: .6rem; }
+.common-graph-layout h3 { margin: 0 0 .7rem; font-size: .95rem; }
+.common-graph-bars { position: relative; display: grid; gap: .4rem; padding: .25rem; border-radius: .4rem; }
+.common-graph-bars .common-graph-bar-row { display: grid; grid-template-columns: 1fr auto; gap: .3rem; text-align: left; border: 1px solid transparent; padding: .35rem .5rem; background: transparent; font-size: .8rem; }
+.common-graph-bar-row > :first-child { grid-column: 1 / -1; }
+.common-graph-bar-row[data-active="true"] { border-color: #42d4ac; background: #14332b; }
+.common-graph-bar-track { display: block; align-self: center; height: .65rem; border-radius: .3rem; background: #1a2c30; overflow: hidden; }
+.common-graph-bar-track > span { display: block; height: 100%; background: #14b88a; border-radius: inherit; transition: filter .12s; }
+.common-graph-bar-row:hover .common-graph-bar-track > span { filter: brightness(1.15); }
+.common-graph-preview { position: absolute; pointer-events: none; width: 160px; top: 1rem; left: calc(100% + .5rem); z-index: 15; padding: .5rem; border-radius: .5rem; background: #020b0e; box-shadow: 0 5px 25px #0009; font-size: .7rem; }
+.common-graph-page { display: flex; justify-content: space-between; gap: .5rem; align-items: center; margin: .65rem 0; font-size: .8rem; }
+.common-graph-selection { display: flex; flex-direction: column; gap: .5rem; text-align: center; }
+.common-graph-selection p { margin: .35rem 0; font-size: .8rem; }
+.common-graph-selection h3 { margin: 0; }
+.common-graph-board { width: 100%; min-width: 0; overflow: hidden; border-radius: .25rem; }
+.common-graph-square { width: 100%; height: 100%; position: relative; }
+.common-graph-square.white { background: #d8c5a5; }
+.common-graph-square.black { background: #8b694d; }
+.common-graph-square.white:hover { background: #e6d6ba; }
+.common-graph-square.black:hover { background: #99795c; }
+.common-graph-coordinate { position: absolute; font-size: clamp(7px,.65vw,11px); line-height: 1; pointer-events: none; color: #183024; z-index: 2; }
+.common-graph-coordinate.rank { top: 2px; left: 2px; }
+.common-graph-coordinate.file { bottom: 2px; right: 2px; }
+.common-graph-counts { display: grid; gap: .4rem; font-size: .8rem; }
+.common-graph-counts > span { padding: .4rem; background: #15272a; border-radius: .3rem; }
+.common-graph-network { display: block; width: 100%; min-height: 210px; overflow: visible; background: #081014; border-radius: .5rem; padding: .3rem; }
+.common-graph-edge { fill: none; stroke: currentColor; color: #528f80; }
+.common-graph-edge:hover { color: #75e2bc; }
+.common-graph-center { display: grid; place-content: center; height: 100%; width: 100%; border-radius: .5rem; border: 1px solid #28b990; background: #153b31; color: #d4efe4; font-size: 12px; text-align: center; }
+.common-graph-node-group { display: flex; flex-direction: column; height: 100%; gap: 3px; }
+.common-graph-node-group .common-graph-node { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 4px; padding: 6px 8px; font-size: 14px; height: 39px; }
+.common-graph-node[data-active="true"] { background: #194537; border-color: #42d4ac; }
+.common-graph-node-group .common-graph-move-games { font-size: 11px; padding: 2px 5px; align-self: center; border-color: transparent; background: transparent; }
+.common-graph-directions { display: flex; justify-content: space-between; gap: .4rem; color: #a1b9be; font-size: .75rem; }
+.common-graph-query { grid-column: 1 / -1; color: #8ba1aa; font-size: .75rem; }
+.common-graph-overlay { position: fixed; inset: 0; z-index: 1200; background: #000c; display: grid; place-items: center; padding: 1rem; }
+.common-graph-games { width: min(850px, 100%); max-height: 90vh; overflow: auto; padding: 1rem; background: #0b1418; color: #d7e4e8; border: 1px solid #365354; border-radius: .7rem; }
+.common-graph-games header, .common-graph-games footer { display: flex; justify-content: space-between; gap: 1rem; align-items: center; }
+.common-graph-games header h3 { margin: 0; }
+.common-graph-games-list { display: grid; gap: .5rem; margin: .75rem 0; }
+.common-graph-games-list > button { display: grid; grid-template-columns: 1.1fr 1.5fr .5fr auto; gap: .6rem; align-items: center; text-align: left; }
+.common-graph-games-list > button[data-active="true"] { background: #194537; border-color: #42d4ac; }
+.common-graph-games time { font-size: .8rem; }
+@media (max-width: 1250px) {
+  .common-graph-layout { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .common-graph-neighborhood { grid-column: 1 / -1; }
+  .common-graph-board { max-width: 330px; align-self: center; }
+  .common-graph-network { max-height: 480px; }
+}
+@media (max-width: 600px) {
+  .common-graph-layout { grid-template-columns: minmax(0, 1fr); }
+  .common-graph-explorer { padding: .5rem; }
+  .common-graph-preview { display: none; }
+  .common-graph-games-list > button { grid-template-columns: 1fr auto; }
+  .common-graph-games-list time { grid-column: 1 / -1; }
+  .common-graph-games-list > button > :nth-child(2) { overflow-wrap: anywhere; }
+}

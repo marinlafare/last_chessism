@@ -7,9 +7,9 @@ import asyncio
 import time
 from types import SimpleNamespace
 from sqlalchemy import select, text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, CloudJobCancellation, CloudSequenceControl
-from chessism_api.database.cloud_codec import read_documents
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchUnit, CloudJobCancellation, CloudSequenceControl
+from chessism_api.database.postgresql.cloud_codec import read_documents
 from .cancellation_cloud import stop_batch, stop_run
 
 FINALIZING = {'finalizing', 'cleanup_planning', 'cleaning', 'log_planning', 'log_cleaning', 'refreshing', 'complete', 'cancelled'}

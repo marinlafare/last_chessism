@@ -27,7 +27,7 @@ from chessism_api.operations.analysis_backups import (
 from chessism_api.operations.analysis_times import record_analysis_times
 from chessism_api.operations.backup_coordination import release_backup, reserve_backup
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     get_player_game_analysis_scope,
     preview_player_games_for_analysis,
 )

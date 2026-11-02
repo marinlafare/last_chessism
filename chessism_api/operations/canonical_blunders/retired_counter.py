@@ -4,7 +4,7 @@ Canonical readers must already use CUDA assessments. Never fill unknown counts
 with zero, rewrite historical rows, enqueue calculations or change the model.
 """
 from sqlalchemy import text
-from chessism_api.database.relational_storage import identifier
+from chessism_api.database.postgresql.relational_storage import identifier
 from .schema import table
 
 

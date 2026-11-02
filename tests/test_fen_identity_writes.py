@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.fen_identity import schema_version, require_numeric_fen_schema
+from chessism_api.database.postgresql.fen_identity import schema_version, require_numeric_fen_schema
 from chessism_api.operations.fen_results import resolve_fen_ids, replace_fen_continuations
 
 

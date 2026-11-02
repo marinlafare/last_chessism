@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
 
 from chessism_api.redis_client import get_redis_pool
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     get_top_fens, 
     get_sum_n_games, 
     get_top_fens_unscored,

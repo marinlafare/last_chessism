@@ -114,7 +114,7 @@ async def main():
     import asyncpg
     from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage,SESSION_KEY
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage,SESSION_KEY
     from tests.check_db_refactor_candidate_postgres import command
     root=Path(tempfile.mkdtemp(prefix='frequency-integration-',dir='/restore-test'));socket=root/'socket';socket.mkdir()
     pgctl='/usr/lib/postgresql/15/bin/pg_ctl';connection=engine=None

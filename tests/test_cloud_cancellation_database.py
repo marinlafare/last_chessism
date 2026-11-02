@@ -7,8 +7,8 @@ from sqlalchemy import select, func
 from fastapi import HTTPException
 import test_cloud_analysis_database as existing
 from test_cloud_work_units_database import WorkUnitDatabaseTests
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation, CloudFenClaim, Fen
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation, CloudFenClaim, Fen
 from chessism_api.operations.cloud_analysis import controller, cancellation, stop_dispatcher
 from chessism_api.routers.cloud_analysis import stop_and_cleanup, retry_cloud_job, resume_cloud_job
 from cleaning_job.cloud import BUCKET

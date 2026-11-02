@@ -1,5 +1,8 @@
 import { getJson, postJson } from '../../services/apiClient'
 
+export const fetchGraphStatus = ({ signal } = {}) => getJson('/graph-sync', { signal })
+export const retryGraphSync = () => postJson('/graph-sync/retry', {})
+
 // Read the controller's saved status; never launch or mutate cloud resources.
 export const fetchCloudStatus = ({ signal } = {}) => getJson('/analysis/cloud', { signal })
 export const fetchCloudBilling = ({ signal } = {}) => getJson('/analysis/cloud/billing', { signal })

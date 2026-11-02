@@ -4,8 +4,8 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 from sqlalchemy import select
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudBatchSequence, CloudSequenceControl
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchSequence, CloudSequenceControl
 from cloud_job import batch_spot, work_units
 from cloud_job.launch import inspect_worker
 from cloud_job.recovery import validate_state

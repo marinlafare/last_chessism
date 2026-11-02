@@ -1,6 +1,6 @@
 """Read independent saved daily salience; never compute or enqueue on GET."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from . import salience_store as store,salience_daily as daily
 
 

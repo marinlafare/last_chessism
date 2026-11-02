@@ -16,7 +16,7 @@ import constants
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.matrix_constructor.catalog import ROW_TYPES
 from chessism_api.operations.matrix_constructor.jobs import _construct_artifact
 from chessism_api.operations.matrix_constructor.config import normalize_matrix_config

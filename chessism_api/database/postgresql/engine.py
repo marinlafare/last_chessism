@@ -6,7 +6,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from chessism_api.database.models import Base
+from chessism_api.database.postgresql.models import Base
 
 async_engine = None
 AsyncDBSession = sessionmaker(expire_on_commit=False, class_=AsyncSession)
@@ -561,7 +561,7 @@ async def init_db(connection_string: str, *, relational_storage=None):
     global async_engine
 
     if relational_storage is not None:
-        from chessism_api.database.relational_storage import (
+        from chessism_api.database.postgresql.relational_storage import (
             create_relational_engine, SESSION_KEY, RelationalStorage,
         )
         if not isinstance(relational_storage, RelationalStorage):
@@ -625,8 +625,8 @@ async def init_db(connection_string: str, *, relational_storage=None):
 
     # An explicit, rehearsed migration owns the large rewrite. Never silently
     # launch it from an API/worker restart or accept a half-migrated schema.
-    from chessism_api.database.fen_identity import require_numeric_fen_schema
-    from chessism_api.database.fen_reference_identity import require_numeric_reference_schema
+    from chessism_api.database.postgresql.fen_identity import require_numeric_fen_schema
+    from chessism_api.database.postgresql.fen_reference_identity import require_numeric_reference_schema
     async with async_engine.connect() as connection:
         normalized = await connection.scalar(text("""SELECT EXISTS(
             SELECT 1 FROM information_schema.columns WHERE table_schema='public'
@@ -655,10 +655,10 @@ async def init_db(connection_string: str, *, relational_storage=None):
                     "SELECT to_regclass('public.matrix_definition') IS NOT NULL"
                 ))
                 await conn.run_sync(Base.metadata.create_all)
-                from chessism_api.database.home_summary_schema import ensure_home_summary_triggers
+                from chessism_api.database.postgresql.home_summary_schema import ensure_home_summary_triggers
                 await ensure_home_summary_triggers(conn)
                 if definitions_missing:
-                    from chessism_api.database.matrix_definitions import import_snapshot_definitions
+                    from chessism_api.database.postgresql.matrix_definitions import import_snapshot_definitions
                     imported = await import_snapshot_definitions(conn)
                     print(f"Imported {imported} legacy matrix recipes; original snapshots preserved.")
                 print("Database tables checked/created.")
@@ -691,7 +691,7 @@ async def init_db(connection_string: str, *, relational_storage=None):
     if migrated_no_move_games:
         # Refresh only projections whose game counts changed. FEN rows and
         # scored-position summaries are deliberately untouched.
-        from chessism_api.database.ask_db import (
+        from chessism_api.database.postgresql.ask_db import (
             refresh_database_summary_game_counts,
             refresh_main_character_mode_summary,
         )

@@ -1,0 +1,4 @@
+FROM chessism-api:graph-progress-20261101
+COPY chessism_api/database/neo4j/requirements-sync.txt /app/requirements-neo4j-sync.txt
+RUN pip install --no-cache-dir --only-binary=:all: -r /app/requirements-neo4j-sync.txt
+COPY chessism_api/database/neo4j/ /app/chessism_api/database/neo4j/

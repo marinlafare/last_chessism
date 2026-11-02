@@ -13,9 +13,9 @@ from sqlalchemy import event, text
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
-from chessism_api.database import models as m, cloud_columns
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
-from chessism_api.database.ask_db import get_game_set_fens_for_analysis
+from chessism_api.database.postgresql import models as m, cloud_columns
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.ask_db import get_game_set_fens_for_analysis
 from chessism_api.operations import database_restore_tests as restore
 from chessism_api.operations.cloud_analysis import game_fen_queue as queue
 from chessism_api.operations.cloud_analysis.preparation import PreparationTimings
@@ -325,7 +325,7 @@ async def main():
         factory=async_sessionmaker(engine,expire_on_commit=False,
             info={SESSION_KEY:RelationalStorage('public','archive','reads','relational_v3')})
         await fixture(engine,conn)
-        with patch.object(queue,'AsyncDBSession',factory),patch('chessism_api.database.ask_db.AsyncDBSession',factory):
+        with patch.object(queue,'AsyncDBSession',factory),patch('chessism_api.database.postgresql.ask_db.AsyncDBSession',factory):
             await asyncio.wait_for(correctness(engine,conn,factory),90)
             await asyncio.wait_for(coordinator(conn,factory),45)
             await asyncio.wait_for(benchmark(engine,conn,factory),150)

@@ -1,6 +1,7 @@
 # Optional CUDA dependency layer, built with Dockerfile.cuda-validation first.
 # Isolated research image: no host driver installation or cloud-worker changes.
 FROM chessism-cuda-validation:20261025
+RUN pip install --no-cache-dir neo4j==6.3.0
 COPY chessism_api/ /app/chessism_api/
 WORKDIR /app
 ENTRYPOINT []

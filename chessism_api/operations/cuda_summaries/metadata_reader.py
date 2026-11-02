@@ -1,7 +1,7 @@
 """Read-only saved metadata. No rebuild, FEN scan or GPU work on page load."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .metadata_store import STATE,enabled
 from .ending_compute import blank,VERSION
 

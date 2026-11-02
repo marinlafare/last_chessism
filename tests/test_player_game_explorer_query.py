@@ -1,6 +1,6 @@
 import unittest
 from types import SimpleNamespace
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations.player_game_explorer_query import normalized_candidates, engine_lookup
 
 

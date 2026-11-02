@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text
 import test_cloud_analysis_database as existing
 import test_cloud_work_units_database as units_test
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     CloudAnalysisJob, CloudAnalysisRun, CloudBatchSequence, CloudBatchCycle,
     CloudFenClaim, CloudPhaseTiming, CloudControllerHeartbeat, Fen,
 )
@@ -163,7 +163,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         new_fen='8/8/8/8/8/8/2k5/6K1 w - -'
         async with AsyncDBSession() as session,session.begin():
             session.add(Fen(fen=new_fen,n_games=1000,moves_counter='{}'))
-        with self.cloud_stubs(objects), patch('chessism_api.database.ask_db.get_fens_for_analysis', side_effect=AssertionError('reselected')):
+        with self.cloud_stubs(objects), patch('chessism_api.database.postgresql.ask_db.get_fens_for_analysis', side_effect=AssertionError('reselected')):
             stopped=False
             for _ in range(60):
                 await self.tick()

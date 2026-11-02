@@ -9,7 +9,7 @@ import numpy as np
 from chessism_api.operations.cuda_summaries import frequency_compute as compute, frequency_files as files
 from chessism_api.operations.cuda_summaries import input_snapshot
 from chessism_api.operations import player_frequency_position_page as page
-from chessism_api.database.relational_storage import RelationalStorage
+from chessism_api.database.postgresql.relational_storage import RelationalStorage
 
 
 class FrequencyTests(unittest.TestCase):

@@ -95,7 +95,8 @@ def _directory_size(path: Path) -> int:
 def _measure_application_usage() -> dict[str, Any]:
     """Measure the live repository without reading backup file contents."""
     backup_bytes = (_directory_size(PGBACKREST_BACKUP_DIRECTORY)
-                    + _directory_size(DATABASE_BACKUP_ROOT / "snapshots"))
+                    + _directory_size(DATABASE_BACKUP_ROOT / "snapshots")
+                    + _directory_size(DATABASE_BACKUP_ROOT / "neo4j"))
     archived_wal_bytes = _directory_size(PGBACKREST_ARCHIVE_DIRECTORY)
     fen_analysis_bytes = _directory_size(FEN_ANALYSIS_BACKUP_ROOT)
     research_bytes = _directory_size(RESEARCH_BACKUP_ROOT)

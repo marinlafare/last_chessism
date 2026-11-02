@@ -105,6 +105,21 @@ try {
   await evaluate("window.stepTest.job.status = 'running'; window.stepTest.job.stop_cleanup = { phase: 'cleaning' }; window.stepTest.render()")
   await waitFor("document.querySelectorAll('[role=progressbar]').length === 9")
   await assert("document.querySelector('.cloud-step--current .cloud-step-bar').dataset.styleId === 'cloud.step.progress.stop-cleaning'")
+  await evaluate(`window.stepTest.online=false; window.stepTest.job={ status:'complete', target:100, imported:100,
+    runs:[{status:'complete'}], graph_sync:{status:'working',processed:3,total:10,detail:'3 / 10 affected graph positions synchronized',
+      started_at:new Date(Date.now()-10000).toISOString(),heartbeat_at:new Date().toISOString()} }; window.stepTest.render()`)
+  await waitFor("document.querySelectorAll('[role=progressbar]').length === 11")
+  await assert(`(() => {const bar=document.querySelector('[data-style-id="cloud.step.progress.neo4j"]');
+    return bar.getAttribute('aria-valuenow')==='30' && bar.classList.contains('is-active')
+      && bar.closest('li').textContent.includes('3 / 10') && bar.closest('li').textContent.includes('Started')})()`)
+  await assert("document.querySelector('[data-style-id=\"cloud.step.progress.cleanup\"]').closest('li').classList.contains('cloud-step--complete')")
+  await assert("document.querySelector('[data-style-id=\"cloud.step.progress.done\"]').closest('li').classList.contains('cloud-step--pending')")
+  await evaluate("window.stepTest.job.graph_sync.status='retrying';window.stepTest.render()")
+  await waitFor("document.querySelector('[data-style-id=\"cloud.step.progress.neo4j\"]').closest('li').textContent.includes('Retrying')")
+  await assert("!document.querySelector('[data-style-id=\"cloud.step.progress.neo4j\"]').classList.contains('is-active')")
+  await evaluate("window.stepTest.job.graph_sync.status='complete';window.stepTest.job.graph_sync.processed=10;window.stepTest.job.graph_sync.detail='10 / 10 affected graph positions synchronized';window.stepTest.render()")
+  await waitFor("document.querySelector('[data-style-id=\"cloud.step.progress.done\"]').closest('li').classList.contains('cloud-step--complete')")
+  await assert("document.querySelector('[data-style-id=\"cloud.step.progress.neo4j\"]').closest('li').textContent.includes('10 / 10')")
   await assert("window.stepTest.errors.length === 0 && window.stepTest.requests.every(request => request.path.endsWith('/appearance') && request.method === 'GET')")
   console.log('PASS: real counters, unknown progress, paused/offline states, independent Edit styles, mobile layout and cancellation; no live API access.')
 } finally {

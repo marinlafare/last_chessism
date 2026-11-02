@@ -3,7 +3,7 @@
 import unittest
 from unittest.mock import AsyncMock, MagicMock
 
-from chessism_api.database.engine import _reshape_player_salience_schema
+from chessism_api.database.postgresql.engine import _reshape_player_salience_schema
 
 
 class SalienceMigrationTests(unittest.IsolatedAsyncioTestCase):

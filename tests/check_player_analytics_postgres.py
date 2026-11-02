@@ -19,11 +19,11 @@ async def main():
     from tests.check_db_refactor_candidate_postgres import FIXTURE, command
     from scripts.db_refactor_candidate import prepare_reference, build_candidate, C, V
     from scripts.db_refactor_application_checks import factory_for
-    from chessism_api.database.player_analytics_schema import install_player_analytics, analytics_table
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.player_analytics_schema import install_player_analytics, analytics_table
+    from chessism_api.database.postgresql.relational_storage import storage_for
     from chessism_api.operations import player_analytics_summary as summaries, player_hero_analytics as hero
     from chessism_api.operations import player_rating_distribution as histogram, player_game_catalog as catalog
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
 
     root = Path(tempfile.mkdtemp(prefix='db-refactor-baseline-player-summary-', dir='/restore-test'))
     socket = root / 'socket'; socket.mkdir()

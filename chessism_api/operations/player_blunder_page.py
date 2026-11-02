@@ -1,5 +1,5 @@
 """Player-scoped published CUDA counts, never a full canonical-engine join."""
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 
 
 def blunder_rows_sql(session, clause):

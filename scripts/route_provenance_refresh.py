@@ -9,8 +9,8 @@ import json
 import os
 from pathlib import Path
 
-from chessism_api.database.runtime import bind_runtime_engine
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.evaluation_repair.refresh_routing import route
 from scripts.repair_legacy_provenance import read_plan
 

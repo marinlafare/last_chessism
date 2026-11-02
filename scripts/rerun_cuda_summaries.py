@@ -11,10 +11,10 @@ import json
 import os
 import uuid
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine, configured_storage
-from chessism_api.database.relational_storage import identifier
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.relational_storage import identifier
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from chessism_api.operations.canonical_blunders.schema import table
 from chessism_api.operations.canonical_blunders.scheduler import schedule
 from chessism_api.operations.cuda_summaries import runs, schema, accuracy_compute

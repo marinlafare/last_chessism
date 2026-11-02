@@ -1,7 +1,7 @@
 """Absolute, retry-safe analysis coverage in the normalized layout."""
 from sqlalchemy import text
 
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 
 
 FIELDS = ("total_positions", "analyzed_positions", "unscored_positions", "is_fully_analyzed",

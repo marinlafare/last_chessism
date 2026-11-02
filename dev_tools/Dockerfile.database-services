@@ -1,0 +1,17 @@
+# Preserve verified Python/system dependencies, without extending the previous
+# 127-layer release. Flatten only the API image; never replace worker images.
+FROM chessism-api:common-positions-disclosure-20261030 AS verified
+FROM scratch
+COPY --from=verified / /
+ENV PATH="/usr/local/bin:/usr/local/sbin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    LANG=C.UTF-8 PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY chessism_api/ /app/chessism_api/
+COPY main.py worker.py constants.py requirements.txt /app/
+# The move must remove the old modules too: two copies would create separate
+# SQLAlchemy models/session factories if a stale import slipped through.
+RUN python -m pip install --no-cache-dir neo4j==6.3.0 && \
+    find /app/chessism_api/database -maxdepth 1 -type f -name '*.py' ! -name '__init__.py' -delete && \
+    find /app/chessism_api/database -type d -name '__pycache__' -prune -exec rm -r {} +
+EXPOSE 8000
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]

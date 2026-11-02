@@ -3,7 +3,7 @@ import itertools
 import time
 import numpy as np
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..research_algorithms.blunder_training import game_blocks,positions_sql
 from . import compute
 from .schema import table

@@ -7,7 +7,7 @@ import asyncio
 import json
 
 import constants
-from chessism_api.database.runtime import init_runtime_db
+from chessism_api.database.postgresql.runtime import init_runtime_db
 from chessism_api.operations.player_salience import (
     enqueue_player_salience,
     enqueue_stale_player_salience_jobs,

@@ -7,7 +7,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.player_game_scores import (
     refresh_game_player_engine_summaries,
 )

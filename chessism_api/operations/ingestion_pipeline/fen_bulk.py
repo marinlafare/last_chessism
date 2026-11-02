@@ -4,8 +4,8 @@ import json
 import logging
 from time import perf_counter
 
-from chessism_api.database.compact_storage import compact_for
-from chessism_api.database.relational_storage import driver_connection
+from chessism_api.database.postgresql.compact_storage import compact_for
+from chessism_api.database.postgresql.relational_storage import driver_connection
 
 LOG = logging.getLogger(__name__)
 

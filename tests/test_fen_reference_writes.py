@@ -4,10 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock,patch
 
 os.environ.setdefault('DATABASE_URL','postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.fen_references import association_rows
-from chessism_api.database.fen_reference_identity import require_numeric_reference_schema,schema_version
-from chessism_api.database.models import GameFenAssociation,PlayerPositionFrequency
-from chessism_api.database.db_interface import DBInterface
+from chessism_api.database.postgresql.fen_references import association_rows
+from chessism_api.database.postgresql.fen_reference_identity import require_numeric_reference_schema,schema_version
+from chessism_api.database.postgresql.models import GameFenAssociation,PlayerPositionFrequency
+from chessism_api.database.postgresql.db_interface import DBInterface
 
 
 class ReferenceWriteTests(unittest.IsolatedAsyncioTestCase):
@@ -15,8 +15,8 @@ class ReferenceWriteTests(unittest.IsolatedAsyncioTestCase):
         from chessism_api.operations.database_restore_tests import _validate_fen_identity
         connection = AsyncMock()
         with patch('chessism_api.operations.database_restore_tests.asyncpg.connect', AsyncMock(return_value=connection)), \
-             patch('chessism_api.database.fen_identity.validate_identity', AsyncMock(return_value={'version':'numeric_v2'})), \
-             patch('chessism_api.database.fen_reference_identity.validate_references', AsyncMock(return_value={'version':'text_v1'})) as references:
+             patch('chessism_api.database.postgresql.fen_identity.validate_identity', AsyncMock(return_value={'version':'numeric_v2'})), \
+             patch('chessism_api.database.postgresql.fen_reference_identity.validate_references', AsyncMock(return_value={'version':'text_v1'})) as references:
             result = await _validate_fen_identity('/unused', {'schema_version':5,'fen_identity_version':'numeric_v2'})
             self.assertEqual(result['references']['version'],'text_v1')
             self.assertTrue(references.await_args.kwargs['allow_legacy'])
@@ -32,7 +32,7 @@ class ReferenceWriteTests(unittest.IsolatedAsyncioTestCase):
     async def test_portable_input_becomes_numeric_without_mutating_payload(self):
         session=AsyncMock()
         rows=[{'game_link':10,'fen_fen':'one','n_move':1,'move_color':'white'}]
-        with patch('chessism_api.database.fen_references.resolve_fen_ids',AsyncMock(return_value={'one':7})):
+        with patch('chessism_api.database.postgresql.fen_references.resolve_fen_ids',AsyncMock(return_value={'one':7})):
             prepared=await association_rows(session,rows)
             await DBInterface(GameFenAssociation).create_all_with_session(session,rows)
         self.assertEqual(prepared[0]['fen_id'],7)
@@ -45,7 +45,7 @@ class ReferenceWriteTests(unittest.IsolatedAsyncioTestCase):
     async def test_missing_mismatched_or_empty_identity_fails_before_insert(self):
         session=AsyncMock()
         for row in ({'fen_fen':'missing'},{'fen_fen':'one','fen_id':8},{}):
-            with patch('chessism_api.database.fen_references.resolve_fen_ids',AsyncMock(return_value={'one':7})):
+            with patch('chessism_api.database.postgresql.fen_references.resolve_fen_ids',AsyncMock(return_value={'one':7})):
                 with self.assertRaises(ValueError): await association_rows(session,[row])
         session.execute.assert_not_awaited()
 

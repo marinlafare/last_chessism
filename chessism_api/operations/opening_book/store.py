@@ -1,6 +1,6 @@
 """One independent reference table, transactional import and bounded lookups."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import driver_connection
+from chessism_api.database.postgresql.relational_storage import driver_connection
 
 TABLE = 'public.opening_book_move'
 COLUMNS = 'position_key,move_uci,result_position_key,opening_labels,source_revision,importer_version'

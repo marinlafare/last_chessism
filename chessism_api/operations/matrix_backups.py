@@ -5,7 +5,7 @@ import shutil
 
 from sqlalchemy import select
 
-from chessism_api.database.models import MatrixArtifact
+from chessism_api.database.postgresql.models import MatrixArtifact
 from chessism_api.operations.matrix_constructor.artifact_files import (
     copy_snapshot, file_operation, inspect_snapshot,
 )

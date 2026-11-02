@@ -6,7 +6,7 @@ import re
 from sqlalchemy import text
 from sqlalchemy.dialects import postgresql
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 ROW_LIMIT = 50
 CANDIDATE_LIMIT = 1000

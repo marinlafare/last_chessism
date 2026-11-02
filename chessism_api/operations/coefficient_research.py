@@ -12,8 +12,8 @@ from typing import Any, Iterable
 
 from sqlalchemy import select, text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CoefficientResearchExperiment
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CoefficientResearchExperiment
 
 
 LICHESS_COEFFICIENT = 0.00368208

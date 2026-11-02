@@ -5,13 +5,13 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     refresh_database_summary_game_counts,
     refresh_fen_pipeline_summary,
     refresh_main_character_mode_summary_for_players,
 )
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.models import Player
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.models import Player
 from chessism_api.operations.ingestion_pipeline.game_repository import (
     GameArchive,
     filter_new_games,
@@ -148,8 +148,8 @@ async def insert_games_months_moves_and_players(
 ) -> str:
     """Validate and atomically persist a parsed game import."""
     started = time.monotonic()
-    from chessism_api.database.engine import AsyncDBSession
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.engine import AsyncDBSession
+    from chessism_api.database.postgresql.relational_storage import storage_for
     async with AsyncDBSession() as selection_session:
         archive_nonstandard = storage_for(selection_session) is not None
     bundle = _prepare_game_bundle(formatted_games,archive_nonstandard=archive_nonstandard)

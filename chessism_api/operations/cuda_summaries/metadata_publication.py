@@ -2,9 +2,9 @@
 import json
 from datetime import date
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.player_analytics_schema import analytics_table
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.player_analytics_schema import analytics_table
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from ..matrix_constructor.artifact_files import file_operation
 from ..player_timezone import resolve_player_timezone
 from . import metadata_store as store,behavior_compute as behavior,ending_compute as endings

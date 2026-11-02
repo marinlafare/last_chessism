@@ -3,8 +3,8 @@ import asyncio
 import logging
 import time
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from ..research_algorithms.cuda_runtime import cuda_backend
 from ..research_algorithms.blunder_full_compute import memory_plan

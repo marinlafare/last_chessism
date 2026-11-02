@@ -14,8 +14,8 @@ import time
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.operations.research_algorithms import blunder_balanced_sampling as balance
 from chessism_api.operations.research_algorithms import blunder_development_reuse as history
 from chessism_api.operations.research_algorithms import blunder_v2_source as source

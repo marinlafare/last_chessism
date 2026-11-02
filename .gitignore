@@ -1,4 +1,5 @@
 # local
+.local-secrets/
 .local-migrations/
 .virtual_documents/
 .codex

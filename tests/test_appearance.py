@@ -13,7 +13,7 @@ from fastapi.testclient import TestClient
 from chessism_api.routers import appearance as router
 from chessism_api.operations.appearance import validate_overrides,preset_name,AppearanceConflict,REGISTRY,MAX_OVERRIDES
 from chessism_api.auth import get_current_account
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 
 
 def override(**changes):
@@ -21,6 +21,15 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_common_positions_disclosure_has_independent_styles(self):
+        for suffix in ('panel', 'toggle', 'content'):
+            target = f'commonPositions.{suffix}'
+            for prop, value in [('background', '#123456'), ('hoverBackground', '#abcdef'),
+                                ('borderColor', '#112233'), ('hoverBorderColor', '#445566'),
+                                ('borderWidth', 1), ('radius', 8), ('padding', 12)]:
+                validate_overrides([override(target=target, property=prop, value=value)])
+        validate_overrides([override(target='commonPositions.toggle', property='textAlign', value='center')])
+
     def test_catalog_percentage_bins_have_independent_saveable_styles(self):
         for kind in ('openings', 'opponents'):
             for bin_index in range(10):
@@ -210,6 +219,16 @@ class AppearanceTests(unittest.TestCase):
         self.assertEqual(validate_overrides(rows)[0]['color_value'],'#11223380')
         with self.assertRaises(ValueError):validate_overrides([{**rows[0],'property':'chartColor99'}])
         with self.assertRaises(ValueError):validate_overrides([{**rows[0],'value':'url(https://invalid.test)'}])
+
+    def test_ingestion_overview_styles_are_independent_and_page_scoped(self):
+        for stage in ('games','positions','neo4j'):
+            for part in ('card','track','fill'):
+                target=f'ingestion.{stage}.{part}'
+                rows=[override(scope='download_games',target=target,property='background',value='#123456')]
+                self.assertEqual(len(validate_overrides(rows)),1)
+                self.assertIn('radius',REGISTRY['scopes']['download_games']['targets'][target]['properties'])
+        self.assertNotIn('ingestion.games.card',REGISTRY['scopes']['home']['targets'])
+        self.assertNotIn('ingestion.positions.card',REGISTRY['scopes']['positions']['targets'])
 
     def test_independent_home_buttons_support_legacy_seed_and_scoped_writes(self):
         targets = [name for name, spec in REGISTRY['scopes']['home']['targets'].items()

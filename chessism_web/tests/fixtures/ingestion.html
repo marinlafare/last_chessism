@@ -27,7 +27,8 @@ window.fetch = () => { throw new Error('This fixture must not make API requests'
 function Panel({ run }) {
   const { completedRuns, dismiss } = useIngestionReview(run)
   return React.createElement(FenIngestionPanel, {
-    ingestionTiming: run, jobState: {}, completedRuns, onDismiss: dismiss,
+    ingestionTiming: run, jobState: state.jobs || {}, loading: Boolean(state.loading),
+    error: state.jobError || '', timingError: state.timingError || '', completedRuns, onDismiss: dismiss,
   })
 }
 state.render = () => {

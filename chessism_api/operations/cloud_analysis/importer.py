@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, select, text, update
 
 from . import runtime  # Set up the standalone package path for the host controller.
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
-from chessism_api.database import cloud_columns
-from chessism_api.database.cloud_codec import read_document, write_document, checksum
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
+from chessism_api.database.postgresql import cloud_columns
+from chessism_api.database.postgresql.cloud_codec import read_document, write_document, checksum
 from chessism_api.operations.analysis import _format_engine_results
 from chessism_api.operations.fen_results import stage_fen_results
 from .batch_validation import validate_batch, checked_batch
@@ -127,8 +127,8 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
         return await refresh_unit_projections([run_id], timings=timings)
     if positions is None:
         raise ValueError('Summary refresh requires positions or a saved run')
-    from chessism_api.database.models import GameFenAssociation
-    from chessism_api.database.ask_db import (
+    from chessism_api.database.postgresql.models import GameFenAssociation
+    from chessism_api.database.postgresql.ask_db import (
         refresh_game_analysis_summary,
     )
     links = set()
@@ -144,14 +144,14 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
 
 async def refresh_global_projections():
     # Full-catalog scans run once per UI request, not once per uploaded file/chunk.
-    from chessism_api.database.ask_db import refresh_scored_position_summary, refresh_scored_rating_summary
+    from chessism_api.database.postgresql.ask_db import refresh_scored_position_summary, refresh_scored_rating_summary
     await refresh_scored_position_summary()
     await refresh_scored_rating_summary()
 
 
 async def refresh_unit_projections(run_ids, *, timings=None):
     """Deduplicate affected games in SQL; never materialize the parent FEN set."""
-    from chessism_api.database.ask_db import refresh_game_analysis_summary
+    from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary
     measure = timings.measure if timings is not None else lambda phase: nullcontext()
     with measure('summary_affected_games'):
         async with AsyncDBSession() as session:

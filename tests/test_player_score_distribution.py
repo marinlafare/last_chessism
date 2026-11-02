@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_score_distribution as scores
 from chessism_api.operations import player_score_histogram as batches
 

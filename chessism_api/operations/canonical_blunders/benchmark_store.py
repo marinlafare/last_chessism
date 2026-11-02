@@ -4,8 +4,8 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import RelationalStorage,SESSION_KEY,identifier
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import RelationalStorage,SESSION_KEY,identifier
 from .schema import table
 from . import publication
 from .assessment import install_view
@@ -90,7 +90,7 @@ class Scratch:
 
 async def recover_interrupted():
     """Only the single worker calls this after marking interrupted runs failed."""
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.relational_storage import storage_for
     async with AsyncDBSession() as s:
         layout=storage_for(s)
         runs=(await s.execute(text('''SELECT r.id FROM algorithm_run r JOIN pg_namespace n

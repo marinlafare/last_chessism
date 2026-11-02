@@ -6,8 +6,8 @@ from unittest.mock import patch
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 from sqlalchemy import JSON, MetaData, create_engine, event, update
 from sqlalchemy.dialects.postgresql import ARRAY
-from chessism_api.database import models  # Registers column tables.
-from chessism_api.database import cloud_codec as codec, cloud_columns as columns
+from chessism_api.database.postgresql import models  # Registers column tables.
+from chessism_api.database.postgresql import cloud_codec as codec, cloud_columns as columns
 
 
 class ReportingTests(unittest.TestCase):

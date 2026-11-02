@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 import json
 import time
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import IngestionPipelineStageTiming
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import IngestionPipelineStageTiming
 
 
 STEP_LABELS = {

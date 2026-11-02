@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, insert
 
 # --- FIXED IMPORTS ---
-from chessism_api.database.models import Fen, FenContinuation
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.models import Fen, FenContinuation
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.ask_db import (
     count_game_set_fens_for_analysis,
     get_game_set_analysis_completion,
     get_game_set_fens_for_analysis,

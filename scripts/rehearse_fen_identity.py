@@ -18,8 +18,8 @@ import asyncpg
 from sqlalchemy import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.fen_identity_migration import migrate
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.fen_identity_migration import migrate
 from chessism_api.operations import database_restore_tests as restore
 from chessism_api.operations.backup_coordination import ensure_backup_reservation, release_backup
 from scripts.fen_migration_progress import ProgressReporter, database_progress
@@ -96,7 +96,7 @@ async def run(args):
             restore._validate_probe(probe)
             migration = migrate
             if args.reference_tables:
-                from chessism_api.database.fen_reference_migration import migrate as migration
+                from chessism_api.database.postgresql.fen_reference_migration import migrate as migration
             result = await migration(connection, publish)
             await publish('testing_portable_backup_roundtrip', migration=result)
             engine = create_async_engine(URL.create('postgresql+asyncpg', username=restore.RESTORE_USER,
@@ -116,7 +116,7 @@ async def run(args):
                 # Restoring exactly the exported values must leave alternatives
                 # identical even though continuation row IDs may be regenerated.
                 from sqlalchemy import select
-                from chessism_api.database.models import Fen, FenContinuation
+                from chessism_api.database.postgresql.models import Fen, FenContinuation
                 async with AsyncDBSession() as session:
                     rows = (await session.execute(select(Fen.fen, FenContinuation.rank, FenContinuation.move, FenContinuation.score)
                         .join(FenContinuation, FenContinuation.fen_id == Fen.fen_id)

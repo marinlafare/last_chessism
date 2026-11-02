@@ -1,8 +1,8 @@
 """Physical v3 writes behind the explicit session storage contract."""
 from sqlalchemy import delete, func, insert, select, text, update
 
-from chessism_api.database.compact_storage import compact_for, compact_table
-from chessism_api.database.relational_storage import driver_connection
+from chessism_api.database.postgresql.compact_storage import compact_for, compact_table
+from chessism_api.database.postgresql.relational_storage import driver_connection
 
 
 async def insert_associations(session, rows):

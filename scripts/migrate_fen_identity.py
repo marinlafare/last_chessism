@@ -15,7 +15,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import asyncpg
-from chessism_api.database.fen_identity_migration import migrate
+from chessism_api.database.postgresql.fen_identity_migration import migrate
 from scripts.fen_migration_progress import ProgressReporter
 from chessism_api.operations.backup_coordination import ensure_backup_reservation, release_backup
 from chessism_api.operations.database_restore_tests import latest_backup_for_restore_test
@@ -73,7 +73,7 @@ async def run(args):
         monitor = asyncio.create_task(progress.monitor(observer, connection.get_server_pid(), initial_lsn))
         migration = migrate
         if references:
-            from chessism_api.database.fen_reference_migration import migrate as migration
+            from chessism_api.database.postgresql.fen_reference_migration import migrate as migration
         result = await migration(connection, progress.publish)
         monitor.cancel()
         with suppress(asyncio.CancelledError):

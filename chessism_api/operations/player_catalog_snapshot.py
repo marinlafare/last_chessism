@@ -7,8 +7,8 @@ import json
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
-from chessism_api.database.player_analytics_schema import analytics_table
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.player_analytics_schema import analytics_table
+from chessism_api.database.postgresql.relational_storage import storage_for
 from .player_analytics_summary import enabled, read_snapshot, counts
 
 CATALOG_SORTS = ('games', 'wins', 'losses', 'draws')

@@ -4,8 +4,8 @@ import unittest
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text, inspect
 from test_cloud_analysis_database import CloudDatabaseTests, TEST_URL
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudResultBatch, CloudRecoveryEvent
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudResultBatch, CloudRecoveryEvent
 from chessism_api.operations.cloud_analysis import controller, importer, recovery_history
 from chessism_api.operations.cloud_analysis.batch_validation import prepare_batch
 from chessism_api.operations.cloud_analysis.read_recovery import RecoveringClient, RecoveringStorage

@@ -1,6 +1,6 @@
 """Explicit numeric-key deletion; never removes canonical FENs or the archive."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 
 
 async def delete_exclusive_batch(session, player, candidates):

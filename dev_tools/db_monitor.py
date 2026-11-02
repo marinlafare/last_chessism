@@ -8,8 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select, update
 
-from chessism_api.database.engine import AsyncDBSession, init_db
-from chessism_api.database.models import Player, Game, Fen, GameFenAssociation
+from chessism_api.database.postgresql.engine import AsyncDBSession, init_db
+from chessism_api.database.postgresql.models import Player, Game, Fen, GameFenAssociation
 import constants
 
 

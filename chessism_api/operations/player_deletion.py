@@ -12,9 +12,9 @@ from arq.connections import ArqRedis
 from arq.jobs import Job, JobStatus
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.ask_db import (
     refresh_database_summary_game_counts,
     refresh_fen_pipeline_summary,
     refresh_main_character_mode_summary_for_players,

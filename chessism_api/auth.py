@@ -10,8 +10,8 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Account, AccountRole, AuthSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Account, AccountRole, AuthSession
 
 load_dotenv()
 

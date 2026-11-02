@@ -10,9 +10,9 @@ import logging
 import os
 
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .player_analytics_summary import day_params, source_rows_sql, NULL_DAY
 from .player_score_distribution import MODES, bins, games_sql, positions_sql, endings_sql
 from .player_score_histogram import BATCH_SELECTION, BATCH_GAMES

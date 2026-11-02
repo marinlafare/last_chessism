@@ -2,7 +2,7 @@
 from datetime import date, datetime, timezone
 from fastapi import HTTPException
 from sqlalchemy import select, text
-from chessism_api.database.models import CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame
+from chessism_api.database.postgresql.models import CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame
 from .schemas import MAX_BATCH_TOTAL_FENS, MAX_BATCH_FENS_PER_VM
 
 MAX_DRAFT_ENTRIES = 100

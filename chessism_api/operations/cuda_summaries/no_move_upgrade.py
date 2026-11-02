@@ -2,7 +2,7 @@
 import copy
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..canonical_blunders.schema import table
 from ..matrix_constructor.artifact_files import file_operation
 from .score_compute import MODES, check_device, host

@@ -3,9 +3,9 @@ import base64
 import hashlib
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.player_analytics_schema import analytics_table
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.player_analytics_schema import analytics_table
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .cuda_summaries import frequency_store as store
 from .cuda_summaries.frequency_compute import VERSION
 from .player_score_position_page import scope_key, PAGE_SIZE

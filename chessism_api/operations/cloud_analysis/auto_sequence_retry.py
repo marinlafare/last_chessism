@@ -1,7 +1,7 @@
 """Explicit, database-only retry intent; the host submits a new fenced session."""
 from copy import deepcopy
 from sqlalchemy import select
-from chessism_api.database.models import CloudBatchCycle, CloudAnalysisRun, CloudSequenceControl, CloudBatchSequence
+from chessism_api.database.postgresql.models import CloudBatchCycle, CloudAnalysisRun, CloudSequenceControl, CloudBatchSequence
 
 
 async def retry(session, job):

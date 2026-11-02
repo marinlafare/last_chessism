@@ -40,8 +40,8 @@ async def run(args):
     from chessism_api.operations import database_restore_tests as restore
     from chessism_api.operations.restore_workspace import workspace_lock
     from chessism_api.operations.backup_files import atomic_write_json
-    from chessism_api.database.relational_storage import describe_contract,validate_backup_contract
-    from chessism_api.database.backup_contract import contract_differences
+    from chessism_api.database.postgresql.relational_storage import describe_contract,validate_backup_contract
+    from chessism_api.database.postgresql.backup_contract import contract_differences
     from scripts.compact_db_preflight import require_private
     from scripts.compact_db_application_checks import application_checks,factory_for,LAYOUT
     from scripts.fen_migration_progress import ProgressReporter
@@ -147,7 +147,7 @@ async def run(args):
             # injected; no runtime startup migration or external service runs.
             await reporter.publish('checking_application_reads')
             from unittest.mock import patch
-            from chessism_api.database import ask_db
+            from chessism_api.database.postgresql import ask_db
             with patch.object(ask_db,'AsyncDBSession',factory):
                 for player in baseline['inputs']:
                     page=await ask_db.get_player_games_page(player['player_name'])
@@ -179,7 +179,7 @@ async def run(args):
                 await restore_engine.dispose()
             # Full-value comparison of EVERY table in the bounded fixture,
             # including typed cloud control documents and import receipts.
-            from chessism_api.database.relational_storage import identifier
+            from chessism_api.database.postgresql.relational_storage import identifier
             tables=await probe.fetch("SELECT schemaname,tablename FROM pg_tables WHERE schemaname IN ('public','chessism_archive') ORDER BY 1,2")
             for table in tables:
                 name=identifier(table['schemaname'])+'.'+identifier(table['tablename'])

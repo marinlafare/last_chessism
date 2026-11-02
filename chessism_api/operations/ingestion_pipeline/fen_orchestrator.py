@@ -7,7 +7,7 @@ from typing import Any
 from arq.connections import ArqRedis
 from arq.jobs import Job, JobStatus
 
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     _get_remaining_fens_count_committed,
     get_fen_ingestion_summary,
     increment_fen_ingestion_summaries,
@@ -251,8 +251,8 @@ async def _run_fen_pipeline(
         return {"claimed_games": 0, "successful_games": 0, "failed_games": 0}
 
     games_to_process = min(max(1, total_games_to_process), games_remaining)
-    from chessism_api.database.engine import AsyncDBSession
-    from chessism_api.database.compact_storage import compact_for
+    from chessism_api.database.postgresql.engine import AsyncDBSession
+    from chessism_api.database.postgresql.compact_storage import compact_for
     async with AsyncDBSession() as selection:
         compact = compact_for(selection)
     if compact:

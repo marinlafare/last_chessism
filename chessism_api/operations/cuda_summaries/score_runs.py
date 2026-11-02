@@ -5,8 +5,8 @@ input is processed; a player revision must still match before publication.
 """
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .schema import CONTROL, RUN, ITEM, PENDING
 
 SCOPE = 'public.cuda_score_scope'
@@ -171,10 +171,13 @@ async def complete(session, run):
         skipped += await session.scalar(text(f"SELECT count(*) FROM {salience_scope} WHERE run_id=:id AND status='superseded'"), p)
     if 'position_frequency' in run['metrics']:
         skipped += await session.scalar(text(f"SELECT COALESCE((timings->'position_frequency'->>'superseded')::int,0) FROM {RUN} WHERE id=:id"),p)
+    map_changed = 'ply_map' in run['metrics'] and await session.scalar(text(
+        f"SELECT COALESCE((timings->'ply_map'->>'superseded')::boolean,false) FROM {RUN} WHERE id=:id"),p)
     await session.execute(text(f'''UPDATE {RUN} SET status='complete',phase=:phase,finished_at=clock_timestamp(),
         updated_at=clock_timestamp(),attempts=0,error=NULL,retry_after=NULL,
         timings=timings || jsonb_build_object('superseded_score_players',CAST(:skipped AS bigint)) WHERE id=:id'''),
-        {**p, 'skipped': skipped, 'phase': 'Complete — changed players remain pending' if skipped else 'Complete'})
+        {**p, 'skipped': skipped, 'phase': 'Complete — changed map remains pending' if map_changed
+         else 'Complete — changed players remain pending' if skipped else 'Complete'})
     # Keep compact run/scope audit; discard reproducible staging and game manifests.
     for table in (PART, OWNER, DAY, CAPTURE):
         await session.execute(text(f'DELETE FROM {table} WHERE run_id=:id'), p)

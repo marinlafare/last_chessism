@@ -303,6 +303,7 @@ export default function DatabaseBackups() {
                   aria-busy={backupActive}
                   type="button"
                   disabled={active || !storage.available || storage.error || snapshotNeedsTest}
+                  title="Back up PostgreSQL and Neo4j. Neo4j pauses briefly for its offline snapshot."
                   onClick={startBackup}
                 >
                   Backup
@@ -313,7 +314,9 @@ export default function DatabaseBackups() {
                   aria-busy={restoreActive}
                   type="button"
                   disabled={active || !storage.available || Boolean(storage.error) || !latestBackup || latestBackupTested}
-                  title={latestBackupTested ? 'The latest backup has already passed its restore test.' : 'Test the latest backup.'}
+                  title={latestBackupTested ? 'The latest backup has already passed its restore test.'
+                    : latestBackup?.neo4j ? 'Restore and verify PostgreSQL and Neo4j in isolated copies.'
+                      : 'Test this legacy PostgreSQL-only backup. Create a new backup to include Neo4j.'}
                   onClick={startRestoreTest}
                 >
                   Test backup

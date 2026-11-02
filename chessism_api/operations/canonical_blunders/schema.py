@@ -1,6 +1,6 @@
 """Explicit additive installation; no source-game updates or GPU work in triggers."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import identifier
+from chessism_api.database.postgresql.relational_storage import identifier
 
 
 def table(layout, name):

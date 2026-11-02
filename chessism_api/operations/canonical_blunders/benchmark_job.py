@@ -10,7 +10,7 @@ from pathlib import Path
 import time
 from collections import Counter
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
 from ..research_algorithms.cuda_runtime import cuda_backend
 from ..research_algorithms.blunder_full_compute import memory_plan
@@ -37,7 +37,7 @@ async def current_configuration():
     async with AsyncDBSession() as s:
         await source.source.prepare(s)
         control=await source.guard(s)
-        from chessism_api.database.relational_storage import storage_for
+        from chessism_api.database.postgresql.relational_storage import storage_for
         model=await s.scalar(text(f'SELECT config FROM {table(storage_for(s),"model")} WHERE id=:id'),
             {'id':control['active_model']})
         return configuration(control['active_model'],model,reader_comparison=True)

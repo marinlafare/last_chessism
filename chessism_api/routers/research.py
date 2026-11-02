@@ -11,8 +11,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from chessism_api.auth import get_current_account
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Account, CoefficientResearchExperiment
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Account, CoefficientResearchExperiment
 from chessism_api.operations.coefficient_research import (
     experiment_payload,
     get_coefficient_research_overview,

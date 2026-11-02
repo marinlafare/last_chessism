@@ -22,7 +22,7 @@ from chessism_api.auth import (
     set_gate_cookie,
     verify_secret,
 )
-from chessism_api.database.models import Account, AuthSession
+from chessism_api.database.postgresql.models import Account, AuthSession
 
 router = APIRouter()
 

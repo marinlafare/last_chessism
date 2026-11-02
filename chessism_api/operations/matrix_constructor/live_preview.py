@@ -5,7 +5,7 @@ import math
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .catalog import ROW_TYPES
 from .definitions import QUERY_TIMEOUT_MS, resolve_definition
 from .queries import matrix_sql

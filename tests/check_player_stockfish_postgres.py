@@ -50,8 +50,8 @@ async def main():
     from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
     from sqlalchemy.orm import sessionmaker
     from tests.check_db_refactor_candidate_postgres import command
-    from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
-    from chessism_api.database.stockfish_summary_schema import install_stockfish_summaries, summary_table
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
+    from chessism_api.database.postgresql.stockfish_summary_schema import install_stockfish_summaries, summary_table
     from chessism_api.operations import player_stockfish_summary as summaries, player_score_distribution as scores
     from chessism_api.operations import player_stockfish_worker as worker
 

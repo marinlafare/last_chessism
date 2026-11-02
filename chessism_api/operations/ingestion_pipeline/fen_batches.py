@@ -3,8 +3,8 @@ import asyncio
 import logging
 import random
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.ask_db import refresh_game_analysis_summary, refresh_fen_pipeline_summary
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary, refresh_fen_pipeline_summary
 from .fen_bulk import persist_positions
 from .fen_core import process_single_game_sync, aggregate_fen_data, count_expected_fen_positions
 from .fen_repository import (

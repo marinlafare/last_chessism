@@ -7,8 +7,8 @@ from typing import Any
 
 from sqlalchemy import select
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Game, to_dict
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Game, to_dict
 from chessism_api.operations.ingestion_pipeline import PARSING_GAMES
 from chessism_api.operations.ingestion_pipeline.chesscom import download_months
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (

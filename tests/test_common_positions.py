@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 import chess
 from chessism_api.operations import common_positions as cache
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 NOW = datetime(2026, 10, 11, tzinfo=timezone.utc)
 E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -"

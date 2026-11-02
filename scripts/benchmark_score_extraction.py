@@ -13,7 +13,7 @@ import time
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.matrix_constructor.queries import matrix_sql
 from chessism_api.operations.player_score_distribution import MODES, prepare
 from chessism_api.operations.player_stockfish_summary import read_saved
@@ -76,7 +76,7 @@ async def benchmark(player):
 
 async def main(player):
     from constants import CONN_STRING
-    from chessism_api.database.runtime import bind_runtime_engine
+    from chessism_api.database.postgresql.runtime import bind_runtime_engine
     engine=await bind_runtime_engine(CONN_STRING)
     try: print(json.dumps(await asyncio.wait_for(benchmark(player),timeout=120)))
     finally: await engine.dispose()

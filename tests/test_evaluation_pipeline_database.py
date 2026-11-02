@@ -4,8 +4,8 @@ import unittest
 
 from sqlalchemy import select, text
 import test_cloud_analysis_database as cloud
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen, FenContinuation, DatabaseSummary
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, FenContinuation, DatabaseSummary
 from chessism_api.operations.fen_results import stage_fen_results, increment_new_fen_counts
 from chessism_api.operations.fen_backup.database import restore_batch
 from chessism_api.operations.tablebase import _save_tablebase_batch

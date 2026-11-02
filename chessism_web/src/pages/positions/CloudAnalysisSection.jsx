@@ -11,7 +11,8 @@ import { blockingCloudJob, cloudIsBusy } from './cloudJobState'
 import CloudFenProgress from './CloudFenProgress'
 import CloudJobOverview from './CloudJobOverview'
 import CloudPerformanceReportModal from './CloudPerformanceReportModal'
-import { cloudJobProgress, cloudActiveRun, cloudJobDone } from './cloudJobProgress'
+import { cloudJobProgress, cloudActiveRun } from './cloudJobProgress'
+import { terminalProgress } from './cloudProgressReview'
 import useCloudJobDisplay from './useCloudJobDisplay'
 import useCloudStatus from './useCloudStatus'
 import CloudGameDraft from './CloudGameDraft'
@@ -111,8 +112,8 @@ export default function CloudAnalysisSection({ onProgress, collapsible = false }
         const canResume = ['paused', 'waiting'].includes(job.status)
         const canCancel = !job.stop_cleanup && sendingStop !== job.id && ['queued', 'running', 'paused', 'waiting', 'failed'].includes(job.status)
         const canRetry = !job.stop_cleanup && job.status === 'failed' && (job.sequence?.automatic ? job.sequence.session < 3 : active?.run_job ? active.run_execution_count < 3 : active?.recovery_session ? active.recovery_session < 3 : active?.batch_jobs.length < 3)
-        const canDismiss = cloudJobDone(job) || job.status === 'cancelled'
-        const stopping = Boolean(job.stop_cleanup || sendingStop === job.id) && !canDismiss
+        const canDismiss = terminalProgress(job)
+        const stopping = Boolean(job.stop_cleanup || sendingStop === job.id) && job.stop_cleanup?.phase !== 'complete' && !canDismiss
         const stopLabel = sendingStop === job.id ? 'Sending stop request…' : cloudJobProgress(job).label
         const backend = job.selection.backend || 'batch_spot'
         const showHistory = (backend === 'cloud_run' ? runDisplay : batchDisplay)?.job.id === job.id

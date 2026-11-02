@@ -8,7 +8,7 @@ from collections import defaultdict
 
 from sqlalchemy import text
 
-from chessism_api.database.relational_storage import driver_connection, identifier, storage_for, INGESTION_COMMIT_LOCK
+from chessism_api.database.postgresql.relational_storage import driver_connection, identifier, storage_for, INGESTION_COMMIT_LOCK
 
 
 START = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -"

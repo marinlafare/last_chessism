@@ -10,7 +10,7 @@ import httpx
 from fastapi import Depends, FastAPI
 
 from chessism_api.auth import get_current_account, require_superuser
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 
 from chessism_api.operations.research_algorithms import score_validation_job as job, jobs
 from chessism_api.operations.research_algorithms.repository import RunCancelled

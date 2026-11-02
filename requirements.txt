@@ -3,6 +3,7 @@ uvicorn
 python-dotenv
 sqlalchemy[asyncio]
 asyncpg
+neo4j==6.3.0
 pydantic
 httpx
 requests

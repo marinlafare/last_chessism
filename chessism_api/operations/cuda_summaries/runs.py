@@ -2,7 +2,7 @@
 import json
 import uuid
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..canonical_blunders.schema import table as canonical_table
 from ..canonical_blunders.source import MAX_GAMES
 from .schema import CONTROL, PENDING, RUN, ITEM, enabled
@@ -52,7 +52,9 @@ async def request_run(session, account_id):
     salience_work = await salience_store.capture(session, run_id) if scores else 0
     from . import frequency_store
     frequency_work = await frequency_store.capture(session, run_id) if scores else 0
-    if not total and not score_work and not metadata_work and not salience_work and not frequency_work:
+    from chessism_api.database.neo4j import ply_map_store
+    map_work = await ply_map_store.capture(session, run_id) if scores else 0
+    if not total and not score_work and not metadata_work and not salience_work and not frequency_work and not map_work:
         raise ValueError('No pending work for the currently available CUDA calculations.')
     if scores:
         await session.execute(text(f"UPDATE {RUN} SET metrics=ARRAY['blunders','score_distribution'] WHERE id=:id"), {'id': run_id})
@@ -64,6 +66,8 @@ async def request_run(session, account_id):
         await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['salience'] WHERE id=:id"), {'id':run_id})
     if frequency_work:
         await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['position_frequency'] WHERE id=:id"), {'id':run_id})
+    if map_work:
+        await session.execute(text(f"UPDATE {RUN} SET metrics=metrics || ARRAY['ply_map'] WHERE id=:id"), {'id':run_id})
     await session.execute(text(f'UPDATE {RUN} SET total_games=:total WHERE id=:id'), {'id': run_id, 'total': total})
     return await progress(session, run_id)
 
@@ -193,7 +197,7 @@ async def status(session, *, player=None):
     if player:
         preparing = await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} q
             WHERE true {owner_filter})'''), params)
-        from chessism_api.database.stockfish_summary_schema import summary_table
+        from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
         score_stale = scores and await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {summary_table(layout,'state')}
             WHERE player_name=:player AND revision<>published_revision)'''), params)
         accuracy_stale = accuracy and await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM ({accuracy_store.needs_work(layout)}) q WHERE player_name=:player)'), params)
@@ -212,7 +216,7 @@ async def status(session, *, player=None):
         attempts,retry_after,error,timings #- '{{position_frequency,chunks}}' #- '{{position_frequency,outputs}}' AS timings
         FROM {RUN} ORDER BY created_at DESC LIMIT 20'''))).mappings()]
     active = next((r for r in history if r['status'] in ('queued','running','retrying')), None)
-    from chessism_api.database.stockfish_summary_schema import summary_table
+    from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
     score_players = await session.scalar(text(f'SELECT count(*) FROM {summary_table(layout,"state")} WHERE revision<>published_revision')) if scores else 0
     accuracy_players = await session.scalar(text(f'SELECT count(*) FROM ({accuracy_store.needs_work(layout)}) q')) if accuracy else 0
     if scores:
@@ -229,7 +233,12 @@ async def status(session, *, player=None):
             {salience_union}
             {frequency_union}
         ) pending_players'''))
+    from chessism_api.database.neo4j import ply_map_store
+    graph_map = await ply_map_store.status(session)
+    if graph_map['installed'] and scores:
+        available = [*available, ply_map_store.METRIC]
     return {'manual': True, 'available_metrics': available, 'deferred_metrics': deferred,
+            'ply_map': graph_map,
             'pending_games': counts, 'pending_players': players, 'pending_score_players': score_players,
             'pending_accuracy_players': accuracy_players,
             'pending_salience_players': len(salience_players),

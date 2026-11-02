@@ -1,0 +1,5 @@
+FROM chessism-api:ply-map-20261101
+COPY chessism_api/database/neo4j/sync_ingestion.py /app/chessism_api/database/neo4j/sync_ingestion.py
+COPY chessism_api/database/neo4j/fen_capture.py /app/chessism_api/database/neo4j/fen_capture.py
+COPY chessism_api/database/neo4j/sync_schema.py /app/chessism_api/database/neo4j/sync_schema.py
+COPY chessism_api/operations/ingestion_pipeline/timing.py /app/chessism_api/operations/ingestion_pipeline/timing.py

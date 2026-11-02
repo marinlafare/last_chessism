@@ -10,10 +10,10 @@ import re
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 from . import runtime
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudResultBatch, CloudAnalysisJob
-from chessism_api.database.cloud_codec import encode_document, decode_document, checksum, write_document
-from chessism_api.database.cloud_migration import migrate, repair_cleanup_resources
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudResultBatch, CloudAnalysisJob
+from chessism_api.database.postgresql.cloud_codec import encode_document, decode_document, checksum, write_document
+from chessism_api.database.postgresql.cloud_migration import migrate, repair_cleanup_resources
 from . import history
 
 

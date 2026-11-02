@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>Isolated collapsed map</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import CommonPositionsDisclosure from '/src/pages/scored-positions/CommonPositionsDisclosure.jsx'
+import { appearanceCss } from '/src/appearance/styleCore.js'
+import '/src/index.css'
+history.replaceState({},'', '/scored_positions')
+const t=window.plyTest={requests:[],errors:[],empty:false,hold:false}
+addEventListener('error',e=>t.errors.push(e.message));addEventListener('unhandledrejection',e=>t.errors.push(String(e.reason)))
+const snapshot={id:'33333333-3333-4333-8333-333333333333',games:3,max_ply:30,created_at:'2026-11-01T12:00:00Z'}
+const nodes=[{key:'root',kind:'root',x:0,y:0,ply:0,label:'Initial position',games:3},
+ {key:'p:1:10',kind:'position',x:1,y:1,ply:1,label:'e4',games:3},
+ {key:'p:3:20',kind:'position',x:3,y:2,ply:3,label:'Nf3',games:2},
+ {key:'t:p:3:20:ending',kind:'ending',x:4,y:3,ply:4,label:'Game endings',games:2}]
+const connections=[{key:'edge1',source:'root',target:'p:1:10',hidden:0,games:3,label:'e4'},
+ {key:'edge2',source:'p:1:10',target:'p:3:20',hidden:1,games:2,label:'1 hidden position'}]
+window.fetch=async(input,options={})=>{
+ const url=new URL(input,location.href),path=url.pathname.replace(/^\/api/,''),p=Object.fromEntries(url.searchParams)
+ t.requests.push({path,p,method:options.method||'GET'})
+ if(options.method&&options.method!=='GET')throw Error('No writes allowed in fixture')
+ if(t.hold)await new Promise((resolve,reject)=>{t.release=resolve;options.signal?.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true})})
+ const reply=data=>new Response(JSON.stringify(data),{headers:{'Content-Type':'application/json'}})
+ if(path==='/graph-explorer/ply-map'){
+  if(t.empty)return reply({status:{pending:true},snapshot:null,nodes:[],connections:[]})
+  const colored=row=>({...row,players:Object.fromEntries((p.players||'').split(',').filter(Boolean).map(id=>[id,2])),selected_games:3})
+  return reply({status:{pending:false},snapshot,nodes:nodes.map(colored),connections:connections.map(colored),has_more:false,boundary_connections:0})
+ }
+ if(path==='/graph-explorer/ply-map/players')return reply({rows:[{player_id:1,name:'lafareto',games:2},{player_id:2,name:'hikaru',games:2}]})
+ if(path==='/graph-explorer/ply-map/detail')return reply({total:2,rows:[{game_id:1,white_name:'lafareto',black_name:'hikaru',reason:'ending',path:[]}],has_more:false})
+ throw Error('Unexpected live request: '+path)
+}
+t.style=(target,property,value)=>{
+ const registry={properties:{background:{kind:'color',css:'background-color'},radius:{kind:'number',css:'border-radius',unit:'px',min:0,max:100},color:{kind:'color',css:'color'}},scopes:{scored_positions:{targets:{[target]:{properties:['background','radius','color']}}}}}
+ const style=document.createElement('style');style.textContent=appearanceCss(registry,[{scope:'scored_positions',target,property,value}]);document.head.append(style)
+}
+createRoot(document.getElementById('root')).render(React.createElement('main',{style:{maxWidth:'1400px',margin:'auto'}},React.createElement(CommonPositionsDisclosure)))
+</script></body></html>

@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import test_cloud_analysis_database as existing
 from sqlalchemy import func, select, text, update
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudBatchUnit,
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudBatchUnit,
     CloudFenClaim, CloudResultBatch, CloudControllerHeartbeat, CloudPhaseTiming, Fen)
 from chessism_api.operations.cloud_analysis import controller, importer, history
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet
@@ -123,7 +123,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_statistics_failure_stops_before_reservation(self):
         root = await self.root()
         with patch.object(fleet, 'refresh_claim_statistics', side_effect=RuntimeError('analyze failed')), \
-             patch('chessism_api.database.ask_db.get_fens_for_analysis', new_callable=AsyncMock) as select_fens:
+             patch('chessism_api.database.postgresql.ask_db.get_fens_for_analysis', new_callable=AsyncMock) as select_fens:
             with self.assertRaisesRegex(RuntimeError, 'analyze failed'):
                 await fleet.reserve_unit(self.job, root, {'units': []}, 0, 1)
             select_fens.assert_not_awaited()

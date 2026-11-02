@@ -15,8 +15,8 @@ from cleaning_job.cleanup import prepare, check_bucket
 from stockfish_batch.checkpoints import encode
 from stockfish_batch.config import Config
 from stockfish_core import PROFILE_ID
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun
 from sqlalchemy import select
 from . import history
 

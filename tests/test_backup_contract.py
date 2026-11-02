@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 from unittest.mock import patch
 
-from chessism_api.database.backup_contract import canonical_contract, contract_differences, normalize_definition
+from chessism_api.database.postgresql.backup_contract import canonical_contract, contract_differences, normalize_definition
 
 BEFORE = "CHECK (((status)::text = ANY ((ARRAY['queued'::character varying, 'running'::character varying])::text[])))"
 AFTER = "CHECK (((status)::text = ANY (ARRAY[('queued'::character varying)::text, ('running'::character varying)::text])))"

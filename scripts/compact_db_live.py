@@ -5,8 +5,8 @@ commit together, only after both exact source/target schema contracts validate.
 """
 from sqlalchemy import text
 
-from chessism_api.database.relational_storage import RelationalStorage, describe_contract
-from chessism_api.database.backup_contract import contract_differences
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, describe_contract
+from chessism_api.database.postgresql.backup_contract import contract_differences
 from scripts.compact_db_migration import migrate_authorized
 from scripts.db_refactor_live_target import identity, authorize, require_no_clients, require_shared_memory
 

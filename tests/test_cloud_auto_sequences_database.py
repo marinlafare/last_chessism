@@ -8,8 +8,8 @@ from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text
 import test_cloud_analysis_database as existing
 import test_cloud_work_units_database as units_test
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (CloudAnalysisJob, CloudAnalysisRun, CloudSequenceControl,
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudSequenceControl,
     CloudBatchSequence, CloudControllerHeartbeat, CloudFenClaim, Fen)
 from chessism_api.operations.cloud_analysis import controller, sequence, auto_sequence as auto, auto_sequence_cleanup as cleanup, importer
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest

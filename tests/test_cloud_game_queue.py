@@ -4,7 +4,7 @@ import unittest
 from unittest.mock import patch
 
 os.environ.setdefault('DATABASE_URL','postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.relational_storage import RelationalStorage
+from chessism_api.database.postgresql.relational_storage import RelationalStorage
 from chessism_api.operations.cloud_analysis import game_fen_queue as queue
 
 

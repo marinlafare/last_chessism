@@ -1,6 +1,6 @@
 """Remove the compatibility view's CPU fallback without changing saved results."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from ..evaluation_repair.plan import require_idle
 from . import schema
 

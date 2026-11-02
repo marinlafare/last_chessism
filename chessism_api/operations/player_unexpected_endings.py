@@ -15,8 +15,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_chart_games import decode_cursor
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 

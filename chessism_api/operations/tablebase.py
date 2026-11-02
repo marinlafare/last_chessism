@@ -11,7 +11,7 @@ from arq.jobs import Job, JobStatus
 from sqlalchemy import bindparam, func, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     increment_game_analysis_summary_for_scored_fens,
     increment_scored_position_summary_for_scored_fens,
     refresh_database_summary_fen_counts,
@@ -21,8 +21,8 @@ from chessism_api.database.ask_db import (
     refresh_scored_rating_summary,
 )
 from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter
 from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
 from chessism_api.operations.redis_ownership import release_owned
@@ -203,7 +203,7 @@ async def _lease_tablebase_batch(
             params = {"limit": max(1, int(limit))}
 
         rows = [dict(row) for row in (await session.execute(text(query), params)).mappings()]
-        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
         unclaimed = set(await unclaimed_locked_fens(session, [row["fen"] for row in rows]))
         rows = [row for row in rows if row["fen"] in unclaimed]
         if not rows:
@@ -229,7 +229,7 @@ async def _save_tablebase_batch(
 ) -> None:
     from chessism_api.evaluations import validate_batch
     validate_batch(solved, source='tablebase')
-    from chessism_api.database.compact_storage import compact_for
+    from chessism_api.database.postgresql.compact_storage import compact_for
     layout = compact_for(session)
     if layout:
         await save_compact_batch(session, solved, unavailable)
@@ -450,6 +450,38 @@ async def _release_coordination(redis: ArqRedis, job_id: str) -> None:
     await release_owned(redis, TABLEBASE_COORDINATION_KEY, job_id)
 
 
+async def _enqueue_tablebase_job(redis, *, game_links, max_positions, batch_size, ingestion_run_id):
+    """One normalized queue contract for shared jobs and scoped finalization."""
+    job = await redis.enqueue_job(
+        'run_tablebase_analysis_job',
+        max_positions=max_positions,
+        batch_size=max(1, min(int(batch_size), 5_000)),
+        candidate_count=None,
+        game_links=_clean_game_links(game_links) if game_links is not None else None,
+        ingestion_run_id=ingestion_run_id,
+        _queue_name='pipeline_queue',
+    )
+    if job is None:
+        raise RuntimeError('Redis did not create the tablebase job.')
+    return job
+
+
+async def _queue_ingestion_followup(redis, *, game_links, max_positions, batch_size, ingestion_run_id):
+    """A shared job cannot finish another ingestion's durable progress record.
+
+    The single pipeline worker executes this scoped follow-up after its current
+    work. Discovery only selects still-unscored positions, so shared-job results
+    are reused, never recalculated. Do not replace the shared coordination owner.
+    """
+    job = await _enqueue_tablebase_job(redis, game_links=game_links, max_positions=max_positions,
+        batch_size=batch_size, ingestion_run_id=ingestion_run_id)
+    job_id = str(job.job_id)
+    await _write_progress(redis, job_id, total=0, processed=0, failed=0,
+        phase='queued', ingestion_run_id=ingestion_run_id,
+        detail='Waiting for shared endgame work; then checking this ingestion and finalizing its progress.')
+    return {'status':'queued', 'job_id':job_id, 'pending':None}
+
+
 async def ensure_tablebase_analysis_enqueued(
     redis: ArqRedis,
     *,
@@ -458,6 +490,13 @@ async def ensure_tablebase_analysis_enqueued(
     batch_size: int = TABLEBASE_BATCH_SIZE,
     ingestion_run_id: str | None = None,
 ) -> dict[str, Any]:
+    async def already_active(job_id=None, pending=None):
+        if ingestion_run_id:
+            return await _queue_ingestion_followup(redis, game_links=game_links,
+                max_positions=max_positions, batch_size=batch_size,
+                ingestion_run_id=ingestion_run_id)
+        return {'status':'already_active', 'job_id':job_id, 'pending':pending}
+
     current_job_id = _redis_text(await redis.get(TABLEBASE_COORDINATION_KEY))
     if current_job_id and current_job_id != "reserving":
         status = await Job(
@@ -466,10 +505,10 @@ async def ensure_tablebase_analysis_enqueued(
             _queue_name="pipeline_queue",
         ).status()
         if status in ACTIVE_JOB_STATUSES:
-            return {"status": "already_active", "job_id": current_job_id, "pending": None}
+            return await already_active(current_job_id)
         await _release_coordination(redis, current_job_id)
     elif current_job_id == "reserving":
-        return {"status": "already_active", "job_id": None, "pending": None}
+        return await already_active()
 
     clean_links = _clean_game_links(game_links)
     has_work = await has_tablebase_candidates(
@@ -488,20 +527,16 @@ async def ensure_tablebase_analysis_enqueued(
         nx=True,
     )
     if not reserved:
-        return {"status": "already_active", "job_id": None, "pending": pending}
+        return await already_active(pending=pending)
 
     try:
-        job = await redis.enqueue_job(
-            "run_tablebase_analysis_job",
+        job = await _enqueue_tablebase_job(
+            redis,
             max_positions=max_positions,
-            batch_size=max(1, min(int(batch_size), 5_000)),
-            candidate_count=pending,
+            batch_size=batch_size,
             game_links=clean_links if game_links is not None else None,
             ingestion_run_id=ingestion_run_id,
-            _queue_name="pipeline_queue",
         )
-        if job is None:
-            raise RuntimeError("Redis did not create the tablebase job.")
         job_id = str(job.job_id)
         await redis.set(
             TABLEBASE_COORDINATION_KEY,

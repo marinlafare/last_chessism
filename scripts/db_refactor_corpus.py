@@ -7,7 +7,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import sessionmaker
 
-from chessism_api.database.relational_storage import SESSION_KEY, require_storage_contract
+from chessism_api.database.postgresql.relational_storage import SESSION_KEY, require_storage_contract
 from scripts.db_refactor_candidate import guard
 from scripts.db_refactor_switch_rehearsal import LAYOUT
 
@@ -143,7 +143,7 @@ async def finalize(connection, pgdata, publish, *, inject=False):
     await connection.execute(text(f'SET LOCAL search_path={LAYOUT.search_path}'))
     factory = sessionmaker(bind=connection, class_=AsyncSession, expire_on_commit=False,
         join_transaction_mode='create_savepoint', info={SESSION_KEY: LAYOUT})
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations.home_summary import refresh_home_summary
 
     await publish('refreshing_database_counts', steps_completed=0, steps_total=len(STAGES))

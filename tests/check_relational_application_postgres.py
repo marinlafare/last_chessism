@@ -22,7 +22,7 @@ from sqlalchemy.orm import sessionmaker
 from scripts.db_refactor_candidate import C,A,V,prepare_reference,build_candidate
 from scripts.db_refactor_write_checks import fixture_bundle,PLAYER,OTHER,LINKS
 from tests.check_db_refactor_candidate_postgres import FIXTURE, command
-from chessism_api.database.relational_storage import (
+from chessism_api.database.postgresql.relational_storage import (
     RelationalStorage, SESSION_KEY, require_storage_contract, create_relational_engine,
     describe_contract, validate_backup_contract,
 )
@@ -70,9 +70,9 @@ async def setup(conn, pgdata):
 
 
 async def check_application(engine, conn):
-    from chessism_api.database import ask_db, db_interface
-    from chessism_api.database.models import Fen, GameFenAssociation
-    from chessism_api.database.db_interface import DBInterface
+    from chessism_api.database.postgresql import ask_db, db_interface
+    from chessism_api.database.postgresql.models import Fen, GameFenAssociation
+    from chessism_api.database.postgresql.db_interface import DBInterface
     from chessism_api.operations import player_game_scores, player_salience, player_salience_calculation, player_deletion, home_summary
     from chessism_api.operations.ingestion_pipeline import game_repository, fen_repository
     from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync, aggregate_fen_data
@@ -202,14 +202,14 @@ async def check_application(engine, conn):
         assert page['total']>=3 and all('avg_abs_score' in row for row in page['rows'])
         print('PASS real read consumers: saved matrix metrics, player salience matrix and scored-game page',flush=True)
         # Build only missing global-cache tables, inside the disposable layout.
-        from chessism_api.database.models import Base
+        from chessism_api.database.postgresql.models import Base
         async with engine.begin() as connection:
             connection=await connection.execution_options(schema_translate_map={None:C})
             names=('home_summary_source','home_titled_summary','home_titled_player_summary',
                    'database_summary','fen_pipeline_summary','scored_position_summary','main_character_mode_summary')
             await connection.run_sync(lambda sync:Base.metadata.create_all(sync,tables=[Base.metadata.tables[n] for n in names]))
             await connection.execute(text("INSERT INTO home_summary_source(id,revision) VALUES(1,1)"))
-            from chessism_api.database.home_summary_schema import install_relational_home_triggers
+            from chessism_api.database.postgresql.home_summary_schema import install_relational_home_triggers
             await install_relational_home_triggers(connection,layout)
         home=await home_summary.run_home_summary_refresh({})
         assert home['titled_games']==2,home # Neither archived Alice game belongs in the active count.

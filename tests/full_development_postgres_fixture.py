@@ -9,7 +9,7 @@ async def verify(connection, engine):
     import numpy as np
     from sqlalchemy import text
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage
     from chessism_api.operations.research_algorithms import blunder_full_source as source
     from chessism_api.operations.research_algorithms import blunder_development_reuse as history
     from chessism_api.operations.research_algorithms.repository import RunCancelled

@@ -60,14 +60,14 @@ try {
   if (!process.argv.includes('--local-only')) {
   await send('browsingContext.navigate', { context,
     url: 'http://127.0.0.1:6789/tests/fixtures/ingestion.html', wait: 'complete' })
-  await waitFor("document.querySelectorAll('.fen-pipeline-stage').length === 3")
-  await waitFor("document.querySelectorAll('.fen-pipeline-stage.is-complete').length === 1")
+  await waitFor("document.querySelectorAll('.fen-pipeline-stage').length === 2")
+  await waitFor("document.querySelectorAll('.fen-pipeline-stage.is-complete').length === 0")
   await waitFor("document.querySelector('.fen-pipeline-stage.is-working').textContent.includes('1,000')")
-  await waitFor("!document.querySelector('.fen-pipeline-stage.is-working [role=progressbar]')")
+  await waitFor("!document.querySelector('.fen-pipeline-stage.is-working [role=progressbar]').hasAttribute('aria-valuenow')")
   await evaluate("window.ingestionTest.run.steps[1].heartbeat_at -= 60; window.ingestionTest.render()")
   await waitFor("document.body.textContent.includes('heartbeat delayed')")
   await evaluate("window.ingestionTest.run.steps[1].status='complete'; window.ingestionTest.run.steps[1].total=1000; window.ingestionTest.render()")
-  await waitFor("document.querySelectorAll('.fen-pipeline-stage.is-complete').length === 2")
+  await waitFor("document.querySelector('[data-ingestion-stage=positions].is-pending')")
   await evaluate("window.ingestionTest.run.steps[2].status='failed'; window.ingestionTest.render()")
   await waitFor("document.querySelector('.fen-pipeline-stage.is-failed')")
   await evaluate("window.ingestionTest.run.status='failed'; window.ingestionTest.run.finished_at=new Date().toISOString(); window.ingestionTest.render()")
@@ -76,20 +76,20 @@ try {
   await waitFor("document.querySelector('.fen-ingestion-result') && !document.querySelector('.fen-pipeline-stage.is-working')")
   await waitFor("window.ingestionTest.errors.length === 0")
   await send('browsingContext.reload', { context, wait: 'complete' })
-  await waitFor("document.querySelectorAll('.fen-pipeline-stage').length === 3")
+  await waitFor("document.querySelectorAll('.fen-pipeline-stage').length === 2")
   await waitFor("document.querySelector('.fen-ingestion-dismiss')")
   await evaluate("document.querySelector('.fen-ingestion-dismiss').click()")
   await waitFor("!document.querySelector('.fen-ingestion-result')")
   await send('browsingContext.reload', { context, wait: 'complete' })
   await waitFor("document.querySelector('.fen-ingestion-panel') && !document.querySelector('.fen-ingestion-result')")
   await evaluate("window.ingestionTest.run.status='complete'; window.ingestionTest.run.finished_at=new Date().toISOString(); window.ingestionTest.run.steps.forEach(s=>s.status='complete'); window.ingestionTest.render()")
-  await waitFor("document.querySelector('.fen-ingestion-dismiss') && document.querySelectorAll('.fen-pipeline-stage.is-complete').length === 3")
+  await waitFor("document.querySelector('.fen-ingestion-dismiss') && document.querySelector('[data-ingestion-stage=positions].is-complete')")
   console.log('PASS: progress, unknown totals, stale heartbeat, failure, retained completion, dismissal/reload, retried run review; no live requests')
 
   await send('browsingContext.navigate', { context,
     url: 'http://127.0.0.1:6789/tests/fixtures/ingestionPolling.html', wait: 'complete' })
   const state = 'window.ingestionPollingTest'
-  const progress = `document.querySelector('.fen-pipeline-stage [role="progressbar"]')?.getAttribute('aria-valuenow')`
+  const progress = `document.querySelector('[data-ingestion-stage=positions] [role="progressbar"]')?.getAttribute('aria-valuenow')`
   const completed = `Array.from(document.querySelectorAll('.fen-ingestion-result')).find(row => row.querySelector('.fen-ingestion-result-heading strong')?.textContent === 'offline-player')`
   await waitFor(`${progress} === '10' && ${state}.freshness.data === 10`)
   await evaluate(`${state}.before = { calls: ${state}.requests.length, stamp: ${state}.freshness.lastSuccessAt }; ${state}.visibility(true); ${state}.count = 40`)
@@ -118,7 +118,7 @@ try {
   await pause(3200)
   await waitFor(`${state}.requests.length === ${state}.before.calls`)
   await evaluate(`${state}.hold = false; ${state}.count = 100; ${state}.status = 'complete'; ${state}.render()`)
-  await waitFor(`${completed}?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuenow') === '100'`)
+  await waitFor(`${completed}?.querySelector('[data-ingestion-stage=positions] [role="progressbar"]')?.getAttribute('aria-valuenow') === '100'`)
   await evaluate(`${completed}.querySelector('.fen-ingestion-dismiss').click()`)
   await waitFor(`!${completed} && document.querySelector('.fen-ingestion-result')?.textContent.includes('sample')`)
   await evaluate(`${state}.render(false)`)

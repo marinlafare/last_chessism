@@ -5,6 +5,7 @@ No production mounts or credentials required; all data lives in tempfile dirs.
 import asyncio
 from contextlib import ExitStack
 import json
+import os
 from pathlib import Path
 import tempfile
 from unittest.mock import patch
@@ -23,10 +24,11 @@ from chessism_api.operations.database_snapshot_restore import prepare_cluster, r
 async def main():
     with tempfile.TemporaryDirectory(prefix="snapshot-test-") as temp, ExitStack() as stack:
         root = Path(temp)
-        volume, workspace = root / "backup", root / "restore"
+        volume = Path(os.environ.get("CHESSISM_ROUNDTRIP_BACKUP_ROOT", str(root / "backup")))
+        workspace = root / "restore"
         app = volume / "chessism"
         db = app / "database"
-        db.mkdir(parents=True)
+        db.mkdir(parents=True, exist_ok=True)
         source, target = root / "source", workspace / "pgdata"
         source_socket, target_socket = root / "src-socket", root / "dst-socket"
         for path in (source, target, source_socket, target_socket):
@@ -123,8 +125,13 @@ async def main():
             except asyncpg.ForeignKeyViolationError:
                 pass
             assert await source_connection.fetchval("SELECT count(*) FROM public.player") == 2, "Source unchanged by restore"
+            from chessism_api.database.neo4j.backup import test_companion
+            graph = await test_companion(manifest, progress)
+            assert graph["status"] == "success"
+            assert (graph["nodes"], graph["relationships"], graph["constraints"]) == (2, 1, 1)
             print(json.dumps({"state": "succeeded", "compressed_bytes": result["repository_bytes"],
-                              "checks": ["snapshot consistency", "compression", "restore", "views", "archive schema", "indexes", "sequences", "foreign keys", "source isolation"]}))
+                              "neo4j": graph,
+                              "checks": ["snapshot consistency", "compression", "restore", "views", "archive schema", "indexes", "sequences", "foreign keys", "source isolation", "Neo4j dump/load/check/query", "Neo4j system database"]}))
         finally:
             if restored:
                 await restored.close()

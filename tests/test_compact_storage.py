@@ -5,10 +5,10 @@ from unittest.mock import AsyncMock
 from sqlalchemy import Integer, SmallInteger, Boolean, update, bindparam
 from sqlalchemy.dialects.postgresql import dialect
 
-from chessism_api.database.compact_storage import exact_integer, integer_result, compact_for, compact_table
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
-from chessism_api.database.runtime import configured_storage, PROFILE_ENV
-from chessism_api.database.models import Fen, FenContinuation, GameFenAssociation, Move, PlayerStats
+from chessism_api.database.postgresql.compact_storage import exact_integer, integer_result, compact_for, compact_table
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.runtime import configured_storage, PROFILE_ENV
+from chessism_api.database.postgresql.models import Fen, FenContinuation, GameFenAssociation, Move, PlayerStats
 from scripts.compact_db_preflight import require_private
 
 

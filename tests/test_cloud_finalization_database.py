@@ -5,9 +5,9 @@ from unittest.mock import AsyncMock, Mock, patch
 
 from sqlalchemy import select
 import test_cloud_analysis_database as existing
-from chessism_api.database import cloud_codec as codec
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudResultBatch
+from chessism_api.database.postgresql import cloud_codec as codec
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudResultBatch
 from chessism_api.operations.cloud_analysis import controller, importer, history
 from chessism_api.operations.cloud_analysis.result_receipts import completion_manifest
 from chessism_api.operations.cloud_analysis import cloud_run_controller as run_controller

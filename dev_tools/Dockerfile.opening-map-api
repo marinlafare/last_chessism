@@ -1,0 +1,3 @@
+FROM chessism-api:graph-explorer-20261031
+COPY chessism_api/ /app/chessism_api/
+COPY main.py /app/main.py

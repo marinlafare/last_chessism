@@ -3,7 +3,7 @@ import asyncio
 import os
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.models import CloudRecoveryEvent
+from chessism_api.database.postgresql.models import CloudRecoveryEvent
 from .migrate_game_fen_queue import upgrade as queue_upgrade
 
 

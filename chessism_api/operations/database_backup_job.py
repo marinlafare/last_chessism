@@ -20,8 +20,11 @@ async def run_database_backup_job(ctx: dict[str, Any], **_kwargs: Any) -> dict[s
     await ensure_backup_reservation(ctx.get("redis"), ctx["job_id"])
     try:
         from chessism_api.operations.database_snapshot import run_snapshot_backup
-        async with matrix_catalog_lock(repeatable_read=True) as session:
-            return await run_snapshot_backup(ctx, session)
+        from chessism_api.database.neo4j.sync_backup import publication_barrier
+        async with publication_barrier() as release_graph:
+            ctx['graph_backup_release'] = release_graph
+            async with matrix_catalog_lock(repeatable_read=True) as session:
+                return await run_snapshot_backup(ctx, session)
     finally:
         await release_backup(ctx.get("redis"), ctx["job_id"])
 
@@ -89,8 +92,8 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         definitions = await definition_backup_manifest(session)
         algorithms = await algorithm_backup_manifest(session)
-        from chessism_api.database.fen_identity import SHAPE_SQL, schema_version
-        from chessism_api.database.relational_storage import storage_for, describe_contract
+        from chessism_api.database.postgresql.fen_identity import SHAPE_SQL, schema_version
+        from chessism_api.database.postgresql.relational_storage import storage_for, describe_contract
         layout = storage_for(session)
         original_search_path = None
         if layout:
@@ -101,7 +104,7 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
             await session.execute(text("SELECT set_config('search_path',:value,true)"),{'value':original_search_path})
         if fen_identity_version != 'numeric_v2':
             raise RuntimeError('Refusing a new backup from a partially migrated FEN schema')
-        from chessism_api.database.fen_reference_identity import SHAPE_SQL as REFERENCE_SHAPE_SQL, schema_version as reference_version
+        from chessism_api.database.postgresql.fen_reference_identity import SHAPE_SQL as REFERENCE_SHAPE_SQL, schema_version as reference_version
         relational_contract = None
         if layout:
             relational_contract = await describe_contract(session,layout)

@@ -15,8 +15,8 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 from sqlalchemy.schema import CreateTable
 from sqlalchemy.dialects.postgresql import dialect
 
-from chessism_api.database.models import Fen
-from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql.models import Fen
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import database_restore_tests as restore
 from chessism_api.operations.ingestion_pipeline.fen_bulk import persist_positions
 from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync, aggregate_fen_data

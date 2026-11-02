@@ -7,7 +7,7 @@ import numpy as np
 from sqlalchemy import text
 from tests import check_canonical_blunders_postgres as base,check_accuracy_cuda_postgres as accuracy
 from tests.test_cuda_behavior import normalize
-from chessism_api.database.player_analytics_schema import install_player_analytics
+from chessism_api.database.postgresql.player_analytics_schema import install_player_analytics
 from chessism_api.operations import player_analytics_summary as legacy,player_unexpected_endings as ending_api
 from chessism_api.operations.canonical_blunders import worker
 from chessism_api.operations.cuda_summaries import runs,schema,metadata_store as store,metadata_worker as mw

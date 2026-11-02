@@ -10,8 +10,8 @@ import uuid
 
 from sqlalchemy import select, text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from .auth import token_hash
 from .catalog import SOURCES, tables_for
 from .config import MAX_ROWS

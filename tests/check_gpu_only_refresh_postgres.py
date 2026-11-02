@@ -153,7 +153,7 @@ async def check(factory, connection, layout):
 
 async def automatic_refresh_check(factory,connection,layout):
     from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations.fen_summary_recovery import recover_batch
     await connection.execute('''ALTER TABLE candidate.game_analysis_coverage ADD PRIMARY KEY(link),
         ADD COLUMN analyzed_positions int,ADD COLUMN unscored_positions int,

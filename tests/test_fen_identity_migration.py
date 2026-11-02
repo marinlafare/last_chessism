@@ -6,8 +6,8 @@ from unittest.mock import AsyncMock
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 import asyncpg
-from chessism_api.database.fen_identity import validate_identity
-from chessism_api.database.fen_identity_migration import migrate, compare_continuations
+from chessism_api.database.postgresql.fen_identity import validate_identity
+from chessism_api.database.postgresql.fen_identity_migration import migrate, compare_continuations
 
 URL = os.getenv('CHESSISM_FEN_ID_TEST_URL', '')
 

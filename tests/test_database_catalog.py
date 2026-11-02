@@ -12,7 +12,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import SQLAlchemyError
 from chessism_api.auth import get_current_account
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 from chessism_api.operations import database_catalog as operation
 from chessism_api.routers import database_catalog as router
 

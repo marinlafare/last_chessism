@@ -13,9 +13,9 @@ import re
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.player_analytics_schema import analytics_table
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.player_analytics_schema import analytics_table
+from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_timezone import resolve_player_timezone
 
 LOG = logging.getLogger(__name__)
@@ -189,7 +189,7 @@ async def get_latest_game(player):
         if saved is not None:
             return {'player_name': player, 'played_at': saved['latest_played_at'],
                     'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale']}
-        from chessism_api.database.relational_reads import player_rows_sql
+        from chessism_api.database.postgresql.relational_reads import player_rows_sql
         stamp = await session.scalar(player_rows_sql(session, '''SELECT gp.played_at
             FROM game_player gp WHERE gp.player_name=:player AND gp.played_at IS NOT NULL
             ORDER BY gp.played_at DESC LIMIT 1''', ('played_at',)), {'player': player})

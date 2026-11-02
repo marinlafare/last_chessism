@@ -25,7 +25,7 @@ export default function AutomaticIngestionPanel() {
       className="scored-positions-panel scored-ingestion-panel"
       jobState={jobs.data || {}}
       ingestionTiming={timing.data?.run}
-      loading={jobs.loading}
+      loading={jobs.loading || timing.loading}
       error={jobs.error?.message || ''}
       timingError={timing.error ? `Latest ingestion timing unavailable: ${timing.error.message}` : ''}
       completedRuns={completedRuns}

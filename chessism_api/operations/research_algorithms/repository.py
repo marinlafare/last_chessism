@@ -6,8 +6,8 @@ import time
 from sqlalchemy import select, update
 from sqlalchemy.orm import defer
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import AlgorithmDefinition, AlgorithmRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import AlgorithmDefinition, AlgorithmRun
 from .config import ACTIVE
 
 

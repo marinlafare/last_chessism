@@ -6,8 +6,8 @@ import hashlib
 from uuid import uuid4
 
 from sqlalchemy import insert
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim
 from cloud_job import batch_spot, work_units
 from cloud_job.launch import inspect_worker, expected_contract
 from . import batch_cleanup
@@ -24,7 +24,7 @@ from .importer import refresh_unit_projections
 
 
 async def reserve_unit(job, root, launch, vm, limit):
-    from chessism_api.database.ask_db import get_fens_for_analysis, get_player_fens_for_analysis
+    from chessism_api.database.postgresql.ask_db import get_fens_for_analysis, get_player_fens_for_analysis
     from .game_fen_queue import get_game_queue_fens
     selection, timings = job.selection, PreparationTimings()
     session, timing_run_id = None, root.id

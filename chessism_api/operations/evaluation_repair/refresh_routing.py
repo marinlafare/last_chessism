@@ -8,7 +8,7 @@ requests first queued during the score-changing phase. No FENs are written.
 """
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.relational_storage import storage_for
 from .. import fen_summary_recovery as recovery
 from .legacy_policy import POLICY, SOURCE
 from .plan import require_idle

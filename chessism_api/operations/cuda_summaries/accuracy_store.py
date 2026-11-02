@@ -1,8 +1,8 @@
 """Accuracy staging and publication under the shared player-revision guard."""
 import json
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from ..player_timezone import resolve_player_timezone
 from ..matrix_constructor.artifact_files import file_operation
 from . import accuracy_compute as compute, score_runs

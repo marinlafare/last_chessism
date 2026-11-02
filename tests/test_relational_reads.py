@@ -2,8 +2,8 @@ import unittest
 from types import SimpleNamespace
 
 from sqlalchemy import text
-from chessism_api.database.relational_storage import RelationalStorage,SESSION_KEY
-from chessism_api.database.relational_reads import player_rows_sql,player_ratings_sql
+from chessism_api.database.postgresql.relational_storage import RelationalStorage,SESSION_KEY
+from chessism_api.database.postgresql.relational_reads import player_rows_sql,player_ratings_sql
 from scripts.db_refactor_application_checks import comparable_response,response_differences,rating_read_cases
 
 

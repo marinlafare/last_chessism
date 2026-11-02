@@ -1,0 +1,12 @@
+# Keep the verified PostgreSQL/Python tools; update only application code.
+FROM chessism-backup-worker:before-neo4j-backup-20261030 AS verified
+FROM scratch
+COPY --from=verified / /
+ENV PATH="/opt/chessism-venv/bin:/usr/lib/postgresql/15/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin" \
+    PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
+WORKDIR /app
+COPY chessism_api/ /app/chessism_api/
+COPY main.py worker.py constants.py requirements.txt /app/
+RUN find /app/chessism_api/database -maxdepth 1 -type f -name '*.py' ! -name '__init__.py' -delete
+USER postgres
+CMD ["arq", "worker.WorkerSettings"]

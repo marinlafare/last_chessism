@@ -48,7 +48,7 @@ async def migrate(connection, expected, observer_pid, publish, checkpoint, *, in
     from scripts.db_refactor_tuning import apply_tuning
     from scripts.db_refactor_migration_sequence import validate_application_copies
     from scripts.db_refactor_corpus import finalize
-    from chessism_api.database.relational_storage import describe_contract
+    from chessism_api.database.postgresql.relational_storage import describe_contract
     from scripts.db_refactor_switch_rehearsal import LAYOUT
 
     async with connection.begin():

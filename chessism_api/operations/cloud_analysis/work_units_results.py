@@ -4,9 +4,9 @@ from collections import defaultdict
 from datetime import datetime, timezone
 
 from sqlalchemy import select, func
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim, CloudResultBatch
-from chessism_api.database.cloud_codec import checksum
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim, CloudResultBatch
+from chessism_api.database.postgresql.cloud_codec import checksum
 from stockfish_batch.performance import validate_performance
 from cloud_job.batch_spot import CPUS, MACHINE, VM_MEMORY_MIB
 from .artifacts import read_completion

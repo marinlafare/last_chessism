@@ -1,7 +1,7 @@
 """Manual-only salience policy, input revisions and atomic publication staging."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .schema import CONTROL, RUN
 from .salience_compute import VERSION
 from .salience_daily import VERSION as DAILY_VERSION

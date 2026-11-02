@@ -6,7 +6,7 @@ the live game union. No cloud calls, reservations or engine-result writes.
 """
 from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, text
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.models import (
     CloudGameDraftCache, CloudGameDraftEntry, CloudGameDraftGame,
 )
 

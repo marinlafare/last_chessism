@@ -17,8 +17,8 @@ from uuid import uuid4
 
 import chess
 from sqlalchemy import text
-from chessism_api.database.runtime import bind_runtime_engine
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .artifacts import root
 from .compute import VERSION,initialize,metadata,compute
 

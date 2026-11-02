@@ -103,6 +103,68 @@ class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
             RELEASE_OWNED_LUA, 1, tablebase.TABLEBASE_COORDINATION_KEY, 'reserving')
         redis.delete.assert_not_awaited()
 
+    async def test_shared_active_job_queues_ingestion_owned_completion_without_stealing_owner(self):
+        redis = AsyncMock()
+        redis.get.return_value = b'shared-job'
+        redis.enqueue_job.return_value = SimpleNamespace(job_id='scoped-job')
+        with patch.object(tablebase, 'Job') as job:
+            job.return_value.status = AsyncMock(return_value=JobStatus.in_progress)
+            result = await tablebase.ensure_tablebase_analysis_enqueued(
+                redis, game_links=[7, 8, 7], ingestion_run_id='player-run')
+        self.assertEqual(result, {'status':'queued','job_id':'scoped-job','pending':None})
+        redis.enqueue_job.assert_awaited_once_with('run_tablebase_analysis_job',
+            max_positions=None, batch_size=1000, candidate_count=None,
+            game_links=[7,8], ingestion_run_id='player-run', _queue_name='pipeline_queue')
+        self.assertTrue(all(call.args[0] != tablebase.TABLEBASE_COORDINATION_KEY
+                            for call in redis.set.await_args_list))
+        redis.eval.assert_not_awaited()
+
+    async def test_shared_reservation_does_not_orphan_ingestion(self):
+        redis = AsyncMock()
+        redis.get.return_value = b'reserving'
+        redis.enqueue_job.return_value = SimpleNamespace(job_id='scoped-job')
+        result = await tablebase.ensure_tablebase_analysis_enqueued(
+            redis, game_links=[1], ingestion_run_id='run')
+        self.assertEqual(result['status'], 'queued')
+        self.assertEqual(redis.enqueue_job.await_args.kwargs['ingestion_run_id'], 'run')
+
+    async def test_lost_admission_race_still_queues_scoped_completion(self):
+        redis = AsyncMock()
+        redis.get.return_value = None
+        redis.set.return_value = False
+        redis.enqueue_job.return_value = SimpleNamespace(job_id='scoped-job')
+        with patch.object(tablebase, 'has_tablebase_candidates', AsyncMock(return_value=True)):
+            result = await tablebase.ensure_tablebase_analysis_enqueued(
+                redis, game_links=[1], ingestion_run_id='run')
+        self.assertEqual(result['status'], 'queued')
+        redis.eval.assert_not_awaited()
+
+    async def test_global_request_still_reuses_active_shared_job(self):
+        redis = AsyncMock()
+        redis.get.return_value = b'shared-job'
+        with patch.object(tablebase, 'Job') as job:
+            job.return_value.status = AsyncMock(return_value=JobStatus.queued)
+            result = await tablebase.ensure_tablebase_analysis_enqueued(redis)
+        self.assertEqual(result['status'], 'already_active')
+        redis.enqueue_job.assert_not_awaited()
+
+    async def test_followup_admission_failure_does_not_release_shared_owner(self):
+        redis=AsyncMock();redis.get.return_value=b'reserving';redis.enqueue_job.return_value=None
+        with self.assertRaisesRegex(RuntimeError,'did not create'):
+            await tablebase.ensure_tablebase_analysis_enqueued(redis,game_links=[1],ingestion_run_id='run')
+        redis.eval.assert_not_awaited()
+        redis.delete.assert_not_awaited()
+
+    async def test_queue_contract_normalizes_both_shared_and_scoped_jobs(self):
+        for run_id in (None,'run'):
+            redis=AsyncMock();redis.enqueue_job.return_value=SimpleNamespace(job_id='job')
+            await tablebase._enqueue_tablebase_job(redis,game_links=[3,3,4],max_positions=None,
+                batch_size=100000,ingestion_run_id=run_id)
+            call=redis.enqueue_job.await_args.kwargs
+            self.assertEqual(call['batch_size'],5000)
+            self.assertEqual(call['game_links'],[3,4])
+            self.assertEqual(call['ingestion_run_id'],run_id)
+
     async def test_failed_progress_reads_tolerate_missing_or_invalid_payloads(self):
         redis = AsyncMock()
         for value in (None, b'', b'{bad json', b'[]', b'null'):

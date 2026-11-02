@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
 from tests import test_cloud_analysis_database as existing
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun
 from chessism_api.operations.cloud_analysis import upload_progress
 
 
@@ -39,7 +39,7 @@ class UploadProgressDatabaseTests(unittest.IsolatedAsyncioTestCase):
         client.get.return_value = response
         # A full control-document read would load the FEN payload; forbid it.
         with patch.object(upload_progress.httpx, 'AsyncClient', return_value=client), \
-             patch('chessism_api.database.cloud_codec.read_documents', side_effect=AssertionError('Full document read')):
+             patch('chessism_api.database.postgresql.cloud_codec.read_documents', side_effect=AssertionError('Full document read')):
             result = await upload_progress.read_progress(self.job.id)
         self.assertEqual(result, {'state': 'ready', 'total_fens': 3, 'uploaded_fens': 1})
         client.get.assert_awaited_once_with(f'http://cloud-billing:8080/upload-progress/{self.run_id}')

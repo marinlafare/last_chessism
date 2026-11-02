@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 
 LOG = logging.getLogger(__name__)
 REFRESH_SECONDS = 300

@@ -16,10 +16,11 @@ from chessism_api.routers import cloud_analysis
 from chessism_api.routers import appearance
 from chessism_api.routers import database_catalog
 from chessism_api.routers import exports
+from chessism_api.routers import graph_sync, graph_explorer
 
 # --- NEW: Import the init_db function ---
-from chessism_api.database.runtime import init_runtime_db
-from chessism_api.database.ask_db import ensure_main_character_mode_summary
+from chessism_api.database.postgresql.runtime import init_runtime_db
+from chessism_api.database.postgresql.ask_db import ensure_main_character_mode_summary
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
 # --- NEW: Import Redis functions ---
 from chessism_api.redis_client import get_redis_pool, close_redis_pool
@@ -92,6 +93,9 @@ async def lifespan(app: FastAPI):
         tablebase_startup_task.cancel()
         with suppress(asyncio.CancelledError):
             await tablebase_startup_task
+    graph_driver = getattr(app.state, 'graph_explorer_driver', None)
+    if graph_driver is not None:
+        await graph_driver.close()
     await close_redis_pool()
     print('BASAL CHESSISM Server DOWN YO!...')
 
@@ -214,3 +218,5 @@ app.include_router(analysis_times.router, prefix="/analysis_times", tags=["Analy
 app.include_router(research.router, prefix="/research", tags=["Research"], dependencies=[Depends(require_superuser)])
 
 app.include_router(backups.router, prefix="/backups", tags=["Backups"], dependencies=[Depends(require_superuser)])
+app.include_router(graph_sync.router, prefix="/graph-sync", tags=["Graph synchronization"], dependencies=[Depends(require_superuser)])
+app.include_router(graph_explorer.router, prefix="/graph-explorer", tags=["Graph explorer"], dependencies=[Depends(require_superuser)])

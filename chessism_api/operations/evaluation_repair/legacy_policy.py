@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import chess
 
 from chessism_api.evaluations import integer, validate_result
-from chessism_api.database.compact_storage import integer_result
+from chessism_api.database.postgresql.compact_storage import integer_result
 
 POLICY = 'legacy_cp_assumption_and_fresh_tablebase_v1'
 SOURCE = 'stockfish_legacy_assumed'

@@ -1,4 +1,4 @@
-# chessism_api/database/ask_db.py
+# chessism_api/database/postgresql/ask_db.py
 import time
 import math
 import json
@@ -8,8 +8,8 @@ from sqlalchemy.exc import ResourceClosedError
 from sqlalchemy import exists, text, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chessism_api.database.engine import async_engine, AsyncDBSession
-from chessism_api.database.models import Fen, Game, GameAnalysisSummary, GameFenAssociation
+from chessism_api.database.postgresql.engine import async_engine, AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, Game, GameAnalysisSummary, GameFenAssociation
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES
 
 async def get_all_database_names():
@@ -1112,7 +1112,7 @@ async def refresh_main_character_mode_summary(*, session_factory=None) -> Dict[s
     Rebuilds the small precomputed table used by main-character time-control filters.
     The expensive scan happens here instead of on every filter click.
     """
-    from chessism_api.database.compact_storage import compact_for
+    from chessism_api.database.postgresql.compact_storage import compact_for
     async with (session_factory or AsyncDBSession)() as numeric_session:
         if compact_for(numeric_session):
             from chessism_api.operations.compact_summaries import refresh_mode_summary
@@ -1229,7 +1229,7 @@ async def refresh_main_character_mode_summary_for_players(player_names: Set[str]
 
     async with AsyncDBSession() as session:
         try:
-            from chessism_api.database.compact_storage import compact_for
+            from chessism_api.database.postgresql.compact_storage import compact_for
             if compact_for(session):
                 from chessism_api.operations.compact_summaries import refresh_mode_summary
                 counts = await refresh_mode_summary(session, clean_players)
@@ -1392,7 +1392,7 @@ async def sync_game_analytics_projection(game_links: Optional[Tuple[int, ...]] =
     set of game links. Postgres remains the source of truth.
     """
     clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.relational_storage import storage_for
     async with AsyncDBSession() as selection_session:
         if storage_for(selection_session):
             from chessism_api.operations.relational_projection import sync_projection
@@ -2525,7 +2525,7 @@ async def reset_player_game_fens_done_to_false(player_name: str) -> int:
                 )
                 .values(fens_done=False)
             )
-            from chessism_api.database.relational_storage import storage_for
+            from chessism_api.database.postgresql.relational_storage import storage_for
             layout = storage_for(session)
             if layout:
                 result = await session.execute(text(f"""UPDATE {layout.table('game')} SET fens_done=false
@@ -3123,7 +3123,7 @@ async def refresh_game_analysis_summary(game_links: Optional[Tuple[int, ...]] = 
     clean_links = tuple(sorted({int(link) for link in game_links or () if link is not None}))
     if game_links is not None and not clean_links:
         return {'games': 0, 'scope': 'links'}
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.relational_storage import storage_for
     async with AsyncDBSession() as relational_session:
         if storage_for(relational_session):
             from chessism_api.operations.relational_coverage import refresh_coverage
@@ -3271,7 +3271,7 @@ async def increment_game_analysis_summary_for_scored_fens(
     if not clean_rows:
         return {"games": 0, "fens": 0}
 
-    from chessism_api.database.relational_storage import storage_for
+    from chessism_api.database.postgresql.relational_storage import storage_for
     async with AsyncDBSession() as relational_session:
         if storage_for(relational_session):
             from chessism_api.operations.relational_coverage import refresh_coverage
@@ -3460,7 +3460,7 @@ async def get_scored_game_analysis_page(
     """
 
     async with AsyncDBSession() as session:
-        from chessism_api.database.relational_storage import storage_for
+        from chessism_api.database.postgresql.relational_storage import storage_for
         if storage_for(session):
             # Removed aggregates must not be sorted over the whole corpus.
             # Keep response fields for old clients, deriving them only for the
@@ -3538,7 +3538,7 @@ async def get_fens_for_analysis(limit: int, *, raise_errors: bool = False, timin
             .with_for_update(skip_locked=True) 
         )
         
-        from chessism_api.database.fen_claims import locked_eligible_fens
+        from chessism_api.database.postgresql.fen_claims import locked_eligible_fens
         fens = await locked_eligible_fens(session, stmt, timings=timings)
         
         if not fens:
@@ -3595,7 +3595,7 @@ async def get_player_fens_for_analysis(
         # already leased by another worker before satisfying LIMIT.
         stmt = _player_fens_for_analysis_stmt(player_name, limit)
         
-        from chessism_api.database.fen_claims import locked_eligible_fens
+        from chessism_api.database.postgresql.fen_claims import locked_eligible_fens
         fens = await locked_eligible_fens(session, stmt, timings=timings)
         
         if not fens:
@@ -3913,7 +3913,7 @@ async def get_game_set_fens_for_analysis(
             LIMIT :limit
             FOR UPDATE OF f SKIP LOCKED;
         """)
-        from chessism_api.database.fen_claims import locked_eligible_fens
+        from chessism_api.database.postgresql.fen_claims import locked_eligible_fens
         fens = await locked_eligible_fens(session, statement, {
             "game_links": clean_links,
             "limit": max(1, int(limit)),

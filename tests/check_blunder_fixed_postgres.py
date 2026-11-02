@@ -47,7 +47,7 @@ async def main():
     from sqlalchemy import text
     from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
     from chessism_api.operations import player_game_scores as production
     from chessism_api.operations.matrix_constructor.queries import matrix_sql
     from chessism_api.operations.research_algorithms import blunder_fixed as model, blunder_validation_job as job

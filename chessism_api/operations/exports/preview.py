@@ -7,7 +7,7 @@ from fastapi import HTTPException
 from redis.exceptions import RedisError
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .catalog import SOURCES, tables_for
 from .query import compile_query, effective_order
 from .writer import preview_value

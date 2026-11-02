@@ -12,9 +12,9 @@ import time
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.runtime import configured_storage
-from chessism_api.database.relational_storage import SESSION_KEY
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import configured_storage
+from chessism_api.database.postgresql.relational_storage import SESSION_KEY
 
 
 async def main():

@@ -6,9 +6,9 @@ import time
 import logging
 from typing import Any
 
-from chessism_api.database.db_interface import DBInterface
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Fen, GameFenAssociation
+from chessism_api.database.postgresql.db_interface import DBInterface
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Fen, GameFenAssociation
 from chessism_api.operations.ingestion_pipeline.fen_core import (
     count_expected_fen_positions,
     process_single_game_sync,

@@ -1,0 +1,3 @@
+FROM chessism-api:neo4j-backups-20261030
+COPY chessism_api/ /app/chessism_api/
+COPY main.py /app/main.py

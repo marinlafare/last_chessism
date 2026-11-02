@@ -4,9 +4,9 @@ from contextlib import asynccontextmanager
 import time
 from sqlalchemy import delete, select, update
 from sqlalchemy.dialects.postgresql import insert
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudFenClaim
-from chessism_api.database import cloud_columns as columns
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudFenClaim
+from chessism_api.database.postgresql import cloud_columns as columns
 
 
 @asynccontextmanager
@@ -125,7 +125,7 @@ async def compact_run(run_id, *, historical=False):
             if run.status != 'complete' or job.status not in {'complete', 'limit_reached'}:
                 return False
             from .importer import validate_manifest
-            from chessism_api.database.cloud_codec import checksum
+            from chessism_api.database.postgresql.cloud_codec import checksum
             manifest = run.launch.get('manifest')
             if not manifest:
                 proof = run.launch.get('import_receipt', {})
@@ -170,7 +170,7 @@ async def compact_run(run_id, *, historical=False):
 
 
 async def cleanup_plans(current_id):
-    from chessism_api.database.cloud_codec import read_documents
+    from chessism_api.database.postgresql.cloud_codec import read_documents
     async with AsyncDBSession() as session:
         refs = (await session.scalars(select(CloudAnalysisRun._cleanup_plan_ref).where(
             (CloudAnalysisRun.status == 'complete') | (CloudAnalysisRun.id == current_id)))).all()

@@ -2,8 +2,8 @@
 import json
 import numpy as np
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from ..matrix_constructor.artifact_files import file_operation
 from ..player_timezone import resolve_player_timezone
 from . import salience_store as store, salience_compute as compute, accuracy_store, accuracy_compute

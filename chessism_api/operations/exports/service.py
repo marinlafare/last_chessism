@@ -7,7 +7,7 @@ import uuid
 from fastapi import HTTPException
 from sqlalchemy import func, select, text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from . import config, files
 from .auth import authorize_spec
 from .models import ExportJob

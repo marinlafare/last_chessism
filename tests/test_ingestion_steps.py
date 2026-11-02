@@ -4,6 +4,25 @@ import unittest
 from unittest.mock import AsyncMock, patch
 
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter, merge_steps
+from chessism_api.operations.ingestion_pipeline.timing import reconcile_step_snapshots
+
+
+class SnapshotTests(unittest.TestCase):
+    def test_stale_live_snapshot_cannot_reopen_durable_completion(self):
+        stored = {'step':'probe_endgames','status':'complete','processed':100,'total':100,
+                  'updated_at':30,'elapsed_seconds':10,'unit':'items'}
+        live = {**stored,'status':'working','processed':90,'updated_at':20,'unit':'positions'}
+        result = reconcile_step_snapshots([stored], [live])['probe_endgames']
+        self.assertEqual((result['status'], result['processed'], result['unit']), ('complete',100,'positions'))
+        self.assertEqual(result['rate'], 10)
+        self.assertEqual(live['status'], 'working')
+
+    def test_newer_live_retry_and_missing_redis_remain_supported(self):
+        stored = {'step':'probe_endgames','status':'failed','updated_at':10}
+        live = {'step':'probe_endgames','status':'working','updated_at':20}
+        self.assertEqual(reconcile_step_snapshots([stored], [live])['probe_endgames'],live)
+        self.assertEqual(reconcile_step_snapshots([stored], [])['probe_endgames'],stored)
+        self.assertEqual(reconcile_step_snapshots([], [live])['probe_endgames'],live)
 
 
 class PositionBatchTests(unittest.TestCase):

@@ -22,6 +22,35 @@ const sequenceAtSix = () => ({
   })),
 })
 
+test('Neo4j progresses independently of cleanup and controller availability', () => {
+  const job={...jobAt('cleaning'),graph_sync:{status:'working',processed:7,total:10,detail:'7 / 10 graph positions'}}
+  let state=cloudJobProgress(job)
+  assert.equal(state.steps.find(s=>s.id==='cleanup').state,'current')
+  assert.equal(state.steps.find(s=>s.id==='neo4j').state,'current')
+  assert.equal(cloudStepProgress(job,state.steps.find(s=>s.id==='neo4j')).value,70)
+  job.status='complete';job.runs[0].status='complete'
+  state=cloudJobProgress(job)
+  assert.equal(cloudJobDone(job),false)
+  assert.equal(state.steps.find(s=>s.id==='cleanup').state,'complete')
+  assert.equal(state.steps.at(-1).state,'pending')
+  assert.match(state.label,/Cloud processing finished/)
+  const review={tracked:['job'],dismissed:[],initialized:true,since:0}
+  assert.deepEqual(dismissProgress(review,[job],'job'),review)
+  job.graph_sync.status='retrying'
+  assert.equal(cloudJobIndicator(job).state,'attention')
+  job.graph_sync.status='complete';job.graph_sync.processed=10
+  assert.equal(cloudJobDone(job),true)
+  assert.equal(dismissProgress(review,[job],'job').dismissed.length,1)
+})
+
+test('cancelled clouds still retain pending graph synchronization without restarting cleanup', () => {
+  const job={...jobAt('complete','cancelled'),stop_cleanup:{phase:'complete'},graph_sync:{status:'working',processed:1,total:2}}
+  const state=cloudJobProgress(job)
+  assert.equal(state.steps.find(s=>s.id==='stop-cleaning').state,'complete')
+  assert.equal(state.steps.find(s=>s.id==='neo4j').state,'current')
+  assert.equal(state.steps.at(-1).state,'pending')
+})
+
 test('every workflow step has a stable independently editable progress identity', () => {
   const steps = cloudJobProgress(jobAt('preparing')).steps
   assert.deepEqual(steps.map(step => step.id), CLOUD_JOB_STEP_IDS)

@@ -3,8 +3,8 @@ from datetime import datetime, timezone
 from uuid import uuid4
 
 from sqlalchemy import select, func
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudRecoveryEvent
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudRecoveryEvent
 
 
 async def record(job_id, **event):

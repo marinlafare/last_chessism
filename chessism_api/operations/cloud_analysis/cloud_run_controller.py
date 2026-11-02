@@ -14,8 +14,8 @@ from stockfish_batch.config import Config
 from stockfish_batch.checkpoints import encode
 from stockfish_batch.performance import validate_performance
 from stockfish_core import PROFILE_ID
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisRun
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisRun
 from .ingestion import ingest_ready
 
 

@@ -7,8 +7,8 @@ Cloud-reserved FENs retain their existing durable cloud projection/retry workflo
 import json
 import logging
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import identifier, storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import identifier, storage_for
 
 LOG = logging.getLogger(__name__)
 BATCH_GAMES = 500
@@ -134,7 +134,7 @@ async def install(connection, layout):
 async def recover_batch(*, factory=None, refresh=None):
     factory = factory or AsyncDBSession
     if refresh is None:
-        from chessism_api.database.ask_db import refresh_game_analysis_summary
+        from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary
         refresh = refresh_game_analysis_summary
     # Source-only updates do not touch coverage, accuracy, efficiency or legacy
     # CPU blunders. Transfer their exact revisions to CUDA in one transaction.

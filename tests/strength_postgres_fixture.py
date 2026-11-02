@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, patch
 async def verify(connection, engine):
     import numpy as np
     from sqlalchemy.ext.asyncio import async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage, SESSION_KEY
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
     from chessism_api.operations.research_algorithms import blunder_strength_source as source, blunder_strength_compute as compute
     from chessism_api.operations.research_algorithms import blunder_shadow_source as extraction, blunder_cohort_compute as cohort
     from chessism_api.operations.research_algorithms.blunder_fixed import DTYPE
@@ -47,7 +47,7 @@ async def verify(connection, engine):
         await connection.execute("INSERT INTO algorithm_run(id,status,config) VALUES($1,'running',$2::jsonb)", run_id, json.dumps({'operation': source.OPERATION}))
         frozen = {'inspected_game_ids': [1, 2, 3], 'inspected_game_ids_sha256': source.history.digest([1, 2, 3])}
         reporter = AsyncMock(); reporter.run_id = run_id
-        with patch('chessism_api.database.engine.AsyncDBSession', factory):
+        with patch('chessism_api.database.postgresql.engine.AsyncDBSession', factory):
             await source.reserve(frozen, reporter)
             await connection.execute("UPDATE algorithm_run SET status='failed' WHERE id=$1", run_id)
             async with factory() as session: assert await source.exploration_ids(session) == {1, 2, 3}

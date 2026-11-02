@@ -5,7 +5,7 @@ from typing import Any
 
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from .catalog import ROW_TYPES, MatrixColumn
 from .config import normalize_matrix_config
 from .queries import matrix_sql

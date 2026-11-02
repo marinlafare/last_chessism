@@ -4,8 +4,8 @@ import hashlib
 import json
 from datetime import timezone
 from sqlalchemy import text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.relational_storage import storage_for
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.relational_storage import storage_for
 from .player_chart_games import decode_cursor, RESULTS
 from .player_hero_analytics import _analytics_scope
 

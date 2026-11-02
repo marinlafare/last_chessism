@@ -4,6 +4,7 @@ import SideRail from '../components/layout/SideRail'
 import AppearanceChartPanel from './scored-positions/AppearanceChartPanel'
 import ScoredOverviewChart from './scored-positions/ScoredOverviewChart'
 import RatingChartDisclosure from './scored-positions/RatingChartDisclosure'
+import CommonPositionsDisclosure from './scored-positions/CommonPositionsDisclosure'
 import { styleTarget } from '../appearance/styleCore'
 import {
   fetchScoredGamesOverview,
@@ -68,6 +69,8 @@ function ScoredPositions() {
 
             <AppearanceChartPanel reloadToken={reloadToken} />
           </section>
+
+          <CommonPositionsDisclosure />
 
           <section {...styleTarget('cuda.panel')} className="scored-positions-panel scored-rating-advantage-panel cuda-reservation" aria-label="Advantage by rating">
             <h2 {...styleTarget('panel.title')} className="panel-title">Advantage by rating</h2>

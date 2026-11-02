@@ -1,0 +1,9 @@
+ARG BASE_IMAGE=chessism-ingestion:optimized-20261029
+FROM ${BASE_IMAGE}
+COPY chessism_api/operations/tablebase.py /app/chessism_api/operations/tablebase.py
+# This preserved pipeline image predates the database-package reorganization.
+# Keep its existing engine/session singleton; do not mix legacy and new engines.
+RUN if [ ! -d /app/chessism_api/database/postgresql ]; then \
+      sed -i 's/chessism_api\.database\.postgresql\./chessism_api.database./g' /app/chessism_api/operations/tablebase.py; \
+    fi
+RUN python -c "from chessism_api.operations.tablebase import _queue_ingestion_followup"

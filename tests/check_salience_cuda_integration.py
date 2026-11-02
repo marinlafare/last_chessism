@@ -122,7 +122,7 @@ async def main():
     import asyncpg
     from sqlalchemy.engine import URL
     from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
-    from chessism_api.database.relational_storage import RelationalStorage
+    from chessism_api.database.postgresql.relational_storage import RelationalStorage
     import numpy as np
     from chessism_api.operations.cuda_summaries import salience_worker,salience_publication,salience_compute,accuracy_compute,salience_daily
     from chessism_api.operations.matrix_constructor.artifact_files import file_operation

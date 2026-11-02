@@ -148,7 +148,7 @@ async def check(factory, connection, layout):
     await connection.execute('UPDATE candidate.fen SET score=score+1 WHERE fen_id=4')
     # The production refresh can commit coverage and then fail its CPU summary;
     # recovery must retain the request until both stages have succeeded.
-    from chessism_api.database import ask_db
+    from chessism_api.database.postgresql import ask_db
     from chessism_api.operations import player_game_scores
     cpu_summary = AsyncMock(side_effect=RuntimeError('synthetic engine-summary failure'))
     with patch.object(ask_db, 'AsyncDBSession', factory), \

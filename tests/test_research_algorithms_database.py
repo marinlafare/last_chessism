@@ -12,7 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from chessism_api.database.models import AlgorithmRun
+from chessism_api.database.postgresql.models import AlgorithmRun
 from chessism_api.operations.research_algorithms import config, inputs, jobs, storage
 from chessism_api.operations.research_algorithms import builder_inputs, builder_runner
 from chessism_api.operations.research_algorithms.builder_schema import normalize_builder

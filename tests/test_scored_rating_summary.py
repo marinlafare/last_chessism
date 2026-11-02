@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 
-from chessism_api.database import ask_db
+from chessism_api.database.postgresql import ask_db
 from chessism_api.routers import fens
 
 

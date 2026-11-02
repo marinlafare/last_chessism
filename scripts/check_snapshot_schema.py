@@ -12,8 +12,8 @@ import tempfile
 from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.relational_storage import RelationalStorage, describe_contract
-from chessism_api.database.backup_contract import contract_differences
+from chessism_api.database.postgresql.relational_storage import RelationalStorage, describe_contract
+from chessism_api.database.postgresql.backup_contract import contract_differences
 from chessism_api.operations import database_restore_tests as r
 from chessism_api.operations.exports.backup_roles import restore_role_sql
 

@@ -14,8 +14,8 @@ from sqlalchemy.engine import URL
 from sqlalchemy.ext.asyncio import create_async_engine,async_sessionmaker
 
 from chessism_api.operations import database_restore_tests as restore
-from chessism_api.database.relational_storage import SESSION_KEY,create_relational_engine
-from chessism_api.database.backup_contract import contract_differences
+from chessism_api.database.postgresql.relational_storage import SESSION_KEY,create_relational_engine
+from chessism_api.database.postgresql.backup_contract import contract_differences
 from scripts.compact_db_live import migrate,contract,V2,V3
 from scripts.db_refactor_live_target import identity
 

@@ -1,0 +1,51 @@
+<!doctype html><html><head><meta charset="UTF-8"><title>Isolated graph explorer</title></head>
+<body><div id="root"></div><script type="module">
+import React from 'react'
+import { createRoot } from 'react-dom/client'
+import { Chess } from 'chess.js'
+// Retained force-map prototype fixture; the page now uses PlyMapExplorer.
+import GraphExplorer from '/src/pages/scored-positions/GraphExplorer.jsx'
+import BoardSoundPreferences from '/src/components/chess/BoardSoundPreferences.jsx'
+import { appearanceCss } from '/src/appearance/styleCore.js'
+import '/src/index.css'
+history.replaceState({}, '', '/scored_positions')
+const state = window.graphTest = {requests:[],errors:[],aborted:[],fail:'',hold:false}
+window.addEventListener('error', event => state.errors.push(event.message))
+window.addEventListener('unhandledrejection', event => state.errors.push(String(event.reason)))
+const board = new Chess(), start = board.fen(), moves = ['e4','e5','Nf3','Nc6','Bb5','a6','Ba4','Nf6','O-O','Be7','Re1','b5']
+const nodes = moves.map((move,i) => {board.move(move); return {key:`chess:${i+1}`,fen_id:i+1,fen:board.fen(),score_kind:'cp',score_cp:25+i}})
+const root = {key:'chess:initial',fen:start,score_kind:'unscored'}
+const record = (node,i) => ({position:node,appearances:100-i*5,games:90-i*5,move:moves[i]||'e4',move_key:'a'.repeat(63)+(i%10)})
+const slots=['all','a','b','both','a_white','a_black','b_white','b_black','both_white','both_black']
+const counts=i=>[9,5,6,9,3,2,4,2,6,3].map(n=>Math.max(0,n-(i%3)))
+const mapNodes=[root,...nodes].map((n,i)=>({key:n.key,fen_id:n.fen_id,first_ply:i,appearances:counts(i),games:counts(i)}))
+const mapEdges=nodes.map((n,i)=>({key:`edge:${i}`,source:i?nodes[i-1].key:root.key,target:n.key,move:moves[i],appearances:counts(i),games:counts(i)}))
+const reply = (value,status=200) => new Response(JSON.stringify(value),{status,headers:{'Content-Type':'application/json'}})
+window.fetch = async (input,options={}) => {
+  const url=new URL(input,location.href), path=url.pathname.replace(/^\/api/,''), p=Object.fromEntries(url.searchParams)
+  const kind=path.split('/').at(-1); state.requests.push({path,p,method:options.method||'GET'})
+  if (options.method && options.method !== 'GET') throw Error('No writes allowed')
+  if (path.startsWith('/graph-explorer/')) {
+    if(state.hold) await new Promise((resolve,reject)=>{state.release=resolve;options.signal?.addEventListener('abort',()=>{state.aborted.push(path);reject(new DOMException('Aborted','AbortError'))},{once:true})})
+    if(state.fail===kind) return reply({detail:'Synthetic graph unavailable'},503)
+    const coverage={player:p.player,player_id:p.player?1:null,color:p.color,games:p.player==='missing'?0:p.player?5:9}
+    if(kind==='players')return reply({rows:[{id:1,name:'lafareto'},{id:2,name:'other'}]})
+    if(kind==='map')return reply(state.snapshot||{nodes:mapNodes,edges:mapEdges,slots,revision:'fixture-map-v1',players:[p.a,p.b],coverage:{games:counts(0),sample_games:9,imported_games:9,max_ply:30},limits:{nodes:false,edges:false,games:false},query_ms:12})
+    if(kind==='positions')return reply({coverage,rows:p.player==='missing'?[]:nodes.slice(+p.offset,+p.offset+10).map(record),has_more:+p.offset===0,offset:+p.offset,query_ms:12})
+    const current=p.key==='chess:initial'?root:nodes.find(n=>n.key===p.key), index=nodes.indexOf(current)
+    if(kind==='position')return reply({...record(current,Math.max(0,index)),coverage,
+      incoming:{rows:current===root?[]:[record(index>0?nodes[index-1]:root,Math.max(0,index-1))],offset:+p.incoming,has_more:false},
+      outgoing:{rows:nodes.slice(+p.outgoing,+p.outgoing+6).map(record),offset:+p.outgoing,has_more:+p.outgoing===0},query_ms:9})
+    if(kind==='games')return reply({coverage,rows:[0,1].map(i=>({game_id:100+i+(+p.offset),white:'lafareto',black:`opponent${i}`,mode:'blitz',white_result:i?0:1,black_result:i?1:0,played_at:`2026-10-${30-i}T12:00:00+00:00`,ply:1,fen:nodes[0].fen})),has_more:+p.offset===0,offset:+p.offset})
+  }
+  if (/^\/games\/\d+\/score$/.test(path))return reply({game:{initial_fen:start,white:{name:'lafareto'},black:{name:'opponent'},result:{white:1,black:0}},moves:[{ply:1,move_number:1,move_color:'white',san:'e4',fen_after:nodes[0].fen}],player_summaries:[]})
+  throw Error('Unexpected request: '+path)
+}
+state.style = (target,property,value) => {
+  const registry={properties:{background:{kind:'color',css:'background-color'},radius:{kind:'number',css:'border-radius',unit:'px',min:0,max:100},textAlign:{kind:'choice',css:'text-align',options:['left','center','right']}},scopes:{scored_positions:{targets:{[target]:{properties:['background','radius','textAlign']}}}}}
+  const style=document.createElement('style');style.textContent=appearanceCss(registry,[{scope:'scored_positions',target,property,value}]);document.head.append(style)
+}
+function Prototype(){const [open,setOpen]=React.useState(false);return React.createElement(React.Fragment,null,
+ React.createElement('button',{className:'common-positions-toggle',onClick:()=>setOpen(!open)},'Prototype'),open&&React.createElement(GraphExplorer))}
+createRoot(document.getElementById('root')).render(React.createElement(BoardSoundPreferences,{accountId:'graph-test'},React.createElement('main',{style:{maxWidth:'1400px',margin:'auto'}},React.createElement(Prototype))))
+</script></body></html>

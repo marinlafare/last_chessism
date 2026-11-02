@@ -19,12 +19,12 @@ from datetime import datetime, timezone
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (
     Base, Fen, FenContinuation, DatabaseSummary, CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim,
     CloudControllerHeartbeat,
 )
-from chessism_api.database.ask_db import get_fens_for_analysis
+from chessism_api.database.postgresql.ask_db import get_fens_for_analysis
 from chessism_api.operations.analysis import _format_engine_results
 from chessism_api.operations.cloud_analysis import controller, importer
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
@@ -153,7 +153,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len({claim.fen for claim in claims}), 3)
 
     async def test_fresh_recheck_excludes_scored_fens_even_after_claim_release(self):
-        from chessism_api.database.fen_claims import unclaimed_locked_fens
+        from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
         async with AsyncDBSession() as session, session.begin():
             row = await session.get(Fen, self.fens[0], with_for_update=True)
             row.score = 10

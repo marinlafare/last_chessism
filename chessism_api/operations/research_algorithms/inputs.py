@@ -9,7 +9,7 @@ import time
 import numpy as np
 from sqlalchemy import text
 
-from chessism_api.database.engine import AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.queries import matrix_sql
 from .config import BATCH_ROWS, source_config
 from .numerics import ColumnStats

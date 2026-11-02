@@ -9,9 +9,9 @@ import constants
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import Base, HomeSummarySource, HomeTitledSummary, HomeTitledPlayerSummary
-from chessism_api.database.home_summary_schema import ensure_home_summary_triggers
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import Base, HomeSummarySource, HomeTitledSummary, HomeTitledPlayerSummary
+from chessism_api.database.postgresql.home_summary_schema import ensure_home_summary_triggers
 from chessism_api.operations.home_summary import get_home_summary, run_home_summary_refresh, needs_refresh
 from chessism_api.operations import home_summary
 

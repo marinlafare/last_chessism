@@ -6,7 +6,7 @@ import logging
 import os
 from pathlib import Path
 
-from chessism_api.database.ask_db import (
+from chessism_api.database.postgresql.ask_db import (
     refresh_database_summary_fen_counts, refresh_game_analysis_summary,
     refresh_scored_position_summary, refresh_scored_rating_summary,
 )

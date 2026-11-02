@@ -16,8 +16,8 @@ from stockfish_batch.checkpoints import BatchCheckpoints, encode, parse_input
 from stockfish_batch.config import Config
 from stockfish_batch.performance import validate_performance
 from .artifacts import read_manifest, read_performance
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit, CloudJobCancellation
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudBatchUnit, CloudJobCancellation
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES, CLOUD_STALL_TIMEOUT_SECONDS
 from .importer import import_batch, refresh_projections, refresh_global_projections, validate_manifest
 from .preflight import verify_clean_workspace
@@ -34,7 +34,7 @@ async def save_run(run_id, **changes):
         if 'status' in changes and changes['status'] != run.status:
             await history.transition(session, run, run.status, changes['status'])
             if changes['status'] == 'finalizing':
-                from chessism_api.database.cloud_codec import checksum
+                from chessism_api.database.postgresql.cloud_codec import checksum
                 run.results_verified_at = datetime.now(timezone.utc)
                 launch = (changes['launch'] if 'launch' in changes else
                           await session.run_sync(lambda _: run.launch))
@@ -80,7 +80,7 @@ async def reserve(job, limit):
             await session.flush()
             await history.transition(session, run, None, 'preparing')
         return
-    from chessism_api.database.ask_db import (
+    from chessism_api.database.postgresql.ask_db import (
         get_fens_for_analysis, get_player_fens_for_analysis, get_game_set_fens_for_analysis,
     )
     selection = job.selection

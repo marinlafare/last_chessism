@@ -61,7 +61,7 @@ async def main():
         print('PASS canonical promotion: contract, active FKs, numeric triggers, read views, injected-failure rollback and success rollback; no release marker',flush=True)
         # Model the controller's lifetime lock on a separate private connection;
         # ingestion/projection repair must still serialize only with each other.
-        from chessism_api.database.relational_storage import INGESTION_COMMIT_LOCK
+        from chessism_api.database.postgresql.relational_storage import INGESTION_COMMIT_LOCK
         from chessism_api.operations.ingestion_pipeline import relational_repository
         from chessism_api.operations import relational_projection
         assert relational_repository.INGESTION_COMMIT_LOCK==relational_projection.INGESTION_COMMIT_LOCK==INGESTION_COMMIT_LOCK

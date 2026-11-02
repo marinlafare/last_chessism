@@ -8,7 +8,7 @@ import json
 import time
 
 from sqlalchemy import text
-from chessism_api.database.relational_storage import RelationalStorage
+from chessism_api.database.postgresql.relational_storage import RelationalStorage
 from chessism_api.operations import fen_summary_recovery as recovery
 from tests import check_canonical_blunders_postgres as base
 

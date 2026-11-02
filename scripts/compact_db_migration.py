@@ -4,8 +4,8 @@ All changes are one transaction and never CASCADE through unknown dependencies.
 The caller must hold the isolated workspace lock and stop other private clients.
 """
 from scripts.compact_db_preflight import require_private, require_target, prove_data
-from chessism_api.database.relational_storage import identifier
-from chessism_api.database.compact_storage import PLAYER_TABLES
+from chessism_api.database.postgresql.relational_storage import identifier
+from chessism_api.database.postgresql.compact_storage import PLAYER_TABLES
 from scripts.compact_db_indexes import drop_reviewed_impact_index, create_integer_impact_index
 
 

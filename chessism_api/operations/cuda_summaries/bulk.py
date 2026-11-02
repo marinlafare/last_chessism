@@ -1,6 +1,6 @@
 """Bounded binary COPY transport; all temporary rows belong to the transaction."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import driver_connection, identifier
+from chessism_api.database.postgresql.relational_storage import driver_connection, identifier
 from ..matrix_constructor.artifact_files import file_operation
 
 

@@ -7,8 +7,8 @@ from arq.connections import ArqRedis
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, insert, select, text
-from chessism_api.database.engine import AsyncDBSession
-from chessism_api.database.models import (CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame,
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.models import (CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame,
     CloudAnalysisJob, CloudBatchSequence)
 from chessism_api.operations.cloud_analysis import game_drafts as drafts
 from chessism_api.operations.cloud_analysis import draft_cache

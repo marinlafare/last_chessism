@@ -1,6 +1,6 @@
-import { cloudJobDone } from './cloudJobProgress.js'
+import { cloudJobDone, graphSyncPending } from './cloudJobProgress.js'
 
-export const terminalProgress = job => cloudJobDone(job) || job.status === 'cancelled'
+export const terminalProgress = job => cloudJobDone(job) || (job.status === 'cancelled' && !graphSyncPending(job))
 
 export function trackProgress(review, jobs) {
   if (!jobs.length) return review

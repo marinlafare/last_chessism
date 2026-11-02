@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import asyncpg
-from chessism_api.database.fen_reference_identity import validate_references
-from chessism_api.database.fen_reference_migration import migrate, compare, TABLES, LEGACY
+from chessism_api.database.postgresql.fen_reference_identity import validate_references
+from chessism_api.database.postgresql.fen_reference_migration import migrate, compare, TABLES, LEGACY
 
 URL = os.getenv('CHESSISM_FEN_ID_TEST_URL','')
 

@@ -1,8 +1,8 @@
 """Captured incremental metadata scopes and additive, opt-in CUDA ownership."""
 from sqlalchemy import text
-from chessism_api.database.relational_storage import storage_for
-from chessism_api.database.player_analytics_schema import analytics_table
-from chessism_api.database.stockfish_summary_schema import summary_table
+from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.player_analytics_schema import analytics_table
+from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .schema import CONTROL,RUN
 from .behavior_compute import VERSION as BEHAVIOR_VERSION
 from .ending_compute import VERSION as ENDING_VERSION

@@ -7,7 +7,7 @@ https://www.postgresql.org/docs/current/sql-copy.html#SQL-COPY-BINARY
 """
 import time
 import numpy as np
-from chessism_api.database.relational_storage import driver_connection,storage_for
+from chessism_api.database.postgresql.relational_storage import driver_connection,storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from . import compute
 

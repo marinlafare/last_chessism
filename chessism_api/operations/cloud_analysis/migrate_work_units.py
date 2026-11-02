@@ -3,8 +3,8 @@ import asyncio
 import os
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
-from chessism_api.database.models import CloudBatchUnit
-from chessism_api.database import cloud_columns
+from chessism_api.database.postgresql.models import CloudBatchUnit
+from chessism_api.database.postgresql import cloud_columns
 
 
 def upgrade(connection):

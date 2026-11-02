@@ -208,8 +208,8 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
             patches = (
                 patch.object(job, "ensure_backup_reservation", AsyncMock()),
                 patch.object(job, "release_backup", AsyncMock()),
-                patch('chessism_api.database.fen_identity.schema_version', return_value='numeric_v2'),
-                patch('chessism_api.database.fen_reference_identity.schema_version', return_value='numeric_v1'),
+                patch('chessism_api.database.postgresql.fen_identity.schema_version', return_value='numeric_v2'),
+                patch('chessism_api.database.postgresql.fen_reference_identity.schema_version', return_value='numeric_v1'),
                 patch.object(job, "backup_completed_matrices", side_effect=save_matrices),
                 patch.object(job, "definition_backup_manifest", AsyncMock(return_value={"count": 0, "storage": "postgresql"})),
                 patch.object(job, "algorithm_backup_manifest", AsyncMock(return_value={"schema_version": 1, "definitions": {"count": 0}, "completed_runs": {"count": 0}})),

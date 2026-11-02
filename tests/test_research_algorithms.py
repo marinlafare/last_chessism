@@ -15,7 +15,7 @@ from fastapi import FastAPI, Depends
 import httpx
 
 from chessism_api.auth import get_current_account, require_superuser
-from chessism_api.database.models import AccountRole
+from chessism_api.database.postgresql.models import AccountRole
 
 from chessism_api.operations.research_algorithms import config, jobs, storage
 from chessism_api.operations.research_algorithms.backups import validate_algorithm_backup

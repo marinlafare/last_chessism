@@ -53,8 +53,8 @@ async def run(args):
     from chessism_api.operations import database_restore_tests as restore
     from chessism_api.operations.restore_workspace import workspace_lock
     from chessism_api.operations.backup_files import atomic_write_json
-    from chessism_api.database.relational_storage import describe_contract,validate_backup_contract
-    from chessism_api.database.backup_contract import contract_differences
+    from chessism_api.database.postgresql.relational_storage import describe_contract,validate_backup_contract
+    from chessism_api.database.postgresql.backup_contract import contract_differences
     from scripts.compact_db_preflight import require_private
     from scripts.compact_db_application_checks import factory_for,LAYOUT
     from scripts.fen_migration_progress import ProgressReporter

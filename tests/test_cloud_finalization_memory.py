@@ -8,7 +8,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
-from chessism_api.database.cloud_codec import checksum
+from chessism_api.database.postgresql.cloud_codec import checksum
 from chessism_api.operations.cloud_analysis import cloud_run_controller as run_controller
 from chessism_api.operations.cloud_analysis import controller, importer
 from test_cloud_run_analysis import fixture, RUN_ID

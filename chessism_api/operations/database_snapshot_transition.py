@@ -18,7 +18,7 @@ from .database_restore_tests import run_database_restore_test_job, database_rest
 
 
 async def main(*, resume_backup_id=None):
-    from chessism_api.database.runtime import bind_runtime_engine
+    from chessism_api.database.postgresql.runtime import bind_runtime_engine
     from chessism_api.redis_client import get_redis_pool, close_redis_pool
     path = b.APP_BACKUP_ROOT / "snapshot-transition.json"
     previous = b._read_json(path, {})

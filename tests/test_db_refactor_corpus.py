@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock,MagicMock,patch
 from scripts.run_db_refactor_corpus import verify_acceptance
 from scripts.launch_db_refactor_http_backup import runner_command
 from scripts.watch_db_refactor import render
-from chessism_api.database import ask_db
+from chessism_api.database.postgresql import ask_db
 from chessism_api.operations.home_summary import refresh_home_summary
 
 
