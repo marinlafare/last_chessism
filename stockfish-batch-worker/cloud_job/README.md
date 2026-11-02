@@ -307,6 +307,30 @@ they are pruned only after verified import, cloud cleanup and local summaries.
 Failed/recoverable runs retain those packs. Actual analysis stays in the normal
 FEN tables and is never duplicated in usage history.
 
+Cloud Run preparation is checkpointed before cloud execution: a `selecting`
+run leases at most 50,000 FENs per transaction, validates bounded groups on four
+CPU workers, and COPY-inserts claims in the same transaction as native input
+chunks and its progress count. Cancellation between pages keeps completed
+reservations available for normal cleanup; a failed page rolls back both queue
+consumption and claims. No cloud launch is allowed until the input is sealed.
+The seal streams the canonical checksum and transfers packed arrays into the
+existing input-document format without constructing a whole-run Python list.
+Staging is removed atomically when sealed, or by stop-and-cleanup.
+
+Combined drafts retain their calculated ID union until it is copied to the job
+queue; new scores and competing claims are still rechecked under FEN locks.
+Eligibility subtracts only claims matching the locked input, using a bounded
+set operation instead of a correlated anti-join. Cloud Run and Batch Spot both
+refresh claim-table planner statistics before taking reservation locks. This
+prevents an empty-to-populated claim table from causing quadratic rechecks.
+Legacy selections without that cache build the existing ordered queue once.
+Progress uses committed counts, not estimates; sealing is a separate activity
+within Queue and reserve FENs. Timing rows record selection, validation, claims,
+commit and sealing. Before deploying this version to a migrated database, run
+`python -m chessism_api.operations.cloud_analysis.migrate_input_preparation`.
+Existing runs keep their original inputs and checkpoints; never restart the
+controller during an in-flight preparation transaction to adopt this release.
+
 `cloud_phase_timing`, `cloud_usage`, and `cloud_execution_attempt` preserve phase,
 worker and provider-attempt measurements. Allocated VM memory and worker memory
 budget have distinct columns. Missing historical measurements remain NULL;

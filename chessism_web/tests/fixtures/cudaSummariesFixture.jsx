@@ -18,6 +18,12 @@ window.fetch = async (input, options = {}) => {
     state.latest = { ...state.active, status: 'failed', phase: 'Failed — retry required', error: 'Synthetic interruption' }
     state.active = null; state.failed = false
   }
+  if (state.completeOnPoll) {
+    state.latest = { ...state.active, status: 'complete', phase: 'Complete', error: null,
+      finished_at: new Date(Date.now() - 18_000).toISOString() }
+    state.active = null; state.completeOnPoll = false
+  }
+  if (state.latest?.finished_at) state.getsAfterFinish = (state.getsAfterFinish || 0) + 1
   const payload = { manual: true, available_metrics: state.scores ? ['blunders','score_distribution'] : ['blunders'],
     deferred_metrics: state.scores ? ['accuracy'] : ['accuracy','score_distribution'], pending_score_players: state.pending_score_players,
     pending_players: 3, pending_games: state.pending_games, preparing_games: 0,

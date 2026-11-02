@@ -89,6 +89,7 @@ class PlayerGamePreviewRequest(PlayerGameScopeRequest):
     game_limit: int | None = Field(None, ge=1, le=50_000)
     use_all: bool = False
     range_order: str = Field("latest", pattern="^(latest|oldest)$")
+    prepare_combined: bool = False
 
 
 class PlayerGameAnalysisConfirmRequest(BaseModel):
@@ -368,25 +369,26 @@ async def api_preview_player_game_analysis(
         if game_limit is None:
             raise HTTPException(status_code=422, detail="Enter the number of games to select")
 
-    scope = await get_player_game_analysis_scope(
+    scope = {} if data.prepare_combined else await get_player_game_analysis_scope(
         player_name,
         date_from=date_from,
         date_to_exclusive=date_to_exclusive,
     )
-    if int(scope.get("incomplete_games") or 0) <= 0:
+    if not data.prepare_combined and int(scope.get("incomplete_games") or 0) <= 0:
         raise HTTPException(status_code=409, detail="No incomplete games with FENs were found in this selection")
 
+    plan_id = uuid4().hex
     preview = await preview_player_games_for_analysis(
         player_name,
         order=order,
         game_limit=game_limit,
         date_from=date_from,
         date_to_exclusive=date_to_exclusive,
+        **({'prepared_plan_id':plan_id} if data.prepare_combined else {}),
     )
     if int(preview.get("selected_games") or 0) <= 0:
         raise HTTPException(status_code=409, detail="No games could be selected")
 
-    plan_id = uuid4().hex
     stockfish_fens = max(
         0,
         int(preview.get("fens_to_analyze") or 0)
@@ -401,8 +403,7 @@ async def api_preview_player_game_analysis(
         "date_from": data.date_from.isoformat() if data.date_from else None,
         "date_to": data.date_to.isoformat() if data.date_to else None,
         "requested_games": game_limit,
-        "stockfish_fens": stockfish_fens,
-        "estimated_seconds": estimated_seconds,
+        **({} if data.prepare_combined else {"stockfish_fens":stockfish_fens,"estimated_seconds":estimated_seconds}),
     }
     await redis.set(
         f"chessism:player_game_analysis_plan:{plan_id}",

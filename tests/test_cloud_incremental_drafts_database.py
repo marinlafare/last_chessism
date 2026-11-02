@@ -141,7 +141,7 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
         await self.remove(self.draft['entries'][0]['id'])
         await self.assert_counts(0, 0)
 
-    async def test_launch_rechecks_live_union_and_releases_only_cache_for_both_backends(self):
+    async def test_launch_rechecks_live_union_and_retains_cache_until_queue_capture(self):
         await self.available()
         from chessism_api.routers.cloud_game_drafts import create_draft
         from chessism_api.operations.cloud_analysis.controller import save_job
@@ -153,6 +153,10 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
             result = await submit_draft(self.draft['id'], SubmitDraft(
                 revision=self.draft['revision'], backend=backend, n_vms=6, n_cpus=100))
             self.assertEqual(result['target'], 2)
+            async with AsyncDBSession() as s:
+                self.assertIsNotNone(await s.get(CloudGameDraftCache,self.draft['id']))
+            from chessism_api.operations.cloud_analysis.game_fen_queue import ensure_queue
+            await ensure_queue(result['id'],[101,102])
             async with AsyncDBSession() as s:
                 self.assertEqual(await s.scalar(select(func.count()).select_from(CloudGameDraftCache)), 0)
                 self.assertEqual(await s.scalar(select(func.count()).select_from(CloudGameDraftEntryFen)), 0)

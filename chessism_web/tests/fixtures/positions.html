@@ -25,6 +25,8 @@ window.fetch = async (input, options = {}) => {
   })
   const matches = suffix => url.pathname.endsWith(suffix)
   if (method === 'GET') {
+    if (matches('/analysis/cuda-summaries')) return reply({ manual: true, active: null, latest: null,
+      history: [], available_metrics: [], pending_games: {} })
     if (matches('/analysis/cloud')) return reply({ controller_online: true, cloud_busy: true,
       blocking_job_id: state.job.id, jobs: [state.job] })
     if (matches('/analysis/cloud/drafts/current')) return reply(state.draft)

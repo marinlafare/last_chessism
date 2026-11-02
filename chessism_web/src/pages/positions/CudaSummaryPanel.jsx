@@ -1,14 +1,14 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { usePoll } from '../../hooks/usePoll'
 import { pageStyleTarget } from '../../appearance/styleCore.js'
 import ProgressMeter from '../../components/progress/ProgressMeter'
 import { fetchCudaSummaries, runCudaSummaries, retryCudaSummaries } from './positionsApi'
+import { cudaSummaryProgress } from './cudaSummaryProgress.js'
+import CudaStepTitle from './CudaStepTitle.jsx'
+import useCudaCompletedProgress from './useCudaCompletedProgress.js'
 import './cuda-summaries.css'
 
-const names = { blunders: 'Blunders', accuracy: 'Accuracy', score_distribution: 'Score distribution',
-  behavioral: 'Behavioral analysis', unexpected_endings: 'Unexpected endings', salience: 'Salience · first 15 moves', position_frequency: 'Repeated positions', ply_map: 'Collapsed ply map' }
 const number = value => Number(value || 0).toLocaleString()
-const players = value => number(value) + (Number(value) === 1 ? ' player' : ' players')
 function Fill(props) { return <span {...pageStyleTarget('cuda.progress.fill')} {...props} /> }
 
 export default function CudaSummaryPanel() {
@@ -16,86 +16,76 @@ export default function CudaSummaryPanel() {
   const [failure, setFailure] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [history, setHistory] = useState(false)
+  const [emptyRequest, setEmptyRequest] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
+  const contentId = useId()
   const busy = useRef(false)
   const submit = async (id) => {
     if (busy.current) return
+    setHistory(false)
+    if (!id && !available) {
+      setFailure('')
+      setEmptyRequest(true)
+      return
+    }
+    setEmptyRequest(false)
     busy.current = true; setSubmitting(true); setFailure('')
     try { await (id ? retryCudaSummaries(id) : runCudaSummaries()); refresh() }
     catch (e) { setFailure(e.message || 'Unable to request CUDA summaries.') }
     finally { busy.current = false; setSubmitting(false) }
   }
-  if (error?.status === 403) return null
   const run = data?.active || data?.latest
+  const showProgress = useCudaCompletedProgress(run)
+  if (error?.status === 403) return null
   const pending = data?.pending_games || {}
-  const metadata = run?.timings?.metadata
-  const salience = run?.timings?.salience
-  const frequency = run?.timings?.position_frequency
-  const plyMap = run?.timings?.ply_map
-  const mapActive = plyMap && !plyMap.complete && /ply map/i.test(run?.phase || '')
-  const frequencyActive = frequency && !frequency.complete && /position frequencies|repeated positions/i.test(run?.phase || '')
-  const salienceActive = run?.metrics?.includes('salience') && !salience?.complete &&
-    (salience || !Number(run?.total_games))
-  const metadataOnly = run?.metrics?.includes('behavioral') && !Number(run?.total_games)
+  const progress = cudaSummaryProgress(run)
   const available = (data?.available_metrics || []).reduce((sum, metric) => sum + Number(pending[metric] || 0), 0)
     + Number(data?.pending_score_players || 0) + Number(data?.pending_accuracy_players || 0)
     + Number(data?.pending_behavioral_players || 0) + Number(data?.pending_unexpected_endings_players || 0)
     + Number(data?.pending_salience_players || 0) + Number(data?.pending_position_frequency_players || 0)
     + Number(Boolean(data?.ply_map?.pending && !data?.ply_map?.syncing))
+  const waitingForGraph = Boolean(data?.ply_map?.pending && data?.ply_map?.syncing && !available)
+  const noWork = emptyRequest && !data?.active && !available && !data?.preparing_games && !waitingForGraph
+  const showHistory = Boolean(run && run.status !== 'complete') || noWork
+  const hasContent = showProgress || noWork || showHistory || submitting || failure || error || data?.preparing_games > 0 || waitingForGraph
+  const expanded = Boolean(data?.manual && !collapsed && hasContent)
+  const toggle = () => {
+    if (expanded) { setCollapsed(true); return }
+    setCollapsed(false)
+    // Opening an existing run is only a disclosure action, never another POST.
+    if (busy.current || data?.active || showProgress || noWork || failure || error || data?.preparing_games > 0 || waitingForGraph) return
+    submit()
+  }
   return <section {...pageStyleTarget('cuda.panel')} className="cuda-summary-panel" aria-label="CUDA summaries">
     <div className="cuda-summary-heading">
-      <button {...pageStyleTarget('cuda.run')} type="button"
-        disabled={loading || !data?.manual || submitting || Boolean(data?.active) || !available || data?.preparing_games > 0}
-        onClick={() => submit()}>Run CUDA summaries</button>
-      <span {...pageStyleTarget('cuda.pending')} role="status">
-        {loading ? 'Loading pending work…' : data?.manual
-          ? players(data.pending_players) + ' with pending summaries'
-          : 'Manual scheduling is not enabled yet.'}
-      </span>
+      <button {...pageStyleTarget('cuda.run')} type="button" className="cuda-summary-toggle"
+        aria-expanded={expanded} aria-controls={contentId} aria-label="Run CUDA summaries"
+        disabled={loading || !data?.manual} onClick={toggle}>
+        {Boolean(data?.active) && <span {...pageStyleTarget('cuda.run.indicator')} className="cuda-running-indicator"
+          role="img" aria-label="CUDA summaries in progress" title="CUDA summaries in progress" />}
+        <span {...pageStyleTarget('cuda.run.label')} className="cuda-summary-toggle-label">Run CUDA summaries</span>
+      </button>
     </div>
-    {data?.manual && <>
-      <div className="cuda-summary-metrics">{Object.entries(names).filter(([metric]) =>
-        !['behavioral','unexpected_endings','salience','position_frequency','ply_map'].includes(metric) || data.available_metrics.includes(metric)).map(([metric, name]) =>
-        <span {...pageStyleTarget('cuda.metric.' + metric)} key={metric}>
-          {name}: {metric === 'ply_map' ? (data.ply_map?.syncing ? 'waiting for graph synchronization' : data.ply_map?.pending ? 'pending' : 'current') : ['behavioral','unexpected_endings','salience','position_frequency'].includes(metric) ? players(data['pending_' + metric + '_players']) + ' pending' : metric === 'accuracy' && data.pending_accuracy_players > 0
-            ? players(data.pending_accuracy_players) + ' pending' : number(pending[metric]) + ' games'}
-          {data.deferred_metrics.includes(metric) ? ' · GPU migration pending' : ' · ready for manual runs'}
-        </span>)}</div>
-      <p {...pageStyleTarget('cuda.note')}>CUDA calculations start only when requested. {data.available_metrics.includes('behavioral')
-        ? 'Scores, blunders and accuracy share position inputs; behavioral analysis and Unexpected endings use an incremental metadata stage.' : data.available_metrics.includes('accuracy')
-        ? 'Blunders, score distribution, and accuracy share one input read. Daily accuracy bands are saved with the results.' : data.available_metrics.includes('score_distribution')
-        ? 'Blunders and score distribution share one input read. Accuracy migration is next.'
-        : 'This first stage runs CUDA blunders; accuracy and score distribution will be connected next.'} {data.available_metrics.includes('salience') && 'Salience uses the first 15 full moves with equal weights and refreshes the hero daily cache.'} Existing results are retained until publication.</p>
-      {data.pending_score_players > 0 && <p {...pageStyleTarget('cuda.pending')}>{number(data.pending_score_players)} players have changed score-distribution partitions.</p>}
-      {data.preparing_games > 0 && <p {...pageStyleTarget('cuda.preparing')} role="status">{number(data.preparing_games)} games still being prepared.</p>}
-      {run && <div {...pageStyleTarget('cuda.progress.panel')} className="cuda-summary-progress">
-        <strong {...pageStyleTarget('cuda.progress.phase')} role="status">{run.phase}</strong>
+    {expanded && <div {...pageStyleTarget('cuda.disclosure.panel')} id={contentId} className="cuda-summary-content">
+      {submitting && !data.active && <CudaStepTitle title="Requesting CUDA summaries" active />}
+      {!data.active && data.preparing_games > 0 && <p {...pageStyleTarget('cuda.preparing')} role="status">Preparing {number(data.preparing_games)} games</p>}
+      {!data.active && data.ply_map?.pending && data.ply_map?.syncing && <p {...pageStyleTarget('cuda.preparing')} role="status">Waiting for graph synchronization</p>}
+      {noWork ? <div {...pageStyleTarget('cuda.progress.panel')} className="cuda-summary-progress">
+        <CudaStepTitle title="No pending work" active={false} />
+      </div> : showProgress && <div {...pageStyleTarget('cuda.progress.panel')} className="cuda-summary-progress">
+        <CudaStepTitle key={`${run.id}:${progress.phase}`} title={progress.phase} active={Boolean(data.active)} />
         <ProgressMeter {...pageStyleTarget('cuda.progress.track')} className="cuda-summary-track"
-          fillTag={Fill} aria-label="CUDA summary progress"
-          aria-valuetext={mapActive || metadataOnly || salienceActive || frequencyActive ? run.phase : undefined}
-          value={mapActive ? undefined : frequencyActive ? (frequency.prepared ? frequency.shards + frequency.published : undefined) : salienceActive ? (salience?.prepared && salience.shards < salience.shard_total ? salience.shards : undefined) : metadataOnly ? (!metadata?.ready && run.status !== 'complete' ? undefined : metadata?.complete ? 1 : Number(metadata?.computed || 0)) : Number(run.processed_games) + Number(run.superseded_games)}
-          max={frequencyActive ? frequency.shard_total + frequency.players.length : salienceActive ? salience?.shard_total || 32 : metadataOnly ? (metadata?.complete ? 1 : Math.max(1, metadata?.chunks?.length || 0)) : Number(run.total_games) || 1} />
-        {!metadataOnly && !salienceActive && !frequencyActive && Number(run.total_games) > 0 && <span {...pageStyleTarget('cuda.progress.count')}>{number(run.processed_games)} / {number(run.total_games)} games processed
-          {run.superseded_games > 0 ? ' · ' + number(run.superseded_games) + ' changed games left pending for a new run' : ''}
-        </span>}
+          fillTag={Fill} aria-label="Current CUDA stage" aria-valuetext={progress.detail || progress.phase}
+          value={progress.value} max={progress.max} indeterminateWidth={progress.moving ? 30 : 0}
+          data-indeterminate={progress.moving && progress.value == null} />
+        {progress.detail && <span {...pageStyleTarget(progress.style)}>{progress.detail}</span>}
         {run.error && <p {...pageStyleTarget('cuda.error')} role="alert">{run.error}</p>}
-        {plyMap && <span {...pageStyleTarget('cuda.progress.ply_map')}>
-          Ply map: {number(plyMap.captured_games)} games captured{plyMap.complete ? plyMap.superseded ? ' · changed during preparation; rebuild pending' : ' · published' : ' · preparing'}
-        </span>}
-        {frequency && <span {...pageStyleTarget('cuda.progress.position_frequency')}>
-          Repeated positions: {number(frequency.rows)} occurrences prepared · {number(frequency.batches)} GPU batches · {number(frequency.published)} / {number(frequency.players.length)} players published
-        </span>}
-        {salience && <span {...pageStyleTarget('cuda.progress.salience')}>
-          Salience: {number(salience.games)} games · {number(salience.rows)} early positions prepared · {number(salience.batches)} GPU batches
-        </span>}
-        {run.timings?.metadata && <span {...pageStyleTarget('cuda.progress.count')}>
-          Metadata: {number(run.timings.metadata.rows)} player-games prepared · {number(run.timings.metadata.computed)} / {number(run.timings.metadata.chunks?.length)} input chunks calculated
-        </span>}
         {run.status === 'failed' && <button {...pageStyleTarget('cuda.retry')} type="button"
           disabled={submitting || Boolean(data.active)} onClick={() => submit(run.id)}>Retry run</button>}
       </div>}
-      <button {...pageStyleTarget('cuda.history.toggle')} type="button" aria-expanded={history}
-        onClick={() => setHistory(open => !open)}>History</button>
-      {history && <div {...pageStyleTarget('cuda.history.panel')} className="cuda-summary-history">
+      {showHistory && <button {...pageStyleTarget('cuda.history.toggle')} type="button" aria-expanded={history}
+        onClick={() => setHistory(open => !open)}>History</button>}
+      {showHistory && history && <div {...pageStyleTarget('cuda.history.panel')} className="cuda-summary-history">
         {!data.history.length && <p {...pageStyleTarget('cuda.history.entry')}>No previous runs.</p>}
         {data.history.map(item => <article {...pageStyleTarget('cuda.history.entry')} key={item.id}>
           <span>{new Date(item.created_at).toLocaleString()} · {item.status} · {number(item.processed_games)} games processed</span>
@@ -106,7 +96,10 @@ export default function CudaSummaryPanel() {
           {item.timings?.position_frequency && <span>Frequency input: {Number(item.timings.position_frequency.input_seconds || 0).toFixed(1)} s · CUDA: {Number(item.timings.position_frequency.cuda_seconds || 0).toFixed(1)} s · Stored rows: {number(item.timings.position_frequency.stored_rows)}</span>}
         </article>)}
       </div>}
-    </>}
-    {(failure || error) && <p {...pageStyleTarget('cuda.error')} role="alert">{failure || error.message}</p>}
+      {(failure || error) && <p {...pageStyleTarget('cuda.error')} role="alert">{failure || error.message}</p>}
+      {failure && <button {...pageStyleTarget('cuda.retry')} type="button" disabled={submitting || Boolean(data.active)}
+        onClick={() => submit()}>Retry request</button>}
+    </div>}
+    {!data?.manual && error && <p {...pageStyleTarget('cuda.error')} role="alert">{error.message}</p>}
   </section>
 }

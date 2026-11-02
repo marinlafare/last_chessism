@@ -49,11 +49,11 @@ export default function PositionsView({ page }) {
               </section>
             ))}
           </section>
-          <CudaSummaryPanel />
           <AnalysisDisclosureGroup>
             <LocalAnalysisSection page={page} />
             <CloudAnalysisSection collapsible onProgress={page.refreshCloudProgress} />
           </AnalysisDisclosureGroup>
+          <CudaSummaryPanel />
         </main>
       </div>
     </div>

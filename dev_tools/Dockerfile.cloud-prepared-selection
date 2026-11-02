@@ -1,0 +1,5 @@
+# Retain the current API/styles; patch only combined-builder preparation.
+FROM chessism-api:cuda-disclosure-styles-20261101
+COPY chessism_api/database/postgresql/models.py chessism_api/database/postgresql/ask_db.py /app/chessism_api/database/postgresql/
+COPY chessism_api/routers/analysis.py chessism_api/routers/cloud_game_drafts.py /app/chessism_api/routers/
+COPY chessism_api/operations/cloud_analysis/prepared_selection.py chessism_api/operations/cloud_analysis/migrate_prepared_selections.py /app/chessism_api/operations/cloud_analysis/

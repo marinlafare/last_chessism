@@ -21,6 +21,18 @@ def override(**changes):
 
 
 class AppearanceTests(unittest.TestCase):
+    def test_cuda_disclosure_and_indicator_have_independent_styles(self):
+        for target in ('cuda.run.label', 'cuda.run.indicator', 'cuda.disclosure.panel'):
+            for prop, value in [('background', '#ff922b'), ('hoverBackground', '#ffffff'),
+                                ('borderColor', '#112233'), ('hoverBorderColor', '#445566'),
+                                ('borderWidth', 1), ('radius', 12), ('padding', 2), ('marginLeft', 4)]:
+                validate_overrides([override(scope='positions', target=target, property=prop, value=value)])
+        for prop, value in [('cudaIndicatorSize', 18), ('cudaIndicatorGlowColor', '#ff922b80'), ('cudaIndicatorPulseSeconds', 2)]:
+            validate_overrides([override(scope='positions', target='cuda.run.indicator', property=prop, value=value)])
+            with self.assertRaises(ValueError):
+                validate_overrides([override(scope='positions', target='cuda.run', property=prop, value=value)])
+        self.assertEqual(REGISTRY['scopes']['positions']['targets']['cuda.run.indicator']['editorParent'], 'cuda.run')
+
     def test_common_positions_disclosure_has_independent_styles(self):
         for suffix in ('panel', 'toggle', 'content'):
             target = f'commonPositions.{suffix}'

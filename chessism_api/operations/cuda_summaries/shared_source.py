@@ -10,6 +10,10 @@ from .score_runs import OWNER, pending_items
 
 VERSION = 'shared_scores_v1'
 RAW = np.dtype([('game', '<i4'), ('ply', '<i4'), ('score', '<f8'), ('source', 'i1')])
+# Large binary reads can exceed the ordinary metadata-query deadline on a cold
+# cache. Keep both deadlines bounded, letting PostgreSQL cancel/report first.
+COPY_STATEMENT_SECONDS = 120
+COPY_CLIENT_SECONDS = COPY_STATEMENT_SECONDS + 15
 
 
 def query(layout):
@@ -134,11 +138,13 @@ async def load(session, run):
     indexes = {g['game_link']: i for i, g in enumerate(games)}
     # One allocation instead of retaining every COPY chunk plus a concatenated copy.
     raw = np.empty(sum(g['total_positions'] for g in positive), RAW); offset = 0
+    if positive:
+        await session.execute(text(f"SET LOCAL statement_timeout='{COPY_STATEMENT_SECONDS}s'"))
     driver = await driver_connection(session)
     for block in binary.blocks(positive, max_games=8192, max_rows=1048576):
         expected = sum(g['total_positions'] for g in block); sink = binary.Sink(expected)
         status = await driver.copy_from_query(query(layout), [g['game_link'] for g in block], expected + 1,
-            output=sink.write, format='binary', timeout=30)
+            output=sink.write, format='binary', timeout=COPY_CLIENT_SECONDS)
         if status != f'COPY {expected}':
             raise ValueError('Shared-input row count disagrees with coverage.')
         part = await file_operation(unpack, sink.data, block, 0)

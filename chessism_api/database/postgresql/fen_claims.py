@@ -4,6 +4,19 @@ from sqlalchemy import text
 
 RECHECK_BATCH_SIZE = 5000
 
+# Both branches are restricted to the locked input. EXCEPT subtracts two bounded
+# sets; unlike a correlated anti-join it cannot repeatedly scan every claim for
+# every selected FEN when empty-table statistics or a cached plan are stale.
+RECHECK_SQL = """
+    SELECT f.fen
+    FROM unnest(CAST(:fens AS text[])) wanted(fen)
+    JOIN fen f ON f.fen = wanted.fen
+    WHERE f.score IS NULL
+    EXCEPT
+    SELECT c.fen FROM cloud_fen_claim c
+    WHERE c.fen = ANY(CAST(:fens AS text[]))
+"""
+
 
 async def locked_eligible_fens(session, statement, parameters=None, *, timings=None):
     """Keep lock acquisition and the fresh-snapshot safety check separate."""
@@ -27,11 +40,6 @@ async def unclaimed_locked_fens(session, fens):
     for offset in range(0, len(fens), RECHECK_BATCH_SIZE):
         # A single array bind keeps parsing/planning bounded instead of expanding
         # thousands of IN parameters. Locks from the first query remain held.
-        eligible.update((await session.scalars(text("""
-            SELECT f.fen
-            FROM unnest(CAST(:fens AS text[])) wanted(fen)
-            JOIN fen f ON f.fen = wanted.fen
-            WHERE f.score IS NULL
-              AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
-        """), {'fens': fens[offset:offset + RECHECK_BATCH_SIZE]})).all())
+        eligible.update((await session.scalars(text(RECHECK_SQL),
+            {'fens': fens[offset:offset + RECHECK_BATCH_SIZE]})).all())
     return [fen for fen in fens if fen in eligible]

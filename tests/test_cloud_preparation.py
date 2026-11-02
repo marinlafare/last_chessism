@@ -61,7 +61,9 @@ class PreparationTests(unittest.IsolatedAsyncioTestCase):
         async def read(statement, params):
             self.assertIn('unnest', str(statement))
             self.assertIn('f.score IS NULL', str(statement))
-            self.assertIn('NOT EXISTS', str(statement))
+            self.assertIn('EXCEPT', str(statement))
+            self.assertIn('c.fen = ANY(CAST(:fens AS text[]))', str(statement))
+            self.assertNotIn('NOT EXISTS', str(statement))
             return Mock(all=lambda: list(reversed([f for f in params['fens'] if f != 'fen-2'])))
         session.scalars = AsyncMock(side_effect=read)
         self.assertEqual(await unclaimed_locked_fens(session, fens), [f for f in fens if f != 'fen-2'])

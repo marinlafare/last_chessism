@@ -52,3 +52,21 @@ test('Research width and VM/Local borders remain independently scoped', () => {
     }
   }
 })
+
+test('CUDA disclosure and running indicator edit independently of the run button', () => {
+  const setting = (property, value, target = 'cuda.run.indicator') => ({ scope: 'positions', target, property, value })
+  for (const target of ['cuda.run.indicator', 'cuda.run.label', 'cuda.disclosure.panel']) {
+    for (const [property, value] of [['background', '#ff922b'], ['hoverBackground', '#abcdef'],
+      ['borderColor', '#123456'], ['hoverBorderColor', '#fedcba'], ['borderWidth', 2], ['radius', 10], ['marginLeft', 4]]) {
+      const css = appearanceCss(registry, [setting(property, value, target)])
+      assert.ok(css.includes(`data-style-id="${target}"`))
+      assert.ok(!css.includes('data-style-id="cuda.run"'))
+    }
+  }
+  for (const [property, value, css] of [['cudaIndicatorSize', 16, '--cuda-indicator-size:16px'],
+    ['cudaIndicatorGlowColor', '#abcdef80', '--cuda-indicator-glow:#abcdef80'],
+    ['cudaIndicatorPulseSeconds', 2, '--cuda-indicator-pulse-seconds:2s']]) {
+    assert.ok(appearanceCss(registry, [setting(property, value)]).includes(css))
+    assert.equal(appearanceCss(registry, [setting(property, value, 'cuda.run')]), '')
+  }
+})

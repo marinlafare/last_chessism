@@ -2,17 +2,15 @@
 import asyncio
 from copy import deepcopy
 from dataclasses import asdict
-import hashlib
 from uuid import uuid4
 
-from sqlalchemy import insert
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchUnit, CloudFenClaim
+from chessism_api.database.postgresql.models import CloudAnalysisRun, CloudBatchUnit
 from cloud_job import batch_spot, work_units
 from cloud_job.launch import inspect_worker, expected_contract
 from . import batch_cleanup
 from cleaning_job.cleanup import prepare, check_bucket
-from stockfish_batch.checkpoints import encode, parse_input
+from stockfish_batch.checkpoints import encode
 from stockfish_batch import __version__
 from stockfish_batch.storage import MAX_INPUT_BYTES
 from stockfish_core import ENGINE_SHA256, PROFILE_ID
@@ -21,6 +19,7 @@ from .preflight import verify_clean_workspace, parallel_checks
 from .preparation import PreparationTimings, StageTimings, refresh_claim_statistics
 from .log_cleanup import plan_logs, remove_logs
 from .importer import refresh_unit_projections
+from . import input_validation
 
 
 async def reserve_unit(job, root, launch, vm, limit):
@@ -42,11 +41,10 @@ async def reserve_unit(job, root, launch, vm, limit):
                 session, fens = await get_fens_for_analysis(limit, raise_errors=True, timings=timings)
         if session is None:
             return 0
-        with timings.measure('prepare_encode'):
-            positions = [{'id': hashlib.sha256(fen.encode()).hexdigest(), 'fen': fen} for fen in fens]
-            raw = b''.join(map(encode, positions))
         with timings.measure('prepare_validate'):
-            parse_input(raw, limit)
+            positions = await input_validation.prepare(fens)
+        with timings.measure('prepare_encode'):
+            raw = b''.join(map(encode, positions))
             ident, index = uuid4().hex, len(launch['units'])
             cfg = batch_spot.config_for(ident, len(positions))
             contract = expected_contract(raw, positions, cfg, {'engine_sha': ENGINE_SHA256,
@@ -64,8 +62,7 @@ async def reserve_unit(job, root, launch, vm, limit):
             owner.position_count += len(positions)
             await session.flush()
         with timings.measure('prepare_claims'):
-            for offset in range(0, len(fens), 1000):
-                await session.execute(insert(CloudFenClaim), [{'fen': fen, 'run_id': ident} for fen in fens[offset:offset + 1000]])
+            await input_validation.claim(session, ident, fens)
         with timings.measure('prepare_commit'):
             await session.commit()
         timing_run_id = ident

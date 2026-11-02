@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import case, func, literal_column, select, text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudControllerHeartbeat,
+from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudControllerHeartbeat, CloudInputPreparation,
     CloudPhaseTiming, CloudResultBatch, CloudUsage, CloudExecutionAttempt, CloudBatchUnit, CloudCleanupProgress,
     CloudBatchSequence, CloudBatchCycle, CloudSequenceControl, CloudGameDraft, CloudGameDraftEntry, CloudJobCancellation)
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest, CloudVmCountRequest, MAX_CLOUD_FENS, MAX_CLOUD_RUN_FENS, MAX_BATCH_TOTAL_FENS, batch_cycle_count
@@ -97,6 +97,8 @@ async def cloud_jobs():
         runs_by_job = defaultdict(list)
         for run in runs:
             runs_by_job[run.job_id].append(run)
+        preparation = {row.run_id: row for row in (await session.scalars(select(CloudInputPreparation)
+            .where(CloudInputPreparation.run_id.in_([run.id for run in runs])))).all()} if runs else {}
         phase_timings = defaultdict(list)
         if jobs:
             phases = (await session.execute(select(
@@ -120,6 +122,9 @@ async def cloud_jobs():
             "id": job.id, "status": job.status, "selection": selections[job.selection_ref],
             "target": job.target, "imported": job.imported,
             "combined_selection": combined.get(job.id),
+            "reservation_progress": next(({'reserved':run.positions,'target':preparation[run.id].target,
+                'phase':preparation[run.id].phase,'updated_at':preparation[run.id].updated_at}
+                for run in runs_by_job[job.id] if run.id in preparation), None),
             "created_at": job.created_at, "error": job.error,
             "phase_timings": phase_timings[job.id],
             "graph_sync": graph_progress.get(job.id),

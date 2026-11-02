@@ -73,7 +73,8 @@ async def save_entry(draft_id: str, data: AddSelection, redis: ArqRedis = Depend
     raw = await redis.get(f'chessism:player_game_analysis_plan:{data.plan_id}')
     if not raw:
         raise HTTPException(409, 'Game preview expired; preview again before adding it')
-    values, links = drafts.preview_entry(json.loads(raw))
+    plan = json.loads(raw)
+    values, links = drafts.preview_entry(plan)
     async with AsyncDBSession() as session, session.begin():
         draft = await drafts.locked_draft(session, draft_id, data.revision)
         cache = await draft_cache.ensure(session, draft)
@@ -97,7 +98,11 @@ async def save_entry(draft_id: str, data: AddSelection, redis: ArqRedis = Depend
             await session.execute(insert(CloudGameDraftGame), [
                 {'entry_id': entry.id, 'game_link': link, 'ordinal': offset + i}
                 for i, link in enumerate(links[offset:offset + 1000])])
-        await draft_cache.add_entry(session, cache, entry.id)
+        if plan.get('prepared_fens_version') == 1:
+            from chessism_api.operations.cloud_analysis.prepared_selection import merge
+            await merge(session, cache, entry.id, data.plan_id, links)
+        else:
+            await draft_cache.add_entry(session, cache, entry.id)
         drafts.changed(draft)
         await draft_cache.publish(session, draft, cache)
         return await drafts.view(session, draft)
@@ -173,6 +178,7 @@ async def submit_draft(draft_id: str, data: SubmitDraft):
                                           repeat_count=batch_cycle_count(target, data.n_vms)))
         draft.submitted_job_id = job.id
         draft.updated_at = datetime.now(timezone.utc)
-        await draft_cache.discard(session, draft.id)
+        # Keep the frozen ID union until the controller copies it to the durable
+        # job queue. Rebuilding it from all games would repeat Calculate/Add.
         return {'id': job.id, 'status': job.status, 'target': target,
                 'backend': data.backend, 'already_submitted': False}

@@ -1,6 +1,6 @@
 """Build game ordering once; lease bounded pages with atomic queue consumption.
 
-Only Batch game selections opt in. Local selection and existing cloud inputs,
+Batch and Cloud Run game selections opt in. Local selection and existing cloud inputs,
 contracts, reservations, imports and recovery remain unchanged. Queue rows are
 IDs, not FEN strings or results. No DDL or cloud calls occur in this module.
 """
@@ -9,11 +9,11 @@ from datetime import datetime, timezone
 import hashlib
 import json
 
-from sqlalchemy import delete, text
+from sqlalchemy import delete, text, select
 from sqlalchemy.dialects.postgresql import insert
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import CloudGameFenQueue
+from chessism_api.database.postgresql.models import CloudGameFenQueue, CloudGameDraft, CloudGameDraftCache
 from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
 
@@ -76,7 +76,22 @@ async def ensure_queue(job_id, game_links, *, timings=None):
             raise ValueError('Game selection changed; refusing to reuse a different FEN queue')
         if queue.built_at is None:
             with measure('prepare_queue_build'):
-                result = await session.execute(text(candidate_sql(storage_for(session))), {'job_id': job_id, 'links': links})
+                draft = (await session.scalars(select(CloudGameDraft).where(
+                    CloudGameDraft.submitted_job_id == job_id))).first()
+                cache = await session.get(CloudGameDraftCache, draft.id) if draft else None
+                if cache and cache.revision == draft.revision:
+                    from . import game_drafts, draft_cache
+                    if await game_drafts.game_links(session, draft.id) != links:
+                        raise ValueError('Submitted game selection changed')
+                    # Combined selections contain the entire authorized union;
+                    # no ranking is needed. Lock/recheck every FEN when leased.
+                    result = await session.execute(text('''INSERT INTO cloud_game_fen_candidate(job_id,ordinal,fen_id)
+                        SELECT :job_id,row_number() OVER (ORDER BY fen_id),fen_id
+                        FROM cloud_game_draft_fen WHERE draft_id=:draft_id'''),
+                        {'job_id':job_id,'draft_id':draft.id})
+                    await draft_cache.discard(session, draft.id)
+                else:
+                    result = await session.execute(text(candidate_sql(storage_for(session))), {'job_id': job_id, 'links': links})
                 queue.candidate_count = result.rowcount
                 queue.built_at = datetime.now(timezone.utc)
                 # Explicit stats after a bulk build prevent an empty-table plan
@@ -136,3 +151,6 @@ async def get_game_queue_fens(job_id, game_links, limit, *, timings=None):
 async def discard_queue(session, job_id):
     """Caller owns transaction; cascade removes only this job's scratch IDs."""
     await session.execute(delete(CloudGameFenQueue).where(CloudGameFenQueue.job_id == job_id))
+    from .draft_cache import discard
+    for ident in (await session.scalars(select(CloudGameDraft.id).where(CloudGameDraft.submitted_job_id == job_id))).all():
+        await discard(session, ident)

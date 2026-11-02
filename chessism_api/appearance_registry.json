@@ -3,6 +3,9 @@
   "scope": "scored_positions",
   "universalProperties": ["margin", "marginTop", "marginRight", "marginBottom", "marginLeft", "radius"],
   "properties": {
+    "cudaIndicatorSize": {"label":"Indicator size (px)","kind":"number","min":6,"max":32,"unit":"px","css":"--cuda-indicator-size","default":12},
+    "cudaIndicatorGlowColor": {"label":"Indicator glow","kind":"color","css":"--cuda-indicator-glow","default":"#ff922b80"},
+    "cudaIndicatorPulseSeconds": {"label":"Pulse duration (seconds)","kind":"number","min":0.4,"max":5,"step":0.1,"unit":"s","css":"--cuda-indicator-pulse-seconds","default":1.6},
     "reviewChartFocusColor": {"label":"Active / focused border color","kind":"color","css":"--review-chart-focus-color","default":"#ffffff"},
     "reviewChartFocusWidth": {"label":"Active / focused border width","kind":"number","min":0,"max":8,"unit":"px","css":"--review-chart-focus-width","default":1},
     "reviewChartFocusOffset": {"label":"Active / focused border offset","kind":"number","min":-8,"max":8,"unit":"px","css":"--review-chart-focus-offset","default":2},

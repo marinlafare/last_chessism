@@ -1,0 +1,2 @@
+FROM chessism-api:backend-cleanup-20261101
+COPY chessism_api/appearance_registry.json chessism_api/appearance_scopes.json /app/chessism_api/

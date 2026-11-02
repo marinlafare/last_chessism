@@ -11,6 +11,23 @@ const jobAt = (phase, status = 'running') => ({
   runs: [{ status: phase, cloud_state: 'SUCCEEDED' }],
 })
 
+test('Cloud Run reservation shows committed counts and a separate sealing stage', () => {
+  const job = { ...jobAt('selecting'), target: 200000,
+    reservation_progress: { reserved: 50000, target: 200000, phase: 'validating' } }
+  const step = cloudJobProgress(job).steps.find(step => step.id === 'reserve')
+  assert.equal(step.state, 'current')
+  const progress = cloudStepProgress(job, step)
+  assert.equal(progress.value, 25)
+  assert.match(progress.detail, /50,000 \/ 200,000 FENs reserved/)
+  assert.match(progress.detail, /Validating next batch/)
+  job.reservation_progress = { reserved: 200000, target: 200000, phase: 'sealing' }
+  const sealing = cloudStepProgress(job, step)
+  assert.equal(sealing.value, null)
+  assert.equal(sealing.showDetail, true)
+  assert.match(sealing.detail, /Finalizing input snapshot/)
+  assert.equal(cloudJobProgress(job).steps.find(step => step.id === 'preflight').state, 'pending')
+})
+
 const sequenceAtSix = () => ({
   id: 'sequence', status: 'running', target: 4000000, imported: 2760000,
   sequence: { automatic: true, phase: 'running', times: 8, cloud_completed: 5, cloud_status: 'RUNNING' },

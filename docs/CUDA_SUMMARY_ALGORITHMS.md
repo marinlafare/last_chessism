@@ -2720,6 +2720,33 @@ the obsolete rollout flag is disabled. No existing player results were rebuilt.
    Isolated transactional recovery checks passed, but the original run's unrun
    production-performance/recovery gates have not been retroactively relabeled.
 
+## Interrupted shared-input reads (2026-11-01)
+
+The shared CUDA reader now invalidates the SQLAlchemy session after a failed
+read, instead of terminating raw asyncpg and then rolling back its dead
+connection. Cleanup is shielded from cancellation, and a cleanup exception
+cannot replace the original timeout/disconnect reported to the existing retry
+workflow. Failed reads do not advance saved input checkpoints.
+
+Metadata retains its 30-second statement deadline. Large binary COPY reads use
+a bounded 120-second server deadline and a 135-second client deadline, so the
+server normally reports cancellation first. Extraction row limits, GPU batch
+budgets, formulas, and the no-CPU-fallback policy are unchanged.
+
+`tests/check_cuda_reader_postgres.py` reproduces actual server/client timeouts,
+cancellation, and disconnected readers in disposable PostgreSQL. It checks
+fresh-connection retries, no pool leaks, and isolation from other connections.
+The shared-pipeline test also checks that a failed extraction retries the same
+run without skipped inputs or duplicated results. Only the idle algorithm
+worker needs the reader update; no database migration or summary rebuild is
+required.
+
+The CUDA progress panel hides completed progress 20 seconds after `finished_at`.
+Polling does not restart the deadline; new runs reappear and failures stay
+visible. History is offered during unfinished runs or after a no-pending-work
+click on Run. That empty click makes no POST and creates no empty job; completed
+records remain stored in History.
+
 ## Checks
 
 `tests.test_summary_algorithms`: contract/kernel tests (CPU only).

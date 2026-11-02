@@ -72,6 +72,9 @@ async def save_job(job_id, **changes):
 
 
 async def reserve(job, limit):
+    if job.selection.get('execution_mode') == 'cloud_run_v1':
+        from .input_preparation import begin
+        return await begin(job, limit)
     if job.selection.get('execution_mode') == 'batch_work_units_v1':
         async with AsyncDBSession() as session, session.begin():
             run = CloudAnalysisRun(id=uuid4().hex, job_id=job.id, status='preparing',
@@ -138,7 +141,14 @@ class Controller:
             # Completed runs only need their scalar status. Summary refresh uses
             # persisted input references in SQL, never the whole Python input.
             if run is not None and run.status != 'refreshing' and cancellation is None:
-                for name in run.CLOUD_DOCUMENTS:
+                names = run.CLOUD_DOCUMENTS
+                if job.selection.get('execution_mode') == 'cloud_run_v1':
+                    if run.status == 'selecting':
+                        names = ()
+                    elif run.status in {'run_creating', 'run_start', 'run_discover', 'submitting',
+                                        'log_planning', 'log_cleaning'}:
+                        names = tuple(name for name in names if name != 'positions')
+                for name in names:
                     await session.run_sync(lambda _, name=name: getattr(run, name))
         from .read_recovery import RecoveringClient
         if isinstance(self.cloud, RecoveringClient):
@@ -187,6 +197,9 @@ class Controller:
         return True
 
     async def advance(self, job, run):
+        if job and job.selection.get('execution_mode') == 'cloud_run_v1' and run.status == 'selecting':
+            from .input_preparation import advance
+            return await advance(self, job, run)
         if job is not None and job.selection.get('execution_mode') == 'batch_work_units_v1':
             from .work_units_controller import advance
             return await advance(self, job, run)

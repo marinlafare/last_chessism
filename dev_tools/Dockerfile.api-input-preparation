@@ -1,0 +1,4 @@
+FROM chessism-api:cloud-prepared-selection-20261101
+COPY chessism_api/database/postgresql/models.py /app/chessism_api/database/postgresql/
+COPY chessism_api/routers/cloud_analysis.py chessism_api/routers/cloud_game_drafts.py /app/chessism_api/routers/
+COPY chessism_api/operations/cloud_analysis /app/chessism_api/operations/cloud_analysis

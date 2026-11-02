@@ -1,0 +1,3 @@
+# Patch only the reader on the verified CUDA runtime; keep models/kernels intact.
+FROM chessism-algorithms:ply-map-bulk-20261101
+COPY chessism_api/operations/cuda_summaries/snapshot_flow.py chessism_api/operations/cuda_summaries/shared_source.py /app/chessism_api/operations/cuda_summaries/

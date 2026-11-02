@@ -80,15 +80,58 @@ class SnapshotTests(TestCase):
 
 
 class CancellationTests(IsolatedAsyncioTestCase):
-    async def test_cancel_terminates_only_owned_reader_and_closes_session(self):
-        session = Mock(close=AsyncMock()); driver = Mock(); started = asyncio.Event()
+    async def test_cancel_invalidates_owned_session_without_dead_connection_rollback(self):
+        session = Mock(close=AsyncMock(), invalidate=AsyncMock()); started = asyncio.Event()
         async def blocked(*args):
             started.set(); await asyncio.Event().wait()
         with patch.object(snapshot_flow.source,'prepare',new=AsyncMock()), \
                 patch.object(snapshot_flow.score_runs,'pending_items',new=AsyncMock(return_value=[{'game_link':1}])), \
-                patch.object(snapshot_flow,'driver_connection',new=AsyncMock(return_value=driver)), \
                 patch.object(snapshot_flow.shared_source,'load',side_effect=blocked):
             task = asyncio.create_task(snapshot_flow.read_chunk(lambda:session,{},None))
             await started.wait(); task.cancel()
             with self.assertRaises(asyncio.CancelledError): await task
-        driver.terminate.assert_called_once(); session.close.assert_awaited_once()
+        session.invalidate.assert_awaited_once(); session.close.assert_not_awaited()
+
+    async def test_original_error_survives_cleanup_failure(self):
+        for error in (TimeoutError('COPY timed out'), RuntimeError('connection lost'), asyncio.CancelledError()):
+            with self.subTest(error=type(error).__name__):
+                session = Mock(close=AsyncMock(), invalidate=AsyncMock(side_effect=RuntimeError('cleanup failed')))
+                with patch.object(snapshot_flow.source, 'prepare', new=AsyncMock()), \
+                        patch.object(snapshot_flow.score_runs, 'pending_items', new=AsyncMock(return_value=[{'game_link':1}])), \
+                        patch.object(snapshot_flow.shared_source, 'load', side_effect=error), patch.object(snapshot_flow.LOG, 'exception') as logged:
+                    with self.assertRaises(type(error)) as raised:
+                        await snapshot_flow.read_chunk(lambda:session, {}, None)
+                    self.assertIs(raised.exception, error)
+                    logged.assert_called_once()
+                session.invalidate.assert_awaited_once(); session.close.assert_not_awaited()
+
+    async def test_normal_and_empty_reads_close_without_invalidation(self):
+        for items in ([], [{'game_link':1}]):
+            with self.subTest(items=items):
+                session = Mock(close=AsyncMock(), invalidate=AsyncMock())
+                with patch.object(snapshot_flow.source, 'prepare', new=AsyncMock()), \
+                        patch.object(snapshot_flow.score_runs, 'pending_items', new=AsyncMock(return_value=items)), \
+                        patch.object(snapshot_flow.shared_source, 'load', new=AsyncMock(return_value='data')) as load:
+                    self.assertEqual(await snapshot_flow.read_chunk(lambda:session, {}, None), 'data' if items else None)
+                    self.assertEqual(load.await_count, bool(items))
+                session.close.assert_awaited_once(); session.invalidate.assert_not_awaited()
+
+    async def test_preparation_failure_also_invalidates(self):
+        session = Mock(close=AsyncMock(), invalidate=AsyncMock())
+        with patch.object(snapshot_flow.source, 'prepare', side_effect=TimeoutError('metadata timeout')):
+            with self.assertRaisesRegex(TimeoutError, 'metadata timeout'):
+                await snapshot_flow.read_chunk(lambda:session, {}, None)
+        session.invalidate.assert_awaited_once(); session.close.assert_not_awaited()
+
+    async def test_second_cancellation_waits_for_invalidation(self):
+        cleaning, release = asyncio.Event(), asyncio.Event()
+        async def invalidate():
+            cleaning.set(); await release.wait()
+        session = Mock(close=AsyncMock(), invalidate=AsyncMock(side_effect=invalidate))
+        with patch.object(snapshot_flow.source, 'prepare', side_effect=asyncio.CancelledError()):
+            task = asyncio.create_task(snapshot_flow.read_chunk(lambda:session, {}, None))
+            await cleaning.wait(); task.cancel(); await asyncio.sleep(0)
+            self.assertFalse(task.done())
+            release.set()
+            with self.assertRaises(asyncio.CancelledError): await task
+        session.invalidate.assert_awaited_once(); session.close.assert_not_awaited()

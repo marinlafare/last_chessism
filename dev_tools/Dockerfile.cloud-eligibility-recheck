@@ -1,0 +1,3 @@
+FROM chessism-cloud-controller:input-preparation-20261101
+COPY chessism_api/database/postgresql/fen_claims.py /app/chessism_api/database/postgresql/fen_claims.py
+COPY chessism_api/operations/cloud_analysis/input_preparation.py /app/chessism_api/operations/cloud_analysis/input_preparation.py

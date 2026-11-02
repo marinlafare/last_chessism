@@ -8,6 +8,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import declarative_base, relationship
 from sqlalchemy.types import Boolean
+from sqlalchemy.dialects.postgresql import ARRAY
 
 Base = declarative_base()
 from .appearance_models import register as register_appearance
@@ -125,6 +126,47 @@ class CloudGameDraftCache(Base):
     missing = Column(BigInteger, nullable=False, default=0)
     claimed = Column(BigInteger, nullable=False, default=0)
     __table_args__ = (CheckConstraint('missing >= 0 AND claimed >= 0 AND claimed <= missing'),)
+
+
+class CloudGamePreparedSelection(Base):
+    """One-hour Calculate result, not a reservation or authorization to run."""
+    __tablename__ = 'cloud_game_prepared_selection'
+    id = Column(String(32), primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    games_sha256 = Column(String(64), nullable=False)
+    missing = Column(BigInteger, nullable=False)
+    claimed = Column(BigInteger, nullable=False)
+
+
+class CloudGamePreparedChunk(Base):
+    """Bounded native arrays avoid millions of temporary indexed/FK rows."""
+    __tablename__ = 'cloud_game_prepared_chunk'
+    plan_id = Column(String(32), ForeignKey('cloud_game_prepared_selection.id', ondelete='CASCADE'), primary_key=True)
+    ordinal = Column(Integer, primary_key=True)
+    fen_ids = Column(ARRAY(BigInteger), nullable=False)
+    claimed = Column(ARRAY(Boolean), nullable=False)
+    __table_args__ = (CheckConstraint('cardinality(fen_ids) BETWEEN 1 AND 16384'),
+                     CheckConstraint('cardinality(fen_ids) = cardinality(claimed)'),)
+
+
+class CloudInputPreparation(Base):
+    """Restartable local reservation; never authorizes a cloud launch."""
+    __tablename__ = 'cloud_input_preparation'
+    run_id = Column(String(32), ForeignKey('cloud_analysis_run.id'), primary_key=True)
+    target = Column(Integer, nullable=False)
+    phase = Column(String(24), nullable=False, default='reserving')
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+
+
+class CloudInputChunk(Base):
+    """Validated input in bounded native arrays, consumed when the run seals."""
+    __tablename__ = 'cloud_input_chunk'
+    run_id = Column(String(32), ForeignKey('cloud_input_preparation.run_id', ondelete='CASCADE'), primary_key=True)
+    ordinal = Column(Integer, primary_key=True)
+    ids = Column(ARRAY(Text), nullable=False)
+    fens = Column(ARRAY(Text), nullable=False)
+    __table_args__ = (CheckConstraint('cardinality(ids) BETWEEN 1 AND 500'),
+                     CheckConstraint('cardinality(ids) = cardinality(fens)'),)
 
 
 class CloudGameDraftEntryFen(Base):

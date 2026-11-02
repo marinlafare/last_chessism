@@ -113,6 +113,16 @@ async def check(factory, connection, layout):
         small_budget = batch_budget.BatchBudget(44*batch_budget.DEVICE_ROW+2*batch_budget.DEVICE_GAME,
                                                44*batch_budget.HOST_ROW+2*batch_budget.HOST_GAME)
         with patch.object(batch_budget, 'plan', return_value=small_budget), patch.object(source, 'MAX_ROWS', 44):
+            # A failed reader must not advance checkpoints or replace summaries.
+            # The usual retry resumes the same frozen run, not a new selection.
+            with patch.object(shared_source, 'load', side_effect=TimeoutError('synthetic COPY timeout')), patch.object(worker.LOG, 'exception'):
+                assert (await worker.canonical_tick({}))['status'] == 'retrying'
+            async with factory() as s:
+                interrupted = await runs.progress(s, run['id'])
+            assert interrupted['error'] == 'TimeoutError: synthetic COPY timeout', interrupted
+            assert interrupted['processed_games'] == 0
+            assert not interrupted['timings'].get('input_snapshot', {}).get('chunks')
+            await connection.execute('UPDATE public.cuda_summary_run SET retry_after=NULL WHERE id=$1', run['id'])
             saved = await finish(run)
         assert saved['timings']['source_positions'] == 8*22, saved  # unique eligible-owned games, never once per owner
         assert saved['timings']['batches'] == (saved['total_games']+1)//2, saved

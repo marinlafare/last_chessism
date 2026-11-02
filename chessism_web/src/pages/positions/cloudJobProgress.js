@@ -169,7 +169,15 @@ export function cloudStepProgress(job, step) {
     if (labels[phase]) return { value: null, detail: labels[phase], showDetail: true }
   }
   let completed, total, unit
-  if (step.id === 'reserve' && job.sequence) {
+  if (step.id === 'reserve' && job.reservation_progress) {
+    completed = job.reservation_progress.reserved
+    total = job.reservation_progress.target
+    unit = 'FENs reserved'
+    if (job.reservation_progress.phase === 'sealing') {
+      return { value: null, detail: `${completed.toLocaleString()} FENs reserved · Finalizing input snapshot`, showDetail: true }
+    }
+    if (job.reservation_progress.phase === 'validating') unit += ' · Validating next batch'
+  } else if (step.id === 'reserve' && job.sequence) {
     completed = job.sequence.reserved
     total = job.sequence.requested
     unit = 'FENs reserved'

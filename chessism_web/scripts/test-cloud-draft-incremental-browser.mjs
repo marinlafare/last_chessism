@@ -57,6 +57,7 @@ try {
     await evaluate(`setPlayer('hikaru')`)
     await click('Calculate')
     await waitFor(`[...document.querySelectorAll('button')].some(b=>b.textContent==='Add' && !b.matches(':disabled'))`)
+    await assert('cloudTest.previewForm.prepare_combined === true')
     await evaluate(`cloudTest.holdSave=true`)
     await click('Add'); await click('Add')
     await waitFor('cloudTest.finishSave')

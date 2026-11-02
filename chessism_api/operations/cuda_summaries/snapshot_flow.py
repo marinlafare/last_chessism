@@ -1,37 +1,46 @@
 """Short, independently checkpointed input preparation; no CUDA allocations."""
 import asyncio
 import json
+import logging
 import time
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import driver_connection
 from ..canonical_blunders import source
 from ..matrix_constructor.artifact_files import file_operation
 from . import score_runs, shared_source, input_snapshot, runs
 
+LOG = logging.getLogger(__name__)
+
+
+async def _finish_session(session, *, invalidate=False):
+    closing = asyncio.create_task(session.invalidate() if invalidate else session.close())
+    try:
+        await asyncio.shield(closing)
+    except asyncio.CancelledError:
+        await closing
+        raise
+
 
 async def read_chunk(factory, run, after):
-    session = factory(); driver = None
+    session = factory()
     try:
         await source.prepare(session)
         items = await score_runs.pending_items(session, run, after=after)
-        if not items:
-            return None
-        driver = await driver_connection(session)
         # Extraction checkpoints are small; several compose one large GPU batch.
-        return await shared_source.load(session, {**run, 'items':items, 'batch_budget':None})
-    except BaseException:
-        # COPY cancellation can leave asyncpg waiting for protocol completion.
-        # Terminate only this borrowed read-only connection before pool cleanup.
-        if driver is not None:
-            driver.terminate()
-        raise
-    finally:
-        closing = asyncio.create_task(session.close())
+        result = await shared_source.load(session, {**run, 'items':items, 'batch_budget':None}) if items else None
+    except BaseException as error:
+        # Let SQLAlchemy discard its connection AND transaction together. Raw
+        # driver.terminate() followed by close() attempts rollback on a dead
+        # connection, masking the original COPY timeout/cancellation.
         try:
-            await asyncio.shield(closing)
+            await _finish_session(session, invalidate=True)
         except asyncio.CancelledError:
-            await closing
-            raise
+            pass  # Cleanup finished despite another cancellation; keep the original error.
+        except BaseException:
+            LOG.exception('CUDA reader cleanup failed while handling %s; preserving the original error.', type(error).__name__)
+        raise
+    else:
+        await _finish_session(session)
+        return result
 
 
 async def prepare(factory, run):

@@ -1,11 +1,31 @@
 .cuda-summary-panel { display: grid; gap: 1rem; padding: 1rem; border: 1px solid var(--border-color, #293b3b); border-radius: .6rem; background: var(--panel-bg, #10171b); }
-.cuda-summary-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+/* Include the parent's normal section gap in the requested 3rem separation. */
+.positions-main > .cuda-summary-panel { margin-top: calc(3rem - var(--positions-section-gap, 16px)); }
+.cuda-summary-heading { display: grid; min-width: 0; }
+.cuda-summary-heading > button { width: 100%; box-sizing: border-box; }
+.cuda-summary-toggle { position: relative; }
+.cuda-summary-toggle-label { display: block; margin-inline: 1.5rem; }
+.cuda-summary-content { display: grid; gap: 1rem; min-width: 0; }
+.cuda-running-indicator { position: absolute; left: .75rem; top: 50%; transform: translateY(-50%); display: block; box-sizing: border-box; width: var(--cuda-indicator-size, 12px); height: var(--cuda-indicator-size, 12px); border-radius: 50%; background: #ff922b; box-shadow: 0 0 .5rem var(--cuda-indicator-glow, #ff922b80); animation: cuda-running-pulse var(--cuda-indicator-pulse-seconds, 1.6s) ease-in-out infinite; }
+@keyframes cuda-running-pulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .cuda-running-indicator { animation: none; } }
 .cuda-summary-panel button { padding: .65rem 1rem; border-radius: .4rem; cursor: pointer; }
 .cuda-summary-panel button:disabled { cursor: not-allowed; opacity: .5; }
-.cuda-summary-metrics { display: flex; flex-wrap: wrap; gap: .75rem; }
-.cuda-summary-metrics > span { padding: .5rem; border: 1px solid #293b3b; border-radius: .4rem; }
 .cuda-summary-panel p { margin: 0; }
 .cuda-summary-progress, .cuda-summary-history { display: grid; gap: .65rem; }
 .cuda-summary-track { height: .75rem; overflow: hidden; background: #263637; border-radius: .4rem; }
 .cuda-summary-track > span { display: block; height: 100%; background: #00b582; transition: width .2s ease; }
+.cuda-summary-track[data-indeterminate="true"] > span { animation: cuda-summary-working 1.5s ease-in-out infinite alternate; }
+@keyframes cuda-summary-working { from { transform: translateX(0); } to { transform: translateX(230%); } }
+@media (prefers-reduced-motion: reduce) { .cuda-summary-track[data-indeterminate="true"] > span { animation: none; } }
+.cuda-summary-progress { min-width: 0; }
+.cuda-summary-progress [role="alert"] { overflow-wrap: anywhere; }
 .cuda-summary-history article { display: grid; gap: .3rem; padding: .6rem; border: 1px solid #293b3b; border-radius: .4rem; }
+.cuda-terminal-title { display: grid; position: relative; min-width: 0; font-family: ui-monospace, monospace; }
+.cuda-terminal-measure, .cuda-terminal-line { grid-area: 1 / 1; overflow-wrap: anywhere; }
+.cuda-terminal-measure { visibility: hidden; }
+.cuda-terminal-cursor { display: inline-block; width: .65em; height: 1em; margin-left: .2em; background: currentColor; vertical-align: -.12em; }
+.cuda-terminal-cursor[data-blinking="true"] { animation: cuda-terminal-blink 3s steps(1, end) infinite; }
+.cuda-terminal-accessible { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+@keyframes cuda-terminal-blink { 0%, 49% { opacity: 1; } 50%, 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .cuda-terminal-cursor[data-blinking="true"] { animation: none; } }

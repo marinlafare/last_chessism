@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudJobCancellation,
-    CloudBatchUnit, CloudSequenceControl, CloudResultBatch, CloudFenClaim)
+    CloudBatchUnit, CloudSequenceControl, CloudResultBatch, CloudFenClaim, CloudInputPreparation)
 from chessism_api.database.postgresql import cloud_columns
 from . import runtime, history
 from .cancellation_cloud import stop_batch, stop_run
@@ -46,6 +46,9 @@ def import_tasks(run):
     launch = run.launch
     if not launch.get('config'):
         return []  # Reserved locally, never uploaded.
+    if launch.get('backend') == 'cloud_run' and run.status in {'selecting', 'preparing', 'publishing'} \
+            and not any(launch.get(key) for key in ('run_execution', 'run_executions', 'run_operation', 'run_uid')):
+        return []  # Execution creation follows these phases; no results can exist yet.
     if launch.get('backend') == 'cloud_run':
         from cloud_job.cloud_run import task_config
         from stockfish_batch.config import Config
@@ -58,15 +61,17 @@ def import_tasks(run):
 
 async def import_available(cloud, ident, *, observed_objects=None):
     async with AsyncDBSession() as session:
-        run = await session.get(CloudAnalysisRun, ident)
+        run = await session.get(CloudAnalysisRun, ident, execution_options={'cloud_documents': ('launch', 'contract')})
     if run.details_pruned or run.results_verified_at:
         return
     tasks = import_tasks(run)
     if tasks:
+        async with AsyncDBSession() as session:
+            run = await session.get(CloudAnalysisRun, ident)
         storage = await asyncio.to_thread(cloud.storage)
         await ingest_ready(storage, run, tasks, storage_factory=cloud.storage, scan_missing=True)
         async with AsyncDBSession() as session:
-            saved = await session.get(CloudAnalysisRun, ident)
+            saved = await session.get(CloudAnalysisRun, ident, execution_options={'cloud_documents': ('receipts',)})
         # No valid completed object may be silently discarded (including gaps).
         for task in tasks:
             base = f'gs://{BUCKET}/'
@@ -81,7 +86,7 @@ async def import_available(cloud, ident, *, observed_objects=None):
                 if receipt not in saved.receipts:
                     raise ValueError('Completed cloud batch was not imported; retaining checkpoints')
     async with AsyncDBSession() as session:
-        row = await session.get(CloudAnalysisRun, ident)
+        row = await session.get(CloudAnalysisRun, ident, execution_options={'cloud_documents': ()})
         count = await session.scalar(select(func.coalesce(func.sum(CloudResultBatch.position_count), 0))
             .where(CloudResultBatch.run_id == ident))
         claims = await session.scalar(select(func.count()).select_from(CloudFenClaim).where(CloudFenClaim.run_id == ident))
@@ -103,7 +108,8 @@ async def finish(job_id, all_ids):
         await session.execute(delete(CloudFenClaim).where(CloudFenClaim.run_id.in_(all_ids)))
         now = datetime.now(timezone.utc)
         for ident in all_ids:
-            run = await session.get(CloudAnalysisRun, ident, with_for_update=True)
+            run = await session.get(CloudAnalysisRun, ident, with_for_update=True,
+                                    execution_options={'cloud_documents': ('launch',)})
             if run.details_pruned:
                 continue
             run.cleanup_completed_at = now
@@ -121,6 +127,7 @@ async def finish(job_id, all_ids):
         await session.execute(update(CloudResultBatch).where(CloudResultBatch.run_id.in_(all_ids)).values(detail_record_id=None))
         if refs:
             await session.execute(delete(cloud_columns.ROOTS).where(cloud_columns.ROOTS.c.id.in_(refs)))
+        await session.execute(delete(CloudInputPreparation).where(CloudInputPreparation.run_id.in_(all_ids)))
         cancellation.phase, cancellation.finished_at = 'complete', now
         job.status, job.error, job.updated_at = 'cancelled', None, now
         from .game_fen_queue import discard_queue
@@ -165,14 +172,15 @@ async def advance(controller, job, cancellation, timings):
     from .controller import save_run
     async with AsyncDBSession() as session:
         roots = (await session.scalars(select(CloudAnalysisRun).where(CloudAnalysisRun.job_id == job.id,
-            ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at, CloudAnalysisRun.id))).all()
+            ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at, CloudAnalysisRun.id)
+            .execution_options(cloud_documents=('launch', 'contract', 'cleanup_plan')))).all()
         all_ids = (await session.scalars(select(CloudAnalysisRun.id).where(CloudAnalysisRun.job_id == job.id)
             .order_by(CloudAnalysisRun.id))).all()
         data_ids = (await session.scalars(select(CloudAnalysisRun.id).where(CloudAnalysisRun.job_id == job.id,
             ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.root_run_id))).order_by(CloudAnalysisRun.id))).all()
         control = await session.get(CloudSequenceControl, job.id)
     phase, cloud = cancellation.phase, controller.cloud
-    run_roots = [root for root in roots if root.launch.get('backend') == 'cloud_run']
+    run_roots = [root for root in roots if root.launch.get('backend') == 'cloud_run' and import_tasks(root)]
     drain, observed = None, None
     if run_roots and phase in {'settling', 'importing', 'planning', 'cleaning'}:
         if not hasattr(controller, 'cancellation_drains'):
@@ -289,7 +297,7 @@ async def advance(controller, job, cancellation, timings):
         if cancellation.cursor < len(data_ids):
             ident = data_ids[cancellation.cursor]
             async with AsyncDBSession() as session:
-                row = await session.get(CloudAnalysisRun, ident)
+                row = await session.get(CloudAnalysisRun, ident, execution_options={'cloud_documents': ()})
             if row.imported_count and not row.details_pruned:
                 await refresh_unit_projections([ident], timings=timings)
             await save(job.id, cursor=cancellation.cursor + 1)

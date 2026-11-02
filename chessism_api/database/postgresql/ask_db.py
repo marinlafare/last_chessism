@@ -3750,6 +3750,7 @@ async def preview_player_games_for_analysis(
     game_limit: Optional[int],
     date_from: Optional[datetime] = None,
     date_to_exclusive: Optional[datetime] = None,
+    prepared_plan_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Freeze an ordered selection of incomplete games and calculate its exact FEN workload."""
     normalized_order = str(order or "latest").lower()
@@ -3797,6 +3798,13 @@ async def preview_player_games_for_analysis(
                 "tablebase_fens": 0,
                 **sampling,
             }
+
+        if prepared_plan_id:
+            from chessism_api.operations.cloud_analysis.prepared_selection import build
+            stats = await build(session, prepared_plan_id, game_links)
+            await session.commit()
+            return {'player_name':player_name, 'game_links':game_links,
+                    'selected_games':len(game_links), **stats, **sampling}
 
         stats_result = await session.execute(text("""
             SELECT

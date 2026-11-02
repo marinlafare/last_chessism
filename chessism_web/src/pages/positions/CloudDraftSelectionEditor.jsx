@@ -16,7 +16,7 @@ export default function CloudDraftSelectionEditor({ backend = 'batch_spot', entr
   }
   const inspect = async () => {
     setLoading(true); setError(''); setPreview(null)
-    try { setPreview(await previewPlayerGameAnalysis(cloudGamePreview(form))) }
+    try { setPreview(await previewPlayerGameAnalysis({ ...cloudGamePreview(form), prepare_combined: true })) }
     catch (err) { setError(err.message) }
     finally { setLoading(false) }
   }
