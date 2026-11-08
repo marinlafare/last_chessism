@@ -215,6 +215,45 @@ class CloudAdapterTests(unittest.TestCase):
         self.assertEqual(self.cloud.bucket(), {})
         self.assertEqual(self.urlopen.call_count, 2)
 
+    def test_log_listing_retries_same_page_without_duplicating_entries(self):
+        def response(data):
+            result = Mock()
+            result.__enter__ = Mock(return_value=Mock(read=Mock(return_value=json.dumps(data).encode())))
+            result.__exit__ = Mock(return_value=False)
+            return result
+        self.urlopen.side_effect = [
+            response({'entries': [{'insertId': 'one'}], 'nextPageToken': 'page-two'}),
+            HTTPError('https://example.invalid', 500, 'temporary', {}, io.BytesIO()),
+            TimeoutError('secret transport detail'),
+            response({'entries': [{'insertId': 'two'}]}),
+        ]
+        self.assertEqual(list(self.cloud.log_entries('logName="test"', default_bucket=True)),
+                         [{'insertId': 'one'}, {'insertId': 'two'}])
+        requests = [call.args[0] for call in self.urlopen.call_args_list]
+        self.assertEqual([request.method for request in requests], ['POST'] * 4)
+        self.assertEqual(len({(r.full_url, r.data) for r in requests[1:]}), 1)
+        body = json.loads(requests[-1].data)
+        self.assertEqual(body, {'resourceNames': [f'projects/{PROJECT}/locations/global/buckets/_Default/views/_AllLogs'],
+            'filter': 'logName="test"', 'pageSize': 1000, 'orderBy': 'timestamp asc', 'pageToken': 'page-two'})
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [1, 2])
+
+    def test_log_listing_retries_are_bounded_and_never_look_like_empty_logs(self):
+        def unavailable(*args, **kwargs):
+            raise HTTPError('https://example.invalid', 503, 'secret response', {}, io.BytesIO())
+        self.urlopen.side_effect = unavailable
+        with self.assertRaisesRegex(CleanupError, r'logging POST entries:list: HTTP 503 after 4 attempt') as error:
+            list(self.cloud.log_entries('test'))
+        self.assertNotIn('secret', ''.join(traceback.format_exception(error.exception)))
+        self.assertEqual(self.urlopen.call_count, 4)
+        self.assertEqual([call.args[0] for call in self.sleep.call_args_list], [1, 2, 4])
+
+    def test_log_listing_permission_failure_is_not_retried(self):
+        self.urlopen.side_effect = HTTPError('https://example.invalid', 403, 'forbidden', {}, io.BytesIO())
+        with self.assertRaisesRegex(CleanupError, r'HTTP 403 after 1 attempt'):
+            list(self.cloud.log_entries('test'))
+        self.assertEqual(self.urlopen.call_count, 1)
+        self.sleep.assert_not_called()
+
     def test_retries_are_bounded_and_error_omits_transport_secrets(self):
         self.urlopen.side_effect = URLError('secret')
         with self.assertRaisesRegex(CleanupError, r'URLError.*4 attempt') as error:
@@ -226,6 +265,10 @@ class CloudAdapterTests(unittest.TestCase):
     def test_unsafe_mutations_and_unpinned_deletes_never_retry_transport_errors(self):
         for service, path, method, params in [
             ('run', 'projects/test/jobs', 'POST', None),
+            ('logging', 'entries:write', 'POST', None),
+            ('logging', 'entries:list', 'DELETE', None),
+            ('batch', 'entries:list', 'POST', None),
+            ('logging', 'projects/test/logs/test', 'DELETE', None),
             ('run', 'projects/test/jobs/job', 'DELETE', {'etag': 'saved'}),
             ('storage', f'b/{BUCKET}/o/result', 'DELETE', None),
             ('storage', f'b/{BUCKET}/o/result', 'DELETE', {'generation': '123', 'ifGenerationMatch': '456'}),

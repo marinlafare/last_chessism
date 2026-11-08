@@ -1,0 +1,2 @@
+FROM chessism-cloud-controller:eligibility-recheck-20261101
+COPY stockfish-batch-worker/cleaning_job/cloud.py /app/stockfish-batch-worker/cleaning_job/cloud.py

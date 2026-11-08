@@ -1,0 +1,381 @@
+CONTEXTUAL LIVE STYLE EDITING — IMPLEMENTATION HANDOFF
+Reference project: LEON_SUITE
+Prepared: 2026-10-11
+
+PURPOSE
+
+Implement a maintainable visual appearance editor in another application,
+inspired by LEON_SUITE. An authorized administrator can right-click an element,
+preview appearance changes immediately, resize supported containers by dragging
+their edges, and explicitly save the changes into a named style preset.
+
+This is a self-contained guide, not a request to copy LEON's entire application.
+Adapt the feature to the target project's framework, layout, authentication,
+storage and deployment conventions. Preserve existing content and user changes.
+Do not impose LEON's three-column layout on a project that does not need it.
+
+1. FIRST DECISIONS
+
+- Inspect the target repository and its existing style system before coding.
+- Establish which role may edit appearance. In LEON, owner_user is the highest
+  role and is authorized; super_user and normal_user are not. Do not infer
+  hierarchy from a role's name or hard-code a particular email address.
+- Establish who sees saved changes. LEON uses an application-wide active preset;
+  permission to edit it does not mean the appearance is private to that owner.
+  Another project may need tenant-wide or personal presets. Ask if unclear.
+- Identify page/subpage scopes, repeated component families, and elements that
+  genuinely require individual customization.
+- Decide where durable presets live and how they are backed up. Use the existing
+  persistence system when appropriate; this feature does not require PostgreSQL.
+- Keep the work focused on appearance. Do not reset databases, replace lessons,
+  alter media, or perform an unrelated layout rewrite to implement this feature.
+
+2. USER EXPERIENCE TO REPRODUCE
+
+Enablement and selection:
+- An authorized user enables "Edit appearance" in account/settings. LEON starts
+  with editing disabled and resets this temporary mode on page reload.
+- While enabled, right-click a registered element to open its appearance popup.
+  Highlight the element so it is clear what will change.
+- Do not replace the browser menu everywhere: handle registered targets only.
+  Keep an escape hatch, such as Shift + right-click for the native browser menu.
+- Support the keyboard context-menu key and Shift + F10 where possible. A
+  focused settings action is another useful entry point for touch users.
+- Offer "Select container: <name>" to move to the nearest editable ancestor.
+  This makes enclosing backgrounds accessible even when children fill them.
+- Ignore events originating inside the appearance tools themselves.
+- The current LEON interaction is contextual right-click editing, not a giant
+  popup containing every page option. A movable circular launcher is optional,
+  not a prerequisite or the main interaction to reproduce.
+
+Popup behavior:
+- Show the selected element's human-readable name, scope and active preset.
+- Expose only properties that are meaningful for that element.
+- Changing a control immediately updates the page, before Save is clicked.
+- Save is disabled when nothing differs from the saved baseline and while a
+  save is in progress. Failed saves retain the draft and display a useful error.
+- A circular-arrow button in the header restores the selected element's last
+  saved settings. This is not "reset the entire application to factory defaults."
+- A per-property inherit/reset action removes that override and reveals the
+  inherited/default value. Keep this distinct from restoring the saved value.
+- The header has minimize, restore and close controls. Minimize collapses the
+  popup to its title bar. Dragging the title bar moves it; dragging its top or
+  bottom edge changes its height. Keep controls reachable within the viewport.
+- Closing or minimizing must not silently save or lose drafts. Confirm before
+  disabling editing or switching presets if that would discard pending changes.
+- Avoid redundant Cancel/Reload buttons and unrelated authentication previews.
+
+3. USE STABLE TARGETS AND A CAPABILITY REGISTRY
+
+Do not derive editable identities from text labels, DOM positions, nth-child
+selectors, generated CSS class names, or a component's current visual appearance.
+These change when content is translated, reordered or inserted.
+
+Annotate owned components with stable metadata, for example:
+  data-style-scope="library/action"
+  data-style-id="workspace.center"
+  data-style-label="Center column"
+
+Use stable domain UUIDs for truly individual content, for example:
+  unit.<uuid>.title
+Keep domain identity separate from appearance identity. A repeated Delete button
+can share one style role while still belonging to a particular content unit.
+
+Create a declarative registry that specifies:
+- Allowed target IDs or tightly bounded patterns.
+- Target kind: text, button, input, container, editor, media, divider, backdrop.
+- Supported properties, CSS mappings, units, numeric limits and font choices.
+- Shared versus page-local behavior.
+- Resize mode: none, width/height, aspect-ratio constrained, or column divider.
+- Optional state mappings such as hover or selected.
+
+The same registry, or generated equivalents from one source, should drive the
+frontend controls, CSS generation, backend validation and backup validation.
+Unknown properties and targets must be rejected, not silently executed as CSS.
+The registry defines capabilities; DOM attributes alone do not grant authority.
+
+4. SCOPING: INDEPENDENT WHERE NEEDED, SHARED WHERE EXPECTED
+
+Use explicit, predictable inheritance, for example:
+  built-in defaults -> application defaults -> page -> subpage -> element
+
+Suggested storage keys:
+  library/action@workspace.center
+  library/comedy@workspace.center
+  library/action@unit.<uuid>.title
+  global@markdown.source
+  global@unit-editor.delete
+
+In this notation "global" describes a component family's style scope within a
+preset. It must not bypass the application's tenant or user isolation rules.
+
+- Ordinary elements are local to the active page/subpage. Editing one subject's
+  column must not change another subject's column.
+- Repeated authoring controls usually share role-based styles: all Markdown
+  source editors, all bold buttons, all unit Delete buttons, all media selectors.
+  Register the entire repeated editing layout, not only its outermost panel.
+- Shared editor styles must not unintentionally change published reading content.
+  Individual published titles and content may keep their own stable targets.
+- Related controls that must stay equal-sized should share geometry on their
+  parent layout. Their colors may remain separate; do not let individual width
+  overrides break an intentionally equal-sized Edit/trash pair.
+- For state indicators, define colors by state, not by individual button. LEON's
+  lesson squares have filled/empty colors shared within one lesson type, with
+  different lesson types independently configurable.
+- Derive indicator state from the actual content rule. LEON now treats a lesson
+  as filled only when it has at least one unit, not merely a saved empty record.
+
+5. CSS ARCHITECTURE AND COMPLETE BACKGROUND COVERAGE
+
+Keep responsibilities separate:
+- Tokens: base palette, typography, spacing and component defaults.
+- Component CSS: structural layout and consumption of those tokens.
+- Registry: supported appearance capabilities and state mappings.
+- Generated override layer: validated preset values applied to stable targets.
+
+Avoid scattered inline style literals and repeated !important rules that prevent
+live overrides. Define a deliberate cascade and test it. Do not change a broad
+inherited CSS variable when the user intended to change one element's background.
+Use local CSS variables for pseudo-elements and third-party editor themes.
+
+Register all relevant visible layers:
+- Page background beneath the full layout.
+- Individual columns/panels and the dividers between them.
+- Content-group backgrounds behind individual units/cards.
+- Individual content containers, titles, inputs and buttons.
+- Repeated editing panels, toolbars, selectors and their controls.
+
+Important LEON lesson: rounded column corners exposed the page's base background,
+but it could not be edited until the workspace root became a registered target.
+Provide a "Page background" target with color/opacity and no layout resizing.
+If scope and target are on the same DOM node, generate a selector that matches
+that node, not a descendant-only selector. For example:
+  [data-style-scope="library/action"][data-style-id="workspace.background"]
+
+For a soft/diffuse content backdrop, paint a separate pseudo-element or background
+layer and fade its edges with a mask. Do not mask or blur the whole container:
+that would also fade text, videos, controls and focus indicators. Keep the layer
+non-interactive and its stacking order below content. Apply its background color
+to that layer, and read that same layer when initializing the popup's color.
+
+Use one coherent selection/focus/inspection outline for tiny state indicators.
+Do not stack an unrelated fixed-color inspector ring over a second focus ring.
+Keep a visible keyboard-focus indication and expose its intended color control.
+
+6. COLORS, TEXT AND ALIGNMENT
+
+- Every editable color should include an RGB picker and a 0–100% opacity slider,
+  including text, backgrounds, borders, hover colors and divider colors.
+- Store opaque colors as #RRGGBB and translucent colors as #RRGGBBAA, or use an
+  equally strict normalized format across frontend, backend and backups.
+- Read actual computed alpha when opening the popup; transparent is not opaque
+  black. Changing a partially transparent color should preserve its alpha.
+- LEON's deliberate usability rule: selecting RGB when the existing color is
+  fully transparent makes it opaque. Otherwise changing an invisible background
+  appears broken because only the underlying layer remains visible. The opacity
+  slider can still explicitly set 0%. Inspecting alone must not change anything.
+- Offer separate font controls for interface text groups and registered text
+  targets. Use an approved font list; avoid arbitrary remote font URLs.
+- Text alignment and container alignment are separate controls. Aligning a box
+  centers the box within available width; it does not center every paragraph.
+- Explain that a full-width box has no spare horizontal room to visibly shift.
+- Keep content formatting separate from UI appearance: changing interface styles
+  must not rewrite Markdown, selected words, stored titles or lesson content.
+
+7. DRAG RESIZING
+
+- Drag supported container edges to resize the box; contents reflow naturally.
+  Never scale font size or transform the whole application to simulate resizing.
+- Use existing column separators for column resizing. Preserve sensible minimum
+  widths for side columns and the center column, including on narrow screens.
+- Persist relative widths/proportions where appropriate; avoid desktop pixel
+  widths that make the application unusable on another screen.
+- Constrain media by its natural aspect ratio where that is the expected behavior.
+- Provide numeric/keyboard alternatives, sensible bounds and reset-to-auto.
+- Use Pointer Events, pointer capture, and animation-frame throttling for drags.
+  Do not issue a backend request for every pointer movement.
+- Escape restores drag-start geometry. Clean up on release, lost capture, blur,
+  navigation and unmount. Keep a captured handle mounted until the drag ends,
+  even if live reflow moves its element outside the viewport.
+- Keep divider hit areas generous even when the visible line is very thin.
+- Distinguish ordinary temporary editor sizing from saved appearance edits. Do
+  not silently promote every normal reading/editing gesture into a global style.
+
+8. PRESETS, LIVE DRAFTS AND EXPLICIT SAVE
+
+Separate four things: immutable defaults, saved named presets, active selection,
+and the current unsaved draft. Render the effective appearance from these layers.
+Do not mutate the saved snapshot while previewing a draft.
+
+Example persistence shape (illustrative; adapt names to the target project):
+{
+  "version": 2,
+  "set_style": "Evening",
+  "styles": {
+    "Evening": {
+      "library/action@workspace.background": {"background": "#090212"},
+      "library/action@workspace.center": {"background": "#182030"},
+      "global@markdown.source": {"background": "#090212", "color": "#968cb1"}
+    }
+  }
+}
+
+- Default remains immutable. Represent selecting Default without overwriting it,
+  for example with set_style = null.
+- The first Save while Default is active asks for a new preset name, validates
+  it, creates the preset and makes it active. Canceling the prompt keeps the draft.
+- Save with a named preset active updates that preset; do not ask for its name
+  again. Account settings offers selection, creation and renaming of presets.
+- Bound names and reject empty, duplicate or reserved Default names. Never use a
+  submitted preset name as a filesystem path.
+- Compare changes with the saved baseline so reverting a change disables Save.
+- Specify whether Save applies to one target or all pending changes. LEON saves
+  the whole draft transaction, including changes made across pages, atomically;
+  the header restore button applies only to the selected target.
+- Clear successful drafts only after the server confirms persistence. A failed
+  save must not claim success or discard the user's work.
+- Refresh saved styles for other sessions with polling/focus refresh, versioned
+  cache invalidation or an existing event mechanism. Do not silently overwrite
+  an active draft when a newer saved version arrives.
+
+9. BACKEND, DURABILITY AND CONCURRENCY
+
+Preserve the project's boundaries. LEON uses:
+  router -> operations/service -> persistence adapter
+Routers should not directly edit files or query the database.
+
+Provide operations to read the active snapshot, save validated element changes,
+create a preset, select a preset and rename it. Return a revision token with the
+snapshot. A save supplies the revision on which its draft was based.
+
+Under a transaction/lock, read current state, check revision, validate changes,
+apply them and commit atomically. Return a conflict response for stale writes;
+preserve the draft and offer explicit reload/reconciliation. Do not silently use
+last-write-wins or overwrite the whole store from a stale browser snapshot.
+
+JSON files are suitable for a small single-host application:
+- Store them in a dedicated, durable configuration directory, never /tmp.
+- Write a temporary sibling file, flush/fsync it, atomically replace the final
+  file and sync the directory where the platform supports this.
+- Lock across processes, not just threads. A local lock file is not a complete
+  solution for multiple hosts; use appropriate transactional/shared storage there.
+- Enforce size limits and fixed paths; avoid following untrusted symlinks.
+- If configuration cannot be read or validated, show safe built-in/last-known
+  appearance and disable saves. Do not treat corruption as permission to replace
+  the presets with an empty document.
+
+Saving does NOT require generating or rewriting arbitrary JSX, Python or CSS.
+LEON persists structured theme configuration in a source-associated JSON file.
+This gives durable, reviewable changes without regex-editing application code.
+Git commit/push remains a separate explicit action, not a side effect of Save.
+
+10. AUTHORIZATION AND SAFETY
+
+- Authorize every write on the server. Hiding controls is not access control.
+- Obtain identity from the authenticated session, never a role in the payload.
+- Enforce tenant/preset ownership if the target application has multiple tenants.
+- Use the application's established CSRF protection for cookie-authenticated
+  writes; validate origins as appropriate. Do not rely on permissive CORS alone.
+- Allow only registered scopes, targets, properties and bounded values. Reject
+  CSS strings, arbitrary selectors, url(), injected declarations and custom code.
+- Validate fonts against a fixed list and numbers as finite values within bounds.
+- Validate document shape, version, preset count, scope count and total size.
+- Read endpoints should expose only the style data the viewer is allowed to see.
+- Give the application write access only to the intended preset store, not the
+  entire source tree or unrelated host files.
+- Keep the appearance popup's own styles outside the editable system so a poor
+  theme cannot hide the controls needed to restore it.
+- Preserve normal text selection, copy/paste, scrolling, media playback and
+  browser context-menu behavior when appearance editing is disabled.
+
+11. DEPLOYMENT AND BACKUPS
+
+- In Docker, mount the whole writable preset directory rather than an individual
+  file when saves use atomic replacement. Container recreation must not erase it.
+- Bootstrap defaults deliberately on first installation; never overwrite existing
+  presets during a rebuild. Run application containers with suitable permissions.
+- Use frontend hot reload for development where supported. Loading saved styles
+  at runtime should not require rebuilding the frontend for every appearance edit.
+- A registry change may still require updating API/backup images if they contain
+  copied registry files. Deploy those consumers together so Save and backup
+  validation recognize the same capabilities.
+- Back up every named preset, its schema version and active selection, not just
+  the currently rendered CSS. Exclude transient drafts, locks and temporary files.
+- Validate restore compatibility and checksums; test recovery in temporary
+  environments without replacing live configuration.
+- Version the schema. Handle previous keys explicitly when identifiers change;
+  keep reading valid older presets rather than discarding owners' saved designs.
+
+12. SUGGESTED MODULE RESPONSIBILITIES
+
+Frontend:
+- Registry/tokens and pure validation, inheritance and CSS-generation functions.
+- Appearance state provider and saved-snapshot loader.
+- Draft/save controller with revision and preset handling.
+- Delegated target selection and inspector highlighting.
+- Context popup and reusable property controls.
+- Popup movement/resize and element resize gesture controllers.
+- Account preset-management UI.
+- Small component helpers that attach registered appearance metadata.
+
+Backend:
+- Thin authenticated routes.
+- Preset operations and authorization.
+- Registry/document validation.
+- Atomic file or transactional database storage adapter.
+- Backup integration using the same validation rules.
+
+Avoid a single enormous style-editor component. Keep modules cohesive and easy
+to inspect; do not create per-instance copies of repeated editor implementations.
+
+13. IMPLEMENTATION ORDER
+
+Stage A — Prepare the style architecture:
+1. Inventory visible layers, current CSS rules, roles and repeated components.
+2. Introduce stable IDs, scopes, tokens and the capability registry.
+3. Establish the cascade and resolve rules that block intended overrides.
+4. Implement preset persistence, validation, permissions and revision conflicts.
+5. Verify that these foundations preserve the current appearance and content.
+
+Stage B — Add the interactive editor:
+1. Add owner/admin enablement and contextual target selection.
+2. Add live property controls, draft state, restore and explicit Save.
+3. Add named preset controls and first-save naming.
+4. Add drag resizing, popup movement/minimization and keyboard alternatives.
+5. Cover every relevant layer, especially page backgrounds and repeated controls.
+6. Integrate backups, test in isolation, and document normal usage and recovery.
+
+14. ACCEPTANCE TESTS
+
+- Unauthorized roles cannot enable editing or save through direct API calls.
+- Right-click selects the intended target; parent selection reaches containers
+  and the underlying page background exposed by rounded corners.
+- Live preview works before Save, including color alpha, fonts and alignment.
+- A transparent background becomes visible when RGB is chosen; partial alpha
+  is preserved; explicit 0% opacity still works.
+- One page/subpage's override does not leak to siblings. Shared editor roles
+  update every intended instance without changing published content.
+- Indicators reflect real state, including empty saved records and deletion of
+  the last content unit. Focus and inspector outlines do not stack unexpectedly.
+- Diffuse backgrounds fade only the backdrop, not text or interactive children.
+- Width/height changes preserve font sizes and work on narrow screens.
+- Minimize, drag, edge resize, Escape and keyboard alternatives work correctly.
+- Restoring a target returns to its saved state; property reset inherits values.
+- First Save from Default asks for a name; saving an active named preset does not.
+- Save persists after reload and container recreation. Concurrent stale saves
+  fail safely; failed writes preserve drafts; malformed storage is not overwritten.
+- SQL/CSS/script injection, invalid numbers and unknown capabilities are rejected.
+- Backups preserve all presets and active selection, including alpha and newer
+  registered targets, and can be verified without touching live data.
+
+Use pure unit tests for scoping, validation, geometry and dirty-state rules; API
+tests for authorization/concurrency; and browser tests for hit-testing, preview,
+gestures and save/reload behavior. Use the project's containers if it is Docker-
+based. Do not use the owner's live content or presets as disposable test fixtures.
+
+DELIVERABLE EXPECTATION
+
+Provide the adapted feature, tests, concise usage instructions, and a clear list
+of any deployment steps or remaining limitations. Preserve the user's content,
+existing styles and repository conventions. Do not claim a change is live until
+the running frontend and all persistence consumers actually support it.

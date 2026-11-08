@@ -60,7 +60,10 @@ cleanup scripts themselves do not import results. Keep the built Docker image on
 cleanup never deletes local Docker images or invokes a rebuild.
 
 The REST adapter retries transient failures up to three times (1/2/4-second
-backoff plus jitter) only for reads and exact-generation Storage deletes. Each
+backoff plus jitter) only for reads and exact-generation Storage deletes. Read
+retries include the exact Cloud Logging `POST entries:list` endpoint: a retry
+reuses its filter and page token, without replaying previously returned pages.
+No other POST request becomes retryable. Each
 delete retry keeps both `generation` and `ifGenerationMatch`; a confirmed 404
 means that generation is already gone. Permission/precondition failures still
 stop cleanup. Job launches and other mutations are never replayed after an

@@ -121,7 +121,12 @@ class Cloud:
         # Retrying a lost DELETE response must never target a newer object.
         # Other mutations (including launch/cancel, image/job/log deletion)
         # keep their existing explicit recovery paths; no ambiguous replay.
+        # Cloud Logging lists entries via POST, but it is still a read. Retry
+        # only this exact endpoint, preserving the filter/page token; never
+        # generalize POST retries to writes, job launches or cancellation.
         retry_safe = method == 'GET' or (
+            service == 'logging' and method == 'POST' and path == 'entries:list'
+        ) or (
             service == 'storage' and method == 'DELETE' and missing_ok
             and path.startswith(f'b/{BUCKET}/o/')
             and isinstance(generation, str) and generation.isdigit()
