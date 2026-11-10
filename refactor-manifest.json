@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 0,
-  "status": "awaiting_baseline_result",
+  "status": "baseline_gate_decision_required",
   "preflight_passed": false,
   "initial_worktree_clean": true,
   "verification": {
@@ -16,24 +16,94 @@
     "main_environment": "Existing chessism-api:runtime image; source read-only; no network; dummy database; no integration opt-ins",
     "worker_tests": "/home/jon/Desktop/workshop/last_chessism/.venv-cloud/bin/python -B -m unittest discover -s tests -p 'test*.py' -v",
     "worker_cwd": "stockfish-batch-worker",
-    "typecheck": {"status": "not_applicable", "reason": "No project Python type-check command or configuration exists."},
-    "lint": {"status": "not_applicable", "reason": "No project Python linter command or configuration exists."},
-    "additional": ["git diff --check", "Compile modified Python sources in memory", "Isolated Redis Lua/ARQ regressions", "Existing isolated PostgreSQL claim checks when infrastructure is available"],
+    "typecheck": {
+      "status": "not_applicable",
+      "reason": "No project Python type-check command or configuration exists."
+    },
+    "lint": {
+      "status": "not_applicable",
+      "reason": "No project Python linter command or configuration exists."
+    },
+    "additional": [
+      "git diff --check",
+      "Compile modified Python sources in memory",
+      "Isolated Redis Lua/ARQ regressions",
+      "Existing isolated PostgreSQL claim checks when infrastructure is available"
+    ],
     "detected_at": "2026-11-09",
-    "baseline_results": null
+    "baseline_results": {
+      "main_initial": {
+        "kind": "main_offline_baseline",
+        "container": "chessism-p1-baseline-20261109",
+        "container_id": "1d8d799afe8eff1133ca7e04f9dbabc8f3bcf44e3aa416324c93c0ca317cf397",
+        "started": "2026-11-09",
+        "monitor_command": "docker logs --follow chessism-p1-baseline-20261109",
+        "result_command": "docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}}' chessism-p1-baseline-20261109",
+        "launch_command": "docker run -d --name chessism-p1-baseline-20261109 --pull never --network none --read-only --cpus 2 --memory 2g --pids-limit 256 --tmpfs /tmp:rw,nosuid,size=1g --mount type=bind,source=/home/jon/Desktop/workshop/last_chessism,target=/workspace,readonly --mount type=bind,source=/dev/null,target=/workspace/.env,readonly --workdir /workspace --env PYTHONDONTWRITEBYTECODE=1 --env PYTHONUNBUFFERED=1 --env PYTHONPATH=/workspace:/workspace/stockfish-batch-worker:/workspace/stockfish-service:/workspace/tests --env DATABASE_URL=postgresql+asyncpg://test:test@127.0.0.1:1/test --entrypoint python chessism-api:runtime -B -m unittest discover -s tests -p 'test*.py' -v",
+        "handoff": "Do not poll. Resume after the user reports completion; inspect output and exit code before proceeding.",
+        "status": "exited",
+        "exit_code": 1,
+        "started_at": "2026-11-10T00:14:35.585254193Z",
+        "finished_at": "2026-11-10T00:15:32.18567682Z",
+        "container_elapsed_seconds": 56.6,
+        "tests_run": 1364,
+        "failures": 3,
+        "errors": 18,
+        "skipped": 276,
+        "test_elapsed_seconds": 52.923,
+        "log_file": "/tmp/chessism-p1-baseline-20261109.log"
+      },
+      "worker": null
+    }
   },
-  "pending_process": {
-    "kind": "main_offline_baseline",
-    "container": "chessism-p1-baseline-20261109",
-    "container_id": "1d8d799afe8eff1133ca7e04f9dbabc8f3bcf44e3aa416324c93c0ca317cf397",
-    "started": "2026-11-09",
-    "monitor_command": "docker logs --follow chessism-p1-baseline-20261109",
-    "result_command": "docker inspect --format 'status={{.State.Status}} exit={{.State.ExitCode}}' chessism-p1-baseline-20261109",
-    "launch_command": "docker run -d --name chessism-p1-baseline-20261109 --pull never --network none --read-only --cpus 2 --memory 2g --pids-limit 256 --tmpfs /tmp:rw,nosuid,size=1g --mount type=bind,source=/home/jon/Desktop/workshop/last_chessism,target=/workspace,readonly --mount type=bind,source=/dev/null,target=/workspace/.env,readonly --workdir /workspace --env PYTHONDONTWRITEBYTECODE=1 --env PYTHONUNBUFFERED=1 --env PYTHONPATH=/workspace:/workspace/stockfish-batch-worker:/workspace/stockfish-service:/workspace/tests --env DATABASE_URL=postgresql+asyncpg://test:test@127.0.0.1:1/test --entrypoint python chessism-api:runtime -B -m unittest discover -s tests -p 'test*.py' -v",
-    "handoff": "Do not poll. Resume after the user reports completion; inspect output and exit code before proceeding."
-  },
+  "pending_process": null,
   "chunks": [
-    {"id": 1, "name": "Keep terminal progress authoritative", "status": "pending", "depends_on": [], "verification": null, "commit_sha": null, "started_at": null, "completed_at": null},
-    {"id": 2, "name": "Propagate selection failures and finalize failed jobs", "status": "pending", "depends_on": [1], "verification": null, "commit_sha": null, "started_at": null, "completed_at": null}
-  ]
+    {
+      "id": 1,
+      "name": "Keep terminal progress authoritative",
+      "status": "pending",
+      "depends_on": [],
+      "verification": null,
+      "commit_sha": null,
+      "started_at": null,
+      "completed_at": null
+    },
+    {
+      "id": 2,
+      "name": "Propagate selection failures and finalize failed jobs",
+      "status": "pending",
+      "depends_on": [
+        1
+      ],
+      "verification": null,
+      "commit_sha": null,
+      "started_at": null,
+      "completed_at": null
+    }
+  ],
+  "baseline_diagnosis": {
+    "environment_error_reports": 8,
+    "environment_issues": [
+      "Missing dummy auth settings: test_algorithm_builder and test_analysis_batch_limits",
+      "Missing worker test fixture path: test_cancellation_drain",
+      "Missing Google dependencies: test_cloud_read_recovery",
+      "Python 3.10 lacks TestCase.enterContext: four test_cloud_reporting tests"
+    ],
+    "existing_assertion_failures": [
+      "test_cloud_auto_sequences.AutoSequenceTests.test_split_total_instead_of_multiplying_or_balancing",
+      "test_database_runtime.ProfileTests.test_all_compose_database_consumers_share_one_default_legacy_switch",
+      "test_matrix_cleanup.MatrixBoundariesTests.test_empty_column_projection_is_valid_for_every_row_type"
+    ],
+    "existing_fixture_errors": [
+      "test_cloud_analysis.ControllerGateTests.test_real_cleanup_writes_tmp_plan_and_can_recreate_it_after_restart: missing job_id",
+      "test_pipeline_helpers.AnalysisJobsApiTests.test_analysis_jobs_lists_running_and_queued_from_server_queue: missing Redis response for started timestamp",
+      "test_player_time_result_filters.TimeResultFilterTests: eight error reports from insufficient mocked execute responses"
+    ],
+    "source_changes": false
+  },
+  "proposed_gate_exception": {
+    "approved": false,
+    "proposal": "Correct isolated environment and establish exact unchanged-code baseline; preserve unrelated issues; require all P1 #1 regressions and previously passing relevant tests to pass, with no new full-suite failures/errors/skips.",
+    "reason": "Skill entry gate requires passing tests or escalation; baseline contains existing failures beyond authorized P1 #1 scope."
+  }
 }

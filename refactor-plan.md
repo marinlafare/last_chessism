@@ -15,7 +15,10 @@ including removing unnecessary error-suppression compatibility. The ordered
 chunks below implement that authorization. Do not address P1 #2 or other findings.
 
 For every long-running verification process, start it detached, record its identity,
-give the user a monitoring command, and end the turn. Resume only after the user
+give the user one status-only monitoring command, and end the turn. That command
+must check every two minutes, show start time and elapsed time, and stop at exit.
+Give an evidence-based duration estimate where available; never invent an ETA.
+Do not ask the user to watch application/system logs. Resume only after the user
 reports completion. Do not poll or wait for these jobs. Short inspections and
 focused deterministic checks may finish within the tool's initial response.
 
@@ -66,6 +69,39 @@ access, or changes to engine retry limits/timeouts are authorized by this plan.
   Never borrow application service connections or persistent application volumes.
 
 ## Verification commands
+
+### Baseline finding and proposed gate exception (pending user decision)
+
+The first baseline run finished with 1,364 tests, 3 failures, 18 errors and 276
+skips in 52.923 test seconds (56.600 container seconds). No application or test
+changes preceded it. This run does not establish a passing baseline.
+
+Eight error reports are attributable to the test environment: two missing dummy
+auth settings, one missing worker-test import path, one missing Google dependency,
+and four uses of `TestCase.enterContext` unsupported by Python 3.10.
+
+Three assertion failures and ten error reports expose existing test/code
+mismatches. Details and test identities are recorded in the manifest and log.
+They must not be silently fixed as part of P1 #1.
+
+Proposed exception, **not yet approved**:
+1. Correct the isolated test environment (Python 3.11+, all declared dependencies,
+   dummy auth settings, and worker-test fixture path) and rerun the unchanged
+   code to establish the exact remaining failures.
+2. Keep unrelated source and tests unchanged. Record exact baseline failures;
+   do not skip them or describe the full suite as passing.
+3. Require every new P1 #1 regression and relevant previously passing test to
+   pass. Require the full suites to introduce no new failures/errors and no new
+   skips; investigate changes in baseline failures individually.
+4. Retain isolated Redis/ARQ and PostgreSQL checks, scope review and all other
+   chunk gates. Any unexpected P1-related baseline defect is investigated before
+   proceeding; this is not a blanket waiver for analysis failures.
+
+The skill's entry gate says "If not: STOP. Fix or escalate to user." Implementation
+is pending the user's decision on this concrete gate exception. Environment
+correction and other read-only diagnosis do not require scope expansion.
+
+### Initial commands (environment correction pending)
 
 Main offline suite, inside `chessism-api:runtime`, with working directory `/workspace`:
 
