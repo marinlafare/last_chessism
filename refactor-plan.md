@@ -16,7 +16,8 @@ chunks below implement that authorization. Do not address P1 #2 or other finding
 
 For every long-running verification process, start it detached, record its identity,
 give the user one command for the temporary status monitor, and end the turn. It
-must check every two minutes, show start time and elapsed time, and stop at exit.
+must refresh in place every second, show start time and elapsed time, and remain
+open until Ctrl+C, including after the process finishes (user's latest preference).
 Give an evidence-based duration estimate where available; never invent an ETA.
 Do not ask the user to watch application/system logs. Resume only after the user
 reports completion. Do not poll or wait for these jobs. Short inspections and
@@ -116,7 +117,8 @@ The temporary program is `/tmp/chessism-p1-verification/monitor.py`. It provides
 a detached `--run` mode, instrumented unittest discovery via `--suite main` or
 `--suite worker`, and a default console monitor. It records atomic status updates,
 current test, elapsed time and structured results. Monitoring defaults to every
-120 seconds and stops at completion; Ctrl+C stops only the monitor. ETA is shown
+one second, redraws the terminal in place and stays open after completion;
+Ctrl+C stops only the monitor. ETA is shown
 for the API stage based on its previous 53-second run, with runtime-change caveat;
 other stages/overall ETA remain unavailable without evidence.
 

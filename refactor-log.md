@@ -103,3 +103,17 @@
   launched, results pending. No application or test source changed. No polling or
   waiting performed. Next: after the user reports completion, inspect both results
   and apply the approved comparison gate before starting chunk 1.
+
+## 2026-11-09 — Live monitor correction
+
+- User requested that the monitor remain open and report continuously instead of
+  appearing as a snapshot. Changed the temporary program's default refresh from
+  120 seconds to one second, with terminal output redrawn in place.
+- The monitor now remains open even after verification finishes, displays its
+  final status, and closes on Ctrl+C. It still follows the same status file and
+  does not restart or interrupt verification. `--once` remains an explicit option.
+- Checked changing stage/test output and continued rendering after completion
+  with simulated state updates and no real-time wait.
+- Session ended. Original verification handoff remains in effect; no new long
+  process was launched, no running result was polled, and no application/test
+  source changed. Await the user's completion report before continuing P1 #1.

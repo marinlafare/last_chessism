@@ -89,7 +89,9 @@
     "ownership": "Containers use host UID/GID; temporary files are removable by the user.",
     "handoff": "Do not poll or wait. Resume when user reports completion. Inspect both structured suite results before implementation.",
     "pid": 1657631,
-    "launched": true
+    "launched": true,
+    "monitor_refresh_seconds": 1,
+    "monitor_behavior": "Live in-place display; stays open after process completion until Ctrl+C. No automatic restart of verification."
   },
   "chunks": [
     {
