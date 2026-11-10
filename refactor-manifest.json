@@ -6,9 +6,9 @@
   "baseline_commit": "4f77d15df240a06efc7904496af7ec5e7a7b89cb",
   "branch": "refactor/p1-analysis-failure-propagation",
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
-  "total_chunks": 2,
-  "current_chunk": 2,
-  "status": "completed",
+  "total_chunks": 4,
+  "current_chunk": 3,
+  "status": "in_progress",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -446,7 +446,17 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": null,
+  "pending_process": {
+    "kind": "correction1_full_gate",
+    "status": "launched",
+    "program": "/tmp/chessism-p1-verification/run_correction1_gate.py",
+    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
+    "report": "/tmp/chessism-p1-verification/correction1-gate-result.json",
+    "expected_api_tests": 1427,
+    "expected_worker_tests": 287,
+    "handoff": "Do not poll. Resume after the user reports completion; inspect the gate before committing chunk 3 or beginning chunk 4.",
+    "pid": 2448487
+  },
   "chunks": [
     {
       "id": 1,
@@ -655,6 +665,59 @@
       "commit_sha": "244a6a4cba30bc4b14944f2fc264343db842e06a",
       "started_at": "2026-11-09",
       "completed_at": "2026-11-09"
+    },
+    {
+      "id": 3,
+      "name": "Give coordinator sole ownership of cancellation",
+      "status": "in_progress",
+      "depends_on": [
+        2
+      ],
+      "verification": {
+        "entry": {
+          "tests": 20,
+          "failures": 0,
+          "errors": 0,
+          "log": "/tmp/chessism-p1-verification/correction-entry.log"
+        },
+        "red": {
+          "tests": 2,
+          "failures_including_subtests": 4,
+          "errors": 0,
+          "log": "/tmp/chessism-p1-verification/correction1-red-final.log",
+          "method": "Final regression tests executed against unchanged coordinator function from b81b6ea in memory."
+        },
+        "green": {
+          "tests": 22,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0,
+          "log": "/tmp/chessism-p1-verification/correction1-green.log"
+        },
+        "python310": {
+          "tests": 22,
+          "failures": 0,
+          "errors": 0,
+          "log": "/tmp/chessism-p1-verification/correction1-python310-v2.log"
+        },
+        "compile": "passed",
+        "git_diff_check": "passed"
+      },
+      "commit_sha": null,
+      "started_at": "2026-11-09",
+      "completed_at": null
+    },
+    {
+      "id": 4,
+      "name": "Scope progress updates to execution attempts",
+      "status": "pending",
+      "depends_on": [
+        3
+      ],
+      "verification": null,
+      "commit_sha": null,
+      "started_at": null,
+      "completed_at": null
     }
   ],
   "baseline_diagnosis": {
@@ -684,7 +747,7 @@
     "approval": "User: ok proceed; also explicitly requested a removable monitoring program and handoff after launching the long process."
   },
   "preflight_basis": "Approved comparison gate: corrected API baseline has exactly the 3 known assertion failures and 10 known fixture errors, 276 skips; worker baseline has 0 failures/errors and 7 skips. Setup-related failures resolved. Isolated Redis/PostgreSQL images available.",
-  "postflight": {
+  "original_postflight": {
     "new_regression_tests": 30,
     "isolated_postgres_tests_passed": 6,
     "source_compile": "passed",
@@ -706,5 +769,9 @@
     ],
     "working_tree_clean_after_implementation_commit": true
   },
-  "completed_at": "2026-11-09"
+  "original_completed_at": "2026-11-09",
+  "acceptance": "pending_independent_review",
+  "correction_source": "/home/jon/.codex/attachments/c229c4e7-89a8-479c-892b-137a8cb77a95/Pasted text.txt",
+  "correction_baseline_commit": "b81b6ea",
+  "correction_authorization": "User explicitly requested both reviewed corrections, separate local commits, no push/merge/deploy; existing baseline exception and monitor handoffs persist."
 }

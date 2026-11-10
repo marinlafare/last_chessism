@@ -1,5 +1,9 @@
 # P1 #1: Analysis selection failures
 
+Current work: the independent review requested two blocking corrections. The
+original implementation record below remains historical, not formal acceptance.
+See the correction chunks at the end of this plan. No push, merge or deployment.
+
 Source: the approved design in this conversation and the implementation instructions at
 `/home/jon/.codex/attachments/2eca9586-fb0c-4f10-9c69-f9a72f07e4d5/Pasted text.txt`.
 
@@ -291,3 +295,96 @@ skipped. The unrelated baseline failures remain as explicitly approved. There is
 no configured Python linter/type checker. Redis progress publication remains
 best-effort; ARQ's stored unsuccessful result is authoritative if Redis reporting
 is unavailable. Engine retry limits/timeouts remain the separate P1 #2 concern.
+
+## Independent-review corrections
+
+Source: `/home/jon/.codex/attachments/c229c4e7-89a8-479c-892b-137a8cb77a95/Pasted text.txt`.
+The user explicitly authorized these two focused corrections, in this order,
+with separate local commits. This is the implementation plan for that request;
+no additional scope or approval gate is being introduced. Keep the existing
+baseline exception and long-process monitoring/handoff instructions above.
+
+Entry evidence: unchanged application source since the verified original gate;
+the independent review checked matching archived baseline failures and reran
+the 20 selector/orchestration tests successfully. Rerun those focused tests at
+correction entry. Full API/worker and isolated Redis/ARQ gates follow each chunk.
+The six PostgreSQL checks remain part of final correction verification.
+
+### Chunk 3: Give the coordinator sole ownership of cancellation
+
+Depends on: completed chunks 1 and 2 and the approved baseline-comparison gate.
+
+Files: `chessism_api/operations/analysis.py`,
+`tests/test_analysis_failure_jobs.py`, and the three tracking documents.
+
+Steps:
+1. Add deterministic two-worker cancellation regressions, with staggered closes,
+   successful/failed rollback and repeated external cancellation while draining.
+   Use events and observed task completion, not timing-dependent sleeps. Record
+   failing assertions against the unmodified coordinator.
+2. Shield the initial worker gather so external cancellation reaches the
+   coordinator, which cancels unfinished workers once. Retain the worker group
+   and drain all workers before propagating the original error/cancellation.
+   Shield the drain from later cancellation requests and continue awaiting that
+   same drain; do not re-cancel workers. Keep this local to `_run_analysis_job`.
+3. Keep failure publication exclusive to ordinary fatal exceptions, after
+   cleanup. Preserve `CancelledError` and committed counters/results. Do not
+   change selection, processing retries or timeouts. Use Python 3.10-compatible
+   asyncio APIs, matching the application's Dockerfile.
+4. Run focused tests, source compilation and whitespace checks, then the complete
+   API/Redis/ARQ and worker suites against the exact approved baseline. Start the
+   long gate detached, provide the existing 120-second monitor and end the turn.
+5. Review saved results after the user's completion report and commit only this
+   correction and its regression/record changes.
+
+Exit: cleanup completes before cancellation escapes, even with failed rollback
+and additional cancellation while draining; original P1 regressions stay green;
+no new full-suite failure/error/skip identities.
+
+Commit: `fix: drain analysis workers without repeated cancellation`
+
+### Chunk 4: Scope progress updates to an execution attempt
+
+Depends on: verified and committed chunk 3.
+
+Files: `chessism_api/operations/analysis.py`,
+`stockfish-service/routers/analysis.py`, `tests/test_analysis_terminal_progress.py`,
+`tests/test_analysis_failure_jobs.py`, `tests/test_analysis_failure_arq.py`,
+`tests/analysis_failure_test_support.py`; update `tests/test_pipeline_helpers.py`
+and `tests/test_analysis_batch_limits.py` only where existing progress request
+or mock expectations must express the new attempt contract. Three tracking files.
+
+Steps:
+1. Add isolated Redis regressions delivering old-attempt updates immediately
+   after reset, after new progress, and after completion. Require zero mutation
+   of the active payload, counters, FEN sets and expiry on rejected updates.
+   Record failures against the current job-ID-only implementation.
+2. Generate a fresh opaque attempt ID at each top-level reset. Atomically install
+   that active ID and clear prior progress/deduplication state. Store it under a
+   job-scoped Redis attempt key with the existing retention policy; include the
+   attempt ID in new progress payloads. No delete-then-establish race.
+3. Pass the same attempt explicitly through `_run_analysis_job`, all loop/frozen
+   passes, coordinator progress writes, `_call_engine_service`, and Stockfish's
+   `AnalysisRequest`/`_write_progress`. Live analysis without progress remains
+   supported; progress-enabled requests require both job and attempt identity.
+4. Both Lua update scripts must reject missing/mismatched active attempts before
+   any mutation; Stockfish must also retain the terminal-phase guard. Never infer
+   an incoming request's attempt from the current Redis value. Reset replaces the
+   active identity; successful updates preserve its TTL alongside progress.
+5. Test valid current-attempt updates, explicit reset uniqueness, current terminal
+   protection, loop reuse, stale coordinator writes, missing identity and expired
+   attempt state. Failure to publish/reset Redis remains best-effort and cannot
+   change the database/ARQ result; later writes must not resurrect old attempts.
+6. Rerun focused failure/ARQ/terminal and affected request-contract tests, then
+   full API/worker suites and six existing isolated PostgreSQL invariants. Use
+   the established monitoring/handoff workflow for long verification.
+7. Review diffs for scope and unchanged selection/transaction/retry policies;
+   record results, commit locally, and stop for the user's independent review.
+
+Exit: only the current attempt can mutate progress, resets establish identity
+atomically, terminal guards and all original P1 guarantees remain verified.
+
+Commit: `fix: isolate analysis progress by execution attempt`
+
+These corrections do not constitute acceptance of P1 #1. Formal acceptance is
+reserved for the subsequent focused independent review requested by the user.

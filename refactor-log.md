@@ -344,3 +344,64 @@
 - Temporary monitor/results remain at `/tmp/chessism-p1-verification/` for review
   and later deletion. All isolated test services have stopped. Updated the
   monitor's final display to indicate completed implementation and commit IDs.
+
+## 2026-11-09 — Independent review corrections authorized
+
+- Independent review reproduced two blocking defects: redundant cancellation can
+  interrupt sibling close, and reset accepts stale Stockfish updates because
+  progress has no attempt identity. The original selection-error fix remains valid.
+- User explicitly requested these two corrections, separately verified/committed
+  on the existing branch. No push, merge, deployment, P1 #2 or unrelated changes.
+  P1 #1 acceptance remains pending a subsequent independent review.
+- Extended the existing plan/manifest with chunks 3 and 4, preserving the original
+  history and approved comparison gate. Working tree was clean at `b81b6ea`.
+- Application Dockerfile uses Python 3.10. Cancellation will be owned by the
+  coordinator through a shielded initial gather and protected drain; no new task
+  APIs, cancellation framework or runtime upgrade are needed.
+- Entry checks rerun the 20 existing selector/orchestration tests. The full saved
+  gate remains applicable to unchanged source; full suites will run after each
+  correction. Retain the user's 120-second in-place monitor and handoff policy.
+
+## 2026-11-09 — Chunk 3 focused correction and regression evidence
+
+- Entry: all 20 existing selector/orchestration tests passed. Started chunk 3.
+- Added two event-synchronized tests, each with successful and failed rollback:
+  two workers close at different times, and a repeated external cancellation
+  arrives while the coordinator is draining. Tests verify completed close before
+  coordinator exit, preserved cancellation, no commit and no failed/complete
+  publication. A scheduled callback provides an event-loop checkpoint, not a
+  timing sleep; a wrapper observes entry into the actual gather drain.
+- Red: both final tests against the original coordinator from `b81b6ea` fail
+  in all four subcases because sibling close receives another cancellation.
+  Evidence: `/tmp/chessism-p1-verification/correction1-red-final.log`.
+- The coordinator now shields its initial gather, owns worker cancellation once,
+  and shields/awaits the same cleanup gather through later cancellation requests.
+  It observes the original gather and then re-raises the original exception.
+  Failure publication, transaction handling and processing policy are unchanged.
+- Green: all 22 selector/orchestration tests pass locally, and all 22 also pass
+  in the existing isolated Python 3.10 API runtime (1.097 test seconds). The first
+  Python 3.10 run exposed only a test assumption about cancellation message
+  propagation; replaced the message assertion with the actual cancelled task
+  state. All cleanup assertions remain. No application workaround was added.
+- Python 3.10 syntax/source compilation and `git diff --check` pass. Prepared
+  the full API/Redis/ARQ and worker gate (expected 1,427 and 287 tests) using the
+  same environment and exact baseline failure/error/skip comparison. Existing
+  terminal regressions remain part of that gate. No chunk 4 code changes yet.
+- An extra in-memory red replay initially copied the module globals, bypassing
+  test patches and hanging the temporary harness; interrupted it with Ctrl+C.
+  Corrected the harness to bind the unchanged baseline function to the actual
+  module globals, with a hard process guard. Final replay confirms four expected
+  red subcases followed by all 22 current tests passing. No source rollback or
+  application change was involved in this harness correction.
+
+## 2026-11-09 — Correction 1 full-gate handoff
+
+- Started detached verification runner PID `2448487`. Monitor:
+  `python3 /tmp/chessism-p1-verification/monitor.py`. It refreshes one
+  in-place display every 120 seconds and stays open until Ctrl+C.
+- Session ended. Chunks 1/2 complete; chunk 3 implemented with red/green
+  and Python 3.10 focused evidence, full comparison gate pending.
+  Chunk 4 pending. Source/tests remain uncommitted until gate review;
+  tracking documents committed for handoff. No polling or waiting.
+- Next: after user reports completion, inspect `correction1-gate-result.json`,
+  resolve any genuine regressions, commit chunk 3, then begin chunk 4.
