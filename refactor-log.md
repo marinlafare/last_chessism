@@ -329,3 +329,18 @@
   the explicitly approved baseline-comparison gate and isolated environment fixes.
   P1 #2, schema migrations, production data, deployment and unrelated refactors
   were excluded. Preparing the planned chunk 2 implementation commit.
+
+## 2026-11-09 — Completed
+
+- Chunk 2 committed as `244a6a4cba30bc4b14944f2fc264343db842e06a`:
+  `fix: fail local analysis when database batch selection fails`.
+- Chunk 1 commit: `f165434e3eb617f28e96081c60d62c0316225224`:
+  `fix: preserve terminal analysis progress against late engine updates`.
+- Both chunks and postflight completed under the approved baseline gate. The
+  implementation worktree was clean after its commit. No required work remains
+  for P1 #1; the unrelated baseline issues and P1 #2 remain outside scope.
+- Commits are local on `refactor/p1-analysis-failure-propagation`. The earlier
+  pre-refactor checkpoint had already been pushed; no new deployment was made.
+- Temporary monitor/results remain at `/tmp/chessism-p1-verification/` for review
+  and later deletion. All isolated test services have stopped. Updated the
+  monitor's final display to indicate completed implementation and commit IDs.

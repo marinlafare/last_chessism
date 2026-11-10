@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 2,
-  "status": "postflight_pending_commit",
+  "status": "completed",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -652,7 +652,7 @@
         },
         "full_gate_report": "/tmp/chessism-p1-verification/chunk2-gate-result.json"
       },
-      "commit_sha": null,
+      "commit_sha": "244a6a4cba30bc4b14944f2fc264343db842e06a",
       "started_at": "2026-11-09",
       "completed_at": "2026-11-09"
     }
@@ -699,6 +699,12 @@
       "No configured Python lint/type checker.",
       "Redis failure publication remains best-effort; ARQ unsuccessful result is authoritative.",
       "P1 #2 engine retry/timeouts deliberately unchanged."
-    ]
-  }
+    ],
+    "implementation_commits": [
+      "f165434e3eb617f28e96081c60d62c0316225224",
+      "244a6a4cba30bc4b14944f2fc264343db842e06a"
+    ],
+    "working_tree_clean_after_implementation_commit": true
+  },
+  "completed_at": "2026-11-09"
 }
