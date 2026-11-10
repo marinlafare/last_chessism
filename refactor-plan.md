@@ -392,6 +392,7 @@ reserved for the subsequent focused independent review requested by the user.
 ### Correction postflight
 
 - [x] Chunk 3 verified and committed separately as `5542c9a`.
+- [x] Chunk 4 verified and committed separately as `7f304be`.
 - [x] Chunk 4 focused verification: 60 checks passed, including all 47 P1
   regressions (17 added by these corrections); 25 API checks pass on Python 3.10.
 - [x] Final API suite: 1,442 tests, exactly three existing failures, ten existing

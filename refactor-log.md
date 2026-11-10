@@ -504,3 +504,18 @@
 - Both requested corrections are implemented and verified. Formal acceptance
   remains pending independent review. Preparing the separate chunk 4 local
   implementation commit. No push, merge, deployment or work on another finding.
+
+## 2026-11-09 — Corrections committed; independent review pending
+
+- Correction 1: `5542c9ad00d5df547ccf16d14f657399dd96feef`,
+  `fix: drain analysis workers without repeated cancellation`.
+- Correction 2: `7f304be35da9fc5b10ac6a36055ad86c83710249`,
+  `fix: isolate analysis progress by execution attempt`.
+- Both commits are local on `refactor/p1-analysis-failure-propagation`. Working
+  tree was clean after the implementation commit. Recording final commit IDs in
+  tracking documents; application/test code remains identical to verified code.
+- No pending verification process. Temporary monitor/evidence are retained at
+  `/tmp/chessism-p1-verification/`; all isolated test services are stopped.
+  Monitor now reports implemented corrections with independent review pending.
+- Stop here. P1 #1 has not been formally accepted; the next step belongs to the
+  focused independent review requested by the user. Do not proceed to P1 #2.
