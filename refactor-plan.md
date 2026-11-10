@@ -522,3 +522,15 @@ chunks separately and record completion with a tracking-only follow-up if needed
 Report findings, exact red/green evidence, compatibility, baseline debt and
 remaining production/real-engine limits. Do not declare P1 #1 accepted, push,
 merge, deploy or begin another task; independent acceptance review follows.
+
+### Approved frontend baseline exception (2026-11-10)
+
+The user explicitly authorized continuing chunks 5/6 with the four reproduced
+frontend assertion failures. The complete baseline is 320 checks, 316 passes,
+four failures, zero errors/skips/cancellations. Exact names and failure details
+are frozen in /tmp/chessism-p1-final-corrections/frontend-baseline-complete/
+failure-details.json and recorded in the manifest/log. These remain unresolved
+testing debt, outside P1 #1. Require every new regression to pass and no additional
+failures, errors or skips. Do not weaken/delete/skip tests or repair appearance/
+navigation behavior. Stop if existing debt prevents meaningful verification.
+The backend exception and all scope/safety restrictions remain unchanged.

@@ -571,3 +571,28 @@ Exact preexisting frontend debt:
 Complete evidence and exact failure details are frozen in /tmp/chessism-p1-final-corrections/frontend-baseline-complete. Backend baseline remains verified: API 1,442 with precisely the prior 3 failures/10 errors/276 skips; worker 287 with 0 failures/errors/7 skips; 60 focused, 25 Python 3.10 and six PostgreSQL checks passed. No new source failures have been introduced, no assertions weakened, and no test was skipped to mask a result.
 
 The explicit retained exception enumerated backend debt; these four frontend failures were not included. architectural-refactor's entry rule says “If not: STOP. Fix or escalate to user.” Request a bounded exception for these exact preexisting frontend failures, with all new P1 regressions required to pass and no additional failures/errors/skips. Do not repair unrelated appearance/navigation behavior. Chunks 5 and 6 remain pending; no application/test implementation and no active process. Session ended at the baseline decision, with prior chunks 1–4 preserved.
+
+## 2026-11-10 — Frontend baseline exception explicitly authorized; chunk 5 starts
+
+The user authorized the four exact preexisting frontend failures as unresolved
+testing debt, with no additional failures/errors/skips and every new regression
+required to pass. Rechecked all 1,386 protected source/config and 1,696 frontend
+input hashes against unchanged baseline; all match. Confirmed the saved four
+failure identities and full assertion/stack details match the completed report.
+The ignored hegel_.md directory is preserved. Only tracking differs from 24e830e.
+No existing failure prevents event-controlled cancellation or Positions outcome
+verification. No appearance/navigation repairs are authorized or planned.
+
+Starting chunk 5: add regression tests before application edits for cleanup
+already underway, external/sibling-triggered cancellation, repeated cancellation,
+rollback failure and preservation of committed work/primary exceptions.
+
+Chunk 5 red evidence: both Python 3.10.22 and 3.11.17 ran 33 checks. All 25 prior checks passed; exactly the eight new methods failed (36 assertion failures across event-controlled subcases), with zero errors/skips. Every assertion failure reported interrupted cleanup. Tests cover all four reported close orderings, worker rollback already underway, each selector's rollback/close with empty/error selections, repeated cancellations, secondary cleanup failures, preserved original exceptions and previously committed work. Saved exact reports/source hashes under chunk5-red-* before application edits.
+
+Implemented the bounded cleanup helper in database/postgresql/analysis_cleanup.py: retain the operation task, shield every await through repeated cancellation, observe its result, and propagate the first cancellation without replacing it with a secondary cleanup failure. Existing selector/worker owners invoke it around their rollback/close operations. SQL, transaction ownership, commit points, retries, timeouts and coordinator policy remain unchanged. Focused green verification pending.
+
+Chunk 5 first green run exposed a test observation issue on Python 3.10: cleanup completed, but wait_for retrieving a cancelled Task discarded its cancellation-message arguments. A standard-library-only probe in both cached images demonstrated original/repeated/original messages inside the coroutine, but empty arguments at the Python 3.10 Task boundary (3.11 retained them). Archived the complete first green evidence in chunk5-green-attempt-1. Kept the message assertion and observed it as it leaves the coroutine; task-cancelled, cleanup-finished, no-interruption, original-error and commit assertions remain. No application correction was needed.
+
+Reran the final test version against exact 24e830e application files mounted read-only over the disposable container source: both runtimes again report precisely eight new failing methods/36 subtest failures, zero errors/skips, and all 25 prior methods passing. Original implementation hashes are in chunk5-original-implementation/sha256.json; final red evidence is chunk5-red-v2-results.json. With the correction, all 33 checks pass on both Python 3.10.22 (2.46s) and 3.11.17 (4.10s). Green report and immutable source snapshot are retained. AST comparison confirms every original test method is unchanged. Removing only the new cleanup wrappers/imports makes ask_db.py and analysis.py structurally identical to 24e830e: SQL, coordinator, progress, commit, retry and timeout behavior are otherwise unchanged.
+
+Prepared chunk5_gate.py for the longer isolated gate: API expected 1,450 checks with the exact 3 failures/10 errors/276 skips; worker 287 with zero failures/errors and seven unchanged skips; six PostgreSQL invariants; 68 focused checks including 55 P1 regressions and real isolated Redis/ARQ. Full failure/error/skip details must match baseline, not just counts. Reuse the passed 33 Python 3.10 checks and frontend baseline only while their source inputs remain unchanged. All fixtures are newly labelled, private, disposable and network-disabled. No production access or application commit yet. Tracking-only checkpoint before launch; chunk 6 remains pending.

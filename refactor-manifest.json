@@ -8,8 +8,8 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 5,
-  "status": "blocked",
-  "preflight_passed": false,
+  "status": "in_progress",
+  "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
     "main_tests": "python -B -m unittest discover -s tests -p 'test*.py' -v",
@@ -843,14 +843,72 @@
     {
       "id": 5,
       "name": "Protect analysis-session cleanup already in progress",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         4
       ],
       "verification": null,
       "commit_sha": null,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-11-10T20:16:37.573043+00:00",
+      "completed_at": null,
+      "phase": "full_verification_prepared",
+      "red_evidence": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk5-red-results.json",
+        "python_versions": [
+          "3.10.22",
+          "3.11.17"
+        ],
+        "tests_per_runtime": 33,
+        "existing_passed": 25,
+        "new_failing_tests": 8,
+        "subtest_failures": 36,
+        "errors": 0,
+        "skips": 0,
+        "application_unchanged_at_red": true,
+        "final_test_version_report": "/tmp/chessism-p1-final-corrections/chunk5-red-v2-results.json"
+      },
+      "focused_green": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk5-green-results.json",
+        "python310": {
+          "tests": 33,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "python311": {
+          "tests": 33,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "new_regression_tests": 8,
+        "original_test_methods_unchanged": 25,
+        "source_snapshot": "/tmp/chessism-p1-final-corrections/chunk5-green-source-sha256.json"
+      },
+      "test_observation_correction": {
+        "reason": "Python 3.10 wait_for strips cancellation-message arguments when retrieving a cancelled task; confirmed with isolated stdlib-only probe.",
+        "change": "Observe original cancellation arguments at coroutine boundary while retaining cancelled-task, completed-cleanup and primary-error assertions.",
+        "first_green_evidence": "/tmp/chessism-p1-final-corrections/chunk5-green-attempt-1",
+        "unchanged_original_implementation_red_rerun": "/tmp/chessism-p1-final-corrections/chunk5-red-v2-results.json",
+        "application_changes_for_this_correction": false
+      },
+      "full_gate": {
+        "status": "prepared",
+        "runner": "/tmp/chessism-p1-final-corrections/chunk5_gate.py",
+        "expected_api_tests": 1450,
+        "expected_existing_api_failures": 3,
+        "expected_existing_api_errors": 10,
+        "expected_api_skips": 276,
+        "expected_worker_tests": 287,
+        "expected_worker_failures": 0,
+        "expected_worker_errors": 0,
+        "expected_worker_skips": 7,
+        "expected_postgres_tests": 6,
+        "expected_focused_tests": 68,
+        "expected_p1_regressions": 55,
+        "reuse_python310_checks": 33,
+        "reuse_frontend_baseline": "All frontend source and fixtures unchanged in this backend-only chunk; four explicitly approved failures remain documented."
+      }
     },
     {
       "id": 6,
@@ -980,9 +1038,9 @@
     "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
     "verified_branch": "refactor/p1-analysis-failure-propagation",
     "initial_worktree_clean": true,
-    "baseline_status": "verification_complete_awaiting_frontend_baseline_exception",
+    "baseline_status": "verified_with_explicit_backend_and_frontend_exceptions",
     "runtime_directory": "/tmp/chessism-p1-final-corrections",
-    "application_changes_started": false,
+    "application_changes_started": true,
     "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
     "started_at": "2026-11-10T19:48:05.527608+00:00",
     "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py",
@@ -990,7 +1048,11 @@
     "runner_sha256": {
       "monitor.py": "bef55d00858c1b35d67a49e975ac42217fe72770b8e11eba700c1c66c5e1ee69",
       "baseline.py": "c5f33ebd56f43e6d025e5da8421cc89c658275669183b8b5c2251d4a0cd989aa",
-      "frontend_baseline.py": "6319f3e24ed1c9018aba8b771419e7babf72eaa25130508c0b13c3dd38844833"
+      "frontend_baseline.py": "6319f3e24ed1c9018aba8b771419e7babf72eaa25130508c0b13c3dd38844833",
+      "chunk5_checks.py": "1b79e8b188cd3bdf46ba02716a5eba1d8df2c7e4b8864e71bbca2af2aaf77729",
+      "chunk5_red_v2.py": "288b78e3362798730dfb435b587bb253531f5c6fd92c25feb1c9be1071678646",
+      "chunk5_green.py": "8af1681667f0ffdad7253ac465b3b1f464ac9e4fcc2467bbc678e3ee1fd1fc9e",
+      "chunk5_gate.py": "aa5ecf2a099c4ff73f00adf3a1c8be749fee6d407cbe30fe71a237dc722ee804"
     },
     "frontend_checks": [
       "node --test tests/*.test.mjs (all 64 files in Node 22)",
@@ -1139,14 +1201,20 @@
       "all_owned_containers_removed": true,
       "result_sha256": "f2eb1a1a405dd00210892c9488fe8784b34db39a7b37cf1c8eb7ca7b75289d79",
       "reviewed_at": "2026-11-10T20:13:00.958241+00:00",
-      "baseline_exception_approved": false
+      "baseline_exception_approved": true,
+      "authorization": {
+        "approved_at": "2026-11-10T20:16:37.573043+00:00",
+        "source": "User explicitly authorized continuing with the four documented preexisting frontend failures.",
+        "conditions": [
+          "All four reproduced on unchanged baseline with exact identities/details retained",
+          "No unrelated appearance/navigation repairs",
+          "Every new P1 regression passes",
+          "No additional failures, errors or skips",
+          "No weakening/deleting/skipping tests",
+          "Stop if existing debt prevents meaningful verification",
+          "Keep debt unresolved and documented"
+        ]
+      }
     }
-  },
-  "blocker": {
-    "reason": "Four verified preexisting frontend assertion failures are outside the explicitly approved backend baseline exception.",
-    "requested_decision": "Permit these four exact unchanged frontend failures as baseline debt while requiring every new regression to pass and no additional failure/error/skip.",
-    "application_changes_started": false,
-    "skill_rule": "Chunk entry check: Tests passing? If not: STOP. Fix or escalate to user.",
-    "skill_source": "/home/jon/.agents/skills/architectural-refactor/SKILL.md"
   }
 }
