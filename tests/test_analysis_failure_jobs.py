@@ -28,11 +28,13 @@ def engine_result(fen="fen"):
 class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
         self.ctx = {"job_id": "failure-regression"}
+        self.real_reset = analysis._reset_job_progress
+        self.real_progress = analysis._write_job_progress
         self.concurrency = patch.object(analysis, "ANALYSIS_CONCURRENCY", 1)
         self.concurrency.start()
         self.addCleanup(self.concurrency.stop)
         self.progress = self.stub("_write_job_progress")
-        self.stub("_reset_job_progress")
+        self.reset = self.stub("_reset_job_progress", return_value="test-attempt")
         self.engine = self.stub("_call_engine_service", return_value=engine_result())
         self.stage = self.stub("stage_fen_results")
         self.timings = self.stub("record_analysis_times")
@@ -152,6 +154,8 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
         final = self.progress.await_args.kwargs
         self.assertEqual((final["phase"], final["processed"], final["failed"], final["total"]),
                          ("failed", 11, 2, 100))
+        self.assertEqual(final["attempt_id"], "test-attempt")
+        self.assertEqual(self.engine.await_args.kwargs["progress_attempt_id"], "test-attempt")
         self.projections.assert_not_awaited()
 
     async def test_progress_publication_failure_does_not_replace_original_error(self):
@@ -460,3 +464,41 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.phases()[-1], "failed")
         self.assertNotIn("complete", self.phases())
         self.projections.assert_not_awaited()
+
+    async def test_entry_points_keep_one_attempt_for_all_engine_batches_and_progress(self):
+        for name, _selector, _args, entry in self.entry_points():
+            with self.subTest(entry=name):
+                self.reset.reset_mock()
+                self.progress.reset_mock()
+                self.engine.reset_mock()
+                attempt = f"attempt-{name}"
+                self.reset.return_value = attempt
+                with patch.object(ask_db, "AsyncDBSession", side_effect=lambda: session_for(["fen"])):
+                    await entry()
+                self.reset.assert_awaited_once_with(self.ctx, self.ctx["job_id"])
+                self.assertGreater(self.engine.await_count, 1)
+                for call in self.engine.await_args_list:
+                    self.assertEqual(call.kwargs["progress_attempt_id"], attempt)
+                for call in self.progress.await_args_list:
+                    self.assertEqual(call.kwargs["attempt_id"], attempt)
+                self.assertEqual(self.phases()[-1], "complete")
+
+    async def test_redis_reset_and_reporting_errors_preserve_original_database_failure(self):
+        failure = RuntimeError("database unavailable")
+        self.ctx["redis"] = SimpleNamespace(eval=AsyncMock(side_effect=OSError("Redis unavailable")))
+        with patch.object(analysis, "_reset_job_progress", self.real_reset), \
+             patch.object(analysis, "_write_job_progress", self.real_progress):
+            with self.assertRaises(RuntimeError) as caught:
+                await self.run_job(AsyncMock(side_effect=failure))
+        self.assertIs(caught.exception, failure)
+        self.assertEqual(self.ctx["redis"].eval.await_count, 3)
+        self.engine.assert_not_awaited()
+        self.stage.assert_not_awaited()
+
+    async def test_parent_pass_requires_explicit_attempt_identity(self):
+        fetch = AsyncMock()
+        with self.assertRaisesRegex(ValueError, "parent attempt"):
+            await self.run_job(fetch, reset_progress=False)
+        fetch.assert_not_awaited()
+        self.engine.assert_not_awaited()
+        self.progress.assert_not_awaited()

@@ -472,3 +472,35 @@
   completion, verify recorded source hashes, resolve any regressions,
   commit chunk 4 and complete the correction record. Stop for independent
   review; do not push, merge, deploy or begin P1 #2.
+
+## 2026-11-09 — Chunk 4 verified and correction postflight complete
+
+- User reported completion. Final gate passed in 91.60 seconds: API 1,442 tests
+  with the exact three baseline failures, ten errors and 276 skips; worker 287
+  tests with no failures/errors and seven unchanged skips. Independently compared
+  saved full failure/error traces (normalizing line numbers), skip identities,
+  Python and dependency versions: all match the approved baseline.
+- All 47 P1 regressions ran in the full API suite, including the 17 added across
+  these corrections. All six isolated PostgreSQL lock/claim/recheck tests passed,
+  without skips. Isolated Redis and PostgreSQL services stopped successfully.
+- Verified all five recorded source hashes match the files tested by the final
+  gate. Final compilation, Python 3.10 syntax, whitespace and scope checks passed;
+  no new TODO/FIXME. Reuse this unchanged final gate for postflight; only tracking
+  documents are modified afterward.
+- Correction 1 gives the coordinator sole cancellation ownership and awaits
+  protected cleanup. Correction 2 establishes an attempt atomically and requires
+  it in both progress writers. No extra architectural layer or compatibility
+  fallback. SQL/locking, transaction ownership, commits, ARQ failure propagation,
+  empty selection, engine policy and tablebase behavior remain unchanged.
+- Implementation files for the corrections: `chessism_api/operations/analysis.py`
+  and `stockfish-service/routers/analysis.py`. Regression changes:
+  `tests/test_analysis_failure_jobs.py`, `tests/test_analysis_failure_arq.py`, and
+  `tests/test_analysis_terminal_progress.py`. Other changes are tracking records.
+- Remaining limits: existing baseline failures/skips; no production/GCP or real
+  Stockfish execution; database cancellation fault paths use fake sessions.
+  Redis progress remains best-effort: if a reset cannot be applied, the new
+  attempt cannot report progress and old progress may remain visible. A lost
+  response after Redis applies reset does not invalidate the generated token.
+- Both requested corrections are implemented and verified. Formal acceptance
+  remains pending independent review. Preparing the separate chunk 4 local
+  implementation commit. No push, merge, deployment or work on another finding.

@@ -65,6 +65,9 @@ class AnalysisFailureArqTests(unittest.IsolatedAsyncioTestCase):
         result = await job.result_info()
         self.assertIsNotNone(result)
         progress = json.loads(await self.redis.get(f"chessism:job_progress:{self.ident}"))
+        self.assertEqual(len(progress["attempt_id"]), 32)
+        self.assertEqual(await self.redis.get(f"chessism:job_progress_attempt:{self.ident}"),
+                         progress["attempt_id"])
         return result, progress
 
     async def test_database_failure_is_stored_as_unsuccessful_with_failed_progress(self):

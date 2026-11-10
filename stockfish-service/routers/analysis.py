@@ -7,7 +7,7 @@ import chess
 import chess.engine
 import redis.asyncio as redis
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 from stockfish_core.analysis import analyse, board_from_fen
 
 from operations.engine import (
@@ -23,6 +23,9 @@ MAX_ANALYSIS_BATCH_SIZE = 1000
 redis_client: redis.Redis | None = None
 
 PROGRESS_UPDATE_SCRIPT = """
+if not ARGV[8] or ARGV[8] == '' or redis.call('GET', KEYS[4]) ~= ARGV[8] then
+    return 0
+end
 local previous = nil
 local current = redis.call('GET', KEYS[1])
 if current then
@@ -51,6 +54,7 @@ end
 local total = tonumber(ARGV[3])
 local payload = cjson.encode({
     job_id = ARGV[4],
+    attempt_id = ARGV[8],
     total = total,
     processed = math.min(total, processed),
     failed = failed,
@@ -62,6 +66,7 @@ local ttl = tonumber(ARGV[7])
 redis.call('SET', KEYS[1], payload, 'EX', ttl)
 redis.call('EXPIRE', KEYS[2], ttl)
 redis.call('EXPIRE', KEYS[3], ttl)
+redis.call('EXPIRE', KEYS[4], ttl)
 return processed
 """
 
@@ -77,9 +82,16 @@ class AnalysisRequest(BaseModel):
     # board uses the same engine but keeps its existing non-persisted budget.
     nodes_limit: int = Field(100000, ge=1, le=100_000_000)
     multipv: int = Field(4, ge=1, le=10)
-    progress_job_id: str | None = Field(None, description="Optional ARQ job id for live progress.")
+    progress_job_id: str | None = Field(None, min_length=1, description="Optional ARQ job id for live progress.")
+    progress_attempt_id: str | None = Field(None, min_length=1, description="Execution attempt that owns this progress.")
     progress_total: int | None = Field(None, ge=1, description="Total FEN count for the job.")
     progress_detail_prefix: str | None = Field(None, description="Optional loop label for live progress.")
+
+    @model_validator(mode="after")
+    def require_progress_identity(self):
+        if bool(self.progress_job_id) != bool(self.progress_attempt_id):
+            raise ValueError("Progress requires both job and attempt IDs")
+        return self
 
 
 def _board_from_fen(fen: str) -> chess.Board | None:
@@ -136,14 +148,16 @@ async def _write_progress(
     progress_key = f"chessism:job_progress:{request.progress_job_id}"
     processed_key = f"chessism:job_progress_fens:{request.progress_job_id}"
     failed_key = f"chessism:job_progress_failed_fens:{request.progress_job_id}"
+    attempt_key = f"chessism:job_progress_attempt:{request.progress_job_id}"
     try:
         client = await _get_redis()
         await client.eval(
             PROGRESS_UPDATE_SCRIPT,
-            3,
+            4,
             progress_key,
             processed_key,
             failed_key,
+            attempt_key,
             fen,
             "1" if current_failed else "0",
             total,
@@ -151,6 +165,7 @@ async def _write_progress(
             full_detail,
             time.time(),
             PROGRESS_TTL_SECONDS,
+            request.progress_attempt_id,
         )
     except Exception as exc:
         print(f"Failed to write analysis progress: {exc!r}", flush=True)

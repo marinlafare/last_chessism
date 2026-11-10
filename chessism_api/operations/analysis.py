@@ -8,6 +8,7 @@ import time
 import os
 import sys
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
+from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, insert
 
@@ -44,8 +45,18 @@ MAX_GLOBAL_ANALYSIS_BATCH_SIZE = 1000
 MAX_LOOP_ANALYSIS_BATCH_SIZE = 1000
 PROGRESS_TTL_SECONDS = 60 * 60 * 24
 
+JOB_PROGRESS_RESET_SCRIPT = """
+redis.call('SET', KEYS[4], ARGV[1], 'EX', tonumber(ARGV[2]))
+redis.call('DEL', KEYS[1], KEYS[2], KEYS[3])
+return ARGV[1]
+"""
+
 JOB_PROGRESS_UPDATE_SCRIPT = """
 local incoming = cjson.decode(ARGV[1])
+if not incoming['attempt_id'] or incoming['attempt_id'] == ''
+    or redis.call('GET', KEYS[2]) ~= incoming['attempt_id'] then
+    return 0
+end
 local current = redis.call('GET', KEYS[1])
 if current then
     local ok, decoded = pcall(cjson.decode, current)
@@ -61,6 +72,7 @@ if current then
     end
 end
 redis.call('SET', KEYS[1], cjson.encode(incoming), 'EX', tonumber(ARGV[2]))
+redis.call('EXPIRE', KEYS[2], tonumber(ARGV[2]))
 return incoming['processed']
 """
 
@@ -76,6 +88,7 @@ async def _call_engine_service(
     nodes: int,
     *,
     progress_job_id: str | None = None,
+    progress_attempt_id: str | None = None,
     progress_total: int | None = None,
     progress_detail_prefix: str | None = None,
 ) -> Optional[List[Dict[str, Any]]]:
@@ -89,6 +102,7 @@ async def _call_engine_service(
     if progress_job_id:
         payload.update({
             "progress_job_id": progress_job_id,
+            "progress_attempt_id": progress_attempt_id,
             "progress_total": progress_total or len(fens),
             "progress_detail_prefix": progress_detail_prefix,
         })
@@ -117,6 +131,7 @@ async def _write_job_progress(
     ctx: dict,
     job_id: str,
     *,
+    attempt_id: str,
     total: int,
     processed: int,
     failed: int,
@@ -129,6 +144,7 @@ async def _write_job_progress(
 
     payload = {
         "job_id": job_id,
+        "attempt_id": attempt_id,
         "total": int(total),
         "processed": int(processed),
         "failed": int(failed),
@@ -139,8 +155,9 @@ async def _write_job_progress(
     try:
         await redis.eval(
             JOB_PROGRESS_UPDATE_SCRIPT,
-            1,
+            2,
             f"chessism:job_progress:{job_id}",
+            f"chessism:job_progress_attempt:{job_id}",
             json.dumps(payload),
             PROGRESS_TTL_SECONDS,
         )
@@ -148,18 +165,26 @@ async def _write_job_progress(
         print(f"Failed to write job progress for {job_id}: {repr(e)}", flush=True)
 
 
-async def _reset_job_progress(ctx: dict, job_id: str) -> None:
+async def _reset_job_progress(ctx: dict, job_id: str) -> str:
+    """Start an attempt atomically; failed reporting must not affect analysis."""
+    attempt_id = uuid4().hex
     redis = ctx.get("redis")
     if not redis:
-        return
+        return attempt_id
     try:
-        await redis.delete(
+        await redis.eval(
+            JOB_PROGRESS_RESET_SCRIPT,
+            4,
             f"chessism:job_progress:{job_id}",
             f"chessism:job_progress_fens:{job_id}",
             f"chessism:job_progress_failed_fens:{job_id}",
+            f"chessism:job_progress_attempt:{job_id}",
+            attempt_id,
+            PROGRESS_TTL_SECONDS,
         )
     except Exception as e:
         print(f"Failed to reset job progress for {job_id}: {repr(e)}", flush=True)
+    return attempt_id
 
 def _format_engine_results(
     engine_output: List[Dict[str, Any]]
@@ -316,6 +341,7 @@ async def _run_analysis_job(
     no_more_message: str,
     max_batch_size: int = MAX_ANALYSIS_BATCH_SIZE,
     reset_progress: bool = True,
+    progress_attempt_id: str | None = None,
     progress_total: int | None = None,
     progress_offset: int = 0,
     failed_offset: int = 0,
@@ -348,10 +374,13 @@ async def _run_analysis_job(
     counter_lock = asyncio.Lock()
     overall_progress_total = int(progress_total or total_fens_to_process)
     if reset_progress:
-        await _reset_job_progress(ctx, arq_job_id)
+        progress_attempt_id = await _reset_job_progress(ctx, arq_job_id)
+    elif not progress_attempt_id:
+        raise ValueError("An analysis pass requires its parent attempt ID")
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=overall_progress_total,
         processed=progress_offset,
         failed=failed_offset,
@@ -406,6 +435,7 @@ async def _run_analysis_job(
                         fens_to_process,
                         nodes_limit,
                         progress_job_id=arq_job_id,
+                        progress_attempt_id=progress_attempt_id,
                         progress_total=overall_progress_total,
                         progress_detail_prefix=progress_detail_prefix,
                     )
@@ -466,6 +496,7 @@ async def _run_analysis_job(
                     await _write_job_progress(
                         ctx,
                         arq_job_id,
+                        attempt_id=progress_attempt_id,
                         total=overall_progress_total,
                         processed=progress_offset + total_engine_processed,
                         failed=failed_offset + total_failed_fens,
@@ -533,6 +564,7 @@ async def _run_analysis_job(
                 await _write_job_progress(
                     ctx,
                     arq_job_id,
+                    attempt_id=progress_attempt_id,
                     total=overall_progress_total,
                     processed=progress_offset + total_engine_processed,
                     failed=failed_offset + total_failed_fens,
@@ -553,6 +585,7 @@ async def _run_analysis_job(
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=overall_progress_total,
         processed=progress_offset + total_engine_processed,
         failed=failed_offset + total_failed_fens,
@@ -662,10 +695,11 @@ async def run_analysis_loop_job(
         f"batch {safe_batch_size}, cool-off {safe_cool_off}s ---",
         flush=True,
     )
-    await _reset_job_progress(ctx, arq_job_id)
+    progress_attempt_id = await _reset_job_progress(ctx, arq_job_id)
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=total_target,
         processed=0,
         failed=0,
@@ -690,6 +724,7 @@ async def run_analysis_loop_job(
             no_more_message=no_more_message,
             max_batch_size=MAX_LOOP_ANALYSIS_BATCH_SIZE,
             reset_progress=False,
+            progress_attempt_id=progress_attempt_id,
             progress_total=total_target,
             progress_offset=total_processed,
             failed_offset=total_failed,
@@ -710,6 +745,7 @@ async def run_analysis_loop_job(
             await _write_job_progress(
                 ctx,
                 arq_job_id,
+                attempt_id=progress_attempt_id,
                 total=total_target,
                 processed=total_processed,
                 failed=total_failed,
@@ -722,6 +758,7 @@ async def run_analysis_loop_job(
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=total_target,
         processed=total_processed,
         failed=total_failed,
@@ -773,7 +810,7 @@ async def run_player_games_analysis_job(
     tablebase_solved = int(tablebase_result.get("solved") or 0)
     actual_target = await count_game_set_fens_for_analysis(clean_links)
 
-    await _reset_job_progress(ctx, arq_job_id)
+    progress_attempt_id = await _reset_job_progress(ctx, arq_job_id)
     if actual_target <= 0:
         await refresh_game_analysis_summary(tuple(clean_links))
         if tablebase_solved > 0:
@@ -782,6 +819,7 @@ async def run_player_games_analysis_job(
         await _write_job_progress(
             ctx,
             arq_job_id,
+            attempt_id=progress_attempt_id,
             total=1,
             processed=1,
             failed=0,
@@ -807,6 +845,7 @@ async def run_player_games_analysis_job(
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=actual_target,
         processed=0,
         failed=0,
@@ -839,6 +878,7 @@ async def run_player_games_analysis_job(
             no_more_message=f"No missing FENs remain for {normalized_player}'s selected games.",
             max_batch_size=MAX_LOOP_ANALYSIS_BATCH_SIZE,
             reset_progress=False,
+            progress_attempt_id=progress_attempt_id,
             progress_total=actual_target,
             progress_offset=total_processed,
             failed_offset=total_failed,
@@ -857,6 +897,7 @@ async def run_player_games_analysis_job(
             await _write_job_progress(
                 ctx,
                 arq_job_id,
+                attempt_id=progress_attempt_id,
                 total=actual_target,
                 processed=total_processed,
                 failed=total_failed,
@@ -874,6 +915,7 @@ async def run_player_games_analysis_job(
     await _write_job_progress(
         ctx,
         arq_job_id,
+        attempt_id=progress_attempt_id,
         total=actual_target,
         processed=total_processed,
         failed=total_failed,

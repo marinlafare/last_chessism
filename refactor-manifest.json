@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 4,
   "current_chunk": 4,
-  "status": "in_progress",
+  "status": "completed",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -446,18 +446,7 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": {
-    "kind": "correction2_full_gate",
-    "status": "launched",
-    "program": "/tmp/chessism-p1-verification/run_correction2_gate.py",
-    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
-    "report": "/tmp/chessism-p1-verification/correction2-gate-result.json",
-    "expected_api_tests": 1442,
-    "expected_worker_tests": 287,
-    "expected_postgres_tests": 6,
-    "handoff": "Do not poll. Resume after the user reports completion; review gate and source hashes, commit chunk 4, complete correction record, leave formal acceptance pending independent review.",
-    "pid": 2495389
-  },
+  "pending_process": null,
   "chunks": [
     {
       "id": 1,
@@ -754,7 +743,7 @@
     {
       "id": 4,
       "name": "Scope progress updates to execution attempts",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         3
       ],
@@ -788,11 +777,68 @@
           "tests/test_analysis_failure_jobs.py": "ecaa61cd31f00f04e9707fa1fa8a8f9c6c6c2165893a69975b81c128576425b1",
           "tests/test_analysis_failure_arq.py": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
           "tests/test_analysis_terminal_progress.py": "ccfe04997f42e83287c0615e9532b11ce50cbbacdf5c39407eff18e2c5dff856"
-        }
+        },
+        "full_gate": {
+          "passed": true,
+          "comparisons": {
+            "main": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "python_matches_baseline": true
+            },
+            "worker": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "python_matches_baseline": true
+            },
+            "postgres": {
+              "all_six_passed": true,
+              "no_skips": true
+            }
+          },
+          "suite_results": {
+            "main": {
+              "tests_run": 1442,
+              "failures": 3,
+              "errors": 10,
+              "skipped": 276,
+              "elapsed_seconds": 52.66363310813904,
+              "exit_code": 1
+            },
+            "worker": {
+              "tests_run": 287,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 7,
+              "elapsed_seconds": 26.869995832443237,
+              "exit_code": 0
+            },
+            "postgres": {
+              "tests_run": 6,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 0,
+              "elapsed_seconds": 7.828154563903809,
+              "exit_code": 0
+            }
+          },
+          "cleanup_exit_codes": {
+            "chessism-p1-correction2-postgres-service-v2": 0,
+            "chessism-p1-isolated-redis": 0
+          },
+          "elapsed_seconds": 91.59683012962341
+        },
+        "source_hashes_match_tested_files": true
       },
       "commit_sha": null,
       "started_at": "2026-11-09",
-      "completed_at": null
+      "completed_at": "2026-11-09"
     }
   ],
   "baseline_diagnosis": {
@@ -848,5 +894,58 @@
   "acceptance": "pending_independent_review",
   "correction_source": "/home/jon/.codex/attachments/c229c4e7-89a8-479c-892b-137a8cb77a95/Pasted text.txt",
   "correction_baseline_commit": "b81b6ea",
-  "correction_authorization": "User explicitly requested both reviewed corrections, separate local commits, no push/merge/deploy; existing baseline exception and monitor handoffs persist."
+  "correction_authorization": "User explicitly requested both reviewed corrections, separate local commits, no push/merge/deploy; existing baseline exception and monitor handoffs persist.",
+  "completed_at": "2026-11-09",
+  "postflight": {
+    "scope": "Two blocking review corrections implemented and verified; formal P1 #1 acceptance pending independent review.",
+    "new_tests_in_corrections": 17,
+    "total_p1_regressions": 47,
+    "focused_tests_passed": 60,
+    "python310_tests_passed": 25,
+    "isolated_postgres_tests_passed": 6,
+    "full_gate_report": "/tmp/chessism-p1-verification/correction2-gate-result.json",
+    "full_suite_results": {
+      "main": {
+        "tests_run": 1442,
+        "failures": 3,
+        "errors": 10,
+        "skipped": 276,
+        "elapsed_seconds": 52.66363310813904,
+        "exit_code": 1
+      },
+      "worker": {
+        "tests_run": 287,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 7,
+        "elapsed_seconds": 26.869995832443237,
+        "exit_code": 0
+      },
+      "postgres": {
+        "tests_run": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0,
+        "elapsed_seconds": 7.828154563903809,
+        "exit_code": 0
+      }
+    },
+    "source_hashes_match_tested_files": true,
+    "source_compile": "passed",
+    "git_diff_check": "passed",
+    "scope_review": "Only the two approved corrections; no new TODO/FIXME.",
+    "test_services_stopped": true,
+    "full_suite_results_reused": true,
+    "reason_for_reuse": "Current application/test hashes match the completed final gate; only tracking documents changed afterward.",
+    "limitations": [
+      "Existing API baseline remains: 3 failures, 10 errors, 276 skips; worker has 7 unchanged skips.",
+      "Production/GCP and real Stockfish execution not exercised; actual database cancellation failures are covered with deterministic fake sessions, alongside six real PostgreSQL invariants.",
+      "Redis reporting is best-effort. If reset cannot be applied, new attempt writers are rejected; retained prior progress can remain visible.",
+      "No configured Python linter or type checker.",
+      "Engine retry/timeouts and all other architectural findings remain out of scope."
+    ],
+    "correction_commits": [
+      "5542c9ad00d5df547ccf16d14f657399dd96feef"
+    ]
+  }
 }

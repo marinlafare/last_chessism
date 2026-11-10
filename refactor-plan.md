@@ -388,3 +388,16 @@ Commit: `fix: isolate analysis progress by execution attempt`
 
 These corrections do not constitute acceptance of P1 #1. Formal acceptance is
 reserved for the subsequent focused independent review requested by the user.
+
+### Correction postflight
+
+- [x] Chunk 3 verified and committed separately as `5542c9a`.
+- [x] Chunk 4 focused verification: 60 checks passed, including all 47 P1
+  regressions (17 added by these corrections); 25 API checks pass on Python 3.10.
+- [x] Final API suite: 1,442 tests, exactly three existing failures, ten existing
+  errors and 276 unchanged skips. Worker: 287 tests, no failures/errors, seven skips.
+- [x] Six isolated PostgreSQL checks pass without skips; test services stopped.
+- [x] Final source hashes match the tested implementation. Compilation, whitespace
+  and scope checks pass; no new TODO/FIXME. No application edits after the gate.
+- [x] Correction implementation complete; no push, merge, deploy or P1 #2 work.
+- [ ] Formal acceptance: reserved for the user's focused independent review.
