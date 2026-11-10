@@ -7,7 +7,7 @@
   "branch": "refactor/p1-analysis-failure-propagation",
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
-  "current_chunk": 5,
+  "current_chunk": 6,
   "status": "in_progress",
   "preflight_passed": true,
   "initial_worktree_clean": true,
@@ -843,7 +843,7 @@
     {
       "id": 5,
       "name": "Protect analysis-session cleanup already in progress",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         4
       ],
@@ -888,10 +888,10 @@
         "all_disposable_containers_removed": true,
         "frontend_unchanged_baseline_reused": true
       },
-      "commit_sha": null,
+      "commit_sha": "49edfc5",
       "started_at": "2026-11-10T20:16:37.573043+00:00",
-      "completed_at": null,
-      "phase": "verified_pending_local_commit",
+      "completed_at": "2026-11-10T20:39:37.125541+00:00",
+      "phase": "completed",
       "red_evidence": {
         "report": "/tmp/chessism-p1-final-corrections/chunk5-red-results.json",
         "python_versions": [
@@ -959,14 +959,56 @@
     {
       "id": 6,
       "name": "Interpret Positions outcomes from authoritative ARQ results",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         5
       ],
       "verification": null,
       "commit_sha": null,
-      "started_at": null,
-      "completed_at": null
+      "started_at": "2026-11-10T20:39:37.125541+00:00",
+      "completed_at": null,
+      "phase": "full_verification_prepared",
+      "red_evidence": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk6-red-v2-result.json",
+        "original_implementation_commit": "49edfc5",
+        "original_source_hashes": "/tmp/chessism-p1-final-corrections/chunk6-original-implementation/sha256.json",
+        "tests": 34,
+        "new_regression_tests": 26,
+        "new_reproduced_failures": 21,
+        "passing_new_preservation_checks": 5,
+        "existing_checks_passed": 8,
+        "skips": 0,
+        "initial_red_report": "/tmp/chessism-p1-final-corrections/chunk6-red-result.json"
+      },
+      "focused_green": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk6-green-v2-result.json",
+        "tests": 34,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "source_snapshot": "/tmp/chessism-p1-final-corrections/chunk6-green-source-sha256.json"
+      },
+      "implementation": {
+        "production_files": [
+          "chessism_web/src/pages/positions/positionPageSupport.js",
+          "chessism_web/src/pages/positions/positionStatusFreshness.js",
+          "chessism_web/src/pages/positions/usePositionsPage.js"
+        ],
+        "shared_polling_transport_unchanged": true,
+        "polling_hook_unchanged": true,
+        "api_contract_unchanged": true,
+        "legacy_fixture_adjustments": "Two existing successful-completion fixtures now include actual API result.success=true; intended assertions retained."
+      },
+      "full_gate": {
+        "status": "prepared",
+        "runner": "/tmp/chessism-p1-final-corrections/chunk6_gate.py",
+        "expected_frontend_tests": 346,
+        "expected_frontend_passed": 342,
+        "expected_existing_frontend_failures": 4,
+        "expected_skips": 0,
+        "require_exact_existing_failure_details": true,
+        "backend_preservation": "Reuse the just-passed complete chunk 5 gate only after verifying all backend source hashes, exact exception/skip records and cached image identities remain unchanged. No backend code changed in chunk 6."
+      }
     }
   ],
   "baseline_diagnosis": {
@@ -1098,7 +1140,8 @@
       "chunk5_checks.py": "1b79e8b188cd3bdf46ba02716a5eba1d8df2c7e4b8864e71bbca2af2aaf77729",
       "chunk5_red_v2.py": "288b78e3362798730dfb435b587bb253531f5c6fd92c25feb1c9be1071678646",
       "chunk5_green.py": "8af1681667f0ffdad7253ac465b3b1f464ac9e4fcc2467bbc678e3ee1fd1fc9e",
-      "chunk5_gate.py": "aa5ecf2a099c4ff73f00adf3a1c8be749fee6d407cbe30fe71a237dc722ee804"
+      "chunk5_gate.py": "aa5ecf2a099c4ff73f00adf3a1c8be749fee6d407cbe30fe71a237dc722ee804",
+      "chunk6_gate.py": "c1717d4d8a72eb304cd5e2a9f424f6da744acfe934d9ca8cea1902d8b0fd7431"
     },
     "frontend_checks": [
       "node --test tests/*.test.mjs (all 64 files in Node 22)",
