@@ -446,17 +446,7 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": {
-    "kind": "correction1_full_gate",
-    "status": "launched",
-    "program": "/tmp/chessism-p1-verification/run_correction1_gate.py",
-    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
-    "report": "/tmp/chessism-p1-verification/correction1-gate-result.json",
-    "expected_api_tests": 1427,
-    "expected_worker_tests": 287,
-    "handoff": "Do not poll. Resume after the user reports completion; inspect the gate before committing chunk 3 or beginning chunk 4.",
-    "pid": 2448487
-  },
+  "pending_process": null,
   "chunks": [
     {
       "id": 1,
@@ -669,7 +659,7 @@
     {
       "id": 3,
       "name": "Give coordinator sole ownership of cancellation",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         2
       ],
@@ -701,11 +691,54 @@
           "log": "/tmp/chessism-p1-verification/correction1-python310-v2.log"
         },
         "compile": "passed",
-        "git_diff_check": "passed"
+        "git_diff_check": "passed",
+        "full_gate": {
+          "passed": true,
+          "comparisons": {
+            "main": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "python_matches_baseline": true,
+              "container_exit_matches_report": true
+            },
+            "worker": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "python_matches_baseline": true,
+              "container_exit_matches_report": true
+            }
+          },
+          "suite_results": {
+            "main": {
+              "tests_run": 1427,
+              "failures": 3,
+              "errors": 10,
+              "skipped": 276,
+              "elapsed_seconds": 49.70684242248535,
+              "exit_code": 1
+            },
+            "worker": {
+              "tests_run": 287,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 7,
+              "elapsed_seconds": 26.3460636138916,
+              "exit_code": 0
+            }
+          },
+          "redis_cleanup_exit_code": 0,
+          "elapsed_seconds": 78.05540657043457
+        }
       },
       "commit_sha": null,
       "started_at": "2026-11-09",
-      "completed_at": null
+      "completed_at": "2026-11-09"
     },
     {
       "id": 4,

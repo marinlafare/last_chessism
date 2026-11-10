@@ -511,13 +511,23 @@ async def _run_analysis_job(
         asyncio.create_task(_worker(i + 1))
         for i in range(worker_count)
     ]
+    worker_group = asyncio.gather(*worker_tasks)
     try:
-        await asyncio.gather(*worker_tasks)
+        # The coordinator owns cancellation; gather must not cancel workers first.
+        await asyncio.shield(worker_group)
     except BaseException as error:
         for task in worker_tasks:
             if not task.done():
                 task.cancel()
-        await asyncio.gather(*worker_tasks, return_exceptions=True)
+        cleanup = asyncio.gather(*worker_tasks, return_exceptions=True)
+        while not cleanup.done():
+            try:
+                await asyncio.shield(cleanup)
+            except asyncio.CancelledError:
+                # A later cancellation must not interrupt rollback/close already underway.
+                continue
+        # Observe the initial gather even when external cancellation won the race.
+        worker_group.exception()
         if isinstance(error, Exception):
             try:
                 await _write_job_progress(

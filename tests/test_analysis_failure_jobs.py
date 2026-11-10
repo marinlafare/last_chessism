@@ -324,6 +324,107 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
         self.sleep.assert_not_awaited()
         self.assertEqual(self.phases()[-1], "failed")
 
+    async def _assert_staggered_cancellation_cleanup(self, *, rollback_fails, cancel_again):
+        self.progress.reset_mock()
+        engine_entered, close_entered, release_close = (asyncio.Event() for _ in range(3))
+        close_finished, close_interrupted, draining = (asyncio.Event() for _ in range(3))
+        sessions = [session_for(), session_for()]
+        workers = []
+        engine_calls = 0
+        real_gather = asyncio.gather
+
+        def observe_drain(*tasks, **kwargs):
+            result = real_gather(*tasks, **kwargs)
+            if kwargs.get("return_exceptions"):
+                asyncio.get_running_loop().call_soon(draining.set)
+            return result
+
+        async def checkpoint():
+            # Run callbacks already queued by cancellation; no elapsed-time assumption.
+            ready = asyncio.Event()
+            asyncio.get_running_loop().call_soon(ready.set)
+            await ready.wait()
+
+        async def engine(*_args, **_kwargs):
+            nonlocal engine_calls
+            engine_calls += 1
+            if engine_calls == 2:
+                engine_entered.set()
+            await asyncio.Event().wait()
+
+        async def fetch(_limit):
+            index = len(workers)
+            workers.append(asyncio.current_task())
+            return sessions[index], ["fen"]
+
+        async def first_close():
+            await close_entered.wait()
+
+        async def second_close():
+            close_entered.set()
+            try:
+                await release_close.wait()
+            except asyncio.CancelledError:
+                close_interrupted.set()
+                raise
+            close_finished.set()
+
+        self.engine.side_effect = engine
+        sessions[0].close.side_effect = first_close
+        sessions[1].close.side_effect = second_close
+        if rollback_fails:
+            sessions[1].rollback.side_effect = OSError("rollback unavailable")
+
+        with patch.object(analysis, "ANALYSIS_CONCURRENCY", 2), \
+             patch.object(analysis.asyncio, "gather", observe_drain):
+            task = asyncio.create_task(self.run_job(fetch, total_fens_to_process=2))
+            try:
+                await asyncio.wait_for(engine_entered.wait(), 2)
+                task.cancel("external cancellation")
+                await asyncio.wait_for(close_entered.wait(), 2)
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(asyncio.shield(workers[0]), 2)
+                await asyncio.wait_for(draining.wait(), 2)
+                await checkpoint()
+                self.assertFalse(close_interrupted.is_set(), "sibling close was cancelled again")
+                self.assertFalse(task.done(), "coordinator finished before sibling cleanup")
+
+                if cancel_again:
+                    task.cancel("another external cancellation")
+                    await checkpoint()
+                    self.assertFalse(close_interrupted.is_set())
+                    self.assertFalse(task.done())
+
+                release_close.set()
+                with self.assertRaises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, 2)
+                self.assertTrue(task.cancelled())
+                self.assertTrue(close_finished.is_set())
+            finally:
+                release_close.set()
+                if not task.done():
+                    task.cancel()
+                await real_gather(task, return_exceptions=True)
+                await real_gather(*workers, return_exceptions=True)
+
+        for session in sessions:
+            session.rollback.assert_awaited_once()
+            session.close.assert_awaited_once()
+            session.commit.assert_not_awaited()
+        self.assertEqual(self.phases(), ["queued"])
+
+    async def test_external_cancellation_drains_two_staggered_closes(self):
+        for rollback_fails in (False, True):
+            with self.subTest(rollback_fails=rollback_fails):
+                await self._assert_staggered_cancellation_cleanup(
+                    rollback_fails=rollback_fails, cancel_again=False)
+
+    async def test_repeated_external_cancellation_does_not_interrupt_drain(self):
+        for rollback_fails in (False, True):
+            with self.subTest(rollback_fails=rollback_fails):
+                await self._assert_staggered_cancellation_cleanup(
+                    rollback_fails=rollback_fails, cancel_again=True)
+
     async def test_existing_processing_retry_behavior_is_preserved(self):
         for kind in ("no_result", "invalid_result", "write_failure"):
             with self.subTest(kind=kind):

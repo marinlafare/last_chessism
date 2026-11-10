@@ -405,3 +405,13 @@
   tracking documents committed for handoff. No polling or waiting.
 - Next: after user reports completion, inspect `correction1-gate-result.json`,
   resolve any genuine regressions, commit chunk 3, then begin chunk 4.
+
+## 2026-11-09 — Chunk 3 full verification passed
+
+- User reported completion. Reviewed saved gate: passed in 78.06 seconds. API
+  1,427 tests with exactly the established three failures, ten errors and 276
+  skips; worker 287 tests with zero failures/errors and seven unchanged skips.
+  Full failure/error traces (ignoring line numbers), skips, dependency versions
+  and Python version match baseline. All 32 P1 regression tests ran.
+- Isolated Redis stopped successfully. Final whitespace check passed. Preparing
+  the separate local cancellation correction commit; no push or merge.
