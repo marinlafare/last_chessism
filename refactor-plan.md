@@ -402,3 +402,123 @@ reserved for the subsequent focused independent review requested by the user.
   and scope checks pass; no new TODO/FIXME. No application edits after the gate.
 - [x] Correction implementation complete; no push, merge, deploy or P1 #2 work.
 - [ ] Formal acceptance: reserved for the user's focused independent review.
+
+
+## Final-review corrections A/B (authorized 2026-11-10)
+
+Source: /home/jon/.codex/attachments/b905d848-5fe4-4e7e-85a9-d7f10c531a13/Pasted text.txt.
+The user explicitly authorizes these two bounded implementation chunks; this is
+not a request for another general plan sign-off. The only repository is
+/home/jon/Desktop/workshop/last_chessism, branch refactor/p1-analysis-failure-propagation.
+Verified starting HEAD 24e830e and clean worktree. No other repository/worktree,
+production data, schemas, engine policies, P1 #2 or P1 #3 may be changed.
+
+### Entry and verification policy
+
+Preserve previous chunks and their evidence as historical implementation records.
+The final independent review returned REQUEST CORRECTIONS: cancellation can
+interrupt already-running closure, and Positions interprets telemetry/ARQ result
+availability as successful execution. Existing four correction commits remain.
+
+Before application changes, recapture the unchanged full API/worker baseline,
+existing 60 focused and 25 Python 3.10 checks, six disposable PostgreSQL checks,
+and frontend Node tests/architecture/source-size/build baseline. Compare API and
+worker failure/error/skip identities against correction2 evidence, including
+tracebacks with line numbers normalized. The explicitly retained API baseline is
+1,442 entries, 3 failures, 10 errors, 276 skips; worker 287, 0 failures/errors,
+7 skips. New tests must all pass; no silent weakening/skipping. Stop if new
+baseline problems prevent meaningful verification. No configured Python or plain
+JS type checker/linter; use Python syntax compilation, git diff --check and the
+existing frontend architecture/source-size checks and Vite build. Build output
+and isolated dependency installs stay in the temporary verification directory.
+
+### Chunk 5: Protect analysis-session cleanup already in progress
+
+Depends on: completed chunk 4 and reviewed entry baseline.
+Files: chessism_api/database/postgresql/ask_db.py;
+chessism_api/operations/analysis.py;
+chessism_api/database/postgresql/analysis_cleanup.py (new, only if a small shared
+protected-await helper is needed by both existing cleanup owners);
+tests/test_analysis_failure_jobs.py; tests/test_analysis_failure_selection.py;
+the three tracking documents.
+
+1. Add deterministic event-controlled regressions for worker closure and
+   selector closure after rollback failure, each interrupted by external
+   cancellation or sibling acquisition failure. Include repeated cancellation,
+   cleanup failure preserving the primary exception, and committed results.
+   Assert the coordinator remains pending until closure actually finishes.
+   Run and record the failures before application changes; no timed sleeps.
+2. Protect cleanup before its first awaited rollback/close can be interrupted.
+   A small shared helper may retain a cleanup task, shield every await, drain
+   after first/repeated cancellation and then propagate the original outcome.
+   Bare shield without draining the retained task is insufficient. Do not hide
+   genuine cleanup failures when no primary error exists. Always attempt close
+   after rollback failure. Keep selector versus worker ownership unchanged.
+3. Retain the coordinator's cancellation and drain behavior, acquisition outside
+   retries, prior commits, counters, SQL/claim rules and engine request policies.
+   Use Python 3.10 APIs; introduce no service layer or generic framework.
+4. Run focused regressions on Python 3.10 and the established runtime; run full
+   API/Redis/ARQ and worker comparisons plus PostgreSQL invariants. Verify source
+   hashes and no unrelated changes. Commit only after the gate is reviewed.
+
+Exit: all four reproduced orderings and repeated cancellation complete cleanup;
+original failure/cancellation survives; all prior P1 guarantees remain verified.
+Commit: fix: protect analysis session cleanup already in progress
+
+### Chunk 6: Interpret Positions outcomes from authoritative ARQ results
+
+Depends on: verified and committed chunk 5.
+Files: chessism_web/src/pages/positions/positionPageSupport.js;
+chessism_web/src/pages/positions/positionStatusFreshness.js;
+chessism_web/src/pages/positions/usePositionStatusPolling.js;
+chessism_web/src/pages/positions/usePositionsPage.js;
+chessism_web/tests/positionsProgress.test.mjs;
+chessism_web/tests/positionStatusFreshness.test.mjs;
+chessism_web/tests/positionJobOutcomes.test.mjs (new);
+chessism_web/tests/positionJobPolling.test.mjs (new if needed);
+the three tracking documents. A file in this list changes only if needed for the
+status interpretation, outcome presentation or polling lifecycle. Shared polling
+transport and unrelated pages remain unchanged; do not start P1 #3.
+
+1. Confirm actual jobs API shapes: status=complete denotes result availability;
+   result.success is the execution outcome. Retained-history endpoint already
+   derives its terminal status from that outcome. No new wire fields or text
+   inference. Inspect queued/deferred/running, cancellation and missing-result
+   states before defining the minimal Positions-specific interpretation.
+2. Add failing cases for failed reset retaining old completed progress, stale
+   completion while queued/running, unsuccessful results with completed/missing
+   progress, success, temporarily missing progress and unresolved result.
+   Exercise polling continuation/termination through the actual shared polling
+   primitive and Positions decisions using a deterministic fake clock. Cover
+   freshness checks so stale telemetry cannot hide a confirmed result/retry.
+3. Give confirmed execution outcomes precedence; never infer success from ARQ
+   status=complete alone. Keep jobs with unresolved outcomes active and polling;
+   prevent stale terminal progress from finalizing an active queue execution.
+   Preserve valid intermediate phases and explicit unsuccessful/cancelled
+   outcomes. Render a failure detail from the actual response contract, without
+   claiming success or scheduling successful completion dismissal.
+4. Adjust existing fixtures only when they falsely equate a complete queue
+   status with success; retain their intended assertions and document why.
+   No broad polling transport redesign or account/project work.
+5. Run all frontend Node tests, relevant polling/progress tests, existing
+   architecture/source-size checks and production build into temporary output.
+   Run the final backend/Python 3.10/Redis/PostgreSQL preservation gate; compare
+   all broader results to entry baseline, record source hashes, then commit.
+
+Exit: actual outcome determines completion/failure, unresolved jobs keep polling,
+all required frontend cases pass, and backend P1 guarantees remain unchanged.
+Commit: fix: make Positions use confirmed ARQ execution outcomes
+
+### Final handoff
+
+All long jobs use /tmp/chessism-p1-final-corrections/monitor.py with an in-place
+120-second display that remains open after completion. Show one watch command,
+launch detached, record PID, and immediately end the turn; do not poll or wait.
+Preserve /tmp/chessism-p1-verification evidence. Tests use fresh uniquely labelled
+containers, no external network, read-only source and explicit synthetic settings;
+only isolated frontend dependency preparation may access the package registry.
+Stop after two bounded verification-fix attempts for a chunk. Commit verified
+chunks separately and record completion with a tracking-only follow-up if needed.
+Report findings, exact red/green evidence, compatibility, baseline debt and
+remaining production/real-engine limits. Do not declare P1 #1 accepted, push,
+merge, deploy or begin another task; independent acceptance review follows.

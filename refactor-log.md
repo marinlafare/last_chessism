@@ -519,3 +519,13 @@
   Monitor now reports implemented corrections with independent review pending.
 - Stop here. P1 #1 has not been formally accepted; the next step belongs to the
   focused independent review requested by the user. Do not proceed to P1 #2.
+
+## 2026-11-10 — Final acceptance returned REQUEST CORRECTIONS; A/B authorized
+
+Verified repository /home/jon/Desktop/workshop/last_chessism, branch refactor/p1-analysis-failure-propagation, HEAD 24e830e, clean worktree before any change. User source: /home/jon/.codex/attachments/b905d848-5fe4-4e7e-85a9-d7f10c531a13/Pasted text.txt. Work stays exclusively in Chessism.
+
+Independent review reproduced four cancellation orderings on Python 3.10.22 where an already-running close is interrupted; existing cancellation tests start cleanup after cancellation. It also executed the actual Positions status helpers and demonstrated stale or absent progress can be mistaken for successful completion despite active/unsuccessful ARQ state. The existing backend selection propagation and successful-reset attempt isolation remain correct.
+
+Added two explicit chunks (5 protected cleanup; 6 authoritative Positions outcome handling), preserving prior history and baseline exceptions. Preparing a fresh isolated baseline before tests-first implementation. No application/test source changed yet. Existing evidence at /tmp/chessism-p1-verification is preserved; new runtime is /tmp/chessism-p1-final-corrections. No other repository, production, schema, engine policy, P1 #2/#3, deployment or push/merge work.
+
+Prepared /tmp/chessism-p1-final-corrections/monitor.py and baseline.py. The runner uses fresh labelled Redis/PostgreSQL services, private Unix sockets, no test-container network, read-only repository mounts, and the exact previous Python/dependency images. It compares full failure/error/skip signatures to correction2, runs the 60/25/6 checks, all 64 frontend Node test files and existing architecture/size checks, then installs locked frontend dependencies in temporary storage and builds an ephemeral source copy. No repository node_modules or build artifacts are created. Hashed 1,386 source/config files; runner scripts parse successfully. Baseline not yet launched at this entry.

@@ -6,10 +6,10 @@
   "baseline_commit": "4f77d15df240a06efc7904496af7ec5e7a7b89cb",
   "branch": "refactor/p1-analysis-failure-propagation",
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
-  "total_chunks": 4,
-  "current_chunk": 4,
-  "status": "completed",
-  "preflight_passed": true,
+  "total_chunks": 6,
+  "current_chunk": 5,
+  "status": "preflight",
+  "preflight_passed": false,
   "initial_worktree_clean": true,
   "verification": {
     "main_tests": "python -B -m unittest discover -s tests -p 'test*.py' -v",
@@ -839,6 +839,30 @@
       "commit_sha": "7f304be35da9fc5b10ac6a36055ad86c83710249",
       "started_at": "2026-11-09",
       "completed_at": "2026-11-09"
+    },
+    {
+      "id": 5,
+      "name": "Protect analysis-session cleanup already in progress",
+      "status": "pending",
+      "depends_on": [
+        4
+      ],
+      "verification": null,
+      "commit_sha": null,
+      "started_at": null,
+      "completed_at": null
+    },
+    {
+      "id": 6,
+      "name": "Interpret Positions outcomes from authoritative ARQ results",
+      "status": "pending",
+      "depends_on": [
+        5
+      ],
+      "verification": null,
+      "commit_sha": null,
+      "started_at": null,
+      "completed_at": null
     }
   ],
   "baseline_diagnosis": {
@@ -891,12 +915,11 @@
     "working_tree_clean_after_implementation_commit": true
   },
   "original_completed_at": "2026-11-09",
-  "acceptance": "pending_independent_review",
+  "acceptance": "request_corrections",
   "correction_source": "/home/jon/.codex/attachments/c229c4e7-89a8-479c-892b-137a8cb77a95/Pasted text.txt",
   "correction_baseline_commit": "b81b6ea",
   "correction_authorization": "User explicitly requested both reviewed corrections, separate local commits, no push/merge/deploy; existing baseline exception and monitor handoffs persist.",
-  "completed_at": "2026-11-09",
-  "postflight": {
+  "previous_postflight": {
     "scope": "Two blocking review corrections implemented and verified; formal P1 #1 acceptance pending independent review.",
     "new_tests_in_corrections": 17,
     "total_p1_regressions": 47,
@@ -949,5 +972,31 @@
       "7f304be35da9fc5b10ac6a36055ad86c83710249"
     ],
     "working_tree_clean_after_implementation_commit": true
+  },
+  "previous_completed_at": "2026-11-09",
+  "final_review_corrections": {
+    "authorization_source": "/home/jon/.codex/attachments/b905d848-5fe4-4e7e-85a9-d7f10c531a13/Pasted text.txt",
+    "starting_head": "24e830e308f69b008e8d1d09762925cabf8ad0d3",
+    "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
+    "verified_branch": "refactor/p1-analysis-failure-propagation",
+    "initial_worktree_clean": true,
+    "baseline_status": "prepared",
+    "runtime_directory": "/tmp/chessism-p1-final-corrections",
+    "application_changes_started": false,
+    "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
+    "started_at": "2026-11-10T19:48:05.527608+00:00",
+    "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py",
+    "source_snapshot_files": 1386,
+    "runner_sha256": {
+      "monitor.py": "a675a0fdbfa20ab020ad66567808c8558146319994c996dc14a3b98541f38ad5",
+      "baseline.py": "99b0ecd04212e1aaeb0d9804c02580bc7b3e3d85330a504971c9ff14ab4e4248"
+    },
+    "frontend_checks": [
+      "node --test tests/*.test.mjs (all 64 files in Node 22)",
+      "node scripts/check-page-boundaries.mjs",
+      "node scripts/check-source-size.mjs",
+      "locked npm ci in temporary storage; Vite build from ephemeral copy of verified source into temporary output"
+    ],
+    "baseline_reference": "/tmp/chessism-p1-verification/correction2-gate-result.json"
   }
 }
