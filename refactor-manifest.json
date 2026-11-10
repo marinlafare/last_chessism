@@ -980,7 +980,7 @@
     "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
     "verified_branch": "refactor/p1-analysis-failure-propagation",
     "initial_worktree_clean": true,
-    "baseline_status": "frontend_baseline_completion_prepared",
+    "baseline_status": "frontend_runner_corrected_dependency_probe_passed",
     "runtime_directory": "/tmp/chessism-p1-final-corrections",
     "application_changes_started": false,
     "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
@@ -990,7 +990,7 @@
     "runner_sha256": {
       "monitor.py": "bef55d00858c1b35d67a49e975ac42217fe72770b8e11eba700c1c66c5e1ee69",
       "baseline.py": "c5f33ebd56f43e6d025e5da8421cc89c658275669183b8b5c2251d4a0cd989aa",
-      "frontend_baseline.py": "57c671081f0289135bb27865df62863d3b0754823a3015672a671db7f3b6a9e1"
+      "frontend_baseline.py": "6319f3e24ed1c9018aba8b771419e7babf72eaa25130508c0b13c3dd38844833"
     },
     "frontend_checks": [
       "node --test tests/*.test.mjs (all 64 files in Node 22)",
@@ -1066,9 +1066,45 @@
     },
     "frontend_completion": {
       "runner": "/tmp/chessism-p1-final-corrections/frontend_baseline.py",
-      "status": "prepared",
+      "status": "completed_with_runner_defects",
       "backend_tests_will_not_be_repeated": true,
-      "isolated_source_copy": "Exact hashed source inputs copied into disposable container tmpfs, including the existing hegel_.md existence condition; all original files preserved.",
+      "isolated_source_copy": "Prior copy preserved tracked files but incorrectly omitted existing ignored hegel_.md directory; corrected before accepting frontend evidence.",
+      "existing_frontend_failures_not_waived": true,
+      "launch": {
+        "pid": 1613731,
+        "started_at": "2026-11-10T20:03:05.639236+00:00",
+        "tracking_commit": "fc83b7c",
+        "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+      }
+    },
+    "frontend_attempt_1": {
+      "archive": "/tmp/chessism-p1-final-corrections/frontend-attempt-1",
+      "elapsed_seconds": 20.107004642486572,
+      "dependency_install_passed": true,
+      "architecture_and_size_passed": true,
+      "valid_full_test_baseline": false,
+      "setup_defects": [
+        "Dependency directory mounted as /deps rather than /deps/node_modules prevented transitive module resolution",
+        "Source copy omitted the existing ignored hegel_.md directory and incorrectly hid its navigation assertion failure"
+      ],
+      "source_unchanged": true,
+      "all_owned_containers_removed": true
+    },
+    "frontend_retry": {
+      "status": "prepared",
+      "reuses": [
+        "All passing backend evidence",
+        "Installed locked frontend dependencies"
+      ],
+      "source_file_count": 1696,
+      "preserved_directory_inputs": [
+        "hegel_.md"
+      ],
+      "dependency_probe": "Actual Vite and opening-map module imports passed in a network-disabled Node 22 container; probe removed",
+      "pending": [
+        "Complete Node frontend baseline",
+        "Production frontend build"
+      ],
       "existing_frontend_failures_not_waived": true
     }
   }
