@@ -208,3 +208,52 @@
   baseline. The runner stopped the isolated Redis successfully.
 - Reviewed the production diff: only the existing Stockfish progress Lua changes.
   Committing chunk 1 as planned; its terminal/reset behavior is verified.
+
+## 2026-11-09 — Chunk 2 implementation and focused verification
+
+- Chunk 1 committed as `f165434`. Started chunk 2 only after its full gate passed.
+- Added 20 selector/coordinator regression tests with deterministic event-based
+  concurrency and bounded hang guards. Red run produced 52 failed assertions
+  (including subtests) and 11 errors: suppressed selection failures, cleanup
+  masking original errors, cancellation leaks and successful finalization.
+  Output: `/tmp/chessism-p1-verification/failure-red.log`.
+- Added two real ARQ/Redis tests. Before the fix, the failure case demonstrated
+  `result.success == True` after a database exception; genuine empty success
+  already passed. Output: `/tmp/chessism-p1-verification/arq-red.log`.
+- Removed `raise_errors` from all three selectors and all audited callers.
+  Selectors now propagate failures/cancellation and release sessions they have
+  not handed off. A small private cleanup helper always attempts close if
+  rollback fails; active selection errors remain the propagated exception.
+- Moved acquisition outside processing retries. Worker cancellation/permanent
+  engine errors preserve their original exceptions through rollback/close errors.
+  Coordinator awaits sibling cancellation/cleanup, publishes failure best-effort,
+  and rethrows. External cancellation is not published as a database failure.
+- Accounted for acknowledged commits before awaiting summary refresh: a cancelled
+  sibling cannot lose its committed batch from the final progress counters.
+- Focused green run: all 22 tests passed in 1.52 seconds, including actual global,
+  player, all/player loop and frozen-game callbacks, empty success, ARQ failed
+  results, offsets, sibling cleanup ordering, reporting failures, cancellation,
+  and existing no-result/invalid-result/write-error retry behavior.
+  Output: `/tmp/chessism-p1-verification/failure-green.log`.
+- AST checks confirm all selection query constructions and the player SQL builder
+  are unchanged. Every cloud/benchmark/integration-test caller change only removes
+  the obsolete keyword. Engine HTTP retry/timeout handling and all four public
+  entry-point function bodies are unchanged. Compilation/diff whitespace checks
+  passed; no configured Python lint/type-check commands exist.
+- Prepared full API/worker baseline comparison plus six existing PostgreSQL tests
+  for locks, disjoint/cloud reservations, fresh eligibility and stale statistics.
+  All services use isolated Unix sockets, temporary data and no network during
+  tests. API suite should run 1,425 tests (30 new across both chunks); worker 287.
+  PostgreSQL duration has no established estimate, so overall ETA is unavailable.
+
+## 2026-11-09 — Chunk 2 long verification handoff
+
+- Started detached runner PID `1858391`. The existing monitor command remains
+  `python3 /tmp/chessism-p1-verification/monitor.py`, refreshing one display every
+  120 seconds. It shows the current suite/test, elapsed time and stage estimate
+  where available. No polling or waiting performed on this long process.
+- Session ended. Current state: chunk 1 verified/committed; chunk 2 implemented
+  with passing focused regressions, full suites/PostgreSQL gate pending. Chunk 2
+  source/test changes remain uncommitted until gate review; tracking files are
+  committed for handoff. Next: inspect all saved results after the user's report,
+  resolve any actual regressions, then commit chunk 2 and complete postflight.

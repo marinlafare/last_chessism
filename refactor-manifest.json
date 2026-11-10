@@ -7,8 +7,8 @@
   "branch": "refactor/p1-analysis-failure-propagation",
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
-  "current_chunk": 1,
-  "status": "chunk1_verified",
+  "current_chunk": 2,
+  "status": "awaiting_chunk2_gate_result",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -446,7 +446,36 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": null,
+  "pending_process": {
+    "kind": "chunk2_full_suite_and_postgres_gate",
+    "program": "/tmp/chessism-p1-verification/run_chunk2_gate.py",
+    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
+    "monitor_refresh_seconds": 120,
+    "status_file": "/tmp/chessism-p1-verification/status.json",
+    "result_file": "/tmp/chessism-p1-verification/chunk2-gate-result.json",
+    "result_files": [
+      "/tmp/chessism-p1-verification/chunk2-main-result.json",
+      "/tmp/chessism-p1-verification/chunk2-worker-result.json",
+      "/tmp/chessism-p1-verification/chunk2-postgres-result.json"
+    ],
+    "container_names": [
+      "chessism-p1-chunk2-main",
+      "chessism-p1-chunk2-worker",
+      "chessism-p1-chunk2-postgres",
+      "chessism-p1-chunk2-postgres-service"
+    ],
+    "redis_container": "chessism-p1-isolated-redis",
+    "estimated_seconds": null,
+    "estimate_basis": "Previous API/worker suites took 56 and 27 seconds; PostgreSQL duration unknown.",
+    "launch_argv": [
+      "python3",
+      "-B",
+      "/tmp/chessism-p1-verification/run_chunk2_gate.py"
+    ],
+    "launched": true,
+    "handoff": "Do not poll or wait. After user reports completion, inspect all comparisons and PostgreSQL results. Commit chunk 2 only after the gate passes; then finish postflight and final report.",
+    "pid": 1858391
+  },
   "chunks": [
     {
       "id": 1,
@@ -512,20 +541,45 @@
         },
         "full_gate_report": "/tmp/chessism-p1-verification/chunk1-gate-result.json"
       },
-      "commit_sha": null,
+      "commit_sha": "f165434e3eb617f28e96081c60d62c0316225224",
       "started_at": "2026-11-09",
       "completed_at": "2026-11-09"
     },
     {
       "id": 2,
       "name": "Propagate selection failures and finalize failed jobs",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         1
       ],
-      "verification": null,
+      "verification": {
+        "red_unit": {
+          "tests": 20,
+          "failures_including_subtests": 52,
+          "errors": 11,
+          "log": "/tmp/chessism-p1-verification/failure-red.log"
+        },
+        "red_arq": {
+          "tests": 2,
+          "failures": 1,
+          "errors": 0,
+          "finding": "Database failure stored result.success=True",
+          "log": "/tmp/chessism-p1-verification/arq-red.log"
+        },
+        "green": {
+          "tests": 22,
+          "failures": 0,
+          "errors": 0,
+          "elapsed_seconds": 1.519,
+          "log": "/tmp/chessism-p1-verification/failure-green.log"
+        },
+        "invariants": "AST comparisons confirm unchanged query constructions, player SQL builder, public entry-point bodies and engine request policy; all necessary caller changes only remove raise_errors.",
+        "compile_changed_sources": "passed",
+        "git_diff_check": "passed",
+        "full_gate": "pending"
+      },
       "commit_sha": null,
-      "started_at": null,
+      "started_at": "2026-11-09",
       "completed_at": null
     }
   ],
