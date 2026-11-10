@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 5,
-  "status": "preflight",
+  "status": "blocked",
   "preflight_passed": false,
   "initial_worktree_clean": true,
   "verification": {
@@ -980,7 +980,7 @@
     "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
     "verified_branch": "refactor/p1-analysis-failure-propagation",
     "initial_worktree_clean": true,
-    "baseline_status": "frontend_runner_corrected_dependency_probe_passed",
+    "baseline_status": "verification_complete_awaiting_frontend_baseline_exception",
     "runtime_directory": "/tmp/chessism-p1-final-corrections",
     "application_changes_started": false,
     "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
@@ -1091,7 +1091,7 @@
       "all_owned_containers_removed": true
     },
     "frontend_retry": {
-      "status": "prepared",
+      "status": "completed",
       "reuses": [
         "All passing backend evidence",
         "Installed locked frontend dependencies"
@@ -1105,7 +1105,48 @@
         "Complete Node frontend baseline",
         "Production frontend build"
       ],
-      "existing_frontend_failures_not_waived": true
+      "existing_frontend_failures_not_waived": true,
+      "launch": {
+        "pid": 1628900,
+        "started_at": "2026-11-10T20:09:16.882036+00:00",
+        "tracking_commit": "e562343",
+        "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+      }
+    },
+    "frontend_baseline": {
+      "evidence": "/tmp/chessism-p1-final-corrections/frontend-baseline-complete",
+      "tests": 320,
+      "passed": 316,
+      "failed": 4,
+      "errors": 0,
+      "skipped": 0,
+      "cancelled": 0,
+      "failed_tests": [
+        "registered target annotations stay in their owning page scopes",
+        "individual home controls seed saved shared styles once, without relinking drafts",
+        "game review owns its targets and preserves old styles without remaining linked",
+        "Hegel page, document, navigation, asset alias and Markdown-only dependencies are removed"
+      ],
+      "architecture_passed": true,
+      "source_size_passed": true,
+      "build_passed": true,
+      "dependency_loading_errors": false,
+      "source_hashes_verified": {
+        "application_config": 1386,
+        "frontend_input_files": 1696
+      },
+      "existing_ignored_directory_preserved": "hegel_.md",
+      "all_owned_containers_removed": true,
+      "result_sha256": "f2eb1a1a405dd00210892c9488fe8784b34db39a7b37cf1c8eb7ca7b75289d79",
+      "reviewed_at": "2026-11-10T20:13:00.958241+00:00",
+      "baseline_exception_approved": false
     }
+  },
+  "blocker": {
+    "reason": "Four verified preexisting frontend assertion failures are outside the explicitly approved backend baseline exception.",
+    "requested_decision": "Permit these four exact unchanged frontend failures as baseline debt while requiring every new regression to pass and no additional failure/error/skip.",
+    "application_changes_started": false,
+    "skill_rule": "Chunk entry check: Tests passing? If not: STOP. Fix or escalate to user.",
+    "skill_source": "/home/jon/.agents/skills/architectural-refactor/SKILL.md"
   }
 }
