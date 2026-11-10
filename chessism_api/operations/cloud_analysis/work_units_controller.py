@@ -36,9 +36,9 @@ async def reserve_unit(job, root, launch, vm, limit):
             session, fens = await get_game_queue_fens(job.id, selection['game_links'], limit, timings=timings)
         else:
             if selection.get('player_name'):
-                session, fens = await get_player_fens_for_analysis(selection['player_name'], limit, raise_errors=True, timings=timings)
+                session, fens = await get_player_fens_for_analysis(selection['player_name'], limit, timings=timings)
             else:
-                session, fens = await get_fens_for_analysis(limit, raise_errors=True, timings=timings)
+                session, fens = await get_fens_for_analysis(limit, timings=timings)
         if session is None:
             return 0
         with timings.measure('prepare_validate'):

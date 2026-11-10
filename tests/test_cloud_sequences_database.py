@@ -96,7 +96,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         rows = await sequence.cycles(self.job.id)
         self.assertEqual([r.position_count for _,r in rows], [2,2])
         self.assertEqual([r.status for _,r in rows], ['reserved','reserved'])
-        local,fens = await existing.get_fens_for_analysis(10, raise_errors=True)
+        local,fens = await existing.get_fens_for_analysis(10)
         self.assertIsNone(local)
         self.assertFalse(fens)
         async with AsyncDBSession() as session:

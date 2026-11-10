@@ -269,3 +269,25 @@ Commit: `fix: fail local analysis when database batch selection fails`
   red/green evidence, validation gaps, risks and scope compliance.
 - Before ending any turn for a long-running check, record current progress and
   the monitoring command. Do not claim completion while verification is pending.
+
+## Completion verification
+
+- [x] Both implementation chunks meet the approved verification gate.
+- [x] Thirty new regressions pass, including real Redis/Lua and ARQ execution.
+- [x] Six existing isolated PostgreSQL locking/claim/recheck tests pass with no skips.
+- [x] Full API suite: 1,425 tests, exactly the existing three failures and ten
+  errors, 276 unchanged skips. No new failure/error/skip identities.
+- [x] Worker suite: 287 tests, zero failures/errors, seven unchanged skips.
+- [x] Query construction, ordering, locks, public entry points and engine request
+  policies verified unchanged; required caller edits only remove `raise_errors`.
+- [x] Changed Python sources compile; whitespace checks pass; no new TODO/FIXME.
+- [x] Test services stopped. No deployment or production data/schema changes.
+- [x] Final full-suite results reused because subsequent edits affect only the
+  temporary PostgreSQL harness and tracking documents, not application/tests.
+
+Remaining validation limits: production/GCP and real Stockfish execution were
+not exercised. Opt-in tests outside the six selected PostgreSQL checks remain
+skipped. The unrelated baseline failures remain as explicitly approved. There is
+no configured Python linter/type checker. Redis progress publication remains
+best-effort; ARQ's stored unsuccessful result is authoritative if Redis reporting
+is unavailable. Engine retry limits/timeouts remain the separate P1 #2 concern.

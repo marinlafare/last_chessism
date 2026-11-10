@@ -288,3 +288,44 @@
   passed, isolated PostgreSQL check pending. No new application changes or
   polling/waiting. Next: inspect the PostgreSQL result after the user's completion
   report, then finish verification/commit/postflight if all required checks pass.
+
+## 2026-11-09 — Chunk 2 verified and final scope review
+
+- User reported exit 0. All six existing isolated PostgreSQL tests passed in
+  8.91 seconds, with no skips: local locks versus cloud claims, disjoint cloud
+  reservations, fresh recheck of scored positions, frozen-sequence claims,
+  work-unit claims, and bounded rechecking with stale statistics/generic plans.
+  PostgreSQL-only retry including setup/cleanup took 11.38 seconds.
+- Combined final gate passed. Retained unchanged API/worker results: API 1,425
+  tests, exactly the known 3 failures/10 errors and 276 skips; worker 287 tests,
+  zero failures/errors and 7 skips. All 30 new tests ran and passed. Isolated
+  Redis and PostgreSQL test services were stopped successfully.
+- Final scope/source compilation/whitespace checks passed. No new TODO/FIXME.
+  No application/test edits occurred after the verified full-suite run; only
+  temporary PostgreSQL setup and tracking documents changed afterward.
+- Root cause resolved: selectors used the empty result for operational failures,
+  while the worker's processing retry handler also intercepted propagated
+  acquisition failures. Strict selection and coordinator failure handling now
+  preserve failure through to an unsuccessful ARQ result.
+- Clean Architecture responsibilities are explicit: selection owns cleanup until
+  session handoff; workers own returned transactions; coordinator owns failure
+  finalization; Stockfish telemetry respects final job state. Kent Beck-style
+  simplification removes the suppression switch everywhere and retains existing
+  callbacks/return tuples, adding only one small shared selection cleanup helper.
+- Production implementation: `chessism_api/database/postgresql/ask_db.py`,
+  `chessism_api/operations/analysis.py`, `stockfish-service/routers/analysis.py`.
+  Keyword-only caller edits: cloud `controller.py`, `input_preparation.py`,
+  `work_units_controller.py`; `stockfish-batch-worker/benchmark_vm16/large_database.py`;
+  `tests/test_cloud_analysis_database.py`, `test_cloud_sequences_database.py`,
+  `test_cloud_work_units_database.py`, `check_cloud_game_queue_postgres.py`.
+- New regression files: `tests/test_analysis_terminal_progress.py` (8),
+  `test_analysis_failure_selection.py` (8), `test_analysis_failure_jobs.py` (12),
+  `test_analysis_failure_arq.py` (2), with `analysis_failure_test_support.py`
+  providing explicit isolated Redis access and collision-free service import.
+- Known limits: unrelated baseline failures and other opt-in integration skips
+  remain; no production/GCP or real Stockfish run; no configured Python lint/type
+  checker. Redis reporting remains best-effort, with ARQ failure authoritative.
+- No design deviation in application behavior. Verification adjustments were
+  the explicitly approved baseline-comparison gate and isolated environment fixes.
+  P1 #2, schema migrations, production data, deployment and unrelated refactors
+  were excluded. Preparing the planned chunk 2 implementation commit.

@@ -129,11 +129,11 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         return contract, encode({"fingerprint": contract["fingerprint"], "records": records})
 
     async def test_cloud_claims_are_visible_before_first_result_and_local_locks_are_skipped(self):
-        local, local_fens = await get_fens_for_analysis(1, raise_errors=True)
+        local, local_fens = await get_fens_for_analysis(1)
         try:
             run = await self.reserved_run(1)
             self.assertNotIn(run.positions[0]["fen"], local_fens)
-            second_local, second_fens = await get_fens_for_analysis(3, raise_errors=True)
+            second_local, second_fens = await get_fens_for_analysis(3)
             try:
                 self.assertEqual(len(second_fens), 1)
                 self.assertNotIn(run.positions[0]["fen"], second_fens)

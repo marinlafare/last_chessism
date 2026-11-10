@@ -6,6 +6,7 @@ import json
 import math
 import time
 import os
+import sys
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, insert
@@ -378,14 +379,12 @@ async def _run_analysis_job(
 
                 print(f"[{job_id}] Worker {worker_id} processing batch...", flush=True)
 
-                fens_to_process = None
-                session: Optional[AsyncSession] = None
                 reserved_fens = current_batch_size
                 committed = False
+                # Acquisition failures are fatal; processing retries start after handoff.
+                session, fens_to_process = await fetch_batch(current_batch_size)
 
                 try:
-                    session, fens_to_process = await fetch_batch(current_batch_size)
-
                     if not fens_to_process or session is None:
                         async with counter_lock:
                             total_claimed -= reserved_fens
@@ -452,16 +451,16 @@ async def _run_analysis_job(
                     # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'
                     await session.commit()
                     committed = True
+                    # Count acknowledged commits before an awaited summary update can be cancelled.
+                    fens_in_batch = len(fens_to_process)
+                    total_engine_processed += len(engine_results)
+                    total_processed += fens_in_batch
+                    total_failed_fens += max(0, fens_in_batch - len(db_ready_data))
+                    total_so_far = total_processed
                     await _increment_summary_for_analysis_results(db_ready_data)
 
                     # --- MODIFIED: Calculate time per FEN ---
-                    fens_in_batch = len(fens_to_process)
                     time_per_fen = (batch_duration / fens_in_batch) if fens_in_batch > 0 else 0
-                    async with counter_lock:
-                        total_engine_processed += len(engine_results)
-                        total_processed += fens_in_batch
-                        total_failed_fens += max(0, fens_in_batch - len(db_ready_data))
-                        total_so_far = total_processed
 
                     print(f"[{job_id}] Batch complete. Total FENs: {total_so_far}. Batch Time: {batch_duration:.2f}s ({time_per_fen:.2f} s/FEN)", flush=True)
                     await _write_job_progress(
@@ -476,21 +475,16 @@ async def _run_analysis_job(
                         ) + f"committed {total_so_far}/{total_fens_to_process}"
                     )
 
-                except EngineServiceRequestError as e:
-                    print(f"CRITICAL: Permanent error in {job_id}: {e}", flush=True)
-                    async with counter_lock:
-                        total_failed_batches += 1
-                    if session:
-                        await session.rollback()
-                    await _write_job_progress(
-                        ctx,
-                        arq_job_id,
-                        total=overall_progress_total,
-                        processed=progress_offset + total_engine_processed,
-                        failed=failed_offset + total_failed_fens,
-                        phase="failed",
-                        detail=str(e),
-                    )
+                except (EngineServiceRequestError, asyncio.CancelledError) as e:
+                    if isinstance(e, EngineServiceRequestError):
+                        print(f"CRITICAL: Permanent error in {job_id}: {e}", flush=True)
+                        async with counter_lock:
+                            total_failed_batches += 1
+                    if session is not None and not committed:
+                        try:
+                            await session.rollback()
+                        except BaseException as error:
+                            print(f"Failed to roll back analysis session: {error!r}", flush=True)
                     raise
                 except Exception as e:
                     print(f"CRITICAL: Unhandled error in {job_id} analysis loop: {repr(e)}", flush=True)
@@ -502,8 +496,15 @@ async def _run_analysis_job(
                         await session.rollback() # Ensure locks are released on failure
                     await asyncio.sleep(1)
                 finally:
-                    if session:
-                        await session.close()
+                    if session is not None:
+                        # A close failure must not replace a fatal error or cancellation.
+                        active_error = sys.exc_info()[1]
+                        try:
+                            await session.close()
+                        except BaseException as error:
+                            if active_error is None:
+                                raise
+                            print(f"Failed to close analysis session: {error!r}", flush=True)
 
     print(f"[{job_id}] Concurrency: {worker_count}", flush=True)
     worker_tasks = [
@@ -512,11 +513,24 @@ async def _run_analysis_job(
     ]
     try:
         await asyncio.gather(*worker_tasks)
-    except BaseException:
+    except BaseException as error:
         for task in worker_tasks:
             if not task.done():
                 task.cancel()
         await asyncio.gather(*worker_tasks, return_exceptions=True)
+        if isinstance(error, Exception):
+            try:
+                await _write_job_progress(
+                    ctx,
+                    arq_job_id,
+                    total=overall_progress_total,
+                    processed=progress_offset + total_engine_processed,
+                    failed=failed_offset + total_failed_fens,
+                    phase="failed",
+                    detail=str(error),
+                )
+            except Exception as progress_error:
+                print(f"Failed to publish analysis failure: {progress_error!r}", flush=True)
         raise
 
     job_end_time = time.time()

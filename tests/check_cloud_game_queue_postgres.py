@@ -71,7 +71,7 @@ async def count_rows(conn, job):
 async def correctness(engine, conn, factory):
     job, run = await new_job(factory, [11,22,11])
     timings = PreparationTimings()
-    old, expected = await get_game_set_fens_for_analysis([11,22,11], 50, raise_errors=True)
+    old, expected = await get_game_set_fens_for_analysis([11,22,11], 50)
     await old.close()
     assert expected == ['a-shared','z-shared','m-white','n-black'], expected
     session, actual = await queue.get_game_queue_fens(job.id, [11,22,11], 2, timings=timings)
@@ -275,7 +275,7 @@ async def benchmark(engine,conn,factory):
     outputs=[]; started=time.monotonic()
     for _ in range(size//batch):
         await conn.execute('ANALYZE cloud_fen_claim')
-        session,fens=await get_game_set_fens_for_analysis(links,batch,raise_errors=True)
+        session,fens=await get_game_set_fens_for_analysis(links,batch)
         outputs.extend(fens)
         await claim(session,fens,old_run)
     old_seconds=time.monotonic()-started

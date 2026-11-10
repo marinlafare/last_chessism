@@ -3520,10 +3520,25 @@ async def get_scored_game_analysis_page(
     }
 
 
-async def get_fens_for_analysis(limit: int, *, raise_errors: bool = False, timings=None) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
+async def _release_unclaimed_analysis_session(session: AsyncSession) -> None:
+    """Release a selection that was not handed off, preserving rollback failures."""
+    try:
+        await session.rollback()
+    except BaseException:
+        try:
+            await session.close()
+        except BaseException as error:
+            print(f"Failed to close analysis selection session: {error!r}", flush=True)
+        raise
+    await session.close()
+
+
+async def get_fens_for_analysis(limit: int, *, timings=None) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of FENs that need analysis.
     Starts a new transaction and applies a row-level lock.
+    Empty selections return (None, None); failures propagate. The caller owns
+    the returned session until it commits or releases the transaction.
     """
     session = AsyncDBSession()
     try:
@@ -3540,21 +3555,17 @@ async def get_fens_for_analysis(limit: int, *, raise_errors: bool = False, timin
         
         from chessism_api.database.postgresql.fen_claims import locked_eligible_fens
         fens = await locked_eligible_fens(session, stmt, timings=timings)
-        
-        if not fens:
-            await session.rollback()
-            await session.close()
-            return None, None
-            
-        return session, fens
+    except BaseException:
+        try:
+            await _release_unclaimed_analysis_session(session)
+        except BaseException as error:
+            print(f"Failed to release analysis selection session: {error!r}", flush=True)
+        raise
 
-    except Exception as e:
-        print(f"Error in get_fens_for_analysis: {repr(e)}", flush=True)
-        await session.rollback()
-        await session.close()
-        if raise_errors:
-            raise
+    if not fens:
+        await _release_unclaimed_analysis_session(session)
         return None, None
+    return session, fens
 
 
 def _player_fens_for_analysis_stmt(player_name: str, limit: int):
@@ -3579,13 +3590,14 @@ def _player_fens_for_analysis_stmt(player_name: str, limit: int):
 async def get_player_fens_for_analysis(
     player_name: str,
     limit: int,
-    *, raise_errors: bool = False, timings=None,
+    *, timings=None,
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
     """
     Fetches the next batch of DISTINCT FENs for a specific player.
     Starts a new transaction and applies a row-level lock.
     
     Returns the session (which holds the lock) and the list of FENs.
+    Only successful empty selections return (None, None); failures propagate.
     """
     session = AsyncDBSession()
     try:
@@ -3597,21 +3609,17 @@ async def get_player_fens_for_analysis(
         
         from chessism_api.database.postgresql.fen_claims import locked_eligible_fens
         fens = await locked_eligible_fens(session, stmt, timings=timings)
-        
-        if not fens:
-            await session.rollback()
-            await session.close()
-            return None, None
-            
-        return session, fens
+    except BaseException:
+        try:
+            await _release_unclaimed_analysis_session(session)
+        except BaseException as error:
+            print(f"Failed to release analysis selection session: {error!r}", flush=True)
+        raise
 
-    except Exception as e:
-        print(f"Error in get_player_fens_for_analysis: {repr(e)}", flush=True)
-        await session.rollback()
-        await session.close()
-        if raise_errors:
-            raise
+    if not fens:
+        await _release_unclaimed_analysis_session(session)
         return None, None
+    return session, fens
 
 
 def _player_game_analysis_conditions(
@@ -3884,9 +3892,9 @@ async def get_game_set_analysis_completion(game_links: List[int]) -> Dict[str, i
 async def get_game_set_fens_for_analysis(
     game_links: List[int],
     limit: int,
-    *, raise_errors: bool = False, timings=None,
+    *, timings=None,
 ) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:
-    """Lease missing FENs for a frozen, ordered set of games."""
+    """Lease missing FENs in frozen game order; only successful emptiness returns no session."""
     clean_links = [int(link) for link in game_links if link is not None]
     if not clean_links:
         return None, None
@@ -3926,18 +3934,17 @@ async def get_game_set_fens_for_analysis(
             "game_links": clean_links,
             "limit": max(1, int(limit)),
         }, timings=timings)
-        if not fens:
-            await session.rollback()
-            await session.close()
-            return None, None
-        return session, fens
-    except Exception as error:
-        print(f"Error in get_game_set_fens_for_analysis: {repr(error)}", flush=True)
-        await session.rollback()
-        await session.close()
-        if raise_errors:
-            raise
+    except BaseException:
+        try:
+            await _release_unclaimed_analysis_session(session)
+        except BaseException as error:
+            print(f"Failed to release analysis selection session: {error!r}", flush=True)
+        raise
+
+    if not fens:
+        await _release_unclaimed_analysis_session(session)
         return None, None
+    return session, fens
 
 async def get_player_fen_score_counts(player_name: str) -> Dict[str, Any]:
     """

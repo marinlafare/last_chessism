@@ -42,7 +42,7 @@ async def reserve(plan, config):
         from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
         from chessism_api.operations.cloud_analysis.admission import require_available
         from sqlalchemy import insert
-        session, fens = await get_fens_for_analysis(config.max_positions, raise_errors=True)
+        session, fens = await get_fens_for_analysis(config.max_positions)
         require(session is not None, 'No unclaimed unscored FENs')
         try:
             await require_available(session)

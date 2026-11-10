@@ -80,7 +80,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as session:
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 3)
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudBatchUnit)), 2)
-        local, fens = await existing.get_fens_for_analysis(10, raise_errors=True)
+        local, fens = await existing.get_fens_for_analysis(10)
         self.assertFalse(fens)
         if local: await local.close()
         view = await cloud_jobs()
@@ -157,7 +157,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.connect() as connection:
             self.assertEqual(await connection.scalar(text(
                 "SELECT reltuples FROM pg_class WHERE oid = 'cloud_fen_claim'::regclass")), 5000)
-        session, fens = await existing.get_fens_for_analysis(5000, raise_errors=True)
+        session, fens = await existing.get_fens_for_analysis(5000)
         try:
             self.assertEqual(len(fens), 5000)
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim).where(

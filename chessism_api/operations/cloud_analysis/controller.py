@@ -88,11 +88,11 @@ async def reserve(job, limit):
     )
     selection = job.selection
     if selection["mode"] == "games":
-        session, fens = await get_game_set_fens_for_analysis(selection["game_links"], limit, raise_errors=True)
+        session, fens = await get_game_set_fens_for_analysis(selection["game_links"], limit)
     elif selection.get("player_name"):
-        session, fens = await get_player_fens_for_analysis(selection["player_name"], limit, raise_errors=True)
+        session, fens = await get_player_fens_for_analysis(selection["player_name"], limit)
     else:
-        session, fens = await get_fens_for_analysis(limit, raise_errors=True)
+        session, fens = await get_fens_for_analysis(limit)
     if session is None:
         await save_job(job.id, status="waiting", error="No unclaimed, unscored FENs available. Local work may still hold them. Resume to check again.")
         return

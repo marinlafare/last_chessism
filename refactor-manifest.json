@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 2,
-  "status": "awaiting_postgres_retry_result",
+  "status": "postflight_pending_commit",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -446,29 +446,7 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": {
-    "kind": "postgres_only_retry",
-    "program": "/tmp/chessism-p1-verification/run_postgres_retry.py",
-    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
-    "monitor_refresh_seconds": 120,
-    "status_file": "/tmp/chessism-p1-verification/status.json",
-    "result_file": "/tmp/chessism-p1-verification/chunk2-gate-result.json",
-    "result_files": [
-      "/tmp/chessism-p1-verification/chunk2-postgres-result.json"
-    ],
-    "container_names": [
-      "chessism-p1-chunk2-postgres-service-v2",
-      "chessism-p1-chunk2-postgres-v2"
-    ],
-    "launch_argv": [
-      "python3",
-      "-B",
-      "/tmp/chessism-p1-verification/run_postgres_retry.py"
-    ],
-    "launched": true,
-    "handoff": "Do not poll or wait. Review PostgreSQL results after user reports completion. Main and worker comparison gates already passed on unchanged source.",
-    "pid": 1913071
-  },
+  "pending_process": null,
   "chunks": [
     {
       "id": 1,
@@ -541,7 +519,7 @@
     {
       "id": 2,
       "name": "Propagate selection failures and finalize failed jobs",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         1
       ],
@@ -569,7 +547,62 @@
         "invariants": "AST comparisons confirm unchanged query constructions, player SQL builder, public entry-point bodies and engine request policy; all necessary caller changes only remove raise_errors.",
         "compile_changed_sources": "passed",
         "git_diff_check": "passed",
-        "full_gate": "pending",
+        "full_gate": {
+          "passed": true,
+          "comparisons": {
+            "main": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true
+            },
+            "worker": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true
+            },
+            "postgres": {
+              "all_six_passed": true,
+              "no_skips": true
+            }
+          },
+          "suite_results": {
+            "main": {
+              "tests_run": 1425,
+              "failures": 3,
+              "errors": 10,
+              "skipped": 276,
+              "elapsed_seconds": 52.237128019332886,
+              "exit_code": 1
+            },
+            "worker": {
+              "tests_run": 287,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 7,
+              "elapsed_seconds": 26.5162832736969,
+              "exit_code": 0
+            },
+            "postgres": {
+              "tests_run": 6,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 0,
+              "elapsed_seconds": 8.910573720932007,
+              "exit_code": 0
+            }
+          },
+          "cleanup_exit_codes": {
+            "chessism-p1-chunk2-postgres-service": 0,
+            "chessism-p1-isolated-redis": 0,
+            "chessism-p1-chunk2-postgres-service-v2": 0
+          },
+          "elapsed_seconds": 88.90583395957947,
+          "postgres_retry_elapsed_seconds": 11.382441759109497
+        },
         "full_suites": {
           "passed_comparison": true,
           "comparisons": {
@@ -616,11 +649,12 @@
           "reason": "Official image initialization clears PGHOST; server listened on custom /pgsocket while psql used /var/run/postgresql.",
           "archive_directory": "/tmp/chessism-p1-verification/postgres-startup-attempt1",
           "application_regression": false
-        }
+        },
+        "full_gate_report": "/tmp/chessism-p1-verification/chunk2-gate-result.json"
       },
       "commit_sha": null,
       "started_at": "2026-11-09",
-      "completed_at": null
+      "completed_at": "2026-11-09"
     }
   ],
   "baseline_diagnosis": {
@@ -649,5 +683,22 @@
     "reason": "Skill entry gate requires passing tests or escalation; baseline contains existing failures beyond authorized P1 #1 scope.",
     "approval": "User: ok proceed; also explicitly requested a removable monitoring program and handoff after launching the long process."
   },
-  "preflight_basis": "Approved comparison gate: corrected API baseline has exactly the 3 known assertion failures and 10 known fixture errors, 276 skips; worker baseline has 0 failures/errors and 7 skips. Setup-related failures resolved. Isolated Redis/PostgreSQL images available."
+  "preflight_basis": "Approved comparison gate: corrected API baseline has exactly the 3 known assertion failures and 10 known fixture errors, 276 skips; worker baseline has 0 failures/errors and 7 skips. Setup-related failures resolved. Isolated Redis/PostgreSQL images available.",
+  "postflight": {
+    "new_regression_tests": 30,
+    "isolated_postgres_tests_passed": 6,
+    "source_compile": "passed",
+    "git_diff_check": "passed",
+    "scope_review": "P1 #1 only; no unexpected files or new TODO/FIXME markers",
+    "full_suite_results_reused": true,
+    "reason_for_reuse": "Application/test source unchanged since full-suite verification; only temporary database harness and tracking documents changed.",
+    "test_services_stopped": true,
+    "limitations": [
+      "Existing API baseline: 3 failures, 10 errors, 276 skips; worker: 7 skips.",
+      "Only six PostgreSQL integration checks opted in; production/GCP and real Stockfish execution untested.",
+      "No configured Python lint/type checker.",
+      "Redis failure publication remains best-effort; ARQ unsuccessful result is authoritative.",
+      "P1 #2 engine retry/timeouts deliberately unchanged."
+    ]
+  }
 }

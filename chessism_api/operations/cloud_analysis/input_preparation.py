@@ -57,9 +57,9 @@ async def _advance(controller, job, run, timings):
         if job.selection['mode'] == 'games':
             session, fens = await get_game_queue_fens(job.id, job.selection['game_links'], count, timings=timings)
         elif job.selection.get('player_name'):
-            session, fens = await get_player_fens_for_analysis(job.selection['player_name'], count, raise_errors=True, timings=timings)
+            session, fens = await get_player_fens_for_analysis(job.selection['player_name'], count, timings=timings)
         else:
-            session, fens = await get_fens_for_analysis(count, raise_errors=True, timings=timings)
+            session, fens = await get_fens_for_analysis(count, timings=timings)
         if session is not None:
             try:
                 await checkpoint_phase(run.id, 'validating')

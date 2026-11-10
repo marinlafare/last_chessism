@@ -9,11 +9,16 @@ import unittest
 from redis.asyncio import Redis
 
 
-def isolated_test_redis():
+def isolated_test_redis_url():
     url = os.environ.get("CHESSISM_ANALYSIS_TEST_REDIS_URL")
     if not url:
         raise unittest.SkipTest("requires explicitly isolated analysis test Redis")
-    return Redis.from_url(url, decode_responses=True, socket_connect_timeout=2, socket_timeout=2)
+    return url
+
+
+def isolated_test_redis():
+    return Redis.from_url(isolated_test_redis_url(), decode_responses=True,
+                          socket_connect_timeout=2, socket_timeout=2)
 
 
 @lru_cache(maxsize=1)
