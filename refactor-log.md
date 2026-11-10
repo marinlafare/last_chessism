@@ -117,3 +117,33 @@
 - Session ended. Original verification handoff remains in effect; no new long
   process was launched, no running result was polled, and no application/test
   source changed. Await the user's completion report before continuing P1 #1.
+
+## 2026-11-09 — Exact-version dependency build and monitor interval
+
+- User reported failed setup. Read completed output: pip could not obtain
+  `pglast==5.9`; setup exited after 2.62 seconds, before either suite started.
+- Confirmed that the existing API image actually has pglast 5.9 with PostgreSQL
+  parser 15.1 and Neo4j 6.3.0. The package index's version endpoint returned 404;
+  the exact upstream release remains at https://github.com/lelit/pglast/releases/tag/v5.9.
+- Inspected upstream setup and submodule configuration. Preserve the dependency
+  version by building commit `b3fc527daeb113fb1ee6490ce1000d8e49c29cc4` and its
+  pinned libpg_query submodule for Python 3.11. The temporary builder installs
+  compiler/Git and Cython<3, verifies source/version, builds a reusable wheel,
+  installs the overlay, and verifies imports plus parsing `SELECT 1`.
+- The dependency container has a disposable writable filesystem and network;
+  only temporary verification files are mounted. Test containers retain no
+  network, read-only source/root filesystem, and host-user ownership. The builder
+  returns dependency/wheel artifact ownership to the host user, even on failure.
+- User changed the monitor preference back to 120-second refresh, clearing the
+  previous display so only one record remains. Updated the program and plan;
+  it stays open until Ctrl+C and now reports the dependency build's current step.
+- Archived failed setup output under
+  `/tmp/chessism-p1-verification/failed-setup-1/`. Restarted the detached pipeline
+  as PID `1712083` using new `chessism-p1-corrected-baseline-v2-*` container names.
+- Monitoring command remains `python3 /tmp/chessism-p1-verification/monitor.py`.
+  Restart an already-open monitor to load the updated 120-second display behavior.
+- Session ended. Current state: 0 of 2 chunks complete, corrected baseline run
+  restarted and results pending. No application/test source changes, no dependency
+  version changes in the project, and no polling/waiting on the new long process.
+  Next: inspect results after the user's completion report, then proceed under
+  the approved baseline-comparison gate.

@@ -16,7 +16,7 @@ chunks below implement that authorization. Do not address P1 #2 or other finding
 
 For every long-running verification process, start it detached, record its identity,
 give the user one command for the temporary status monitor, and end the turn. It
-must refresh in place every second, show start time and elapsed time, and remain
+must refresh in place every 120 seconds, show start time and elapsed time, and remain
 open until Ctrl+C, including after the process finishes (user's latest preference).
 Give an evidence-based duration estimate where available; never invent an ETA.
 Do not ask the user to watch application/system logs. Resume only after the user
@@ -107,17 +107,23 @@ for a globally green suite at the entry and chunk gates. Scope remains P1 #1.
 
 Use the existing `chessism-cloud-controller:latest` image (Python 3.11.17), with
 Neo4j 6.3.0 and pglast 5.9 installed into a disposable dependency directory.
+The package index no longer serves pglast 5.9, although the existing API image
+contains it. Build exactly that version for Python 3.11 from upstream commit
+`b3fc527daeb113fb1ee6490ce1000d8e49c29cc4` (release `v5.9`) and its pinned parser
+submodule. The temporary dependency build container installs its own compiler
+into its disposable filesystem and preserves the resulting wheel for reuse.
 Only dependency installation has network access; it mounts no checkout or
 credentials. Both test containers have `--network none`, read-only source and
 root filesystem, dummy auth/database settings, and writable temporary paths.
-Run containers under the host UID/GID so the temporary program/results can be
-deleted by the user. No Docker socket or production volumes enter the containers.
+Run test containers under the host UID/GID; the dependency builder returns wheel
+and dependency ownership to that user so artifacts can be deleted afterward.
+No Docker socket or production volumes enter the containers.
 
 The temporary program is `/tmp/chessism-p1-verification/monitor.py`. It provides
 a detached `--run` mode, instrumented unittest discovery via `--suite main` or
 `--suite worker`, and a default console monitor. It records atomic status updates,
 current test, elapsed time and structured results. Monitoring defaults to every
-one second, redraws the terminal in place and stays open after completion;
+120 seconds, clears the previous terminal display and stays open after completion;
 Ctrl+C stops only the monitor. ETA is shown
 for the API stage based on its previous 53-second run, with runtime-change caveat;
 other stages/overall ETA remain unavailable without evidence.
