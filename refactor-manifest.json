@@ -980,7 +980,7 @@
     "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
     "verified_branch": "refactor/p1-analysis-failure-propagation",
     "initial_worktree_clean": true,
-    "baseline_status": "continuation_prepared",
+    "baseline_status": "frontend_baseline_completion_prepared",
     "runtime_directory": "/tmp/chessism-p1-final-corrections",
     "application_changes_started": false,
     "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
@@ -988,8 +988,9 @@
     "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py",
     "source_snapshot_files": 1386,
     "runner_sha256": {
-      "monitor.py": "a675a0fdbfa20ab020ad66567808c8558146319994c996dc14a3b98541f38ad5",
-      "baseline.py": "c5f33ebd56f43e6d025e5da8421cc89c658275669183b8b5c2251d4a0cd989aa"
+      "monitor.py": "bef55d00858c1b35d67a49e975ac42217fe72770b8e11eba700c1c66c5e1ee69",
+      "baseline.py": "c5f33ebd56f43e6d025e5da8421cc89c658275669183b8b5c2251d4a0cd989aa",
+      "frontend_baseline.py": "57c671081f0289135bb27865df62863d3b0754823a3015672a671db7f3b6a9e1"
     },
     "frontend_checks": [
       "node --test tests/*.test.mjs (all 64 files in Node 22)",
@@ -1015,7 +1016,7 @@
       "all_containers_removed": true
     },
     "baseline_continuation": {
-      "status": "prepared",
+      "status": "launched",
       "reuses": [
         "API 1442-test baseline",
         "worker 287-test baseline"
@@ -1030,7 +1031,45 @@
         "frontend build"
       ],
       "runtime_fix": "Distinct postgres-checks container role, fresh private socket directories, explicit database readiness check.",
-      "source_changes": false
+      "source_changes": false,
+      "launch": {
+        "pid": 1598974,
+        "started_at": "2026-11-10T19:57:06.583319+00:00",
+        "tracking_commit": "3eb7dde",
+        "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+      }
+    },
+    "monitor_display": "120-second in-place display; no raw exception or command output; technical evidence stays in saved reports.",
+    "entry_attempt_2": {
+      "archive": "/tmp/chessism-p1-final-corrections/entry-attempt-2",
+      "elapsed_seconds": 24.64224624633789,
+      "postgres_passed": 6,
+      "focused_passed": 60,
+      "python310_passed": 25,
+      "web_tests": {
+        "tests": 318,
+        "passed": 313,
+        "failed": 5,
+        "skips": 0
+      },
+      "failure_classification": {
+        "missing_dependency": "graphology unavailable because the runner scheduled installation after tests",
+        "existing_assertions": [
+          "appearancePages: registered target ownership",
+          "appearancePages: independent control seed count (29 versus 22)",
+          "appearancePages: game-review border property",
+          "navigationAppearance: existing ignored hegel_.md file"
+        ]
+      },
+      "all_containers_removed": true,
+      "source_unchanged": true
+    },
+    "frontend_completion": {
+      "runner": "/tmp/chessism-p1-final-corrections/frontend_baseline.py",
+      "status": "prepared",
+      "backend_tests_will_not_be_repeated": true,
+      "isolated_source_copy": "Exact hashed source inputs copied into disposable container tmpfs, including the existing hegel_.md existence condition; all original files preserved.",
+      "existing_frontend_failures_not_waived": true
     }
   }
 }
