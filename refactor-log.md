@@ -630,3 +630,36 @@ User reported the 13.49-second gate finished. Independently compared the final f
 All 1,699 final source-input hashes still match the tested snapshot. The original ignored hegel_.md directory remains intact. All four owned frontend containers were removed. Backend source and cached runtime image identities match the complete passed chunk 5 gate: API 1,450 with the same 3 failures/10 errors/276 skips; worker 287 with 0 failures/errors/7 skips; 68 focused checks, 55 P1 regressions, 33 Python 3.10 cleanup checks and six PostgreSQL invariants passed. Backend results were verified and reused after the frontend-only edits, not rerun or represented as rerun. No additional failures, errors or skips compared with the verified baselines.
 
 Correction B is ready for its separate local commit. P1 #1 remains pending independent acceptance review.
+
+## 2026-11-10 — Implementation handoff for independent acceptance review
+
+Correction B committed locally as 499a781 (fix: make Positions use confirmed ARQ execution outcomes). Correction A is 49edfc5 (fix: protect analysis session cleanup already in progress). Both are on refactor/p1-analysis-failure-propagation in /home/jon/Desktop/workshop/last_chessism. Application/test bytes are unchanged from the passed verification snapshots. This final tracking checkpoint records completion of implementation, not acceptance of P1 #1.
+
+Root causes and design:
+- Cancellation could enter while a session was already awaiting rollback/close, before the coordinator's shielded drain. A small persistence cleanup helper now retains and drains each operation through repeated cancellation, then propagates the original cancellation. Existing selectors and workers retain ownership and primary-error handling. No new service layer, interface or general-purpose framework was introduced.
+- Positions gave progress.phase priority and treated ARQ result availability as success; its freshness filter could also reject an authoritative result using unrelated Redis timestamps. Presentation helpers now use the actual result.success boolean, keep unresolved jobs active, preserve explicit unsuccessful/cancelled results, and prevent stale completion/fading state from finalizing a retry. Progress timing remains a presentation concern; the backend remains the execution authority. Shared polling code was not refactored.
+
+Production files modified:
+- chessism_api/database/postgresql/analysis_cleanup.py (new bounded cleanup helper)
+- chessism_api/database/postgresql/ask_db.py (selector cleanup calls)
+- chessism_api/operations/analysis.py (worker cleanup calls)
+- chessism_web/src/pages/positions/positionPageSupport.js (outcomes, details and restored state)
+- chessism_web/src/pages/positions/positionStatusFreshness.js (outcome-aware freshness)
+- chessism_web/src/pages/positions/usePositionsPage.js (failure display and completion lifecycle)
+
+Test files modified/added:
+- tests/test_analysis_failure_jobs.py
+- tests/test_analysis_failure_selection.py
+- chessism_web/tests/positionJobOutcomes.test.mjs (new)
+- chessism_web/tests/positionJobPolling.test.mjs (new)
+- chessism_web/tests/positionsProgress.test.mjs (realistic success fixture)
+- chessism_web/tests/positionStatusFreshness.test.mjs (realistic success fixture)
+The remaining changes are refactor-plan.md, refactor-manifest.json and this log.
+
+Preserved contracts/invariants: database selection errors propagate; (None, None) remains successful exhaustion; acquisition remains outside processing retries; committed results and transaction ownership remain intact; SQL selection/locking/recheck rules are unchanged; ARQ records unsuccessful analysis; attempt identities and terminal Redis guards remain unchanged and verified. The jobs API schema, processing/engine retry and timeout policy, shared polling transport and page polling intervals are unchanged.
+
+Final comparison: API 1,442 → 1,450 tests with the same 3 failures/10 errors/276 skips; worker 287 → 287 with 0 failures/errors/7 skips; frontend 320 → 346 with the same four failures and zero skips. All new regressions pass. Full failure/error/skip identity and detail comparisons are recorded, and the four frontend baseline failure blocks are preserved in the tracked manifest as unresolved testing debt. Nothing was weakened, deleted or skipped to obtain the result; the two fixture updates express the verified successful-result contract.
+
+Verification limits: frontend workflow tests use real status-polling/decision modules with fake timers, not a mounted React/browser end-to-end session. Real Stockfish and production/GCP execution were not exercised. Failed Redis resets can still leave old progress counters visible; they no longer determine completion or stop polling. Cooperative repeated cancellation was tested; hard process termination cannot be covered by an in-process cleanup guarantee.
+
+No production data/schema/deployment changes, push, merge or other-repository work. P1 #2 and P1 #3 were not started. All disposable test containers were removed, and the original ignored hegel_.md directory is unchanged. No verification process remains active. Temporary monitor and evidence remain in /tmp/chessism-p1-final-corrections for review. Stop here; the next step is the user's independent acceptance review.

@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "in_progress",
+  "status": "completed",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -959,7 +959,7 @@
     {
       "id": 6,
       "name": "Interpret Positions outcomes from authoritative ARQ results",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [
         5
       ],
@@ -991,10 +991,10 @@
         "source_hashes_match": true,
         "all_owned_containers_removed": true
       },
-      "commit_sha": null,
+      "commit_sha": "499a781",
       "started_at": "2026-11-10T20:39:37.125541+00:00",
-      "completed_at": null,
-      "phase": "verified_pending_local_commit",
+      "completed_at": "2026-11-10T20:53:49.030315+00:00",
+      "phase": "completed",
       "red_evidence": {
         "report": "/tmp/chessism-p1-final-corrections/chunk6-red-v2-result.json",
         "original_implementation_commit": "49edfc5",
@@ -1070,7 +1070,7 @@
     "reason": "Skill entry gate requires passing tests or escalation; baseline contains existing failures beyond authorized P1 #1 scope.",
     "approval": "User: ok proceed; also explicitly requested a removable monitoring program and handoff after launching the long process."
   },
-  "preflight_basis": "Approved comparison gate: corrected API baseline has exactly the 3 known assertion failures and 10 known fixture errors, 276 skips; worker baseline has 0 failures/errors and 7 skips. Setup-related failures resolved. Isolated Redis/PostgreSQL images available.",
+  "preflight_basis": "Verified unchanged API/worker baseline plus four exact unchanged frontend failures explicitly approved by the user; every new regression passed, with no additional failures/errors/skips.",
   "original_postflight": {
     "new_regression_tests": 30,
     "isolated_postgres_tests_passed": 6,
@@ -1094,7 +1094,7 @@
     "working_tree_clean_after_implementation_commit": true
   },
   "original_completed_at": "2026-11-09",
-  "acceptance": "request_corrections",
+  "acceptance": "pending_independent_review",
   "correction_source": "/home/jon/.codex/attachments/c229c4e7-89a8-479c-892b-137a8cb77a95/Pasted text.txt",
   "correction_baseline_commit": "b81b6ea",
   "correction_authorization": "User explicitly requested both reviewed corrections, separate local commits, no push/merge/deploy; existing baseline exception and monitor handoffs persist.",
@@ -1361,6 +1361,60 @@
         "normalization": "Only TAP test numbering and duration; assertion details and full stacks preserved.",
         "final_details": "/tmp/chessism-p1-final-corrections/chunk6-frontend-failure-details.json"
       }
-    }
+    },
+    "status": "implemented_pending_independent_review",
+    "previous_acceptance_verdict": "request_corrections"
+  },
+  "completed_at": "2026-11-10T20:53:49.030315+00:00",
+  "postflight": {
+    "implementation_complete": true,
+    "acceptance": "pending_independent_review",
+    "correction_commits": {
+      "cancellation_cleanup": "49edfc5",
+      "authoritative_frontend_outcomes": "499a781"
+    },
+    "new_backend_regression_tests": 8,
+    "new_frontend_regression_tests": 26,
+    "backend_red": "All eight new methods failed before correction on Python 3.10.22 and 3.11.17 (36 subtest failures); all 25 original checks passed.",
+    "backend_green": "All 33 cleanup checks passed on both Python versions; all 68 focused checks including 55 P1 regressions passed.",
+    "frontend_red": "21 new failures reproduced, five new preservation cases and eight existing focused checks passed against original implementation.",
+    "frontend_green": "All 34 focused checks passed, including all 26 new regressions.",
+    "api": {
+      "tests": 1450,
+      "existing_failures": 3,
+      "existing_errors": 10,
+      "skips": 276,
+      "new_failures_errors_skips": 0
+    },
+    "worker": {
+      "tests": 287,
+      "failures": 0,
+      "errors": 0,
+      "skips": 7,
+      "new_failures_errors_skips": 0
+    },
+    "frontend": {
+      "tests": 346,
+      "passed": 342,
+      "existing_failures": 4,
+      "skips": 0,
+      "new_failures_errors_skips": 0
+    },
+    "isolated_postgres_tests_passed": 6,
+    "architecture": "passed",
+    "source_size": "passed",
+    "frontend_production_build": "passed",
+    "syntax_and_whitespace": "passed",
+    "backend_evidence_reuse": "Complete gate after last backend change; final frontend gate revalidated backend source/image identities before reuse.",
+    "evidence_directory": "/tmp/chessism-p1-final-corrections",
+    "protected_existing_directory": "hegel_.md",
+    "scope": "Only two approved Chessism P1 #1 corrections. No production changes, push, merge, deploy, P1 #2 or P1 #3.",
+    "limitations": [
+      "No mounted React/browser end-to-end verification",
+      "No real Stockfish or production/GCP execution",
+      "Redis reset failure may retain old progress counters; authoritative outcomes now control completion and polling",
+      "Cooperative cancellation tested; hard process termination is outside this guarantee"
+    ],
+    "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened."
   }
 }

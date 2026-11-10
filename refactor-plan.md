@@ -534,3 +534,22 @@ testing debt, outside P1 #1. Require every new regression to pass and no additio
 failures, errors or skips. Do not weaken/delete/skip tests or repair appearance/
 navigation behavior. Stop if existing debt prevents meaningful verification.
 The backend exception and all scope/safety restrictions remain unchanged.
+
+### Final-review correction postflight (2026-11-10)
+
+- [x] Correction A verified and committed separately as `49edfc5`.
+- [x] Correction B verified and committed separately as `499a781`.
+- [x] Eight backend regressions reproduced before correction; all 33 cleanup
+  checks pass on Python 3.10 and 3.11, with completed-cleanup assertions.
+- [x] Twenty-six frontend regressions pass; 21 reproduce old defects and five
+  preserve correct behavior. All 34 focused frontend checks pass.
+- [x] Complete API/worker results match approved failure/error/skip details;
+  six isolated PostgreSQL checks and 68 focused checks pass.
+- [x] Full frontend: 346 checks, 342 passes, exactly four approved preexisting
+  failures, zero skips; exact failure details retained in the manifest.
+- [x] Architecture, source-size and production build pass. Final source hashes
+  match; backend source/image checks validate reuse of its complete passed gate.
+- [x] Only approved production/test files and tracking documents changed;
+  disposable test services removed and original ignored directory preserved.
+- [x] No production changes, push, merge, deployment, P1 #2 or P1 #3 work.
+- [ ] Formal P1 #1 acceptance: reserved for independent review.
