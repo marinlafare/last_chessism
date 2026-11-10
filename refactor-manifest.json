@@ -7,7 +7,7 @@
   "branch": "refactor/p1-analysis-failure-propagation",
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 4,
-  "current_chunk": 3,
+  "current_chunk": 4,
   "status": "in_progress",
   "preflight_passed": true,
   "initial_worktree_clean": true,
@@ -446,7 +446,18 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": null,
+  "pending_process": {
+    "kind": "correction2_full_gate",
+    "status": "launched",
+    "program": "/tmp/chessism-p1-verification/run_correction2_gate.py",
+    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
+    "report": "/tmp/chessism-p1-verification/correction2-gate-result.json",
+    "expected_api_tests": 1442,
+    "expected_worker_tests": 287,
+    "expected_postgres_tests": 6,
+    "handoff": "Do not poll. Resume after the user reports completion; review gate and source hashes, commit chunk 4, complete correction record, leave formal acceptance pending independent review.",
+    "pid": 2495389
+  },
   "chunks": [
     {
       "id": 1,
@@ -736,20 +747,51 @@
           "elapsed_seconds": 78.05540657043457
         }
       },
-      "commit_sha": null,
+      "commit_sha": "5542c9ad00d5df547ccf16d14f657399dd96feef",
       "started_at": "2026-11-09",
       "completed_at": "2026-11-09"
     },
     {
       "id": 4,
       "name": "Scope progress updates to execution attempts",
-      "status": "pending",
+      "status": "in_progress",
       "depends_on": [
         3
       ],
-      "verification": null,
+      "verification": {
+        "red": {
+          "tests": 11,
+          "failures": 2,
+          "errors": 0,
+          "log": "/tmp/chessism-p1-verification/correction2-red.log"
+        },
+        "focused_green": {
+          "tests": 60,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0,
+          "elapsed_seconds": 3.271,
+          "log": "/tmp/chessism-p1-verification/correction2-green-v2.log"
+        },
+        "python310": {
+          "tests": 25,
+          "failures": 0,
+          "errors": 0,
+          "log": "/tmp/chessism-p1-verification/correction2-python310.log"
+        },
+        "compile": "passed",
+        "git_diff_check": "passed",
+        "invariants": "Unchanged selector/locking/staging/tablebase files; AST-identical Stockfish execution and API HTTP/error/timeout logic.",
+        "source_sha256_before_full_gate": {
+          "chessism_api/operations/analysis.py": "d21b06b2905939d00fb477a343297dd91b48f1161132d054aca17fdeac61fb0e",
+          "stockfish-service/routers/analysis.py": "6b88647fc29d79461237e787c3d26476197f904ef3e87e1cf8161139d58ac699",
+          "tests/test_analysis_failure_jobs.py": "ecaa61cd31f00f04e9707fa1fa8a8f9c6c6c2165893a69975b81c128576425b1",
+          "tests/test_analysis_failure_arq.py": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
+          "tests/test_analysis_terminal_progress.py": "ccfe04997f42e83287c0615e9532b11ce50cbbacdf5c39407eff18e2c5dff856"
+        }
+      },
       "commit_sha": null,
-      "started_at": null,
+      "started_at": "2026-11-09",
       "completed_at": null
     }
   ],

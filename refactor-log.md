@@ -415,3 +415,60 @@
   and Python version match baseline. All 32 P1 regression tests ran.
 - Isolated Redis stopped successfully. Final whitespace check passed. Preparing
   the separate local cancellation correction commit; no push or merge.
+
+## 2026-11-09 — Chunk 4 attempt isolation and focused verification
+
+- Chunk 3 committed locally as `5542c9ad00d5df547ccf16d14f657399dd96feef`.
+  Started chunk 4 using that verified state. No unrelated working-tree changes.
+- Red: added real isolated Redis tests for old Stockfish updates after reset,
+  after new progress and after completion. On the original progress code, 11
+  tests ran with two failures: old updates recreated cleared state and polluted
+  the new attempt. The existing terminal guard already protected completion.
+  Evidence: `/tmp/chessism-p1-verification/correction2-red.log`.
+- Reset now generates a UUID and atomically sets the job's active attempt key
+  while deleting the prior payload/FEN sets. The same ID is explicitly passed
+  through global/player, loop and frozen-game batches, all coordinator reports,
+  and the Stockfish HTTP payload. Both progress Lua scripts reject absent/stale
+  attempt IDs before mutation. Successful updates renew the attempt's existing
+  24-hour retention; rejected/terminal engine updates change no TTL or state.
+- Progress-enabled Stockfish requests require both job and attempt IDs. Live
+  requests without progress remain valid. There is no legacy permissive path,
+  new layer, repository, result class or custom exception. Sub-passes require
+  their parent's explicit identity rather than inventing one or reading Redis.
+- Added coverage for stale coordinator writes; missing/mismatched/expired IDs;
+  atomic reset; identity retention; all entry-point/pass propagation; current
+  terminal protection; reset/report outages preserving the original database
+  exception; wire validation and ARQ stored outcomes. There are now 47 P1
+  regressions total, including 17 added across these two corrections.
+- Focused green: 60 tests passed in 3.271 seconds, including all 47 P1 regressions
+  plus existing scheduling/batch-limit checks, with real isolated Redis and ARQ.
+  First focused run had one test-spy failure: AsyncMock wrapping Redis's ordinary
+  method returned its coroutine without awaiting it. Corrected the spy to record
+  the ordinary call while allowing the real await; no application change needed.
+- Application Python 3.10: all 25 selector/orchestration tests also pass. Syntax,
+  in-memory compilation and whitespace checks pass. AST comparison confirms the
+  Stockfish endpoint's engine execution and API HTTP/error/timeout policy are
+  unchanged; selection, lock/recheck, result staging and tablebase files untouched.
+- Existing Redis failure behavior stays best-effort: an unavailable reset cannot
+  authorize new writers under the old ID. The new attempt then has no reportable
+  progress until a successful reset; retained old progress may remain visible.
+  ARQ/database outcomes are unaffected. Expired identities cannot be resurrected
+  by either writer. No deployment, production data, push, merge or P1 #2 changes.
+- Prepared full API/worker comparison and six isolated PostgreSQL checks. Expected
+  counts: 1,442 API, 287 worker and six PostgreSQL tests. Formal acceptance remains
+  pending the user's focused independent review after implementation verification.
+
+## 2026-11-09 — Correction 2 full-gate handoff
+
+- Started detached verification runner PID `2495389`. Monitor:
+  `python3 /tmp/chessism-p1-verification/monitor.py`. One in-place display
+  every 120 seconds; remains open until Ctrl+C. Estimated total ~92s.
+- Session ended. Chunk 3 verified and committed as `5542c9a`; chunk 4
+  implemented with passing focused Redis/ARQ and Python 3.10 checks.
+  Full API/worker/PostgreSQL comparison pending. No polling or waiting.
+  Implementation/tests remain uncommitted until result review; tracking
+  files are committed for handoff. No formal acceptance is claimed.
+- Next: inspect `correction2-gate-result.json` after the user reports
+  completion, verify recorded source hashes, resolve any regressions,
+  commit chunk 4 and complete the correction record. Stop for independent
+  review; do not push, merge, deploy or begin P1 #2.
