@@ -980,7 +980,7 @@
     "verified_repository": "/home/jon/Desktop/workshop/last_chessism",
     "verified_branch": "refactor/p1-analysis-failure-propagation",
     "initial_worktree_clean": true,
-    "baseline_status": "prepared",
+    "baseline_status": "continuation_prepared",
     "runtime_directory": "/tmp/chessism-p1-final-corrections",
     "application_changes_started": false,
     "baseline_exception": "Same existing API 3 failures, 10 errors, 276 skips and worker 7 skips; no new failures/errors/skips allowed.",
@@ -989,7 +989,7 @@
     "source_snapshot_files": 1386,
     "runner_sha256": {
       "monitor.py": "a675a0fdbfa20ab020ad66567808c8558146319994c996dc14a3b98541f38ad5",
-      "baseline.py": "99b0ecd04212e1aaeb0d9804c02580bc7b3e3d85330a504971c9ff14ab4e4248"
+      "baseline.py": "c5f33ebd56f43e6d025e5da8421cc89c658275669183b8b5c2251d4a0cd989aa"
     },
     "frontend_checks": [
       "node --test tests/*.test.mjs (all 64 files in Node 22)",
@@ -997,6 +997,40 @@
       "node scripts/check-source-size.mjs",
       "locked npm ci in temporary storage; Vite build from ephemeral copy of verified source into temporary output"
     ],
-    "baseline_reference": "/tmp/chessism-p1-verification/correction2-gate-result.json"
+    "baseline_reference": "/tmp/chessism-p1-verification/correction2-gate-result.json",
+    "launch": {
+      "pid": 1584755,
+      "started_at": "2026-11-10T19:51:37.874948+00:00",
+      "planning_commit": "b8fbe43",
+      "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+    },
+    "entry_attempt_1": {
+      "status": "runner_setup_failed",
+      "elapsed_seconds": 82.25273537635803,
+      "reason": "PostgreSQL test container reused the database service name; tests not started.",
+      "archive": "/tmp/chessism-p1-final-corrections/entry-attempt-1",
+      "api_baseline_matched": true,
+      "worker_baseline_matched": true,
+      "source_files_unchanged": 1386,
+      "all_containers_removed": true
+    },
+    "baseline_continuation": {
+      "status": "prepared",
+      "reuses": [
+        "API 1442-test baseline",
+        "worker 287-test baseline"
+      ],
+      "remaining": [
+        "6 PostgreSQL checks",
+        "60 focused checks",
+        "25 Python 3.10 checks",
+        "64 frontend Node test files",
+        "architecture/source-size checks",
+        "isolated locked dependency installation",
+        "frontend build"
+      ],
+      "runtime_fix": "Distinct postgres-checks container role, fresh private socket directories, explicit database readiness check.",
+      "source_changes": false
+    }
   }
 }
