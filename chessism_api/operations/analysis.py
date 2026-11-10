@@ -14,6 +14,7 @@ from sqlalchemy import delete, insert
 
 # --- FIXED IMPORTS ---
 from chessism_api.database.postgresql.models import Fen, FenContinuation
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.database.postgresql.db_interface import DBInterface
 from chessism_api.database.postgresql.ask_db import (
     count_game_set_fens_for_analysis,
@@ -449,7 +450,7 @@ async def _run_analysis_job(
                         async with counter_lock:
                             total_failed_batches += 1
                             total_claimed -= reserved_fens
-                        await session.rollback()
+                        await finish_analysis_cleanup(session.rollback())
                         await asyncio.sleep(1)
                         continue
 
@@ -469,7 +470,7 @@ async def _run_analysis_job(
                             total_failed_batches += 1
                             total_failed_fens += len(fens_to_process)
                             total_claimed -= reserved_fens
-                        await session.rollback()
+                        await finish_analysis_cleanup(session.rollback())
                         await asyncio.sleep(1)
                         continue
 
@@ -513,7 +514,7 @@ async def _run_analysis_job(
                             total_failed_batches += 1
                     if session is not None and not committed:
                         try:
-                            await session.rollback()
+                            await finish_analysis_cleanup(session.rollback())
                         except BaseException as error:
                             print(f"Failed to roll back analysis session: {error!r}", flush=True)
                     raise
@@ -524,14 +525,14 @@ async def _run_analysis_job(
                         if not committed:
                             total_claimed -= reserved_fens
                     if session:
-                        await session.rollback() # Ensure locks are released on failure
+                        await finish_analysis_cleanup(session.rollback()) # Ensure locks are released on failure
                     await asyncio.sleep(1)
                 finally:
                     if session is not None:
                         # A close failure must not replace a fatal error or cancellation.
                         active_error = sys.exc_info()[1]
                         try:
-                            await session.close()
+                            await finish_analysis_cleanup(session.close())
                         except BaseException as error:
                             if active_error is None:
                                 raise

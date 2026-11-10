@@ -9,6 +9,7 @@ from sqlalchemy import exists, text, select, update, func
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import async_engine, AsyncDBSession
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.database.postgresql.models import Fen, Game, GameAnalysisSummary, GameFenAssociation
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES
 
@@ -3523,14 +3524,14 @@ async def get_scored_game_analysis_page(
 async def _release_unclaimed_analysis_session(session: AsyncSession) -> None:
     """Release a selection that was not handed off, preserving rollback failures."""
     try:
-        await session.rollback()
+        await finish_analysis_cleanup(session.rollback())
     except BaseException:
         try:
-            await session.close()
+            await finish_analysis_cleanup(session.close())
         except BaseException as error:
             print(f"Failed to close analysis selection session: {error!r}", flush=True)
         raise
-    await session.close()
+    await finish_analysis_cleanup(session.close())
 
 
 async def get_fens_for_analysis(limit: int, *, timings=None) -> Tuple[Optional[AsyncSession], Optional[List[str]]]:

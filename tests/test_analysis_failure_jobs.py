@@ -429,6 +429,176 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                 await self._assert_staggered_cancellation_cleanup(
                     rollback_fails=rollback_fails, cancel_again=True)
 
+    async def _assert_cleanup_already_underway(self, *, owner, trigger, close_fails, step="close"):
+        self.progress.reset_mock()
+        self.engine.reset_mock()
+        self.stage.reset_mock()
+        cleanup_entered, release_cleanup, close_finished = (asyncio.Event() for _ in range(3))
+        cleanup_interrupted, fail_sibling, draining = (asyncio.Event() for _ in range(3))
+        cleanup_finished = asyncio.Event()
+        session = session_for()
+        selection_failure = RuntimeError("selection failed before handoff")
+        sibling_failure = RuntimeError("sibling acquisition failed")
+        engine_failure = analysis.EngineServiceRequestError("original engine request failure")
+        committed = owner == "worker" and step == "close"
+        self.engine.side_effect = engine_failure if step == "rollback" else None
+        workers = []
+        cancellation_messages = []
+        real_gather = asyncio.gather
+
+        def observe_drain(*tasks, **kwargs):
+            result = real_gather(*tasks, **kwargs)
+            if kwargs.get("return_exceptions"):
+                asyncio.get_running_loop().call_soon(draining.set)
+            return result
+
+        async def checkpoint():
+            ready = asyncio.Event()
+            asyncio.get_running_loop().call_soon(ready.set)
+            await ready.wait()
+
+        async def suspend_cleanup():
+            cleanup_entered.set()
+            try:
+                await release_cleanup.wait()
+            except asyncio.CancelledError:
+                cleanup_interrupted.set()
+                raise
+            cleanup_finished.set()
+
+        async def close():
+            if step == "close":
+                await suspend_cleanup()
+            close_finished.set()
+            if close_fails:
+                raise OSError("secondary close failure")
+
+        async def rollback():
+            await suspend_cleanup()
+            raise OSError("rollback failed after completing its wait")
+
+        async def fetch(limit):
+            workers.append(asyncio.current_task())
+            if len(workers) == 1:
+                await fail_sibling.wait()
+                raise sibling_failure
+            if owner == "selector":
+                return await ask_db.get_fens_for_analysis(limit)
+            return session, ["fen"]
+
+        async def run_observed_job():
+            try:
+                return await self.run_job(fetch, total_fens_to_process=2)
+            except asyncio.CancelledError as error:
+                # Python 3.10 drops the message when wait_for retrieves a cancelled task.
+                cancellation_messages.append(error.args)
+                raise
+
+        session.close.side_effect = close
+        if owner == "selector":
+            session.begin.side_effect = selection_failure
+            session.rollback.side_effect = OSError("rollback failed before close")
+        elif step == "rollback":
+            session.rollback.side_effect = rollback
+
+        with patch.object(analysis, "ANALYSIS_CONCURRENCY", 2), \
+             patch.object(ask_db, "AsyncDBSession", return_value=session), \
+             patch.object(analysis.asyncio, "gather", observe_drain):
+            task = asyncio.create_task(run_observed_job())
+            try:
+                # The first cancellation must arrive after cleanup has begun.
+                await asyncio.wait_for(cleanup_entered.wait(), 2)
+                if trigger == "external":
+                    task.cancel("original external cancellation")
+                else:
+                    fail_sibling.set()
+                await asyncio.wait_for(draining.wait(), 2)
+                await checkpoint()
+                self.assertFalse(cleanup_interrupted.is_set(), "already-running cleanup was interrupted")
+                self.assertFalse(task.done(), "coordinator returned before close finished")
+                self.assertNotIn("failed", self.phases())
+                self.assertNotIn("complete", self.phases())
+
+                for _ in range(2):
+                    task.cancel("repeated cancellation during cleanup")
+                    await checkpoint()
+                    self.assertFalse(cleanup_interrupted.is_set())
+                    self.assertFalse(task.done())
+
+                release_cleanup.set()
+                expected = asyncio.CancelledError if trigger == "external" else RuntimeError
+                with self.assertRaises(expected) as caught:
+                    await asyncio.wait_for(task, 2)
+                if trigger == "external":
+                    self.assertEqual(cancellation_messages, [("original external cancellation",)])
+                    self.assertTrue(task.cancelled())
+                    self.assertNotIn("failed", self.phases())
+                else:
+                    self.assertIs(caught.exception, sibling_failure)
+                    self.assertEqual(self.phases()[-1], "failed")
+                    self.assertEqual(self.progress.await_args.kwargs["processed"], int(committed))
+                self.assertTrue(cleanup_finished.is_set())
+                self.assertTrue(close_finished.is_set())
+                self.assertFalse(cleanup_interrupted.is_set())
+                if owner == "selector":
+                    self.assertIs(workers[1].exception(), selection_failure)
+                elif step == "rollback":
+                    self.assertIs(workers[1].exception(), engine_failure)
+            finally:
+                release_cleanup.set()
+                if not task.done():
+                    task.cancel()
+                await real_gather(task, *workers, return_exceptions=True)
+
+        session.close.assert_awaited_once()
+        self.sleep.assert_not_awaited()
+        if committed:
+            session.commit.assert_awaited_once()
+            session.rollback.assert_not_awaited()
+            self.stage.assert_awaited_once()
+        else:
+            session.rollback.assert_awaited_once()
+            session.commit.assert_not_awaited()
+            self.stage.assert_not_awaited()
+            if owner == "selector":
+                self.engine.assert_not_awaited()
+
+    async def test_external_cancellation_waits_for_worker_close_already_underway(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="worker", trigger="external", close_fails=close_fails)
+
+    async def test_sibling_failure_waits_for_worker_close_already_underway(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="worker", trigger="sibling", close_fails=close_fails)
+
+    async def test_external_cancellation_waits_for_selector_close_after_rollback_failure(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="selector", trigger="external", close_fails=close_fails)
+
+    async def test_sibling_failure_waits_for_selector_close_after_rollback_failure(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="selector", trigger="sibling", close_fails=close_fails)
+
+    async def test_external_cancellation_waits_for_worker_rollback_already_underway(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="worker", trigger="external", step="rollback", close_fails=close_fails)
+
+    async def test_sibling_failure_waits_for_worker_rollback_already_underway(self):
+        for close_fails in (False, True):
+            with self.subTest(close_fails=close_fails):
+                await self._assert_cleanup_already_underway(
+                    owner="worker", trigger="sibling", step="rollback", close_fails=close_fails)
+
     async def test_existing_processing_retry_behavior_is_preserved(self):
         for kind in ("no_result", "invalid_result", "write_failure"):
             with self.subTest(kind=kind):

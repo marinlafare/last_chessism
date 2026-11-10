@@ -125,6 +125,77 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                     session.rollback.assert_awaited_once()
                     session.close.assert_awaited_once()
 
+    async def _assert_repeated_cancellation_during_cleanup(self, step):
+        for selector, args in SELECTORS:
+            for selection_fails in (False, True):
+                for cleanup_fails in (False, True):
+                    with self.subTest(selector=selector.__name__, step=step,
+                                      selection_fails=selection_fails, cleanup_fails=cleanup_fails):
+                        entered, release, finished, interrupted = (asyncio.Event() for _ in range(4))
+                        cancellation_messages = []
+                        session = selection_session([], [])
+                        failure = RuntimeError("original database selection failure")
+                        if selection_fails:
+                            session.begin.side_effect = failure
+
+                        async def cleanup():
+                            entered.set()
+                            try:
+                                await release.wait()
+                            except asyncio.CancelledError:
+                                interrupted.set()
+                                raise
+                            finished.set()
+                            if cleanup_fails:
+                                raise OSError("secondary cleanup failure")
+
+                        getattr(session, step).side_effect = cleanup
+
+                        async def run_observed_selection():
+                            try:
+                                return await selector(*args)
+                            except asyncio.CancelledError as error:
+                                # Observe before Python 3.10's cancelled-task message loss.
+                                cancellation_messages.append(error.args)
+                                raise
+
+                        with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                            task = asyncio.create_task(run_observed_selection())
+                            try:
+                                await asyncio.wait_for(entered.wait(), 2)
+                                for message in ("original cancellation", "repeated cancellation"):
+                                    task.cancel(message)
+                                    ready = asyncio.Event()
+                                    asyncio.get_running_loop().call_soon(ready.set)
+                                    await ready.wait()
+                                    self.assertFalse(interrupted.is_set())
+                                    self.assertFalse(task.done())
+                                release.set()
+                                expected = RuntimeError if selection_fails else asyncio.CancelledError
+                                with self.assertRaises(expected) as caught:
+                                    await asyncio.wait_for(task, 2)
+                                if selection_fails:
+                                    self.assertIs(caught.exception, failure)
+                                else:
+                                    self.assertEqual(cancellation_messages, [("original cancellation",)])
+                                    self.assertTrue(task.cancelled())
+                                self.assertTrue(finished.is_set())
+                                self.assertFalse(interrupted.is_set())
+                            finally:
+                                release.set()
+                                if not task.done():
+                                    task.cancel()
+                                await asyncio.gather(task, return_exceptions=True)
+                        session.rollback.assert_awaited_once()
+                        session.close.assert_awaited_once()
+                        session.commit.assert_not_awaited()
+
+    async def test_repeated_cancellation_finishes_selector_rollback_before_returning(self):
+        await self._assert_repeated_cancellation_during_cleanup("rollback")
+
+    async def test_repeated_cancellation_finishes_selector_close_before_returning(self):
+        await self._assert_repeated_cancellation_during_cleanup("close")
+
     async def test_handoff_preserves_order_recheck_and_caller_transaction_ownership(self):
         for selector, args in SELECTORS:
             with self.subTest(selector=selector.__name__):

@@ -847,11 +847,51 @@
       "depends_on": [
         4
       ],
-      "verification": null,
+      "verification": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk5-gate-results.json",
+        "report_sha256": "aa8fac774659fe8ee4a97094e170ae01d47291ac7532db0eafaeb4feeb6f2bba",
+        "elapsed_seconds": 94.74833607673645,
+        "api": {
+          "tests": 1450,
+          "failures": 3,
+          "errors": 10,
+          "skips": 276,
+          "baseline_details_identical": true
+        },
+        "worker": {
+          "tests": 287,
+          "failures": 0,
+          "errors": 0,
+          "skips": 7,
+          "baseline_details_identical": true
+        },
+        "postgres": {
+          "tests": 6,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "focused": {
+          "tests": 68,
+          "p1_regressions": 55,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "python310": {
+          "tests": 33,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "source_hashes_match": true,
+        "all_disposable_containers_removed": true,
+        "frontend_unchanged_baseline_reused": true
+      },
       "commit_sha": null,
       "started_at": "2026-11-10T20:16:37.573043+00:00",
       "completed_at": null,
-      "phase": "full_verification_prepared",
+      "phase": "verified_pending_local_commit",
       "red_evidence": {
         "report": "/tmp/chessism-p1-final-corrections/chunk5-red-results.json",
         "python_versions": [
@@ -893,7 +933,7 @@
         "application_changes_for_this_correction": false
       },
       "full_gate": {
-        "status": "prepared",
+        "status": "passed",
         "runner": "/tmp/chessism-p1-final-corrections/chunk5_gate.py",
         "expected_api_tests": 1450,
         "expected_existing_api_failures": 3,
@@ -907,7 +947,13 @@
         "expected_focused_tests": 68,
         "expected_p1_regressions": 55,
         "reuse_python310_checks": 33,
-        "reuse_frontend_baseline": "All frontend source and fixtures unchanged in this backend-only chunk; four explicitly approved failures remain documented."
+        "reuse_frontend_baseline": "All frontend source and fixtures unchanged in this backend-only chunk; four explicitly approved failures remain documented.",
+        "launch": {
+          "pid": 1672978,
+          "started_at": "2026-11-10T20:30:02.262679+00:00",
+          "tracking_commit": "5afdff7",
+          "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+        }
       }
     },
     {
