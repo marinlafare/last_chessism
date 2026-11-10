@@ -8,13 +8,13 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 0,
-  "status": "baseline_gate_decision_required",
+  "status": "awaiting_corrected_baseline_result",
   "preflight_passed": false,
   "initial_worktree_clean": true,
   "verification": {
     "main_tests": "python -B -m unittest discover -s tests -p 'test*.py' -v",
-    "main_environment": "Existing chessism-api:runtime image; source read-only; no network; dummy database; no integration opt-ins",
-    "worker_tests": "/home/jon/Desktop/workshop/last_chessism/.venv-cloud/bin/python -B -m unittest discover -s tests -p 'test*.py' -v",
+    "main_environment": "Existing chessism-cloud-controller:latest, Python 3.11.17; disposable neo4j==6.3.0 and pglast==5.9 overlay; source read-only; tests have no network; dummy auth/database; full worker fixture import path.",
+    "worker_tests": "python -B -m unittest discover -s tests -p 'test*.py' -v",
     "worker_cwd": "stockfish-batch-worker",
     "typecheck": {
       "status": "not_applicable",
@@ -54,9 +54,43 @@
         "log_file": "/tmp/chessism-p1-baseline-20261109.log"
       },
       "worker": null
-    }
+    },
+    "worker_environment": "Same isolated Python 3.11 image and dependency overlay as main tests; no integration opt-ins.",
+    "instrumented_runner": "Temporary monitor.py --suite main/worker executes unittest discovery with status-reporting TextTestResult; no filters or skips added."
   },
-  "pending_process": null,
+  "pending_process": {
+    "kind": "corrected_main_and_worker_baseline",
+    "temporary_directory": "/tmp/chessism-p1-verification",
+    "program": "/tmp/chessism-p1-verification/monitor.py",
+    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
+    "status_file": "/tmp/chessism-p1-verification/status.json",
+    "result_files": [
+      "/tmp/chessism-p1-verification/main-result.json",
+      "/tmp/chessism-p1-verification/worker-result.json"
+    ],
+    "container_names": [
+      "chessism-p1-corrected-baseline-deps",
+      "chessism-p1-corrected-baseline-main",
+      "chessism-p1-corrected-baseline-worker"
+    ],
+    "stages": [
+      "Install missing dependencies in temporary directory",
+      "Main offline unittest suite",
+      "Worker offline unittest suite"
+    ],
+    "launch_argv": [
+      "python3",
+      "/tmp/chessism-p1-verification/monitor.py",
+      "--run"
+    ],
+    "launch_mode": "Detached subprocess with separate session; stdout/stderr in runner.log inside temporary directory.",
+    "docker_commands": "Each executed argument array is recorded in dependencies-command.json, main-command.json or worker-command.json in the temporary directory.",
+    "network": "Dependency download container only; test containers use network none. No credentials or source mounted during downloads.",
+    "ownership": "Containers use host UID/GID; temporary files are removable by the user.",
+    "handoff": "Do not poll or wait. Resume when user reports completion. Inspect both structured suite results before implementation.",
+    "pid": 1657631,
+    "launched": true
+  },
   "chunks": [
     {
       "id": 1,
@@ -102,8 +136,9 @@
     "source_changes": false
   },
   "proposed_gate_exception": {
-    "approved": false,
+    "approved": true,
     "proposal": "Correct isolated environment and establish exact unchanged-code baseline; preserve unrelated issues; require all P1 #1 regressions and previously passing relevant tests to pass, with no new full-suite failures/errors/skips.",
-    "reason": "Skill entry gate requires passing tests or escalation; baseline contains existing failures beyond authorized P1 #1 scope."
+    "reason": "Skill entry gate requires passing tests or escalation; baseline contains existing failures beyond authorized P1 #1 scope.",
+    "approval": "User: ok proceed; also explicitly requested a removable monitoring program and handoff after launching the long process."
   }
 }

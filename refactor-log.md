@@ -75,3 +75,31 @@
 - Session ended. Current state: 0 of 2 chunks complete, application/test source
   unchanged, no running verification process. Next: obtain the gate decision,
   correct the isolated environment, and complete baseline checks.
+
+## 2026-11-09 — Approved gate and temporary monitor handoff
+
+- User explicitly approved proceeding under the proposed baseline-comparison
+  gate. Updated the plan/manifest; no further approval of that exception is needed.
+- User requested a removable console program showing elapsed time, current stage,
+  estimated finish when supportable, and status. Created
+  `/tmp/chessism-p1-verification/monitor.py`, outside the repository. Checked its
+  syntax and a completed-result display without starting a monitoring wait.
+- The default monitor checks every 120 seconds, displays start/elapsed/stage/test
+  and result counts, and exits when finished. Ctrl+C closes only the monitor.
+  It does not print application or system logs. Overall ETA is unavailable;
+  the main-stage estimate uses the previous 53-second test duration and explains
+  that the runtime has changed.
+- Corrected verification setup uses Python 3.11.17 from the existing controller
+  image, missing Neo4j/pglast dependencies in a disposable overlay, dummy auth
+  values, and the worker-test fixture path. Both suites run without network or
+  integration opt-ins. Dependency downloads alone have network access, with no
+  checkout/credentials mounted. Containers run under the host UID/GID for cleanup.
+- Started detached runner PID `1657631`. It installs dependencies, runs main
+  unittest discovery, then worker unittest discovery, recording separate logs,
+  structured reports, exact Docker commands and atomic progress in the temporary
+  directory. Existing failures do not prevent the worker baseline from running.
+- Monitoring command: `python3 /tmp/chessism-p1-verification/monitor.py`.
+- Session ended. Current state: 0 of 2 chunks complete; corrected baseline process
+  launched, results pending. No application or test source changed. No polling or
+  waiting performed. Next: after the user reports completion, inspect both results
+  and apply the approved comparison gate before starting chunk 1.

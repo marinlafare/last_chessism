@@ -15,7 +15,7 @@ including removing unnecessary error-suppression compatibility. The ordered
 chunks below implement that authorization. Do not address P1 #2 or other findings.
 
 For every long-running verification process, start it detached, record its identity,
-give the user one status-only monitoring command, and end the turn. That command
+give the user one command for the temporary status monitor, and end the turn. It
 must check every two minutes, show start time and elapsed time, and stop at exit.
 Give an evidence-based duration estimate where available; never invent an ETA.
 Do not ask the user to watch application/system logs. Resume only after the user
@@ -61,16 +61,16 @@ access, or changes to engine retry limits/timeouts are authorized by this plan.
 - [x] Inspect the existing runtime image: includes API test dependencies absent
   from `.venv-cloud` (PyArrow, Neo4j, and pglast).
 - [x] Create the working branch and commit these tracking documents.
-- [ ] Run the complete main Python offline unittest discovery in the existing API
+- [ ] Run the complete main Python offline unittest discovery in the corrected
   image, with repository source read-only, no network, and dummy database settings.
-- [ ] Run batch-worker offline unittest discovery with its existing Python 3.14
+- [ ] Run batch-worker offline unittest discovery in the same isolated Python 3.11
   environment. Record results separately because the worker requires Python 3.11+.
 - [ ] Establish available isolated Redis/PostgreSQL verification infrastructure.
   Never borrow application service connections or persistent application volumes.
 
 ## Verification commands
 
-### Baseline finding and proposed gate exception (pending user decision)
+### Baseline finding and approved gate exception
 
 The first baseline run finished with 1,364 tests, 3 failures, 18 errors and 276
 skips in 52.923 test seconds (56.600 container seconds). No application or test
@@ -84,7 +84,7 @@ Three assertion failures and ten error reports expose existing test/code
 mismatches. Details and test identities are recorded in the manifest and log.
 They must not be silently fixed as part of P1 #1.
 
-Proposed exception, **not yet approved**:
+The user approved this exception with "ok proceed" after reviewing the baseline:
 1. Correct the isolated test environment (Python 3.11+, all declared dependencies,
    dummy auth settings, and worker-test fixture path) and rerun the unchanged
    code to establish the exact remaining failures.
@@ -97,20 +97,40 @@ Proposed exception, **not yet approved**:
    chunk gates. Any unexpected P1-related baseline defect is investigated before
    proceeding; this is not a blanket waiver for analysis failures.
 
-The skill's entry gate says "If not: STOP. Fix or escalate to user." Implementation
-is pending the user's decision on this concrete gate exception. Environment
-correction and other read-only diagnosis do not require scope expansion.
+The skill's entry gate says "If not: STOP. Fix or escalate to user." That escalation
+has been resolved by the user's explicit approval above; do not request it again.
+The approved comparison against the corrected baseline replaces the requirement
+for a globally green suite at the entry and chunk gates. Scope remains P1 #1.
 
-### Initial commands (environment correction pending)
+### Corrected isolated environment and temporary monitoring
 
-Main offline suite, inside `chessism-api:runtime`, with working directory `/workspace`:
+Use the existing `chessism-cloud-controller:latest` image (Python 3.11.17), with
+Neo4j 6.3.0 and pglast 5.9 installed into a disposable dependency directory.
+Only dependency installation has network access; it mounts no checkout or
+credentials. Both test containers have `--network none`, read-only source and
+root filesystem, dummy auth/database settings, and writable temporary paths.
+Run containers under the host UID/GID so the temporary program/results can be
+deleted by the user. No Docker socket or production volumes enter the containers.
+
+The temporary program is `/tmp/chessism-p1-verification/monitor.py`. It provides
+a detached `--run` mode, instrumented unittest discovery via `--suite main` or
+`--suite worker`, and a default console monitor. It records atomic status updates,
+current test, elapsed time and structured results. Monitoring defaults to every
+120 seconds and stops at completion; Ctrl+C stops only the monitor. ETA is shown
+for the API stage based on its previous 53-second run, with runtime-change caveat;
+other stages/overall ETA remain unavailable without evidence.
+
+Monitoring command: `python3 /tmp/chessism-p1-verification/monitor.py`.
+
+The wrapper discovers and executes the same tests as these commands (no filters
+or skips added), with working directory `/workspace` for the main suite:
 
 ```sh
 python -B -m unittest discover -s tests -p 'test*.py' -v
 ```
 
 Mount this checkout read-only at `/workspace`; set
-`PYTHONPATH=/workspace:/workspace/stockfish-batch-worker:/workspace/stockfish-service:/workspace/tests`,
+`PYTHONPATH=/test-deps:/workspace:/workspace/stockfish-batch-worker:/workspace/stockfish-service:/workspace/tests:/workspace/stockfish-batch-worker/tests`,
 `DATABASE_URL=postgresql+asyncpg://test:test@127.0.0.1:1/test`, and
 `PYTHONDONTWRITEBYTECODE=1`. Hide the checkout's `.env` using a read-only `/dev/null`
 mount. Run with `--network none --read-only`, bounded resources and writable tmpfs
@@ -118,10 +138,10 @@ at `/tmp`. Do not enable database, Neo4j, CUDA, or engine integration opt-ins in
 this offline suite. Any unavailable/opt-in tests must be reported as unverified,
 not counted as passing integration checks.
 
-Worker offline suite, from `stockfish-batch-worker/`:
+Worker offline suite, from `/workspace/stockfish-batch-worker/`, in the same image:
 
 ```sh
-/home/jon/Desktop/workshop/last_chessism/.venv-cloud/bin/python -B -m unittest discover -s tests -p 'test*.py' -v
+python -B -m unittest discover -s tests -p 'test*.py' -v
 ```
 
 Focused tests during implementation:
@@ -146,7 +166,7 @@ configured; record those checks as not applicable, not as executed passes.
 
 ## Chunk 1: Keep terminal progress authoritative
 
-Depends on: passing preflight.
+Depends on: preflight meeting the approved baseline-comparison gate.
 
 Files:
 - `stockfish-service/routers/analysis.py`
