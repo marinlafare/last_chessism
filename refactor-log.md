@@ -197,3 +197,14 @@
   at this handoff. No polling or waiting performed on the long verification.
 - Next: when the user reports completion, inspect `chunk1-gate-result.json`, review
   the diff, commit chunk 1 if its comparison gate passes, then begin chunk 2.
+
+## 2026-11-09 — Chunk 1 verified
+
+- User reported completion. Full comparison gate passed in 87.30 seconds.
+- API suite: 1,403 tests, the same 3 baseline failures and 10 errors, 276 skips.
+  All eight added Redis regressions ran; no additional failures/errors/skips.
+- Worker suite: 287 tests, zero failures/errors, seven unchanged opt-in skips.
+  Failure/error identities and messages, skips and dependency versions match
+  baseline. The runner stopped the isolated Redis successfully.
+- Reviewed the production diff: only the existing Stockfish progress Lua changes.
+  Committing chunk 1 as planned; its terminal/reset behavior is verified.

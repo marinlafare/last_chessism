@@ -23,6 +23,19 @@ MAX_ANALYSIS_BATCH_SIZE = 1000
 redis_client: redis.Redis | None = None
 
 PROGRESS_UPDATE_SCRIPT = """
+local previous = nil
+local current = redis.call('GET', KEYS[1])
+if current then
+    local ok, decoded = pcall(cjson.decode, current)
+    if ok then
+        -- Engine requests can outlive the job that finalized this progress.
+        if decoded['phase'] == 'failed' or decoded['phase'] == 'complete' then
+            return tonumber(decoded['processed']) or 0
+        end
+        previous = decoded
+    end
+end
+
 redis.call('SADD', KEYS[2], ARGV[1])
 if ARGV[2] == '1' then
     redis.call('SADD', KEYS[3], ARGV[1])
@@ -30,13 +43,9 @@ end
 
 local processed = redis.call('SCARD', KEYS[2])
 local failed = redis.call('SCARD', KEYS[3])
-local current = redis.call('GET', KEYS[1])
-if current then
-    local ok, decoded = pcall(cjson.decode, current)
-    if ok then
-        processed = math.max(processed, tonumber(decoded['processed']) or 0)
-        failed = math.max(failed, tonumber(decoded['failed']) or 0)
-    end
+if previous then
+    processed = math.max(processed, tonumber(previous['processed']) or 0)
+    failed = math.max(failed, tonumber(previous['failed']) or 0)
 end
 
 local total = tonumber(ARGV[3])

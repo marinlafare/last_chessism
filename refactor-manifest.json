@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 1,
-  "status": "awaiting_chunk1_gate_result",
+  "status": "chunk1_verified",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -446,37 +446,12 @@
       "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95"
     }
   },
-  "pending_process": {
-    "kind": "chunk1_full_suite_gate",
-    "program": "/tmp/chessism-p1-verification/run_chunk1_gate.py",
-    "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
-    "monitor_refresh_seconds": 120,
-    "status_file": "/tmp/chessism-p1-verification/status.json",
-    "result_file": "/tmp/chessism-p1-verification/chunk1-gate-result.json",
-    "result_files": [
-      "/tmp/chessism-p1-verification/chunk1-main-result.json",
-      "/tmp/chessism-p1-verification/chunk1-worker-result.json"
-    ],
-    "container_names": [
-      "chessism-p1-chunk1-main",
-      "chessism-p1-chunk1-worker"
-    ],
-    "redis_container": "chessism-p1-isolated-redis",
-    "estimated_seconds": 82,
-    "launch_argv": [
-      "python3",
-      "-B",
-      "/tmp/chessism-p1-verification/run_chunk1_gate.py"
-    ],
-    "launched": true,
-    "handoff": "Do not poll or wait. After user reports completion, inspect comparison results, review diff, then commit chunk 1 if gate passes before starting chunk 2.",
-    "pid": 1778308
-  },
+  "pending_process": null,
   "chunks": [
     {
       "id": 1,
       "name": "Keep terminal progress authoritative",
-      "status": "in_progress",
+      "status": "completed",
       "depends_on": [],
       "verification": {
         "red": {
@@ -494,11 +469,52 @@
         },
         "compile_changed_sources": "passed",
         "git_diff_check": "passed",
-        "full_gate": "pending"
+        "full_gate": {
+          "passed": true,
+          "comparisons": {
+            "main": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "container_exit_matches_report": true
+            },
+            "worker": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true,
+              "container_exit_matches_report": true
+            }
+          },
+          "suite_results": {
+            "main": {
+              "tests_run": 1403,
+              "failures": 3,
+              "errors": 10,
+              "skipped": 276,
+              "elapsed_seconds": 56.00548458099365,
+              "exit_code": 1
+            },
+            "worker": {
+              "tests_run": 287,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 7,
+              "elapsed_seconds": 26.9067804813385,
+              "exit_code": 0
+            }
+          },
+          "redis_cleanup_exit_code": 0,
+          "elapsed_seconds": 87.29622483253479
+        },
+        "full_gate_report": "/tmp/chessism-p1-verification/chunk1-gate-result.json"
       },
       "commit_sha": null,
       "started_at": "2026-11-09",
-      "completed_at": null
+      "completed_at": "2026-11-09"
     },
     {
       "id": 2,
