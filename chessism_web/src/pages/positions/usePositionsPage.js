@@ -3,7 +3,7 @@ import {
   COMPLETED_JOB_FADE_MS, COMPLETED_JOB_VISIBLE_MS, DEFAULT_ANALYSIS_NODES,
   ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE,
   formatNumber, getAnalysisJobProgress, getAnalysisProcessView, getPositionJobKey,
-  getProgressSnapshot, getTrackedJobPhase, isAnalysisJobKey, isTrackedJobActive,
+  getProgressSnapshot, getTrackedJobPhase, getTrackedJobFailureDetail, isAnalysisJobKey, isTrackedJobActive,
   isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
   storeJobState,
 } from './positionPageSupport'
@@ -332,7 +332,7 @@ export function usePositionsPage() {
           payload: { job_id: job.job_id },
           jobId: job.job_id,
           loading: false,
-          error: '',
+          error: getTrackedJobPhase({ status: job }) === 'failed' ? getTrackedJobFailureDetail(job) : '',
           status: job,
           targetFens: target,
           ...(key === 'loop' ? {
@@ -496,7 +496,7 @@ export function usePositionsPage() {
 
   const handleCompletedJob = (key, state, status, patch) => {
     const jobId = state.jobId
-    const succeeded = status.result?.success !== false
+    const succeeded = status.result?.success === true
     patch.completedAt = patch.completedAt || state.completedAt || Date.now()
     patch.fading = false
 
@@ -596,7 +596,7 @@ export function usePositionsPage() {
   }, [])
 
   usePositionJobPolling(jobState, (key, state, status) => {
-    const patch = { status, error: '' }
+    const patch = { status, error: '', completedAt: null, fading: false }
     if (key === 'fen' && status.progress) {
       const { total, processed, phase, detail } = status.progress
       const target = Math.max(1, Number(total || 1))
@@ -619,7 +619,7 @@ export function usePositionsPage() {
       }
       handleCompletedJob(key, state, status, patch)
     } else if (phase === 'failed' || phase === 'unavailable') {
-      patch.error = status.progress?.detail || 'Automatic pipeline stage failed.'
+      patch.error = getTrackedJobFailureDetail(status)
       patch.fading = false
     }
     updateJobState(key, patch, state.jobId)

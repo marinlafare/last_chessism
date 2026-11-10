@@ -82,5 +82,5 @@ test('targets are recovered for player, loop, and complete-game requests', () =>
 test('idle, submitting, and completed controls retain their labels', () => {
   assert.equal(getAnalysisButtonLabel({}), 'Analyze')
   assert.equal(getAnalysisButtonLabel({ loading: true }), 'Queueing')
-  assert.equal(getAnalysisButtonLabel({ jobId: 'finished', status: { status: 'complete' } }), 'Analyze')
+  assert.equal(getAnalysisButtonLabel({ jobId: 'finished', status: { status: 'complete', result: { success: true } } }), 'Analyze')
 })

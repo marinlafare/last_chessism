@@ -963,11 +963,38 @@
       "depends_on": [
         5
       ],
-      "verification": null,
+      "verification": {
+        "report": "/tmp/chessism-p1-final-corrections/chunk6-gate-results.json",
+        "report_sha256": "3b8c4d8fd6c76e53c5724bf4d798d7d2bff64cccd2ed84da10b8a0bb1e4d709c",
+        "elapsed_seconds": 13.49260139465332,
+        "frontend": {
+          "tests": 346,
+          "passed": 342,
+          "existing_failures": 4,
+          "new_failures": 0,
+          "new_errors": 0,
+          "skips": 0,
+          "cancelled": 0,
+          "same_failure_identities_and_details": true
+        },
+        "focused": {
+          "tests": 34,
+          "new_regression_tests": 26,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0
+        },
+        "architecture": "passed",
+        "source_size": "passed",
+        "production_build": "passed",
+        "backend_evidence_reused_after_source_and_image_verification": "/tmp/chessism-p1-final-corrections/chunk5-gate-results.json",
+        "source_hashes_match": true,
+        "all_owned_containers_removed": true
+      },
       "commit_sha": null,
       "started_at": "2026-11-10T20:39:37.125541+00:00",
       "completed_at": null,
-      "phase": "full_verification_prepared",
+      "phase": "verified_pending_local_commit",
       "red_evidence": {
         "report": "/tmp/chessism-p1-final-corrections/chunk6-red-v2-result.json",
         "original_implementation_commit": "49edfc5",
@@ -1000,14 +1027,20 @@
         "legacy_fixture_adjustments": "Two existing successful-completion fixtures now include actual API result.success=true; intended assertions retained."
       },
       "full_gate": {
-        "status": "prepared",
+        "status": "passed",
         "runner": "/tmp/chessism-p1-final-corrections/chunk6_gate.py",
         "expected_frontend_tests": 346,
         "expected_frontend_passed": 342,
         "expected_existing_frontend_failures": 4,
         "expected_skips": 0,
         "require_exact_existing_failure_details": true,
-        "backend_preservation": "Reuse the just-passed complete chunk 5 gate only after verifying all backend source hashes, exact exception/skip records and cached image identities remain unchanged. No backend code changed in chunk 6."
+        "backend_preservation": "Reuse the just-passed complete chunk 5 gate only after verifying all backend source hashes, exact exception/skip records and cached image identities remain unchanged. No backend code changed in chunk 6.",
+        "launch": {
+          "pid": 1715176,
+          "started_at": "2026-11-10T20:47:27.075319+00:00",
+          "tracking_commit": "174ea70",
+          "monitor_command": "python3 /tmp/chessism-p1-final-corrections/monitor.py"
+        }
       }
     }
   ],
@@ -1303,6 +1336,30 @@
           "Stop if existing debt prevents meaningful verification",
           "Keep debt unresolved and documented"
         ]
+      },
+      "failure_details": [
+        {
+          "test": "registered target annotations stay in their owning page scopes",
+          "details": "not ok 13 - registered target annotations stay in their owning page scopes\n  ---\n  duration_ms: 8.862403\n  type: 'test'\n  location: '/tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:66:1'\n  failureType: 'testCodeFailure'\n  error: 'positions/FenIngestionPanel.jsx: positions/ingestion.player'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: ~\n  operator: '=='\n  stack: |-\n    walk (file:///tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:89:42)\n    walk (file:///tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:85:31)\n    TestContext.<anonymous> (file:///tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:93:3)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ..."
+        },
+        {
+          "test": "individual home controls seed saved shared styles once, without relinking drafts",
+          "details": "not ok 20 - individual home controls seed saved shared styles once, without relinking drafts\n  ---\n  duration_ms: 4.810118\n  type: 'test'\n  location: '/tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:192:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    29 !== 22\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: 22\n  actual: 29\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:199:10)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ..."
+        },
+        {
+          "test": "game review owns its targets and preserves old styles without remaining linked",
+          "details": "not ok 24 - game review owns its targets and preserves old styles without remaining linked\n  ---\n  duration_ms: 5.046442\n  type: 'test'\n  location: '/tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:257:1'\n  failureType: 'testCodeFailure'\n  error: 'home/gameReview.chart.title/borderColor'\n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: true\n  actual: false\n  operator: '=='\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/chessism-source/chessism_web/tests/appearancePages.test.mjs:271:119)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)\n  ..."
+        },
+        {
+          "test": "Hegel page, document, navigation, asset alias and Markdown-only dependencies are removed",
+          "details": "not ok 234 - Hegel page, document, navigation, asset alias and Markdown-only dependencies are removed\n  ---\n  duration_ms: 1.10565\n  type: 'test'\n  location: '/tmp/chessism-source/chessism_web/tests/navigationAppearance.test.mjs:28:1'\n  failureType: 'testCodeFailure'\n  error: |-\n    Expected values to be strictly equal:\n    \n    true !== false\n    \n  code: 'ERR_ASSERTION'\n  name: 'AssertionError'\n  expected: false\n  actual: true\n  operator: 'strictEqual'\n  stack: |-\n    TestContext.<anonymous> (file:///tmp/chessism-source/chessism_web/tests/navigationAppearance.test.mjs:30:12)\n    Test.runInAsyncScope (node:async_hooks:214:14)\n    Test.run (node:internal/test_runner/test:1047:25)\n    Test.processPendingSubtests (node:internal/test_runner/test:744:18)\n    Test.postRun (node:internal/test_runner/test:1173:19)\n    Test.run (node:internal/test_runner/test:1101:12)\n    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)\n  ..."
+        }
+      ],
+      "unresolved_testing_debt": true,
+      "final_comparison": {
+        "identities_and_details_unchanged": true,
+        "normalization": "Only TAP test numbering and duration; assertion details and full stacks preserved.",
+        "final_details": "/tmp/chessism-p1-final-corrections/chunk6-frontend-failure-details.json"
       }
     }
   }

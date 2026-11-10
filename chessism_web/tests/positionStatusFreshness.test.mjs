@@ -4,6 +4,7 @@ import { obsoletePositionStatus } from '../src/pages/positions/positionStatusFre
 
 const snapshot = (phase, updated_at, job_id = 'local-job') => ({
   job_id, status: phase === 'complete' ? 'complete' : 'in_progress',
+  result: phase === 'complete' ? { success: true } : null,
   progress: { phase, updated_at },
 })
 test('discovery cannot revive a terminal job or replace a newer local checkpoint', () => {

@@ -8,6 +8,7 @@ const POSITION_JOBS_STORAGE_KEY = 'chessism:positions:jobs'
 const COMPLETED_JOB_VISIBLE_MS = 5000
 const COMPLETED_JOB_FADE_MS = 700
 const ETA_RATE_SMOOTHING = 0.35
+const TERMINAL_PROGRESS_PHASES = new Set(['complete', 'failed', 'unavailable', 'cancelled', 'canceled'])
 
 const formatTruncatedMillions = (value) => {
   const millions = Math.floor(Math.max(0, Number(value) || 0) / 10_000) / 100
@@ -80,9 +81,25 @@ const pageHasAttention = () => {
 }
 
 const getTrackedJobPhase = (state) => {
-  const queueStatus = state?.status?.status
+  const status = state?.status || {}
+  if (status.result?.success === false) return 'failed'
+  if (status.result?.success === true) return 'complete'
+  const queueStatus = status.status
+  if (queueStatus === 'not_found' || queueStatus === 'failed' || queueStatus === 'unavailable') return queueStatus
   if (queueStatus === 'queued' || queueStatus === 'deferred') return queueStatus
-  return state?.status?.progress?.phase || queueStatus || state?.progress?.phase || 'queued'
+  // ARQ complete means a result is available; progress cannot prove its outcome.
+  const progressPhase = status.progress?.phase
+  if (progressPhase && !TERMINAL_PROGRESS_PHASES.has(progressPhase)) return progressPhase
+  return queueStatus === 'complete' ? 'in_progress' : queueStatus || 'queued'
+}
+
+const getTrackedJobFailureDetail = (status) => {
+  if (status?.result?.success === false) {
+    const failure = status.result.result
+    if (failure?.type === 'CancelledError') return 'Job was cancelled.'
+    return failure?.message || 'Job failed.'
+  }
+  return status?.progress?.detail || 'Job failed.'
 }
 
 const getAnalysisButtonLabel = (state) => {
@@ -107,13 +124,18 @@ const getAnalysisJobProgress = (state) => {
     state?.targetFens ?? state?.targetPlayerFens ?? state?.progress?.target ?? 0
   ) || 0)
   const analyzed = isQueued ? 0 : Math.min(target, Math.max(0, Number(progress.processed) || 0))
+  let detail = progress.detail
+  if (isQueued) detail = 'Waiting to start.'
+  else if (phase === 'failed' || phase === 'unavailable') detail = getTrackedJobFailureDetail(status)
+  else if (phase === 'complete' && progress.phase !== 'complete') detail = undefined
+  else if (phase !== 'complete' && TERMINAL_PROGRESS_PHASES.has(progress.phase)) detail = 'Waiting for job outcome.'
   return {
     analyzed,
     failed: isQueued ? 0 : Math.max(0, Number(progress.failed) || 0),
     target,
     percent: target > 0 ? Math.min(100, Math.round(analyzed / target * 100)) : 0,
     phase,
-    detail: isQueued ? 'Waiting to start.' : progress.detail,
+    detail,
   }
 }
 
@@ -212,7 +234,12 @@ const loadStoredJobState = () => {
   if (typeof window === 'undefined') return {}
   try {
     const parsed = JSON.parse(window.localStorage.getItem(POSITION_JOBS_STORAGE_KEY) || '{}')
-    return parsed && typeof parsed === 'object' ? parsed : {}
+    if (!parsed || typeof parsed !== 'object') return {}
+    return Object.fromEntries(Object.entries(parsed).map(([key, state]) => [key,
+      state?.jobId && !isTrackedJobComplete(state)
+        ? { ...state, completedAt: null, fading: false }
+        : state,
+    ]))
   } catch {
     return {}
   }
@@ -252,6 +279,7 @@ export {
   getPositionJobKey,
   getProgressSnapshot,
   getTrackedJobPhase,
+  getTrackedJobFailureDetail,
   isAnalysisJobKey,
   isLoopJobKey,
   isTrackedJobActive,
