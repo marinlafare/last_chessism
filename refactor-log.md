@@ -257,3 +257,34 @@
   source/test changes remain uncommitted until gate review; tracking files are
   committed for handoff. Next: inspect all saved results after the user's report,
   resolve any actual regressions, then commit chunk 2 and complete postflight.
+
+## 2026-11-09 — Full suites pass comparison; PostgreSQL setup correction
+
+- User reported the failed gate. Both complete suites passed the approved
+  comparison: API 1,425 tests in 52.24 seconds with the exact 3 known failures,
+  10 known errors and 276 skips; worker 287 tests in 26.52 seconds with zero
+  failures/errors and seven unchanged skips. All 30 added regressions ran.
+- Failure occurred before PostgreSQL tests started. The temporary server used
+  `/pgsocket`, while the official image's initialization function explicitly clears
+  PGHOST and makes psql use `/var/run/postgresql`. Confirmed this by inspecting
+  the installed entrypoint. Its bootstrap also defaults to port 5432 unless
+  PGPORT is set, even when the final server command sets port 55432.
+- Corrected only the temporary harness: mount the private socket directory at
+  the image's default socket path and set PGPORT=55432 for initialization. Kept
+  no network, read-only filesystem, host UID/GID and temporary PostgreSQL data.
+  Removed the conflicting tmpfs for the socket directory; the host-owned bind
+  directory also resolves its nonfatal chmod warning.
+- Preserved failed setup evidence under
+  `/tmp/chessism-p1-verification/postgres-startup-attempt1/`. Application/test
+  source is unchanged. The next run retries only the six PostgreSQL tests and
+  retains the verified full-suite results, avoiding an unnecessary rerun.
+
+## 2026-11-09 — PostgreSQL-only retry handoff
+
+- Started detached PostgreSQL retry PID `1913071`; monitor command remains
+  `python3 /tmp/chessism-p1-verification/monitor.py`. It clears the prior display
+  every 120 seconds and shows current stage/test. Overall ETA remains unavailable.
+- Session ended. Chunk 1 committed; chunk 2 focused and full-suite comparisons
+  passed, isolated PostgreSQL check pending. No new application changes or
+  polling/waiting. Next: inspect the PostgreSQL result after the user's completion
+  report, then finish verification/commit/postflight if all required checks pass.

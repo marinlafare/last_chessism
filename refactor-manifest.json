@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 2,
   "current_chunk": 2,
-  "status": "awaiting_chunk2_gate_result",
+  "status": "awaiting_postgres_retry_result",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -447,34 +447,27 @@
     }
   },
   "pending_process": {
-    "kind": "chunk2_full_suite_and_postgres_gate",
-    "program": "/tmp/chessism-p1-verification/run_chunk2_gate.py",
+    "kind": "postgres_only_retry",
+    "program": "/tmp/chessism-p1-verification/run_postgres_retry.py",
     "monitor_command": "python3 /tmp/chessism-p1-verification/monitor.py",
     "monitor_refresh_seconds": 120,
     "status_file": "/tmp/chessism-p1-verification/status.json",
     "result_file": "/tmp/chessism-p1-verification/chunk2-gate-result.json",
     "result_files": [
-      "/tmp/chessism-p1-verification/chunk2-main-result.json",
-      "/tmp/chessism-p1-verification/chunk2-worker-result.json",
       "/tmp/chessism-p1-verification/chunk2-postgres-result.json"
     ],
     "container_names": [
-      "chessism-p1-chunk2-main",
-      "chessism-p1-chunk2-worker",
-      "chessism-p1-chunk2-postgres",
-      "chessism-p1-chunk2-postgres-service"
+      "chessism-p1-chunk2-postgres-service-v2",
+      "chessism-p1-chunk2-postgres-v2"
     ],
-    "redis_container": "chessism-p1-isolated-redis",
-    "estimated_seconds": null,
-    "estimate_basis": "Previous API/worker suites took 56 and 27 seconds; PostgreSQL duration unknown.",
     "launch_argv": [
       "python3",
       "-B",
-      "/tmp/chessism-p1-verification/run_chunk2_gate.py"
+      "/tmp/chessism-p1-verification/run_postgres_retry.py"
     ],
     "launched": true,
-    "handoff": "Do not poll or wait. After user reports completion, inspect all comparisons and PostgreSQL results. Commit chunk 2 only after the gate passes; then finish postflight and final report.",
-    "pid": 1858391
+    "handoff": "Do not poll or wait. Review PostgreSQL results after user reports completion. Main and worker comparison gates already passed on unchanged source.",
+    "pid": 1913071
   },
   "chunks": [
     {
@@ -576,7 +569,54 @@
         "invariants": "AST comparisons confirm unchanged query constructions, player SQL builder, public entry-point bodies and engine request policy; all necessary caller changes only remove raise_errors.",
         "compile_changed_sources": "passed",
         "git_diff_check": "passed",
-        "full_gate": "pending"
+        "full_gate": "pending",
+        "full_suites": {
+          "passed_comparison": true,
+          "comparisons": {
+            "main": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true
+            },
+            "worker": {
+              "failures_match_baseline": true,
+              "errors_match_baseline": true,
+              "skips_match_baseline": true,
+              "all_expected_tests_ran": true,
+              "dependencies_match_baseline": true
+            }
+          },
+          "suite_results": {
+            "main": {
+              "tests_run": 1425,
+              "failures": 3,
+              "errors": 10,
+              "skipped": 276,
+              "elapsed_seconds": 52.237128019332886,
+              "exit_code": 1
+            },
+            "worker": {
+              "tests_run": 287,
+              "failures": 0,
+              "errors": 0,
+              "skipped": 7,
+              "elapsed_seconds": 26.5162832736969,
+              "exit_code": 0
+            }
+          },
+          "report_files": [
+            "/tmp/chessism-p1-verification/chunk2-main-result.json",
+            "/tmp/chessism-p1-verification/chunk2-worker-result.json"
+          ]
+        },
+        "postgres_setup_attempt_1": {
+          "status": "failed_before_tests",
+          "reason": "Official image initialization clears PGHOST; server listened on custom /pgsocket while psql used /var/run/postgresql.",
+          "archive_directory": "/tmp/chessism-p1-verification/postgres-startup-attempt1",
+          "application_regression": false
+        }
       },
       "commit_sha": null,
       "started_at": "2026-11-09",
