@@ -147,3 +147,53 @@
   version changes in the project, and no polling/waiting on the new long process.
   Next: inspect results after the user's completion report, then proceed under
   the approved baseline-comparison gate.
+
+## 2026-11-09 — Corrected baseline accepted; starting chunk 1
+
+- User reported completion. Dependency build succeeded with exact pglast 5.9
+  (PostgreSQL 15.1 parser) and Neo4j 6.3.0. Retained its reusable wheel/dependencies.
+- API baseline: 1,395 tests in 52.58 seconds, 3 failures, 10 errors, 276 skips.
+  Every failure/error matches the previously diagnosed unrelated baseline issues;
+  all eight test-environment error reports are resolved. Worker baseline: 287
+  tests in 26.41 seconds, zero failures/errors, seven opt-in skips.
+- Accepted preflight under the user's approved comparison gate. Archived exact
+  results, logs and commands in `/tmp/chessism-p1-verification/baseline/` and stored
+  failure/error/skip identities and dependency versions in the manifest.
+- Confirmed local isolated Redis 7 and PostgreSQL 15 images are available.
+- Starting chunk 1: added eight regressions exercising the actual Stockfish Lua
+  and coordinator reset against explicitly isolated Redis. They cover terminal
+  payloads, sets and absolute expiration times, normal counters/deduplication,
+  intermediate loop completion and reset after both final phases. Production
+  source is still unchanged; red verification is next.
+
+## 2026-11-09 — Chunk 1 red/green evidence
+
+- Red run on unchanged production code: eight isolated Redis tests, three failures.
+  Late updates changed both final phases to `analyzing` and recreated progress
+  sets after a terminal state. Normal progress and reset scenarios already passed.
+- Corrected the new test cleanup to explicitly await Redis key deletion; repeated
+  red verification confirmed the same three failures without cleanup warnings.
+  Authoritative red output: `/tmp/chessism-p1-verification/terminal-red2.log`.
+- Added the atomic early guard in Stockfish's existing Lua script, before any
+  set mutation or expiry update. Reuses decoded progress for normal monotonic
+  counters; no changes to engine execution, retry or timeout policy.
+- Green run: all eight tests passed in 0.43 seconds using actual Redis/Lua.
+  Output: `/tmp/chessism-p1-verification/terminal-green.log`. Changed Python
+  sources compile in memory and `git diff --check` passes.
+- Prepared a detached full-suite gate that reuses dependencies (no installation),
+  runs the new Redis tests with the full API suite, then the worker suite, compares
+  exact failures/errors/skips and expected test counts against the saved baseline,
+  and stops the isolated Redis afterward. Expected combined duration is roughly
+  82 seconds based on previous suite timing and container startup.
+
+## 2026-11-09 — Chunk 1 verification handoff
+
+- Started detached full-suite gate PID `1778308`. Monitor with
+  `python3 /tmp/chessism-p1-verification/monitor.py`; it clears the previous display
+  every 120 seconds, remains open until Ctrl+C, and shows the estimated finish.
+- Session ended. Current state: chunk 1 implemented with focused red/green
+  evidence, full gate pending; chunk 2 not started. Production/test changes remain
+  uncommitted until this gate is reviewed; only tracking documents are committed
+  at this handoff. No polling or waiting performed on the long verification.
+- Next: when the user reports completion, inspect `chunk1-gate-result.json`, review
+  the diff, commit chunk 1 if its comparison gate passes, then begin chunk 2.

@@ -62,11 +62,11 @@ access, or changes to engine retry limits/timeouts are authorized by this plan.
 - [x] Inspect the existing runtime image: includes API test dependencies absent
   from `.venv-cloud` (PyArrow, Neo4j, and pglast).
 - [x] Create the working branch and commit these tracking documents.
-- [ ] Run the complete main Python offline unittest discovery in the corrected
+- [x] Run the complete main Python offline unittest discovery in the corrected
   image, with repository source read-only, no network, and dummy database settings.
-- [ ] Run batch-worker offline unittest discovery in the same isolated Python 3.11
+- [x] Run batch-worker offline unittest discovery in the same isolated Python 3.11
   environment. Record results separately because the worker requires Python 3.11+.
-- [ ] Establish available isolated Redis/PostgreSQL verification infrastructure.
+- [x] Establish available isolated Redis/PostgreSQL verification infrastructure.
   Never borrow application service connections or persistent application volumes.
 
 ## Verification commands
