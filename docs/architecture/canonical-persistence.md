@@ -1,8 +1,9 @@
 # Canonical PostgreSQL foundation — Stage A, Batch 1
 
-Status: implemented and verified; independent Batch 1 review pending. This is
-an additive foundation, **not a runtime-ready replacement database**. No application
-caller is switched. Entry code checkpoint: `0fde829`. No historical data is required.
+Status: Batch 1 independently accepted with documented limitations at `35be4fc`.
+Stage A2–A4 are now authorized and in progress. This remains **not a runtime-ready
+replacement database**. No application caller is switched yet. Entry code checkpoint
+for the foundation: `0fde829`. No historical data is required.
 
 ## Scope and sources
 
@@ -120,12 +121,17 @@ foundation contract, version, DDL checksum, catalog checksum and initial timesta
 Validation performs reads only, rejects an incompatible version/artifact or catalog
 drift, and never repairs it. It works inside a read-only transaction.
 
-Version 1 identifies this **foundation**, not whole-application readiness. Changes
+Version 1 is the accepted Batch 1 foundation. Version 2 closes the nullable CHECK
+loophole: unscored rows with no source cannot carry an `analyzed_at` timestamp.
+Neither version implies whole-application readiness. Changes
 to these artifacts or additions in A2/A3 require an explicit new version; for these
 disposable databases reinitialization uses a newly created database, not automatic
 migration. No runtime storage profile or release switch is installed by A1.
 
 ## Verification and baseline
+
+The results below are the accepted A1 gate. A2 evidence is recorded separately in
+the manifest; the A1 gate is not evidence for newly added runtime persistence.
 
 `tests/canonical_schema_fixture.py` supplies synthetic standard/variant/custom-start,
 zero-move and self-play games, repeated positions, two accounts, empty/populated
@@ -176,4 +182,24 @@ executed suites and not globally passing results.
 - Existing cloud lifecycle policies remain in their current coordinator; B will
   remove dependency cycles without weakening receipts, cleanup or recovery.
 - Backup/restore behavior, Neo4j/GCP services and the verified checkpoint are unchanged.
-- A2–A4 can follow the approved sequence after A1 review; they are not authorized yet.
+- A2–A4 are authorized as one stage; independent acceptance follows their final gate.
+
+## A2.1 canonical import boundary
+
+`database/postgresql/game_imports.py` accepts an existing PostgreSQL transaction.
+`ingest_games` validates complete game/move/opening bundles, stages bounded groups,
+and takes the existing ingestion transaction lock. Identical repeats return no new
+identities. Conflicting metadata, moves or openings raise; they never silently
+overwrite or acknowledge different content. Extraction flags on existing games are
+preserved. All classifications, including zero-move metadata, share one identity.
+
+`sync_month_counts` records explicitly fetched months, including empty ones. It
+counts only `is_standard AND n_moves > 0`, once per game even in self-play. UTC
+timestamp boundaries replace calendar columns; session timezone does not redefine
+an imported month. Variants, custom starts and zero-move games remain stored but
+excluded from this established active-game count.
+
+These functions do not begin, commit, roll back or close their caller's transaction.
+The application operation must include projection invalidation and ingestion
+accounting in the same transaction. A2.2/A2.3 provide that complete runtime wiring;
+the infrastructure chunk introduces no new storage profile or runtime switch.

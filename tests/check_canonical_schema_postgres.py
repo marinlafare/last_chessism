@@ -4,17 +4,15 @@ Run with: python -B -m unittest tests.check_canonical_schema_postgres -v
 Each test owns a uniquely named empty database in the disposable server.
 """
 import asyncio
-import os
 import sys
 import unittest
-from uuid import uuid4
 from unittest.mock import patch
 
 import asyncpg
 
 from chessism_api.database.postgresql import canonical
-from scripts.init_canonical_db import isolated_target
 from tests.canonical_schema_fixture import seed, FENS, START, PLAYED, GAME_SQL
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 
 # This is the existing selection contract, exercised against the new physical schema.
 SELECT_PENDING = '''SELECT f.fen FROM public.fen f
@@ -24,28 +22,7 @@ RECHECK = '''SELECT f.fen FROM unnest($1::text[]) wanted(fen) JOIN public.fen f 
  WHERE f.score IS NULL EXCEPT SELECT fen FROM public.cloud_fen_claim WHERE fen=ANY($1::text[])'''
 
 
-class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
-    async def asyncSetUp(self):
-        self.socket = isolated_target(os.environ['CHESSISM_CANONICAL_TEST_SOCKET'],'chessism_canonical_test')
-        self.settings = dict(host=self.socket,port=55432,user='test',password='',timeout=10)
-        self.admin = await asyncpg.connect(database='chessism_canonical_test',**self.settings)
-        self.name = 'chessism_canonical_'+uuid4().hex
-        self.connections = []
-        await self.admin.execute('CREATE DATABASE '+self.name)
-        self.db = await self.connect()
-
-    async def connect(self):
-        conn = await asyncpg.connect(database=self.name,**self.settings)
-        await conn.execute("SET search_path TO public, pg_catalog; SET statement_timeout TO '5s'")
-        self.connections.append(conn)
-        return conn
-
-    async def asyncTearDown(self):
-        for conn in self.connections:
-            await conn.close()
-        await self.admin.execute('DROP DATABASE '+self.name)
-        await self.admin.close()
-
+class CanonicalPostgresTests(CanonicalDatabaseTestCase):
     async def populated(self):
         await canonical.initialize(self.db)
         async with self.db.transaction():
@@ -53,7 +30,7 @@ class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_empty_initialization_and_exact_repeat_preserve_data(self):
         self.assertTrue(await canonical.initialize(self.db))
-        self.assertEqual(await canonical.validate(self.db),1)
+        self.assertEqual(await canonical.validate(self.db),2)
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM public.account'),0)
         self.assertEqual(await self.db.fetch(SELECT_PENDING,10),[])
         await seed(self.db)
@@ -90,7 +67,7 @@ class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(canonical.SchemaMismatch):
                 await fn(self.db)
         self.assertEqual(await self.db.fetchval('SELECT version FROM canonical_schema_version'),99)
-        await self.db.execute('UPDATE canonical_schema_version SET version=1,ddl_sha256=\'wrong\'')
+        await self.db.execute('UPDATE canonical_schema_version SET version=2,ddl_sha256=\'wrong\'')
         with self.assertRaises(canonical.SchemaMismatch):
             await canonical.validate(self.db)
 
@@ -103,7 +80,15 @@ class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
     async def test_validation_works_in_read_only_transaction(self):
         await canonical.initialize(self.db)
         async with self.db.transaction(readonly=True):
-            self.assertEqual(await canonical.validate(self.db),1)
+            self.assertEqual(await canonical.validate(self.db),2)
+
+    async def test_accepted_version_one_is_not_silently_reinterpreted(self):
+        await canonical.initialize(self.db)
+        await self.db.execute('UPDATE canonical_schema_version SET version=1')
+        for operation in (canonical.validate, canonical.initialize):
+            with self.assertRaises(canonical.SchemaMismatch):
+                await operation(self.db)
+        self.assertEqual(await self.db.fetchval('SELECT version FROM canonical_schema_version'),1)
 
     async def test_developer_command_initializes_repeats_and_validates_explicit_target(self):
         args = [sys.executable,'-B','-m','scripts.init_canonical_db','--socket',self.socket,
@@ -200,6 +185,15 @@ class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
         await self.db.execute('DELETE FROM fen WHERE fen_id=$1',fen_id)
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM fen_continuation'),0)
 
+    async def test_unscored_timestamp_requires_explicit_unavailable_source(self):
+        ids = await self.populated()
+        with self.assertRaises(asyncpg.CheckViolationError):
+            await self.db.execute('UPDATE fen SET analyzed_at=now() WHERE fen_id=$1',ids['fens'][0])
+        self.assertIsNone(await self.db.fetchval('SELECT analyzed_at FROM fen WHERE fen_id=$1',ids['fens'][0]))
+        await self.db.execute("""UPDATE fen SET analysis_source='tablebase_unavailable',
+            analyzed_at=now() WHERE fen_id=$1""",ids['fens'][0])
+        self.assertIn(FENS[0],[row['fen'] for row in await self.db.fetch(SELECT_PENDING,10)])
+
     async def test_bundle_and_accounting_rollback_is_atomic(self):
         await canonical.initialize(self.db)
         with self.assertRaises(asyncpg.CheckViolationError):
@@ -242,7 +236,7 @@ class CanonicalPostgresTests(unittest.IsolatedAsyncioTestCase):
                 await self.db.execute('UPDATE months SET n_games=6 WHERE player_id=$1 AND month=1',ids['white'])
                 raise RuntimeError('interrupt bundle')
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM ingestion_pipeline_stage_timing'),0)
-        self.assertEqual(await self.db.fetchval('SELECT n_games FROM months WHERE month=1'),5)
+        self.assertEqual(await self.db.fetchval('SELECT n_games FROM months WHERE month=1'),2)
 
     async def test_cloud_claims_are_unique_and_refer_to_existing_runs_and_fens(self):
         await self.populated()

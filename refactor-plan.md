@@ -1,68 +1,107 @@
 # Chessism V1 architectural refactoring
 
-## Active authorization — Stage A, Batch 1
+## Active authorization — Complete Stage A (A2–A4)
 
-The user approved the A → B → C → D roadmap and explicitly authorized only
-**A1: Canonical schema and persistence contracts**. P1 #1 is accepted with the
-documented limitations; the older pending-review statements below are historical.
-Entry checkpoint: `0fde829d9477b3f73714b52e820a67bad49dad77`, clean branch
-`refactor/p1-analysis-failure-propagation`. All 1,699 saved verification input
-hashes match. Reuse that baseline and its exact unresolved debt; do not rerun
-unaffected full suites. User authorization supersedes the skill's blanket
-full-suite-per-chunk rule and additional plan-signoff requirement.
+Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.
+A1 was independently ACCEPTED WITH DOCUMENTED LIMITATIONS. Its commits are
+`22a406c` and `35be4fc`; entry HEAD is `35be4fce19d692914df76904cb638b361351b346`.
+Repository and branch are `/home/jon/Desktop/workshop/last_chessism` and
+`refactor/p1-analysis-failure-propagation`. The entry working tree is clean and
+all 1,699 protected application/test inputs match the accepted evidence.
 
-### A1 implementation boundary
+The user authorizes A2, A3 and A4 as one stage, local commits after focused gates,
+and one independent review at the end. No additional batch approvals are needed.
+This overrides the skill's repeated sign-off and full-suite-per-chunk rules.
+Existing API 3 failures/10 errors/276 skips, worker 7 skips, and four frontend
+failures remain separate unresolved debt. No new failures/errors/skips are allowed.
 
-Implementation and isolated verification are complete: 31 foundation checks
-(5 offline, 26 PostgreSQL) and all 68 focused P1 checks passed without skips.
-Evidence reviewed after user handoff; owned resources removed. Local commit and
-its handoff record conclude A1. Independent review is still required before A2.
+## Ordered implementation chunks
 
-1. Add `docs/architecture/canonical-persistence.md`: schema scope, relationships,
-   transaction contracts, conversion map, and outstanding integration boundaries.
-2. Add `chessism_api/database/postgresql/canonical/`: independent SQL foundation
-   and explicit initializer/version validator. Keep useful normalized v3 keys,
-   integer scores, account/session semantics, ingestion accounting, and typed
-   cloud recovery structures. No historical copy, compatibility views, release
-   marker, or existing runtime import is a prerequisite.
-3. Add `scripts/init_canonical_db.py`: explicit isolated Unix-socket target only;
-   no environment fallback, destructive reset, live connection, or deployment.
-4. Add `tests/canonical_schema_fixture.py`, `tests/check_canonical_schema_postgres.py`,
-   and `tests/test_canonical_schema.py`: deterministic synthetic fixtures and
-   real PostgreSQL tests for initialization/versioning, identities/constraints,
-   accounts, variants, evaluations, atomicity, cloud state, and selection locks.
-5. Verify with private PostgreSQL 15 using no network or application volumes.
-   Check source preservation, new unit/integration tests, syntax/whitespace, and
-   relevant existing P1 checks. No configured Python lint/typecheck exists.
-6. Review saved evidence after the user reports completion. If passing, commit
-   only A1 files locally as `feat: establish canonical PostgreSQL foundation`.
-   Stop for Batch 1 review. Batches A2–A4 and all later stages remain unauthorized.
+### A2.1 — Canonical game imports and explicit month accounting
+Entry: accepted A1, matching baseline and clean working tree (verified).
+1. In `canonical/core.sql`, reject unscored timestamps without a source; bump the
+   foundation version in `canonical/__init__.py` and update version assertions.
+2. Add `database/postgresql/game_imports.py`: concrete bulk ingestion into canonical
+   game/player/move/opening tables, exact duplicate/conflict handling, transaction
+   guard, shared ingestion lock, and explicit standard/nonempty UTC month counts.
+   Accept the caller's PostgreSQL connection; never start/commit/close its transaction.
+3. Add an isolated PostgreSQL test fixture shared by schema/import suites and
+   `tests/check_canonical_imports_postgres.py`. Cover mixed classifications, retained
+   zero-move metadata, self-play once, duplicates/conflicts, rollback/retry,
+   cancellation, concurrent importers, UTC boundaries and successfully fetched empty months.
+4. Correct A1 synthetic month counts to represent existing active-game semantics.
+   Record that these functions are not yet wired to runtime: A2.2/A2.3 integrate the
+   complete write unit, including projections. Do not add another storage profile.
+5. Run foundation/import/P1 checks on private PostgreSQL/Redis; review evidence,
+   then commit locally `refactor: establish canonical game import transactions`.
+Exit: all focused checks pass without skips; prior runtime remains unchanged.
 
-Exit: initializer is atomic and repeatable, validation performs no schema repair,
-all new checks pass without skips, existing application/test files remain intact,
-and limitations distinguish schema foundation from application integration.
-Record schema artifact/source hashes and exact test results. Future extensions
-must update the foundation version; this batch does not claim full runtime readiness.
+### A2.2 — Canonical write relationships and application ingestion
+Depends on A2.1. Define required auxiliary write tables in canonical SQL before use;
+replace participant surrogate keys with `(game_link,is_white)` in side summaries
+and pending work. Convert `ingestion_pipeline/game_importer.py`, `game_repository.py`,
+`fen_repository.py`, `fen_batches.py`, `fen_core.py` consumers and corresponding
+player/game projection writers. Keep formatter metadata for zero-move games,
+explicitly classify analysis-eligible games, and preserve the ingestion public result.
+Move shared transaction ownership to the application operation; database functions
+accept its session/connection. Test real complete imports, derived writes, failures,
+repeated imports and cancellation. Commit only after the focused gate passes.
 
-### Remaining roadmap (approved direction, not implementation authorization)
+### A2.3 — Canonical evaluation writes and analysis selection
+Depends on A2.2. Convert `fen_results.py`, `fen_summary_recovery.py`, tablebase writes,
+`fen_claims.py`, cloud importer/reservation/input preparation, and selectors currently
+in `ask_db.py` to cohesive persistence modules. Preserve selection order, fresh
+snapshot rechecks, SKIP LOCKED, claim exclusion, receipt replay, and P1 ownership /
+cleanup / error propagation. Keep accepted progress/ARQ mechanisms. Tests exercise
+actual adapters against canonical PostgreSQL plus existing P1/Redis/ARQ regressions.
+Commit verified work; record A2 evidence before A3.
 
-- A2: canonical writes and analysis selection; preserve accepted P1 behavior.
-- A3: canonical reads/analytics and derived projections.
-- A4: remove retired profiles/interfaces after complete caller conversion.
-- B: bounded engine execution and cloud dependency direction.
-- C: shared frontend job outcomes, Positions state, explicit ingestion outcomes.
-- D: full isolated integration and independent acceptance.
+### A3.1 — Canonical game/player queries and summary readers
+Depends on A2.3. Convert routers and operations using game/player queries, navigation,
+rankings, pagination, `home_summary.py`, `player_*` summaries and `common_positions.py`.
+Derive UTC calendar/ratings explicitly. Consolidate genuinely shared analytics SQL;
+keep global/player/historical distinctions. Move cohesive remaining functions from
+`ask_db.py`; convert side-specific keys through all callers. Verify ties, stable
+pagination, empty output, dates/months, self-play and repeated FENs.
 
-### Handoff and resource boundary
+### A3.2 — Research, exports, graph, administration and synthetic plans
+Depends on A3.1. Define remaining canonical auxiliary structures and convert
+`canonical_blunders/`, `cuda_summaries/`, `research_algorithms/`, `exports/`,
+graph database consumers, deletion/admin and snapshot consumers. Preserve feature
+contracts and existing backup/restore behavior; no real backup or restore operation.
+Replace profile-dependent queries with direct canonical SQL and native keys.
+Add representative equivalence tests and reproducible query-plan/cardinality checks;
+report measured scale honestly. Commit after focused verification and record A3 evidence.
 
-Any long verification runs detached with a temporary `monitor.py`: one display,
-120-second refresh, start/elapsed/stage/status and evidence-based ETA only. Return
-immediately after confirming startup; inspect results after the user reports back.
-Owned test containers must be removed even on failure. Keep technical failures
-in saved logs rather than printing raw command tracebacks in the monitor.
-Do not touch existing databases, backups, services, unrelated files, or repositories.
-No push, merge, deployment, runtime conversion, public-result change, or backup
-behavior change is authorized in A1.
+### A4 — Retire old implementations and enable fail-closed startup
+Depends on verified A2/A3 consumers. Replace `runtime.py` / `engine.py` storage-profile
+selection and startup DDL with explicit canonical version/catalog validation.
+Extend the fingerprint to detect disabled FK enforcement before using this startup
+boundary, with a focused regression. Remove `DBInterface`, `ask_db.py`, old
+`relational_storage.py` / `compact_storage.py` / `relational_reads.py`, compatibility
+views and obsolete initialization/migration paths only after dependency searches
+show no required runtime caller remains. Preserve supporting auth/cloud structures.
+Map removed compatibility tests to canonical behavioral replacements; retain the
+coverage and record the mapping. No generic repository/query framework.
+
+Final gate: complete backend/worker suites with exact baseline comparison; canonical
+initialization and representative application workflows; transactions, locking,
+repeated cancellation and recovery checks; retired-import/DDL/source-size audit;
+owned-resource cleanup. Final local commit(s), accurate evidence report, then stop
+for ONE independent Stage A acceptance review. No claim of acceptance beforehand.
+
+## Safety and handoff
+
+Only isolated disposable PostgreSQL/Redis resources. Preserve existing database,
+recovery checkpoint, ignored/untracked files, Neo4j and deployed services. No push,
+merge, deploy, external side effects, Stage B or unrelated repairs. A blocking public
+contract change or material scope expansion requires user input, not a workaround.
+
+Every long process runs detached with a working `/tmp/.../monitor.py`, one display
+refreshed every 120 seconds, elapsed/start/stage/status, honest ETA, bounded resources
+and cleanup. Confirm startup and return immediately; resume only on user completion.
+No polling or waiting by the agent. Commit verified changes after evidence review,
+not unverified work merely to satisfy the skill's handoff template.
 
 ## Historical P1 #1 plan: Analysis selection failures
 

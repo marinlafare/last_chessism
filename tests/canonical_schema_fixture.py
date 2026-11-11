@@ -33,7 +33,8 @@ async def seed(connection):
         for move,fen_id in enumerate(ids[:3]):
             await connection.execute('INSERT INTO public.game_fen_association VALUES($1,$2,$3,$4)',game,fen_id,move,move%2==0)
     # Explicit completed empty month is different from no imported month.
-    await connection.execute('INSERT INTO public.months VALUES($1,2026,1,5),($1,2026,2,0)',white)
+    # Only the two standard nonempty games count; self-play counts once.
+    await connection.execute('INSERT INTO public.months VALUES($1,2026,1,2),($1,2026,2,0)',white)
     await connection.execute("""INSERT INTO public.account(id,name,email,password_hash,role,is_active)
         VALUES('account-a','Synthetic A','a@example.invalid','synthetic-test-only','admin',true),
               ('account-b','Synthetic B','b@example.invalid','synthetic-test-only','user',false)""")

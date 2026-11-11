@@ -693,3 +693,56 @@ Limitations: runtime consumers are not switched; auxiliary projections/research/
 The final staged whitespace check (including newly added files) found one extra blank EOF line in support.sql. Removed that byte only; exact SQL equality after trimming final newlines verified. No SQL statement changed. Final DDL/source digests recorded separately from immutable test digests; reran the five offline safety checks. This does not justify repeating the PostgreSQL/P1 gate.
 
 A1 implementation committed locally as 22a406c60c84b3cc57e46e10c742094b5b4ff4d1 (`feat: establish canonical PostgreSQL foundation`). This handoff records the commit and completion; no further application changes. All 99 gate checks passed, final five offline checks and staged whitespace check passed. Stage A1 is ready for independent review, not formally accepted. A2–A4 remain unauthorized pending that review. No push, merge or deployment.
+
+## Stage A completion — authorization and entry checks
+
+A1 acceptance confirmed from the independent review and explicit user authorization.
+Repository, branch, HEAD 35be4fc and ancestry verified; working tree clean. All 1,699
+protected baseline inputs match. Applying architectural-refactor, clean-architecture
+and kent-beck-style. A2–A4 are authorized as one stage with focused gates/local
+commits, then complete backend/worker baseline comparison and independent review.
+User direction supersedes repeated approval/full-suite-per-change skill steps.
+
+Recorded concrete conversion chunks in the plan. Starting A2.1: canonical bulk
+imports/month accounting and the evaluation CHECK correction. Runtime wiring waits
+for the complete write unit and required projection definitions in A2.2/A2.3; no new
+storage profile. Deferred FK enforcement validation will be corrected before the
+A4 startup gate. No production access, backup modification or other-repository work.
+
+## A2.1 prepared for isolated verification
+
+Implemented `game_imports.py`: bounded COPY staging, explicit caller transaction,
+existing ingestion lock, complete move/parent validation, exact duplicate handling,
+metadata/child conflict rejection, one game identity and standard/nonempty UTC month
+counts. No hidden commit or new storage profile. Runtime wiring is pending A2.2/A2.3.
+Updated canonical schema to version 2 to reject unexplained unscored timestamps;
+version 1 is rejected rather than silently reinterpreted. Corrected the synthetic
+month ledger from five total classifications to two eligible games.
+
+Added 16 real PostgreSQL import regressions and two schema regressions; factored
+only the repeated isolated-database test setup/cleanup. Five offline tests and syntax
+checks pass. All 1,699 baseline inputs remain unchanged. Prepared 117-check gate
+(5 offline + 28 schema + 16 imports + 68 P1) in
+/tmp/chessism-canonical-a2-imports-20261110-01. Same pinned image IDs as accepted A1;
+no network/ports, read-only source, masked .env, tmpfs PG data, bounded resources,
+label-checked cleanup. No implementation acceptance or passing integration claim yet.
+
+A2.1 gate launched; supervisor PID 2254139. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-imports-20261110-01/monitor.py`. Returning control immediately.
+Next: after user completion, review results/hashes/cleanup, correct demonstrated
+defects if necessary, then commit verified A2.1 work locally and continue A2.2.
+
+## A2.1 evidence reviewed
+
+117 checks passed (49 foundation/import + 68 P1), zero failures/errors/skips.
+Supervisor time 26.60s; PostgreSQL/offline 14.22s; P1 5.64s. Reviewed structured
+results and logs after user handoff. All 1,710 frozen inputs match, including 1,699
+protected baseline files. Separate run-label Docker inspection confirms no owned
+containers remain. No integration correction was needed; source remains exactly
+as tested. Recording result digests and preparing the authorized local commit.
+
+Clean Architecture: application-owned transaction required explicitly, with no
+hidden commit/connection lifecycle in persistence helpers. Kent Beck: concrete
+bulk functions replace profile-dependent representations; exact retries and active
+month counts are directly tested. This verified infrastructure will be connected
+in A2.2, not claimed as complete Stage A or independent acceptance.

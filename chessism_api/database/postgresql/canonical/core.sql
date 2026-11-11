@@ -94,7 +94,7 @@ CREATE TABLE fen (
             AND wdl_loss BETWEEN 0 AND 1000 AND wdl_win + wdl_draw + wdl_loss = 1000)),
     CHECK ((score IS NULL AND analysis_source IS NULL AND analyzed_at IS NULL
             AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL AND wdl_win IS NULL)
-        OR (score IS NULL AND analysis_source = 'tablebase_unavailable'
+        OR (score IS NULL AND analysis_source IS NOT NULL AND analysis_source = 'tablebase_unavailable'
             AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL AND wdl_win IS NULL)
         OR (score IS NOT NULL AND analysis_source IS NOT NULL AND analyzed_at IS NOT NULL AND
             ((analysis_source = 'stockfish' AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL)

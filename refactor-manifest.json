@@ -1418,10 +1418,10 @@
     "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened.",
     "acceptance_source": "User consolidated roadmap and explicit Stage A Batch 1 authorization; historical implementation log retained."
   },
-  "active_work": "stage_a_batch_1",
+  "active_work": "stage_a_completion",
   "stage_a_batch_1": {
     "name": "Canonical schema and persistence contracts",
-    "status": "completed_pending_independent_review",
+    "status": "accepted_with_documented_limitations",
     "authorization": "User explicitly approved A1 only; stop for review after local commit.",
     "baseline_commit": "0fde829d9477b3f73714b52e820a67bad49dad77",
     "baseline_input_hashes_matched": 1699,
@@ -1549,8 +1549,139 @@
         "occurrence/continuation keys remove redundant surrogate IDs"
       ]
     },
-    "independent_review": "pending",
+    "independent_review": "Accepted in user conversation; authorization attachment explicitly confirms acceptance. Month semantics, nullable evaluation CHECK, and FK enforcement validation addressed in Stage A completion.",
     "completed_at": "2026-11-11T00:11:52.929963+00:00"
   },
-  "chunk_counter_scope": "Historical P1 #1 chunks; active work is stage_a_batch_1."
+  "chunk_counter_scope": "Historical P1 #1 chunks; active work is stage_a_batch_1.",
+  "stage_a_completion": {
+    "authorization_source": "/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt",
+    "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
+    "status": "in_progress",
+    "current_chunk": "A2.1",
+    "started_at": "2026-11-11T00:30:30.215098+00:00",
+    "baseline_input_hashes_matched": 1699,
+    "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
+    "chunks": [
+      {
+        "id": "A2.1",
+        "name": "Canonical imports and month accounting",
+        "status": "verified_pending_commit",
+        "verification": {
+          "status": "passed",
+          "evidence_directory": "/tmp/chessism-canonical-a2-imports-20261110-01",
+          "planned_tests": {
+            "offline": 5,
+            "schema_postgres": 28,
+            "imports_postgres": 16,
+            "p1": 68
+          },
+          "offline_tests_passed": 5,
+          "syntax": "passed",
+          "baseline_inputs_unchanged": 1699,
+          "source_inputs": 1710,
+          "monitor_command": "python3 /tmp/chessism-canonical-a2-imports-20261110-01/monitor.py",
+          "runtime_wiring": "pending A2.2/A2.3; no additional storage profile",
+          "commit_pending": true,
+          "launch": {
+            "pid": 2254139,
+            "started_at": "2026-11-11T00:36:29.945887+00:00",
+            "startup_confirmed": true
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 49,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 14.216772317886353,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 5.643688440322876,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            }
+          },
+          "total_passed": 117,
+          "elapsed_seconds": 26.60256552696228,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a2-imports-63c7ec1521-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-imports-63c7ec1521-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-imports-63c7ec1521-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-imports-63c7ec1521-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity": "all 1710 frozen inputs matched",
+          "evidence_sha256": {
+            "results.json": "eef1674bb5dcadc64b98275e4d1f77b907b382dff85d1dfe5df6693be8ce88d3",
+            "foundation-results.json": "251ba7e352274fbb6f153bd66b6dce6bf91f58f1e3e7cbaa3a06181815af9757",
+            "p1-results.json": "52be1258848daea54d03b0d69598dfd35f80c3ba21fb672d0a30cc41bc58bfa0",
+            "input-sha256.json": "bee097b14ab209958355bfe3711d5e9f8686d24d689fa9ad8e1a2c1ae68f2063"
+          }
+        },
+        "commit_sha": null,
+        "completed_at": "2026-11-11T00:38:22.310433+00:00"
+      },
+      {
+        "id": "A2.2",
+        "name": "Write relationships and application ingestion",
+        "status": "pending",
+        "verification": null,
+        "commit_sha": null
+      },
+      {
+        "id": "A2.3",
+        "name": "Evaluation writes and analysis selection",
+        "status": "pending",
+        "verification": null,
+        "commit_sha": null
+      },
+      {
+        "id": "A3.1",
+        "name": "Queries and summaries",
+        "status": "pending",
+        "verification": null,
+        "commit_sha": null
+      },
+      {
+        "id": "A3.2",
+        "name": "Feature consumers and synthetic performance",
+        "status": "pending",
+        "verification": null,
+        "commit_sha": null
+      },
+      {
+        "id": "A4",
+        "name": "Retirement and final integration",
+        "status": "pending",
+        "verification": null,
+        "commit_sha": null
+      }
+    ],
+    "pending_process": null,
+    "accepted": false
+  }
 }
