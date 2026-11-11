@@ -2,16 +2,18 @@
 
 Status: Batch 1 independently accepted with documented limitations at `35be4fc`.
 Stage A2–A4 are now authorized and in progress. This remains **not a runtime-ready
-replacement database**. No application caller is switched yet. Entry code checkpoint
+replacement database**. Game-import callers now use canonical persistence; remaining
+consumers and runtime startup conversion are still pending. Entry code checkpoint
 for the foundation: `0fde829`. No historical data is required.
 
 ## Scope and sources
 
-The initializer creates 88 application tables, one semantic view, and a version
+The initializer creates 94 application tables, one semantic view, and a version
 record in one empty PostgreSQL 15 database. Ten core tables define the normalized
 chess relationships. `support.sql` preserves 78 existing account/session,
 appearance, ingestion/timing and cloud tables, including the typed cloud document
-children. Its declarations were rendered from the checkpoint's SQLAlchemy metadata;
+children. Six projection tables support the game-import write unit. The supporting
+declarations were rendered from the checkpoint's SQLAlchemy metadata;
 initialization imports neither that metadata nor the old runtime. Large typed
 cloud definitions are retained because their checksums, packed arrays, receipts
 and cancellation plans are live recovery contracts, not historical compatibility.
@@ -123,7 +125,8 @@ drift, and never repairs it. It works inside a read-only transaction.
 
 Version 1 is the accepted Batch 1 foundation. Version 2 closes the nullable CHECK
 loophole: unscored rows with no source cannot carry an `analyzed_at` timestamp.
-Neither version implies whole-application readiness. Changes
+Version 3 adds the six ingestion projection tables and initialized singleton
+totals. None of these versions implies whole-application readiness. Changes
 to these artifacts or additions in A2/A3 require an explicit new version; for these
 disposable databases reinitialization uses a newly created database, not automatic
 migration. No runtime storage profile or release switch is installed by A1.
@@ -200,6 +203,33 @@ an imported month. Variants, custom starts and zero-move games remain stored but
 excluded from this established active-game count.
 
 These functions do not begin, commit, roll back or close their caller's transaction.
-The application operation must include projection invalidation and ingestion
-accounting in the same transaction. A2.2/A2.3 provide that complete runtime wiring;
-the infrastructure chunk introduces no new storage profile or runtime switch.
+The infrastructure chunk introduced no new storage profile or runtime switch.
+
+## A2.2 game-import application transaction
+
+`ingestion_pipeline/game_importer.py` now owns the transaction spanning games,
+players, moves, openings, all successfully fetched month ledgers, game/mode totals,
+and pending salience work. It uses `transactions.write_transaction`; rollback and
+closure finish through repeated cancellation using the accepted P1 helper unchanged.
+Summary failure rolls back the import. No post-commit refresh can turn a failed
+summary update into a partially acknowledged import.
+
+Formatting no longer writes player shells or discards existing identities before
+checking their contents. Identical downloads are parsed and checked at persistence;
+conflicting retries fail. The public success string and already-imported message
+remain strings with the established wording. Counts describe actual inserted rows.
+Zero-move game metadata is preserved; no tombstone or archive option is needed.
+
+`player_salience_pending_game` is keyed by `(game_link,is_white)` with a cascading
+game FK. Both sides always exist in `game_player`, including self-play, so ownership
+is derived rather than duplicated. Mode summaries retain their prior perspective
+semantics (both sides in self-play); month/global game totals count games once.
+Global game/pipeline totals preserve the active standard/nonempty population from
+the deployed relational_v3 behavior. Position counters are untouched by game imports.
+
+Version 3 defines `player_salience_summary`, `player_salience_pending_game`,
+`main_character_mode_summary`, `game_analysis_coverage`, `database_summary` and
+`fen_pipeline_summary`. The latter two start with zero singleton totals. Other
+projection/feature definitions and FEN write conversion remain for the subsequent
+A2/A3 work. Historical import adapters have no new runtime callers and await A4
+retirement; no additional selectable storage profile was introduced.

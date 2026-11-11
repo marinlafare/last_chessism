@@ -1557,7 +1557,7 @@
     "authorization_source": "/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt",
     "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
     "status": "in_progress",
-    "current_chunk": "A2.1",
+    "current_chunk": "A2.2",
     "started_at": "2026-11-11T00:30:30.215098+00:00",
     "baseline_input_hashes_matched": 1699,
     "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
@@ -1565,7 +1565,7 @@
       {
         "id": "A2.1",
         "name": "Canonical imports and month accounting",
-        "status": "verified_pending_commit",
+        "status": "completed",
         "verification": {
           "status": "passed",
           "evidence_directory": "/tmp/chessism-canonical-a2-imports-20261110-01",
@@ -1581,7 +1581,7 @@
           "source_inputs": 1710,
           "monitor_command": "python3 /tmp/chessism-canonical-a2-imports-20261110-01/monitor.py",
           "runtime_wiring": "pending A2.2/A2.3; no additional storage profile",
-          "commit_pending": true,
+          "commit_pending": false,
           "launch": {
             "pid": 2254139,
             "started_at": "2026-11-11T00:36:29.945887+00:00",
@@ -1642,15 +1642,234 @@
             "input-sha256.json": "bee097b14ab209958355bfe3711d5e9f8686d24d689fa9ad8e1a2c1ae68f2063"
           }
         },
-        "commit_sha": null,
+        "commit_sha": "6039b34",
         "completed_at": "2026-11-11T00:38:22.310433+00:00"
       },
       {
         "id": "A2.2",
         "name": "Write relationships and application ingestion",
-        "status": "pending",
-        "verification": null,
-        "commit_sha": null
+        "status": "in_progress",
+        "verification": {
+          "status": "passed",
+          "gate": "game_import_application_transaction",
+          "evidence_directory": "/tmp/chessism-canonical-a2-gameflow-20261110-01",
+          "planned_tests": {
+            "foundation_postgres_and_offline": 59,
+            "workflow": 22,
+            "p1": 68
+          },
+          "planned_total": 149,
+          "offline_safety_passed": 5,
+          "syntax": "passed",
+          "source_input_count": 1715,
+          "protected_baseline_count": 1693,
+          "changed_baseline_inputs": [
+            "chessism_api/operations/ingestion_pipeline/README.md",
+            "chessism_api/operations/ingestion_pipeline/game_importer.py",
+            "chessism_api/operations/ingestion_pipeline/jobs.py",
+            "chessism_api/operations/ingestion_pipeline/months.py",
+            "tests/test_pipeline_helpers.py",
+            "tests/test_relational_storage.py"
+          ],
+          "test_mapping": {
+            "test_relational_storage.RelationalStorageTests.test_empty_nonstandard_game_keeps_archival_metadata": "test_empty_games_keep_metadata_without_an_archive_profile preserves variant metadata and now requires standard zero-move metadata, replacing intentional tombstone/profile behavior",
+            "CanonicalPostgresTests.test_accepted_version_one_is_not_silently_reinterpreted": "test_previous_versions_are_not_silently_reinterpreted rejects both prior versions 1 and 2",
+            "test_pipeline_helpers.GameFormattingTests.test_invalid_game_does_not_queue_orphan_moves_or_mutate_input": "Same no-write assertion; mock targets canonical ingest_games instead of retired insert_game_bundle"
+          },
+          "remaining_A2_2": "FEN extraction/persistence/coverage and remaining side-summary writers",
+          "monitor_command": "python3 /tmp/chessism-canonical-a2-gameflow-20261110-01/monitor.py",
+          "launch": {
+            "pid": 2297601,
+            "started_at": "2026-11-11T00:50:04.173397+00:00",
+            "startup_confirmed": true
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 59,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 13.042405605316162,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 22,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.08303689956665039,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 4.144746780395508,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            }
+          },
+          "total_passed": 149,
+          "elapsed_seconds": 24.377387046813965,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity": "all 1715 frozen inputs match",
+          "evidence_sha256": {
+            "results.json": "e9302a72713f5487a6206f32ca2808789751cae3a70f7e5dac183414010e362d",
+            "input-sha256.json": "f5486c529a9c7a9a1ec4fb2bc0c81573b03ff48b50b7c5bc1686764fd3a450bd",
+            "foundation-results.json": "9ec8769a7e54cf82dfe25a65641ee2f376f5c182b6c27bf7d2a02b15b1697bda",
+            "workflow-results.json": "8d31665fff81274c4a3001a435fb622bcd19666f4a2f9d2932a29f58e82b58be",
+            "p1-results.json": "0c61d070124c8a62c94fcfa4c7613f0726bc00fa28de34650f90c51b20e84f69"
+          }
+        },
+        "commit_sha": null,
+        "started_at": "2026-11-11T00:42:28.892717+00:00",
+        "subgates": [
+          "game application transaction and side-key pending work",
+          "FEN writes, coverage and remaining write consumers"
+        ],
+        "gates": [
+          {
+            "status": "passed",
+            "gate": "game_import_application_transaction",
+            "evidence_directory": "/tmp/chessism-canonical-a2-gameflow-20261110-01",
+            "planned_tests": {
+              "foundation_postgres_and_offline": 59,
+              "workflow": 22,
+              "p1": 68
+            },
+            "planned_total": 149,
+            "offline_safety_passed": 5,
+            "syntax": "passed",
+            "source_input_count": 1715,
+            "protected_baseline_count": 1693,
+            "changed_baseline_inputs": [
+              "chessism_api/operations/ingestion_pipeline/README.md",
+              "chessism_api/operations/ingestion_pipeline/game_importer.py",
+              "chessism_api/operations/ingestion_pipeline/jobs.py",
+              "chessism_api/operations/ingestion_pipeline/months.py",
+              "tests/test_pipeline_helpers.py",
+              "tests/test_relational_storage.py"
+            ],
+            "test_mapping": {
+              "test_relational_storage.RelationalStorageTests.test_empty_nonstandard_game_keeps_archival_metadata": "test_empty_games_keep_metadata_without_an_archive_profile preserves variant metadata and now requires standard zero-move metadata, replacing intentional tombstone/profile behavior",
+              "CanonicalPostgresTests.test_accepted_version_one_is_not_silently_reinterpreted": "test_previous_versions_are_not_silently_reinterpreted rejects both prior versions 1 and 2",
+              "test_pipeline_helpers.GameFormattingTests.test_invalid_game_does_not_queue_orphan_moves_or_mutate_input": "Same no-write assertion; mock targets canonical ingest_games instead of retired insert_game_bundle"
+            },
+            "remaining_A2_2": "FEN extraction/persistence/coverage and remaining side-summary writers",
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-gameflow-20261110-01/monitor.py",
+            "launch": {
+              "pid": 2297601,
+              "started_at": "2026-11-11T00:50:04.173397+00:00",
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 59,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 13.042405605316162,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "workflow": {
+                "suite": "workflow",
+                "tests": 22,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.08303689956665039,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "p1": {
+                "suite": "p1",
+                "tests": 68,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 4.144746780395508,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "total_passed": 149,
+            "elapsed_seconds": 24.377387046813965,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-p1",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-workflow",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-gameflow-ce6dbe07cc-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": "all 1715 frozen inputs match",
+            "evidence_sha256": {
+              "results.json": "e9302a72713f5487a6206f32ca2808789751cae3a70f7e5dac183414010e362d",
+              "input-sha256.json": "f5486c529a9c7a9a1ec4fb2bc0c81573b03ff48b50b7c5bc1686764fd3a450bd",
+              "foundation-results.json": "9ec8769a7e54cf82dfe25a65641ee2f376f5c182b6c27bf7d2a02b15b1697bda",
+              "workflow-results.json": "8d31665fff81274c4a3001a435fb622bcd19666f4a2f9d2932a29f58e82b58be",
+              "p1-results.json": "0c61d070124c8a62c94fcfa4c7613f0726bc00fa28de34650f90c51b20e84f69"
+            },
+            "commit_sha": null
+          }
+        ]
       },
       {
         "id": "A2.3",

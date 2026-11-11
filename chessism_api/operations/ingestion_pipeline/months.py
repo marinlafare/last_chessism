@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from sqlalchemy import select
+from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import Month
 from chessism_api.operations import players as player_operations
 
 
@@ -49,8 +48,9 @@ async def missing_archive_months(player_name: str) -> list[str]:
     possible = await full_archive_months(player_name)
     async with AsyncDBSession() as session:
         result = await session.execute(
-            select(Month.year, Month.month)
-            .where(Month.player_name == player_name)
+            text("""SELECT m.year,m.month FROM public.months m
+                JOIN public.player p ON p.id=m.player_id WHERE p.player_name=:player"""),
+            {'player': player_name},
         )
         existing = {f"{row.year}-{row.month}" for row in result}
     return [month for month in possible if month not in existing]
@@ -60,10 +60,10 @@ async def update_archive_months(player_name: str) -> list[str]:
     """Latest recorded month through the current UTC month, inclusive."""
     async with AsyncDBSession() as session:
         result = await session.execute(
-            select(Month.year, Month.month)
-            .where(Month.player_name == player_name)
-            .order_by(Month.year.desc(), Month.month.desc())
-            .limit(1)
+            text("""SELECT m.year,m.month FROM public.months m
+                JOIN public.player p ON p.id=m.player_id WHERE p.player_name=:player
+                ORDER BY m.year DESC,m.month DESC LIMIT 1"""),
+            {'player': player_name},
         )
         latest = result.first()
     if latest is None:

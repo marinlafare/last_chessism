@@ -40,14 +40,12 @@ class RelationalStorageTests(unittest.TestCase):
         config=normalize_matrix_config({'row_type':'game','feature_columns':['white_rating']})
         self.assertNotIn('score_stats',matrix_sql(config)[1])
 
-    def test_empty_nonstandard_game_keeps_archival_metadata(self):
+    def test_empty_games_keep_metadata_without_an_archive_profile(self):
         from scripts.db_refactor_write_checks import fixture_bundle
         from chessism_api.operations.ingestion_pipeline.game_importer import _prepare_game_bundle
         game=dict(fixture_bundle()['games'][-1],n_moves=0)
-        archived=_prepare_game_bundle([game],archive_nonstandard=True)
+        archived=_prepare_game_bundle([game])
         self.assertEqual(archived['games'],[game])
-        self.assertEqual(archived['no_move_games'],[])
         self.assertEqual(archived['games'][0]['initial_setup'],'preserve-the-original-starting-position')
-        legacy=_prepare_game_bundle([game])
-        self.assertEqual(legacy['games'],[])
-        self.assertEqual(legacy['no_move_games'][0]['game_id'],game['link'])
+        standard=dict(game,rules='chess',initial_setup=None)
+        self.assertEqual(_prepare_game_bundle([standard])['games'],[standard])

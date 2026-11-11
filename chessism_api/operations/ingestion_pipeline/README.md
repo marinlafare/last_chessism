@@ -6,9 +6,10 @@ to queryable positions:
 ```text
 jobs.py
   -> chesscom.py       serial, rate-limited monthly downloads
-  -> game_importer.py  import use-case and derived-summary handoff
+  -> game_importer.py  canonical import transaction, months and summaries
        -> pgn.py              pure clock validation and PGN transformation
-       -> game_repository.py  deduplication and atomic game persistence
+       -> postgresql/game_imports.py          bulk writes and exact retry checks
+       -> postgresql/game_import_summaries.py  game totals and side-key pending work
   -> fen_orchestrator.py
        -> fen_batches.py       compact-storage bounded replay + atomic bulk writes
        -> fen_bulk.py          COPY staging, identity resolution, exact deltas
@@ -38,6 +39,13 @@ Supporting modules:
 
 - HTTP routes enqueue work; they do not run ingestion in request handlers.
 - `jobs.py` owns the player-level download/import job lifecycle.
+- `game_importer.py` commits games, players, openings, fetched month ledgers and
+  summary invalidation together. Formatting has no writes. Zero-move metadata is
+  retained; month/global totals explicitly exclude variants/custom starts and
+  zero-move games. Side-specific projections retain both self-play perspectives.
+- `game_repository.py` and `relational_repository.py` remain only for the obsolete
+  persistence paths pending their Stage A4 retirement. The FEN path below is still
+  awaiting its canonical conversion; this intermediate stage is not runtime-ready.
 - `pgn.py` rejects games without a clock for every played half-move. Such games
   are intentionally unusable for Chessism and must not be silently accepted.
 - FEN child workers claim games with `FOR UPDATE SKIP LOCKED`. A game becomes

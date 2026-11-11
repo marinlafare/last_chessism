@@ -17,8 +17,6 @@ from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
 from chessism_api.operations.ingestion_pipeline.game_importer import (
     format_games,
     insert_games_months_moves_and_players,
-)
-from chessism_api.operations.ingestion_pipeline.game_repository import (
     sync_player_months,
 )
 from chessism_api.operations.ingestion_pipeline.months import (
@@ -134,9 +132,6 @@ async def _download_format_and_insert(
             f"Parsing {downloaded_count} downloaded games.",
         )
     formatted_games = await format_games(archives, player_name, reporter=reporter)
-    if isinstance(formatted_games, str):
-        await sync_player_months(player_name, fetched_months)
-        return formatted_games
 
     if progress_callback:
         await progress_callback(
@@ -146,8 +141,8 @@ async def _download_format_and_insert(
             "Saving games to the database.",
         )
     async with measured(reporter, "save_games", len(formatted_games), "input games"):
-        result = await insert_games_months_moves_and_players(formatted_games, player_name)
-    await sync_player_months(player_name, fetched_months)
+        result = await insert_games_months_moves_and_players(
+            formatted_games, player_name, fetched_months=fetched_months)
     if progress_callback:
         await progress_callback(
             "complete",

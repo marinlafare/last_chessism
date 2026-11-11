@@ -746,3 +746,48 @@ hidden commit/connection lifecycle in persistence helpers. Kent Beck: concrete
 bulk functions replace profile-dependent representations; exact retries and active
 month counts are directly tested. This verified infrastructure will be connected
 in A2.2, not claimed as complete Stage A or independent acceptance.
+
+A2.1 committed locally as 6039b34; nothing pushed. Starting A2.2. The game import
+unit and FEN extraction unit will have separate focused gates inside this chunk.
+The first gate wires game import/month accounting/projection invalidation into the
+application operation, preserves zero-move metadata, and introduces required
+canonical summary definitions. Remaining FEN work follows its verification.
+
+## A2.2 game-import transaction prepared for verification
+
+Game importer now owns one transaction for canonical rows, all fetched month
+ledgers, game/mode totals and side-key salience invalidation. Pure formatting no
+longer commits player shells or skips conflict validation for existing identities.
+No post-commit summary refresh. Public result strings remain strings with the
+established success/already-present wording; actual inserted identities drive counts.
+Repeated cancellation completes rollback/close using the unchanged P1 helper.
+
+Added six canonical projection tables in schema version 3; pending work uses
+(game_link,is_white), ownership remains derived. Mode statistics preserve side
+perspectives; global/month totals preserve standard/nonempty game counts. Month
+reader queries use numeric owner keys. Historical game_repository/relational paths
+are no longer called by the game import entry point; removal remains A4 work.
+
+Ten new real PostgreSQL application checks and six cleanup checks prepared. Existing
+12 formatting and four relational tests are included with documented replacement
+of the archive/tombstone assertion, not dropped coverage. Five offline checks and
+syntax pass. Only six protected baseline inputs changed, all within the bounded
+conversion; the other 1,693 are unchanged. The gate freezes 1,715 inputs and runs
+149 checks (59 schema/import/application + 22 workflow + 68 P1). FEN writes/coverage
+remain the next A2.2 gate. No passing integration claim before evidence review.
+Evidence: /tmp/chessism-canonical-a2-gameflow-20261110-01. No production access,
+external network, database deletion, push, merge, deployment or Stage B work.
+
+A2.2 game-import gate launched; supervisor PID 2297601. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-gameflow-20261110-01/monitor.py`. Returning control immediately.
+After user completion: inspect results, source hashes and cleanup; commit this
+verified application transaction if passing, then continue A2.2 FEN persistence.
+
+## A2.2 game-import evidence reviewed
+
+149 checks passed (59 foundation/import/application, 22 workflow, 68 P1), zero
+failures/errors/skips. Supervisor 24.38s. All 1,715 frozen inputs still match.
+All five owned containers removed; independently confirmed by Docker run label.
+Reviewed raw logs and structured results. No source correction was needed.
+Recording and committing the game application transaction before continuing FEN
+persistence/coverage. Full A2.2 and Stage A remain in progress, not accepted.

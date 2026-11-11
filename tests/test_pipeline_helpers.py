@@ -241,7 +241,7 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
         }
 
         with patch(
-            "chessism_api.operations.ingestion_pipeline.game_importer.insert_game_bundle",
+            "chessism_api.operations.ingestion_pipeline.game_importer.game_imports.ingest_games",
             new_callable=AsyncMock,
         ) as insert_game_bundle:
             result = await insert_games_months_moves_and_players(

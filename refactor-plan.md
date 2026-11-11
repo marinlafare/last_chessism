@@ -37,14 +37,21 @@ Entry: accepted A1, matching baseline and clean working tree (verified).
 Exit: all focused checks pass without skips; prior runtime remains unchanged.
 
 ### A2.2 — Canonical write relationships and application ingestion
-Depends on A2.1. Define required auxiliary write tables in canonical SQL before use;
+A2.1 completed and verified in local commit `6039b34`.
+This chunk has two focused gates: the complete game-import application transaction
+(including side-key pending work), then FEN persistence/coverage consumers.
+Define required auxiliary write tables in canonical SQL before use;
 replace participant surrogate keys with `(game_link,is_white)` in side summaries
 and pending work. Convert `ingestion_pipeline/game_importer.py`, `game_repository.py`,
 `fen_repository.py`, `fen_batches.py`, `fen_core.py` consumers and corresponding
 player/game projection writers. Keep formatter metadata for zero-move games,
 explicitly classify analysis-eligible games, and preserve the ingestion public result.
 Move shared transaction ownership to the application operation; database functions
-accept its session/connection. Test real complete imports, derived writes, failures,
+accept its session/connection. The first gate adds `canonical/projections.sql`, `game_import_summaries.py`, and
+`transactions.py`; switches `game_importer.py` / `jobs.py` / `months.py`; adds
+`tests/check_canonical_ingestion_postgres.py` and focused cleanup regressions.
+Map existing formatting/archival tests to canonical behavior without weakening them.
+Test real complete imports, derived writes, failures,
 repeated imports and cancellation. Commit only after the focused gate passes.
 
 ### A2.3 — Canonical evaluation writes and analysis selection
