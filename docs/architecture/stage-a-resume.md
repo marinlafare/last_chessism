@@ -9,9 +9,11 @@ authorizes it. Stage A is **incomplete and not accepted**. No A3/A4 completion c
 - Repository: `/home/jon/Desktop/workshop/last_chessism` only.
 - Branch: `refactor/p1-analysis-failure-propagation`.
 - HEAD before checkpoint: `c74864ff4b4a7628262f1dedf96aa482187cca45`.
-- Saved HEAD: the local **WIP** commit containing this handoff, titled
+- Saved code checkpoint: **`05f0bf3bc059028f22c8bd5a693079cbef76522e`**, titled
   `wip: pause partial Stage A after verified dashboard checkpoint`.
-  Resolve its exact hash with `git log -1 --format=%H -- docs/architecture/stage-a-resume.md`.
+- Current HEAD includes the following documentation-only handoff finalization.
+  Resolve that HEAD with `git log -1 --format=%H -- docs/architecture/stage-a-resume.md`.
+  The final chat response also records the exact HEAD; no application edits follow the WIP.
 - The checkpoint is recoverable work, not integration or stage acceptance. No push.
 - Before checkpointing: 17 modified files and five new Python files, all task-related.
   These are saved together with the handoff and evidence archive. No user files were
@@ -76,8 +78,12 @@ Focused verification already passed (counts overlap; do not sum as unique tests)
 
 The latest run passed **66 foundation/PostgreSQL + 19 related contracts + 68 P1**,
 including 17 new PostgreSQL cases, in 26.12 seconds. No failures, errors or skips.
-Raw logs and structured results agree. All 1,745 frozen source/test hashes match;
-the retired module remains absent. Startup compilation and five offline checks
+Raw logs and structured results agree. All 1,745 frozen input hashes matched at
+the start of the stop. Saving the handoff subsequently changed only the frozen
+`docs/architecture/canonical-persistence.md` evidence/status text. The other 1,744
+inputs still match; no application or test input changed. Both expected document
+hashes are recorded in `stage_a_completion.safe_stop.post_stop_integrity`.
+The retired module remains absent. Startup compilation and five offline checks
 had already passed. Nothing was rerun after the stop request.
 
 The dashboard gate preserves the A2 mode calculation, shares it with ingestion,
@@ -150,7 +156,8 @@ These changes have focused verification but remain part of incomplete Stage A:
 - `tests/test_db_refactor_corpus.py`
 
 The checkpoint additionally contains this handoff and the durable evidence archive.
-The source/hash inventories in the latest run distinguish current changes from
+WIP `05f0bf3` preserves these files; the following commit only finalizes this
+handoff and stop metadata. The source/hash inventories in the latest run distinguish changes from
 all 1,699 originally protected baseline files.
 
 ## Processes, resources and database safety
@@ -185,7 +192,8 @@ its scripts or creating services.
 `refactor-manifest.json`'s `stage_a_completion`, the active portion of
 `refactor-plan.md`, and the recent `refactor-log.md`. Verify repository/branch/HEAD
 and working-tree state against this checkpoint; compare source hashes with the
-latest saved inventory before changing anything. Do not repeat the already passed
+latest saved inventory before changing anything, allowing the explicitly recorded
+documentation-only stop update. Do not repeat the already passed
 153-check gate unless intervening source changes justify it. Identify the next
 cohesive remaining A3.1 summary/analytics conversion from the plan before editing.
 

@@ -1348,3 +1348,11 @@ all task-related unfinished dashboard/ranking work and the resume handoff at
 `docs/architecture/stage-a-resume.md`. Stop after checkpointing; tomorrow requires
 explicit authorization. The most recent source changes have focused evidence;
 full integration, remaining A3 consumers and A4 remain unfinished.
+
+Safe-stop WIP checkpoint created locally as `05f0bf3bc059028f22c8bd5a693079cbef76522e`.
+The follow-up commit only records its identity and finalizes the handoff. Final
+hash inspection found the expected stop documentation update in the frozen
+canonical-persistence.md; the other 1,744 inputs match. No application or test
+code changed after the passing gate. This documentation exception is explicit in
+the manifest and handoff; original test inventories/evidence are not rewritten.
+No additional tests, services or implementation were started.

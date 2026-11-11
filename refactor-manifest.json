@@ -3918,7 +3918,7 @@
           "status": "passed",
           "gate": "canonical dashboard counts and mode rankings",
           "attempt": 1,
-          "commit_sha": null,
+          "commit_sha": "05f0bf3bc059028f22c8bd5a693079cbef76522e",
           "entry_commit": "c74864f",
           "evidence_directory": "/tmp/chessism-canonical-a3-dashboard-20261110-01",
           "planned_tests": {
@@ -5867,7 +5867,7 @@
             "status": "passed",
             "gate": "canonical dashboard counts and mode rankings",
             "attempt": 1,
-            "commit_sha": null,
+            "commit_sha": "05f0bf3bc059028f22c8bd5a693079cbef76522e",
             "entry_commit": "c74864f",
             "evidence_directory": "/tmp/chessism-canonical-a3-dashboard-20261110-01",
             "planned_tests": {
@@ -6317,7 +6317,7 @@
       "resume_requires_explicit_authorization": true,
       "handoff": "docs/architecture/stage-a-resume.md",
       "parent_head": "c74864ff4b4a7628262f1dedf96aa482187cca45",
-      "checkpoint_commit_reference": "git log -1 --format=%H -- docs/architecture/stage-a-resume.md",
+      "checkpoint_commit_reference": "05f0bf3bc059028f22c8bd5a693079cbef76522e",
       "supervisor_pid": 2682953,
       "supervisor_exited_host_confirmed": true,
       "active_owned_writers": [],
@@ -6328,7 +6328,18 @@
       "evidence_archive": "docs/architecture/evidence/stage-a-stop-2026-11-10.tar.gz",
       "archive_sha256": "e6db7951dc795f1a894ea0dd319fbf0026d9f2a7fa06579bd42f02ddc1f83c47",
       "archive_contents_verified": true,
-      "archive_files": 350
+      "archive_files": 350,
+      "checkpoint_commit": "05f0bf3bc059028f22c8bd5a693079cbef76522e",
+      "post_stop_integrity": {
+        "unchanged_inputs": 1744,
+        "expected_documentation_changes": {
+          "docs/architecture/canonical-persistence.md": {
+            "tested": "018cc5ac16c07d445d2875bbe00f64f827aee886eaa071753a4e885f54c8b840",
+            "checkpoint": "eef20a3b38567b11a8dd66dde7c9fdc4a27e528341d8c823efde025ce68fba6a"
+          }
+        },
+        "application_or_test_changes": []
+      }
     }
   }
 }
