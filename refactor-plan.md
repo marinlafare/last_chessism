@@ -1,4 +1,70 @@
-# P1 #1: Analysis selection failures
+# Chessism V1 architectural refactoring
+
+## Active authorization — Stage A, Batch 1
+
+The user approved the A → B → C → D roadmap and explicitly authorized only
+**A1: Canonical schema and persistence contracts**. P1 #1 is accepted with the
+documented limitations; the older pending-review statements below are historical.
+Entry checkpoint: `0fde829d9477b3f73714b52e820a67bad49dad77`, clean branch
+`refactor/p1-analysis-failure-propagation`. All 1,699 saved verification input
+hashes match. Reuse that baseline and its exact unresolved debt; do not rerun
+unaffected full suites. User authorization supersedes the skill's blanket
+full-suite-per-chunk rule and additional plan-signoff requirement.
+
+### A1 implementation boundary
+
+Implementation and isolated verification are complete: 31 foundation checks
+(5 offline, 26 PostgreSQL) and all 68 focused P1 checks passed without skips.
+Evidence reviewed after user handoff; owned resources removed. Local commit and
+its handoff record conclude A1. Independent review is still required before A2.
+
+1. Add `docs/architecture/canonical-persistence.md`: schema scope, relationships,
+   transaction contracts, conversion map, and outstanding integration boundaries.
+2. Add `chessism_api/database/postgresql/canonical/`: independent SQL foundation
+   and explicit initializer/version validator. Keep useful normalized v3 keys,
+   integer scores, account/session semantics, ingestion accounting, and typed
+   cloud recovery structures. No historical copy, compatibility views, release
+   marker, or existing runtime import is a prerequisite.
+3. Add `scripts/init_canonical_db.py`: explicit isolated Unix-socket target only;
+   no environment fallback, destructive reset, live connection, or deployment.
+4. Add `tests/canonical_schema_fixture.py`, `tests/check_canonical_schema_postgres.py`,
+   and `tests/test_canonical_schema.py`: deterministic synthetic fixtures and
+   real PostgreSQL tests for initialization/versioning, identities/constraints,
+   accounts, variants, evaluations, atomicity, cloud state, and selection locks.
+5. Verify with private PostgreSQL 15 using no network or application volumes.
+   Check source preservation, new unit/integration tests, syntax/whitespace, and
+   relevant existing P1 checks. No configured Python lint/typecheck exists.
+6. Review saved evidence after the user reports completion. If passing, commit
+   only A1 files locally as `feat: establish canonical PostgreSQL foundation`.
+   Stop for Batch 1 review. Batches A2–A4 and all later stages remain unauthorized.
+
+Exit: initializer is atomic and repeatable, validation performs no schema repair,
+all new checks pass without skips, existing application/test files remain intact,
+and limitations distinguish schema foundation from application integration.
+Record schema artifact/source hashes and exact test results. Future extensions
+must update the foundation version; this batch does not claim full runtime readiness.
+
+### Remaining roadmap (approved direction, not implementation authorization)
+
+- A2: canonical writes and analysis selection; preserve accepted P1 behavior.
+- A3: canonical reads/analytics and derived projections.
+- A4: remove retired profiles/interfaces after complete caller conversion.
+- B: bounded engine execution and cloud dependency direction.
+- C: shared frontend job outcomes, Positions state, explicit ingestion outcomes.
+- D: full isolated integration and independent acceptance.
+
+### Handoff and resource boundary
+
+Any long verification runs detached with a temporary `monitor.py`: one display,
+120-second refresh, start/elapsed/stage/status and evidence-based ETA only. Return
+immediately after confirming startup; inspect results after the user reports back.
+Owned test containers must be removed even on failure. Keep technical failures
+in saved logs rather than printing raw command tracebacks in the monitor.
+Do not touch existing databases, backups, services, unrelated files, or repositories.
+No push, merge, deployment, runtime conversion, public-result change, or backup
+behavior change is authorized in A1.
+
+## Historical P1 #1 plan: Analysis selection failures
 
 Current work: the independent review requested two blocking corrections. The
 original implementation record below remains historical, not formal acceptance.

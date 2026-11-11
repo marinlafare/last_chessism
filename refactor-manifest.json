@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "completed",
+  "status": "awaiting_batch_1_review",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -1368,7 +1368,7 @@
   "completed_at": "2026-11-10T20:53:49.030315+00:00",
   "postflight": {
     "implementation_complete": true,
-    "acceptance": "pending_independent_review",
+    "acceptance": "accepted_with_documented_limitations",
     "correction_commits": {
       "cancellation_cleanup": "49edfc5",
       "authoritative_frontend_outcomes": "499a781"
@@ -1415,6 +1415,135 @@
       "Redis reset failure may retain old progress counters; authoritative outcomes now control completion and polling",
       "Cooperative cancellation tested; hard process termination is outside this guarantee"
     ],
-    "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened."
-  }
+    "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened.",
+    "acceptance_source": "User consolidated roadmap and explicit Stage A Batch 1 authorization; historical implementation log retained."
+  },
+  "active_work": "stage_a_batch_1",
+  "stage_a_batch_1": {
+    "name": "Canonical schema and persistence contracts",
+    "status": "verified_pending_local_commit",
+    "authorization": "User explicitly approved A1 only; stop for review after local commit.",
+    "baseline_commit": "0fde829d9477b3f73714b52e820a67bad49dad77",
+    "baseline_input_hashes_matched": 1699,
+    "baseline_evidence": "/tmp/chessism-p1-final-corrections/chunk6-green-source-sha256.json",
+    "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
+    "verification": {
+      "offline_safety_tests": {
+        "tests": 5,
+        "passed": 5,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "syntax": "passed",
+      "diff_check": "passed",
+      "protected_application_inputs_unchanged": 1699,
+      "planned_postgres_checks": 26,
+      "planned_existing_p1_checks": 68,
+      "evidence_directory": "/tmp/chessism-canonical-a1-20261110-01",
+      "monitor_command": "python3 /tmp/chessism-canonical-a1-20261110-01/monitor.py",
+      "full_suite_reuse": "Full suites were not rerun: all 1699 protected inputs remain identical to the accepted baseline; exact existing failure/error/skip details retained. New foundation and existing focused P1 tests ran with zero failures/errors/skips.",
+      "commit_pending": true,
+      "launch": {
+        "pid": 2175427,
+        "started_at": "2026-11-11T00:05:04.749332+00:00",
+        "startup_confirmed": true
+      },
+      "results": {
+        "foundation": {
+          "suite": "foundation",
+          "tests": 31,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0,
+          "elapsed_seconds": 7.156656980514526,
+          "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+        },
+        "p1": {
+          "suite": "p1",
+          "tests": 68,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0,
+          "elapsed_seconds": 4.526128530502319,
+          "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+        }
+      },
+      "total_checks_passed": 99,
+      "elapsed_seconds": 16.4686176776886,
+      "cleanup": [
+        {
+          "container": "chessism-canonical-a1-af2ff20210-p1",
+          "removed": true
+        },
+        {
+          "container": "chessism-canonical-a1-af2ff20210-foundation",
+          "removed": true
+        },
+        {
+          "container": "chessism-canonical-a1-af2ff20210-redis",
+          "removed": true
+        },
+        {
+          "container": "chessism-canonical-a1-af2ff20210-postgres",
+          "removed": true
+        }
+      ],
+      "cleanup_independently_confirmed": true,
+      "all_frozen_inputs_matched_at_review": 1707,
+      "ddl_sha256": "364339bf98861abdf6fe591940ca0cd23848755f386b184e4ef332bcd6f68e62",
+      "post_gate_changes": "Documentation/tracking and removal of one blank EOF line in support.sql; exact SQL byte equality after stripping terminal newlines verified. Five offline safety tests rerun; no behavior or assertions changed.",
+      "images": {
+        "postgres": "sha256:9a18aed4ecdd7db9e63f876ace8ef65166d9358ece23893eed8db9b1a7fa0b95",
+        "redis": "sha256:2a51817f79255c8b69f86a974459c2e0359aff81417d80158f2b9e541e6f4b33",
+        "foundation": "sha256:cee894ea7424d765d8545ed2d2845e136e56691bf52d8d20a443b92ecc5210a6",
+        "p1": "sha256:cee894ea7424d765d8545ed2d2845e136e56691bf52d8d20a443b92ecc5210a6"
+      },
+      "evidence_sha256": {
+        "foundation-results.json": "dbe98b5eb1666ccc5a37d6a9921c4a52f4bfc2cc271c1120907d11b7eb4a4c87",
+        "p1-results.json": "5d7c75a07d073fe915aa796946f45505ab052ec291c93c493a8304a874430f58",
+        "input-sha256.json": "1a48e1539d442a6ce476092dc39054156abc1ddb1a17a73ee1277f098a670c6e",
+        "results.json": "791e9d61e9e9c720ba510f2096f630816840fedd712ceffd850b9648e45c2c00"
+      },
+      "tested_source_sha256": {
+        "chessism_api/database/postgresql/canonical/support.sql": "33ea9470dbf4d81fd7022aebf04a70f8e681f82c3238d7f6c23476b0d3ca56f5",
+        "chessism_api/database/postgresql/canonical/core.sql": "5776b2e64f751e7bb82bfa04c6ab580b53787b623960a44689ae597076d6d03d",
+        "chessism_api/database/postgresql/canonical/__init__.py": "e9e45ba0818b4350c38f4ad22875edea1085fe6ea9166a545179c07cb2b65c6a",
+        "scripts/init_canonical_db.py": "a58b3ee0d9eec2e868d9c41132d416cecc94c7c2ed01ae9e034ac8faea7770bf",
+        "tests/canonical_schema_fixture.py": "dc866f0fe086c941e1af2187d3d3a46ebddf9d37bab10441130602c170c7c4bb",
+        "tests/check_canonical_schema_postgres.py": "de3c43f95dd07db0ac9db5361a80445dcf5514a39ded70bf2d6c7a51c289af6f",
+        "tests/test_canonical_schema.py": "84f012bf557f78e0c29743e7aa26424bd53516d1b23f6765711488b77b33ae54"
+      },
+      "tested_ddl_sha256": "dccf484b7f38d8935d2c9c849ac521440cdb02fc182511c877905182034990e1",
+      "final_source_sha256": {
+        "chessism_api/database/postgresql/canonical/support.sql": "fe210955d78cb98de2f2a9335aa2b001de97ff22fbe03ef687e482b5c1fbd2f6",
+        "chessism_api/database/postgresql/canonical/core.sql": "5776b2e64f751e7bb82bfa04c6ab580b53787b623960a44689ae597076d6d03d",
+        "chessism_api/database/postgresql/canonical/__init__.py": "e9e45ba0818b4350c38f4ad22875edea1085fe6ea9166a545179c07cb2b65c6a",
+        "scripts/init_canonical_db.py": "a58b3ee0d9eec2e868d9c41132d416cecc94c7c2ed01ae9e034ac8faea7770bf",
+        "tests/canonical_schema_fixture.py": "dc866f0fe086c941e1af2187d3d3a46ebddf9d37bab10441130602c170c7c4bb",
+        "tests/check_canonical_schema_postgres.py": "de3c43f95dd07db0ac9db5361a80445dcf5514a39ded70bf2d6c7a51c289af6f",
+        "tests/test_canonical_schema.py": "84f012bf557f78e0c29743e7aa26424bd53516d1b23f6765711488b77b33ae54"
+      }
+    },
+    "commit_sha": null,
+    "started_at": "2026-11-10T23:52:21.976475+00:00",
+    "next_authorized_batch": null,
+    "schema_scope": {
+      "core_tables": 10,
+      "preserved_support_tables": 78,
+      "semantic_views": 1,
+      "version_tables": 1,
+      "runtime_activated": false,
+      "derived_feature_schemas": "A2/A3 must add required projections/research/export/graph definitions before A4.",
+      "contract_changes": [
+        "game participation derived from two game player FKs",
+        "zero-move game shares game identity",
+        "calendar and average ratings derived",
+        "occurrence/continuation keys remove redundant surrogate IDs"
+      ]
+    },
+    "independent_review": "pending",
+    "completed_at": "2026-11-11T00:10:37.475128+00:00"
+  },
+  "chunk_counter_scope": "Historical P1 #1 chunks; active work is stage_a_batch_1."
 }
