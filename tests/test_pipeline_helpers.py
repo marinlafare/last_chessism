@@ -42,7 +42,7 @@ from chessism_api.operations.game_analysis_views import (
 from chessism_api.operations.player_game_views import (
     get_player_fen_score_counts,
 )
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.fen_views import (
     get_top_fens_unscored,
 )
 from chessism_api.database.postgresql.analysis_selection import _player_fens_for_analysis_stmt
@@ -2217,21 +2217,22 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         session.close.assert_awaited_once()
 
     async def test_most_repeated_unscored_query_matches_partial_index_order(self):
-        expected = [{"fen": "8/8/8/8/8/8/8/K6k w - - 0 1", "n_games": 10, "score": None}]
-
-        with patch(
-            "chessism_api.database.postgresql.ask_db.open_async_request",
-            new=AsyncMock(return_value=expected),
-        ) as request:
+        expected = [{"fen": "8/8/8/8/8/8/8/K6k w - -", "n_games": 10, "score": None}]
+        session = AsyncMock()
+        session.in_transaction = MagicMock(return_value=True)
+        query_result = MagicMock()
+        query_result.mappings.return_value.all.return_value = expected
+        session.execute.return_value = query_result
+        with patch("chessism_api.operations.fen_views.AsyncDBSession", return_value=session):
             result = await get_top_fens_unscored(6, offset=5)
-
         self.assertEqual(result, expected)
-        sql = request.await_args.args[0]
+        sql = str(session.execute.await_args.args[0])
         self.assertIn("score IS NULL", sql)
-        self.assertIn("n_games DESC", sql)
-        self.assertNotIn("fen ASC", sql)
+        self.assertIn("n_games DESC,fen ASC", sql)
         self.assertIn("OFFSET :offset", sql)
-        self.assertEqual(request.await_args.kwargs["params"], {"limit": 6, "offset": 5})
+        self.assertEqual(session.execute.await_args.args[1], {"limit": 6, "offset": 5})
+        session.commit.assert_awaited_once()
+        session.close.assert_awaited_once()
 
 
 class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):

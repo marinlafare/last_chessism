@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from chessism_api.database.postgresql.engine import async_engine, AsyncDBSession
 from chessism_api.database.postgresql.models import Fen, Game, GameFenAssociation
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES
+from chessism_api.scored_positions import summary_payload as scored_summary_payload
 
 async def get_all_database_names():
     """
@@ -680,15 +681,6 @@ SCORED_POSITION_SUMMARY_COLUMNS = """
 """
 
 
-SCORED_BUCKET_DEFINITIONS = [
-    ("equal", "Equal", 1),
-    ("small", "Small", 2),
-    ("clear", "Clear", 3),
-    ("decisive", "Decisive", 4),
-    ("mate", "Mate", 5),
-]
-
-
 def _json_payload(value: Any, fallback: Any) -> Any:
     if value is None:
         return fallback
@@ -698,52 +690,6 @@ def _json_payload(value: Any, fallback: Any) -> Any:
         except json.JSONDecodeError:
             return fallback
     return value
-
-
-def _scored_bucket_payload(row: Any, key: str, label: str, order: int) -> Dict[str, Any]:
-    positions = int(row.get(f"{key}_positions") or 0)
-    appearances = int(row.get(f"{key}_appearances") or 0)
-    abs_score_sum = float(row.get(f"{key}_abs_score_sum") or 0.0)
-    return {
-        "key": key,
-        "label": label,
-        "order": order,
-        "positions": positions,
-        "appearances": appearances,
-        "avg_abs_score": round(abs_score_sum / positions, 2) if positions else 0.0
-    }
-
-
-def _scored_position_summary_from_row(row: Any) -> Dict[str, Any]:
-    analyzed_fens = int(row.get("analyzed_fens") or 0)
-    wdl_positions = int(row.get("wdl_positions") or 0)
-    score_sum = float(row.get("score_sum") or 0.0)
-    abs_score_sum = float(row.get("abs_score_sum") or 0.0)
-
-    return {
-        "total_positions": int(row.get("total_positions") or 0),
-        "analyzed_fens": analyzed_fens,
-        "scored_positions": int(row.get("scored_positions") or 0),
-        "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
-        "unscored_fens": int(row.get("unscored_fens") or 0),
-        "buckets": [
-            _scored_bucket_payload(row, key, label, order)
-            for key, label, order in SCORED_BUCKET_DEFINITIONS
-        ],
-        "side_balance": {
-            "white_better": int(row.get("white_better") or 0),
-            "black_better": int(row.get("black_better") or 0),
-            "balanced": int(row.get("balanced") or 0),
-            "avg_score": round(score_sum / analyzed_fens, 2) if analyzed_fens else 0.0,
-            "avg_abs_score": round(abs_score_sum / analyzed_fens, 2) if analyzed_fens else 0.0
-        },
-        "wdl": {
-            "positions": wdl_positions,
-            "avg_white_win": round(float(row.get("wdl_win_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0,
-            "avg_draw": round(float(row.get("wdl_draw_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0,
-            "avg_white_loss": round(float(row.get("wdl_loss_sum") or 0.0) / wdl_positions, 2) if wdl_positions else 0.0
-        }
-    }
 
 
 async def _read_scored_position_summary() -> Optional[Dict[str, Any]]:
@@ -758,7 +704,7 @@ async def _read_scored_position_summary() -> Optional[Dict[str, Any]]:
 
     if not row:
         return None
-    return _scored_position_summary_from_row(row)
+    return scored_summary_payload(row)
 
 
 async def refresh_scored_position_summary(*, session_factory=None, database_summary=None) -> Dict[str, Any]:
@@ -886,7 +832,7 @@ async def refresh_scored_position_summary(*, session_factory=None, database_summ
             await session.rollback()
             raise
 
-    return _scored_position_summary_from_row(row or {})
+    return scored_summary_payload(row or {})
 
 
 async def increment_scored_position_summary_for_scored_fens(
@@ -2609,103 +2555,6 @@ async def drop_player_stats_table():
     except Exception as e:
         print(f"Error dropping 'player_stats' table: {e}")
 
-async def get_top_fens(limit: int = 20) -> List[Dict[str, Any]]:
-    """
-    Retrieves the top N FENs based on the highest count of n_games.
-    """
-    sql_query = """
-        SELECT
-            fen,
-            n_games,
-            moves_counter,
-            score
-        FROM
-            fen
-        ORDER BY
-            n_games DESC
-        LIMIT :limit;
-    """
-    params = {"limit": limit}
-
-    result = await open_async_request(
-        sql_query,
-        params=params,
-        fetch_as_dict=True
-    )
-    return result
-
-async def get_top_fens_unscored(
-    limit: int = 20,
-    offset: int = 0,
-) -> List[Dict[str, Any]]:
-    """
-    Retrieves the top N FENs based on the highest count of n_games,
-    where the score has NOT been calculated yet.
-    """
-    sql_query = """
-        SELECT
-            fen,
-            n_games,
-            score
-        FROM
-            fen
-        WHERE
-            score IS NULL
-        ORDER BY
-            n_games DESC
-        LIMIT :limit
-        OFFSET :offset;
-    """
-    params = {
-        "limit": max(1, min(100, int(limit))),
-        "offset": max(0, int(offset)),
-    }
-
-    result = await open_async_request(
-        sql_query,
-        params=params,
-        fetch_as_dict=True
-    )
-    return result
-
-async def get_sum_n_games(threshold: int = 10) -> Optional[int]:
-    """
-    Calculates the sum of all n_games where n_games > threshold.
-    """
-    async with AsyncDBSession() as session:
-        try:
-            stmt = (
-                select(func.sum(Fen.n_games))
-                .where(Fen.n_games > threshold)
-            )
-            result = await session.execute(stmt)
-            total_sum = result.scalar()
-            return total_sum
-        except Exception as e:
-            print(f"Error calculating sum of n_games: {e}")
-            return None
-
-
-async def get_fen_analysis_counts() -> Dict[str, int]:
-    """
-    Returns FEN analysis coverage counts.
-    analyzed_fens counts every FEN with a stored score, including score 0.
-    """
-    row = await ensure_database_summary()
-    return {
-        "total_fens": int(row.get("n_positions") or 0),
-        "analyzed_fens": int(row.get("analyzed_fens") or 0),
-        "unscored_fens": int(row.get("unscored_fens") or 0),
-        "nonzero_scored_fens": int(row.get("nonzero_scored_fens") or 0),
-    }
-
-
-async def get_scored_positions_overview() -> Dict[str, Any]:
-    """
-    Returns aggregate analysis for scored FENs from the precomputed projection.
-    """
-    return await ensure_scored_position_summary()
-
 
 async def _build_scored_advantage_by_rating_payload(*, session_factory=None) -> Dict[str, Any]:
     """
@@ -3019,100 +2868,6 @@ async def get_scored_advantage_by_rating(*, include_ratings: bool = True) -> Dic
     if not include_ratings:
         return {key: summary[key] for key in ("rating_basis", "groups")}
     return summary
-
-
-async def get_scored_positions_page(
-    sort: str = "impact",
-    min_abs_score: int = 0,
-    page: int = 1,
-    page_size: int = 20
-) -> Dict[str, Any]:
-    """
-    Returns paginated scored FEN rows for the scored positions page.
-    """
-    target_sort = (sort or "impact").strip().lower()
-    order_sql_by_sort = {
-        "frequency": "n_games DESC, ABS(score) DESC, fen ASC",
-        "impact": "(n_games * ABS(score)) DESC, n_games DESC, fen ASC",
-        "evaluation": "ABS(score) DESC, n_games DESC, fen ASC"
-    }
-    order_sql = order_sql_by_sort.get(target_sort, order_sql_by_sort["impact"])
-    if target_sort not in order_sql_by_sort:
-        target_sort = "impact"
-
-    safe_min_abs_score = max(0, min(int(min_abs_score or 0), 10000))
-    safe_page_size = max(1, min(int(page_size or 20), 50))
-    safe_page = max(1, int(page or 1))
-
-    where_sql = """
-        score IS NOT NULL
-        AND ABS(score) >= :min_abs_score
-    """
-    count_query = f"""
-        SELECT COUNT(*)::bigint AS total
-        FROM fen
-        WHERE {where_sql};
-    """
-    data_query = f"""
-        SELECT
-            fen,
-            n_games,
-            moves_counter,
-            next_moves,
-            score,
-            wdl_win,
-            wdl_draw,
-            wdl_loss,
-            split_part(fen, ' ', 2) AS side_to_move,
-            (n_games * ABS(score)) AS impact_score
-        FROM fen
-        WHERE {where_sql}
-        ORDER BY {order_sql}
-        OFFSET :offset
-        LIMIT :limit;
-    """
-
-    async with AsyncDBSession() as session:
-        count_result = await session.execute(text(count_query), {
-            "min_abs_score": safe_min_abs_score
-        })
-        count_row = count_result.mappings().first() or {}
-        total = int(count_row.get("total") or 0)
-        total_pages = (total + safe_page_size - 1) // safe_page_size if total > 0 else 0
-        if total_pages > 0 and safe_page > total_pages:
-            safe_page = total_pages
-        offset = (safe_page - 1) * safe_page_size
-
-        data_result = await session.execute(text(data_query), {
-            "min_abs_score": safe_min_abs_score,
-            "offset": offset,
-            "limit": safe_page_size
-        })
-        rows = data_result.mappings().all()
-
-    return {
-        "sort": target_sort,
-        "min_abs_score": safe_min_abs_score,
-        "page": safe_page,
-        "page_size": safe_page_size,
-        "total": total,
-        "total_pages": total_pages,
-        "rows": [
-            {
-                "fen": str(row.get("fen") or ""),
-                "n_games": int(row.get("n_games") or 0),
-                "moves_counter": str(row.get("moves_counter") or ""),
-                "next_moves": str(row.get("next_moves") or ""),
-                "score": float(row.get("score") or 0.0),
-                "wdl_win": float(row.get("wdl_win") or 0.0) if row.get("wdl_win") is not None else None,
-                "wdl_draw": float(row.get("wdl_draw") or 0.0) if row.get("wdl_draw") is not None else None,
-                "wdl_loss": float(row.get("wdl_loss") or 0.0) if row.get("wdl_loss") is not None else None,
-                "side_to_move": str(row.get("side_to_move") or ""),
-                "impact_score": float(row.get("impact_score") or 0.0)
-            }
-            for row in rows
-        ]
-    }
 
 
 # --- THIS IS THE FIX ---

@@ -1,30 +1,30 @@
 import os
 import json
 import unittest
-from unittest.mock import AsyncMock,patch
+from unittest.mock import AsyncMock,MagicMock,patch
 os.environ.setdefault('DATABASE_URL','postgresql+asyncpg://test:test@localhost/test')
 from chessism_api.operations import fen_explorer as explorer
-from test_common_positions import E4,context,result
+from test_common_positions import E4,result
 
 
 class FenExplorerTests(unittest.IsolatedAsyncioTestCase):
     def test_scopes_and_fen_validation(self):
-        self.assertEqual(explorer.scope_filter('unique'),('n_games = 1',{}))
-        self.assertEqual(explorer.scope_filter('repeated'),('n_games > 1',{}))
-        self.assertEqual(explorer.scope_filter('10')[1],{'appearances':10})
+        for scope in ('unique','repeated','scored','unscored',*(str(n) for n in range(2,11))):
+            self.assertIsNone(explorer.validate_scope(scope))
         for value in ('0','1','11','1 OR TRUE'):
-            with self.assertRaises(ValueError):explorer.scope_filter(value)
+            with self.assertRaises(ValueError):explorer.validate_scope(value)
         self.assertEqual(explorer.validate_fen(E4),E4)
         for fen in ('bad fen',E4+' 0 1','not/a/board w KQ -'):
             with self.assertRaises(ValueError):explorer.validate_fen(fen)
 
     async def test_samples_are_bounded_and_never_order_entire_table_randomly(self):
-        session=AsyncMock();session.execute.side_effect=[result()]+[result([{'fen':E4,'appearances':1}])]*3
-        with patch.object(explorer,'AsyncDBSession',return_value=context(session)):
+        session=AsyncMock();session.in_transaction=MagicMock(return_value=True);session.execute.side_effect=[result()]*3+[result([{'fen':E4,'appearances':1}])]*3
+        with patch.object(explorer,'AsyncDBSession',return_value=session):
             rows=await explorer.sample_positions('unique')
         self.assertEqual(len(rows),1)
-        self.assertEqual(session.execute.await_count,4)
-        for call in session.execute.call_args_list[1:]:
+        session.commit.assert_awaited_once();session.close.assert_awaited_once()
+        self.assertEqual(session.execute.await_count,6)
+        for call in session.execute.call_args_list[3:]:
             self.assertIn('TABLESAMPLE SYSTEM',str(call.args[0]));self.assertIn('LIMIT 120',str(call.args[0]))
             self.assertNotIn('ORDER BY random',str(call.args[0]));self.assertLessEqual(call.args[1]['percent'],.2)
 

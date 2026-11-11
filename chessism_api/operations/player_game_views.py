@@ -1,25 +1,11 @@
 """Player navigation and basic game statistics with one read snapshot per view."""
-from contextlib import asynccontextmanager
-
-from sqlalchemy import text
-
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql import player_game_reads as reads
-from chessism_api.database.postgresql.transactions import write_transaction
-
-
-@asynccontextmanager
-async def _snapshot(factory):
-    # Shared setup for this feature's reads; the accepted cleanup handles errors
-    # and repeated cancellation before the connection is returned to the pool.
-    async with write_transaction(factory or AsyncDBSession) as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
-        yield session
+from chessism_api.database.postgresql.transactions import read_transaction
 
 
 async def get_player_fen_score_counts(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         row = await reads.coverage(session, player_name)
     stamp = row['latest_rating_at']
     return {'player_name': player_name,
@@ -31,33 +17,33 @@ async def get_player_fen_score_counts(player_name, *, factory=None):
 
 
 async def get_player_neighbors(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return {'player_name': player_name, **await reads.neighbors(session, player_name)}
 
 
 async def get_tracked_player_navigation(same_group_as=None, *, factory=None):
     selected = same_group_as.strip().lower() if same_group_as is not None else None
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return await reads.navigation(session, selected)
 
 
 async def get_player_performance_summary(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return await reads.performance(session, player_name)
 
 
 async def get_player_game_averages(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return await reads.averages(session, player_name)
 
 
 async def get_player_termination_stats(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return await reads.terminations(session, player_name)
 
 
 async def get_player_top_openings(player_name, limit=5, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         return await reads.openings(session, player_name, limit)
 
 
@@ -69,7 +55,7 @@ def _format_games(rows):
 
 async def get_player_games_page(player_name, page=1, page_size=10, *, factory=None):
     page, page_size = max(1, page), max(1, min(100, page_size))
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         total = await reads.game_count(session, player_name)
         rows = await reads.games(session, player_name, limit=page_size, offset=(page-1)*page_size)
     return {'player_name': player_name, 'page': page, 'page_size': page_size,
@@ -77,7 +63,7 @@ async def get_player_games_page(player_name, page=1, page_size=10, *, factory=No
 
 
 async def get_player_game_summary(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         row = await reads.summary(session, player_name)
         modes = await reads.time_controls(session, player_name)
     return {'player_name': player_name, **{key:row[key] for key in ('wins','losses','draws','total_games')},
@@ -90,7 +76,7 @@ async def get_player_mode_games(player_name, mode, *, factory=None):
     mode = (mode or '').strip().lower()
     rows = []
     if mode in {'bullet','blitz','rapid'}:
-        async with _snapshot(factory) as session:
+        async with read_transaction(factory or AsyncDBSession) as session:
             rows = await reads.games(session, player_name, mode=mode)
     games = _format_games(rows)
     wins = sum(row['result']=='win' for row in games)
@@ -112,7 +98,7 @@ async def get_player_time_control_results(player_name, mode, *, factory=None):
 
 
 async def get_player_modes_stats(player_name, *, factory=None):
-    async with _snapshot(factory) as session:
+    async with read_transaction(factory or AsyncDBSession) as session:
         rows = await reads.mode_stats(session, player_name)
     by_mode = {}
     for row in rows:

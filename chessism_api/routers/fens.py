@@ -13,14 +13,16 @@ from chessism_api.operations.game_analysis_views import (
 from chessism_api.operations.player_game_views import (
     get_player_fen_score_counts,
 )
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.fen_views import (
     get_top_fens,
     get_sum_n_games,
     get_top_fens_unscored,
     get_fen_analysis_counts,
-    get_fen_pipeline_overview,
     get_scored_positions_overview,
     get_scored_positions_page,
+)
+from chessism_api.database.postgresql.ask_db import (
+    get_fen_pipeline_overview,
     get_scored_advantage_by_rating,
     _get_remaining_fens_count_committed,
 )
@@ -299,7 +301,7 @@ async def api_get_top_fens(limit: int = 20) -> JSONResponse:
         results_str += (
             f"{i+1: >3}. "
             f"n_games: {fen_data['n_games']: >6} | "
-            f"Score: {fen_data['score']: >6} | "
+            f"Score: {str(fen_data['score']): >6} | "
             f"FEN: {fen_data['fen']}\n"
         )
     

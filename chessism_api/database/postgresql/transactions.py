@@ -47,3 +47,12 @@ async def write_transaction(session_factory):
         raise
     else:
         await finish_analysis_cleanup(session.close())
+
+
+@asynccontextmanager
+async def read_transaction(session_factory):
+    """One read-only UTC snapshot, with the same guarded rollback and closure."""
+    async with write_transaction(session_factory) as session:
+        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+        yield session

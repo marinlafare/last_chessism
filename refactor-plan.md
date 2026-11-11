@@ -253,6 +253,35 @@ Version remains 6. No hours/snapshot, CUDA, production data or Stage B work.
 
 Player navigation/basic statistics passed all 123 checks; remaining analytics follow.
 
+Next A3.1 subgate: canonical FEN browsing and aggregate reads. Move the six
+FEN list/page/count/overview operations from ask_db to `operations/fen_views.py`;
+add `database/postgresql/fen_reads.py` for caller-owned SQL. Read initialized
+canonical summary singletons directly: HTTP reads never silently rebuild missing
+projections. Missing required rows raise; ordinary empty initialized databases
+retain zero/null response contracts. Extract unchanged scored-summary arithmetic
+into pure `chessism_api/scored_positions.py` for both current refresh and read callers.
+Preserve sorting/filter/page bounds and response types; make previously unspecified
+frequency ties deterministic by FEN. The top-list route must format unscored
+NULL values without a TypeError; scored text remains identical. Widen score arithmetic before ABS/multiplication
+because canonical evaluations permit full int32 values. SQL failures propagate.
+
+Convert `fen_explorer.py` sampled reads, examples and distinct-game drilldown to the
+same adapter: numeric participants/FENs, boolean sides, unique moves and UTC dates.
+Retain three bounded block samples, sample size, account/token/TTL behavior,
+10-game keyset pages, 2,000-occurrence cap, verified move examples and timeouts.
+Select examples deterministically. Do not add full-table random sorting or change
+shared histogram/common-position cache machinery. Share read-only repeatable-read
+setup in `transactions.read_transaction`, reusing its unchanged accepted write/
+rollback/close mechanism. Replace the existing identical player-view setup with
+that helper and repeat its PostgreSQL tests; prepared analysis transactions remain
+unchanged. Verify data/public routes, all scored sort modes including zero/mate/
+tablebase/int32 edge values, live committed summaries, ties and boundaries, game
+identity/participants/UTC, repeated positions/self-play, snapshot races, errors,
+read-only enforcement and repeated cancellation. Keep existing explorer/cache
+contracts and P1 checks. Schema stays version 6; broader fixture mappings remain A4.
+
+FEN browsing passed all 136 checks; remaining analytics follow.
+
 ### A3.2 — Research, exports, graph, administration and synthetic plans
 Depends on A3.1. Define remaining canonical auxiliary structures and convert
 `canonical_blunders/`, `cuda_summaries/`, `research_algorithms/`, `exports/`,

@@ -479,8 +479,7 @@ two visible games (0.458ms). This is not historical-scale performance evidence.
 ## A3.1 player navigation and basic statistics (verified)
 
 `operations/player_game_views.py` owns one guarded, read-only repeatable-read/UTC
-snapshot per response; its private context shares this resource setup across the
-related views. `database/postgresql/player_game_reads.py` contains fixed canonical
+snapshot per response through the shared `transactions.read_transaction`. `database/postgresql/player_game_reads.py` contains fixed canonical
 queries and requires that transaction. A narrow, feature-specific side projection
 replaces the legacy field catalog/query rewrite; no new schema/view/profile exists.
 Repeated game-list response formatting is consolidated.
@@ -514,3 +513,45 @@ Focused gate: 123 checks passed (40 foundation/PG, 15 related contracts, 68 P1),
 including 17 new PostgreSQL cases, without failures/errors/skips. All 1,736 frozen
 inputs match; the five isolated containers were removed and independently checked.
 Evidence: `/tmp/chessism-canonical-a3-player-views-20261110-01`.
+
+## A3.1 FEN browsing and aggregate reads (verified)
+
+`fen_reads.py` owns concrete canonical SQL; `fen_views.py` and `fen_explorer.py`
+own read transactions and response/sampling policy. Explorer queries resolve
+participants by numeric IDs, sides from booleans and calendar dates in UTC. Unique
+move keys remove duplicate-selection branches. Example selection is deterministic;
+its actual replay still has to reach the requested FEN. Frequency lists now break
+ties by FEN, matching the canonical pending index. Existing page/filter bounds,
+zero-score inclusion, null WDL fields and public scalar types are retained. The
+text top-list endpoint formats an unscored NULL without the previous TypeError.
+
+HTTP aggregate reads use the initialized summary singletons and fail if a required
+row is missing; they do not silently rebuild projections. Initialized empty data
+still returns valid zeros/nulls. Summary arithmetic moved unchanged to the pure
+`scored_positions.py` module, used by current refresh callers and read operations.
+The page query widens int32 scores before ABS and uses numeric multiplication for
+impact, so valid extreme evaluations and large occurrence counts cannot overflow.
+
+`read_transaction` consolidates actual duplicated snapshot setup and delegates
+rollback/closure to the unchanged accepted transaction functions. Existing player
+views now use it as well. Counts/pages and explorer game/occurrence reads share a
+repeatable-read snapshot. Writes are prohibited; errors and cancellation propagate
+only after guarded cleanup. The explorer retains three bounded block samples,
+100 sampled positions, account/token/TTL behavior, ten-game keyset pages, the
+2,000-occurrence cap, per-query timeouts and cached/thumbnail response behavior.
+Sampling remains exploratory and may return fewer or no rows for sparse scopes.
+
+Seventeen new PostgreSQL cases cover independent page/statistics oracles, types,
+sort/filter boundaries, ties, int32/numeric extremes, actual summary publication,
+missing singleton errors, empty data, UTC/numeric participant joins, duplicate
+positions/self-play, occurrence caps, replayed labels, snapshot races, read-only
+rules, query failures, repeated cancellation and real routes. The old pending SQL
+assertion maps to deterministic FEN tie ordering; explorer scope-shape assertions
+map to actual PostgreSQL scope membership. No payload or cache assertions removed.
+Prior player and analysis view suites repeat; schema version remains 6. Other
+summary writers/caches and full baseline comparison remain later A3/A4 work.
+
+Focused gate: all 136 checks passed (57 foundation/PG, 11 related contracts,
+68 P1), including 17 new PostgreSQL cases, with no failures/errors/skips. All
+1,740 frozen inputs match; five owned containers removed, independently confirmed.
+Evidence: `/tmp/chessism-canonical-a3-fen-views-20261110-01`.

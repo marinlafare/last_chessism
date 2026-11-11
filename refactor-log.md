@@ -1250,3 +1250,43 @@ confirmed with the exact run label. No production access or service changes.
 
 Ready for local commit. Remaining analytics and feature consumers remain A3;
 full-suite baseline comparison and retirement remain A4. Stage A is not accepted.
+
+## A3.1 FEN browsing and aggregate reads gate started
+
+Player navigation/basic views committed as `59a305c`; entry source tree clean.
+FEN browsing still uses the catch-all SQL helper/ORM, and explorer games/examples
+reference historical participant and side fields. Convert these cohesive reads to
+canonical SQL with application-owned snapshots. Scope and verification are now
+recorded above A3.2 in the plan. No schema, cache policy, scoring algorithm,
+production-resource or Stage B change.
+
+Canonical FEN browsing implemented; verification pending. Six list/page/aggregate
+reads moved from ask_db, with canonical explorer queries in the same adapter.
+Read snapshots share the existing guarded transaction cleanup; previous cleanup
+function ASTs are unchanged. Summary arithmetic ASTs are unchanged after extraction.
+Canonical summary absence raises, rather than rebuilding during HTTP reads.
+The top text route now renders NULL scores; numeric page arithmetic is widened
+for the supported int32 evaluation range and bigint occurrence counts.
+
+Prepared 136 checks: 57 offline/canonical PostgreSQL (17 new cases plus player and
+analysis views), 11 transaction/explorer/coverage contracts and 68 P1 checks.
+Five offline checks passed; changed Python compiles and diff checks pass. Frozen
+inputs: 1,740. Reuse unchanged schema/writer/recovery evidence. Full baseline
+comparison and historical opt-in fixture mapping remain A4, without new skips.
+Evidence: /tmp/chessism-canonical-a3-fen-views-20261110-01.
+
+A3.1 FEN views verification launched; supervisor PID 2642785.
+Startup confirmed. Monitor: `python3 /tmp/chessism-canonical-a3-fen-views-20261110-01/monitor.py`.
+Returning control without polling. Review results, source integrity and owned
+cleanup after the user reports completion; no commit before evidence review.
+
+## A3.1 FEN browsing gate passed and reviewed
+
+All 136 checks passed: 57 offline/canonical PostgreSQL (17 new FEN cases and
+35 existing schema/player/analysis checks), 11 related contracts and 68 accepted
+P1 regressions. No failures/errors/skips. Supervisor 24.08s. Raw and structured
+evidence agree. All 1,740 frozen inputs match; the retired module remains absent.
+All five owned containers were removed, independently confirmed by exact label.
+
+Ready for local commit. Remaining analytics/feature consumers and full-suite
+baseline comparison/retirement remain A3/A4. Stage A is not complete or accepted.
