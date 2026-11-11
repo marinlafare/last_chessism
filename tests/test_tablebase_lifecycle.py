@@ -23,7 +23,7 @@ class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
               patch.object(tablebase,'_read_tablebase_batch',AsyncMock(return_value=rows)),
               patch.object(tablebase,'_lease_tablebase_batch',AsyncMock(return_value=(session,rows[1:]))),
               patch.object(tablebase,'_save_tablebase_batch',AsyncMock()) as save,
-              patch('chessism_api.operations.fen_results.increment_new_fen_counts',AsyncMock()) as increment,
+              patch('chessism_api.database.postgresql.evaluation_results.increment_new_fen_counts',AsyncMock()) as increment,
               patch.object(tablebase,'increment_scored_position_summary_for_scored_fens',AsyncMock()),
               patch.object(tablebase,'increment_game_analysis_summary_for_scored_fens',AsyncMock()),
               patch.object(tablebase,'count_tablebase_candidates',AsyncMock()) as count):

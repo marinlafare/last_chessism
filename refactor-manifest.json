@@ -2000,79 +2000,233 @@
         "status": "in_progress",
         "verification": {
           "status": "passed",
-          "gate": "canonical_analysis_selection_and_cloud_queue",
-          "evidence_directory": "/tmp/chessism-canonical-a2-selection-20261110-03",
+          "gate": "canonical Stockfish publication and atomic cloud receipts",
+          "evidence_directory": "/tmp/chessism-canonical-a2-evaluations-20261110-02",
           "planned_tests": {
-            "postgres_and_offline": 23,
-            "workflow": 27,
+            "foundation": 25,
+            "workflow": 43,
             "p1": 68
           },
-          "planned_total": 118,
+          "planned_total": 136,
           "offline_safety_passed": 5,
-          "syntax": "passed",
-          "source_input_count": 1720,
-          "protected_baseline_count": 1672,
-          "changed_baseline_inputs": [
-            "chessism_api/database/postgresql/ask_db.py",
-            "chessism_api/database/postgresql/fen_claims.py",
-            "chessism_api/operations/analysis.py",
-            "chessism_api/operations/cloud_analysis/controller.py",
-            "chessism_api/operations/cloud_analysis/game_fen_queue.py",
-            "chessism_api/operations/cloud_analysis/input_preparation.py",
-            "chessism_api/operations/cloud_analysis/work_units_controller.py",
-            "chessism_api/operations/ingestion_pipeline/README.md",
-            "chessism_api/operations/ingestion_pipeline/fen_batches.py",
-            "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
-            "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
-            "chessism_api/operations/ingestion_pipeline/fen_repository.py",
-            "chessism_api/operations/ingestion_pipeline/game_importer.py",
-            "chessism_api/operations/ingestion_pipeline/jobs.py",
-            "chessism_api/operations/ingestion_pipeline/months.py",
-            "stockfish-batch-worker/benchmark_vm16/large_database.py",
-            "tests/check_cloud_game_queue_postgres.py",
-            "tests/test_analysis_failure_arq.py",
-            "tests/test_analysis_failure_jobs.py",
-            "tests/test_analysis_failure_selection.py",
-            "tests/test_cloud_analysis_database.py",
-            "tests/test_cloud_game_queue.py",
-            "tests/test_cloud_sequences_database.py",
-            "tests/test_cloud_work_units_database.py",
-            "tests/test_fen_reference_database.py",
-            "tests/test_pipeline_helpers.py",
-            "tests/test_relational_storage.py"
+          "syntax": "all changed Python parsed; git diff --check passed",
+          "source_input_count": 1722,
+          "protected_baseline_count": 1659,
+          "changed_baseline_inputs": {
+            "chessism_api/database/postgresql/ask_db.py": {
+              "accepted": "b71a0a83fcfb939c0798b89e98c3cf56314f920240381ab6b436374c2e469778",
+              "current": "d0211ebd4fee64a282e37377ef952db14e18c67c435c38b16c24ed658367c7ad"
+            },
+            "chessism_api/database/postgresql/db_interface.py": {
+              "accepted": "f0887421051ff63f457117fb19477e2fd05b9b67be998be791e8fbdfc33ebb31",
+              "current": "e0b1414d9024b19b2e093e9b9f063f14bbe60e3fe68cc4d113c908df8269e40d"
+            },
+            "chessism_api/database/postgresql/fen_claims.py": {
+              "accepted": "e75c06086d98a4aa0d1776cf3f8a9d6d724fccfa660605b1ba51dfffffff968f",
+              "current": "5ff72857e4dc9fdc1615d2c37a7e5f3125d82a6838bafbd33139b5988e6511b4"
+            },
+            "chessism_api/operations/analysis.py": {
+              "accepted": "bc4ee81a108b525e810404517874fb7cfb18dea85b5580b757286824c1004cda",
+              "current": "484f363b8cff2672e32a1d2d2cf8608cefa831b27f54fed91c2c00c1b42d7b27"
+            },
+            "chessism_api/operations/cloud_analysis/controller.py": {
+              "accepted": "6fad5347ae328eedc11d48a069deaf1591f96abc3002704941f4c2f90c2cde2b",
+              "current": "7ef03a120c18c68039eb0a4121fcd5253d9bcdeb61f0f9c22bbc61c582d32d12"
+            },
+            "chessism_api/operations/cloud_analysis/game_fen_queue.py": {
+              "accepted": "29b1697897d425e11aff4da90bedc5d34e87363821427dfff6075236b101da1c",
+              "current": "04a7d410cf78c8c030ddeb13d891c0ce0119dce4883883cd1143736d1221f8a4"
+            },
+            "chessism_api/operations/cloud_analysis/importer.py": {
+              "accepted": "371fca16d9536fa672afc8db1ca55bc06795a977d7e48b240e6b67572fc0b86c",
+              "current": "80eb0da8aace00b5bbe890a7273be0d18de46ec369ae369f7196bc5d2f15515b"
+            },
+            "chessism_api/operations/cloud_analysis/input_preparation.py": {
+              "accepted": "a446c00ba9dd83aa9034f2cf781ad17fecd6731828233dab98aa585ee96ea87a",
+              "current": "c77e3a84fc3061bc0f865413ca44d5ac39d411bfbcde15fb40dad86ddef50f6d"
+            },
+            "chessism_api/operations/cloud_analysis/work_units_controller.py": {
+              "accepted": "e9d35c73349525cbb01aee3779e3dfc5f6a9f6e3c8e85bc23b9922982472cedd",
+              "current": "383ebdfd23878752220b1e0ed5e94ff011cf41bb8c4dfd2d7055a5af0681dd00"
+            },
+            "chessism_api/operations/evaluation_repair/publish.py": {
+              "accepted": "7c0d9614a1a9e80089a579c58bb805c81e0c42e757db995038536205e2404f25",
+              "current": "4b7a015abf7e987d6c71755a42ff070cfa502a62089a7dd40d21ae4789980e0e"
+            },
+            "chessism_api/operations/fen_results.py": {
+              "accepted": "5fcef4c77e82f46de8ce983c3daf16ba9c25dfd04b831d3a3d2fe10c7609e202",
+              "current": "d4a07ba6747e82075785d04206060252dd1150d189839004389c1d98971dda6a"
+            },
+            "chessism_api/operations/ingestion_pipeline/README.md": {
+              "accepted": "b1de8ee9e9021201cec7c5a10e1095a0bd9c159b63c37a3f55c2d2320f71c99a",
+              "current": "b62c962f712dd8bb7ec6a276bf5d084e071fa40747c5e615e643c6004d3f0c2b"
+            },
+            "chessism_api/operations/ingestion_pipeline/fen_batches.py": {
+              "accepted": "4c65fb22a536b29802727cf45f3dd92f557bd032cd4c3404d8689b39a76c4df2",
+              "current": "93d63b662c2f0ba3748630180f63ab21869afc946b2ed08daa9dc364115e3f96"
+            },
+            "chessism_api/operations/ingestion_pipeline/fen_bulk.py": {
+              "accepted": "b43055dd7870e54ce2f4122b0b5066e508ddc591af12bd8f43897c1b1d6dede7",
+              "current": "0643494aa0a7aae87f47317ed3cc3745d43e85142c6cf239488d5300197d1e8d"
+            },
+            "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py": {
+              "accepted": "847acaf8935731b2767b8c7c04e7ce17f03f6371289b13524c9055f92fa8c004",
+              "current": "0a087c3bf1d08e9eb5c925336cbe259b97a13ac221b299abc70e897cedad4291"
+            },
+            "chessism_api/operations/ingestion_pipeline/fen_repository.py": {
+              "accepted": "f8b70c48b844044641d5100bf62c10f1f1b04ba1c8e81cbb4b209b50698406cc",
+              "current": "cec3467283861c5f57ea30e456a08c2b20a9e90ecf5025e6a6e28f524d29a3a2"
+            },
+            "chessism_api/operations/ingestion_pipeline/game_importer.py": {
+              "accepted": "2b69237be6ad30e64e7d8d3a220cd265bbe55c177fc0d01ad88d3e2c551d49c1",
+              "current": "58cf18c3657e40914bc88c34a988a4ba22f3c369fda01535c48dd76175c1a8e3"
+            },
+            "chessism_api/operations/ingestion_pipeline/jobs.py": {
+              "accepted": "773060e6f8dbeccbd411da86ec11fb4444856eab870d509c4102d4a946eae6d7",
+              "current": "6bd86a2b72c3272fbd35d6f673fe1284abb1cfb3426ac4dd0d43de79c8c8b3c2"
+            },
+            "chessism_api/operations/ingestion_pipeline/months.py": {
+              "accepted": "27a7c8d9ded5c4282a02adc53cfecc53722f5a587e6fb07bb6d7849a845b36f3",
+              "current": "3a01e10e0f0569c02485e0f8814692d8ee4aaf0143158729455dddd39f43c41e"
+            },
+            "chessism_api/operations/tablebase.py": {
+              "accepted": "f91812e0d3cd52c4f15725ce35a2f90e0a65d99d4e81d8a484fe44a488f94b1f",
+              "current": "ecde6e3270d9e5f67c8be5f5a3e8bc84a083dc008fbe8bf6c6e53baac2e5bf73"
+            },
+            "scripts/compact_db_application_checks.py": {
+              "accepted": "a3ccb0a8d0489547d3d28c345ac33c3f448dffef1d05f571aee3f8289e6ab5da",
+              "current": "a59b2da1a5a6d37ee41c5dcaa766b557d79805f0de1adfb263c4ea74d84ec641"
+            },
+            "scripts/db_refactor_write_checks.py": {
+              "accepted": "efa1138f3c207a7db87d23f05cf18509bae3fd40b9652074b8c1bc3d8fdceb26",
+              "current": "56ba603bd41c6f738e208622ffe89b539a8f40061010bc2c4e4b675651fca4f5"
+            },
+            "stockfish-batch-worker/benchmark_vm16/large_database.py": {
+              "accepted": "4b71bb9f8adceab7bc84f76cbeb0b6bdabf5735e1171617346161d1a3340141a",
+              "current": "1cd9ac3a700f99cf10217db179d322d1334ebbbd30cdc2e0ca2f167e0be65007"
+            },
+            "tests/check_cloud_game_queue_postgres.py": {
+              "accepted": "b90680744135b7fc4c4f0d9b9ddce7ca351c7a4d98f39582e0b56634f44d9c19",
+              "current": "78659bb835d5c8e6996ee97907af54f422f002cc743d0e437f1eca1ef9fd36d5"
+            },
+            "tests/check_compact_storage_postgres.py": {
+              "accepted": "0eff565f8c4c8f125c0d2b53738c5b8f52348d05f79f9dadc40d094f4e7ec914",
+              "current": "0dd87f9fc73f43282d4fd9b9d69ff65948937859cb282d4e87a26a741b60d5b0"
+            },
+            "tests/check_relational_application_postgres.py": {
+              "accepted": "d1bb3f0cb6c23291b44f198d6da83bdb4321a1825dc87b8371f660f2434186c8",
+              "current": "21e6c1feee8ad8ac7ba2145a4af989e6d6b0b2eaacce5a4cae3454c9a636ce2a"
+            },
+            "tests/test_analysis_failure_arq.py": {
+              "accepted": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
+              "current": "158d3760105cfafc5aef3f63a7a35c13c05b131d9e107b62f8f6a6ce7e77225f"
+            },
+            "tests/test_analysis_failure_jobs.py": {
+              "accepted": "7a3652ec50b4c46c0ae63ce15d10dfbc19115749a70db1c662d954c3a330e709",
+              "current": "bfa48a5f9447423ab2822768366e5c980fb80506b545468b5d7a9e649c3b3375"
+            },
+            "tests/test_analysis_failure_selection.py": {
+              "accepted": "c7f2f19686b37527d94ad57aaea4410eb71ce627dcbd64d5f297508cc776d032",
+              "current": "2fe93a13b3210934876c951c2ac0dd023a8b2a3e25f4c3932c2e9f9738a2e382"
+            },
+            "tests/test_analysis_scheduling.py": {
+              "accepted": "9cd66fc02453d87ea51131da29b679760268fb197630706994eaf303f1d3d73c",
+              "current": "4956c8371e8df606568b841686945d56497c537346bd4acd09c9ea7348e8ab90"
+            },
+            "tests/test_cloud_analysis_database.py": {
+              "accepted": "fd57b828c110338e8d3c597cc8a584ccee8cfddd0d7022451946195203682530",
+              "current": "699473902fe76ad6f01162921cfc7f04ef2e269b4c27c11f54cf0fbb0a2210d3"
+            },
+            "tests/test_cloud_game_queue.py": {
+              "accepted": "be1d94d34a03747c4cebe6bb5d585a02ceb4f9a69281264520980017527cb22a",
+              "current": "047bda27d1d75a546a567f99cc92c905cb1060add8f104ca31a4ec60d355bc92"
+            },
+            "tests/test_cloud_sequences_database.py": {
+              "accepted": "9204e1fc48763315ffeada0f26ca153b63dd59f50cad6d3a7a07d0a5f65e4274",
+              "current": "0d1f05a106541737a42b3979f7d75aad599b5b9d4204fb7918f010fdea5890de"
+            },
+            "tests/test_cloud_work_units_database.py": {
+              "accepted": "5d07663c88309859e150adf8ec79274d13a16856503f8efe5180d50cb59f5ee7",
+              "current": "0f9bcdcb8c75eb586f50c45cfef36dd0d3cf7efd08290e13cb0a2828bbb61cc7"
+            },
+            "tests/test_evaluation_contract.py": {
+              "accepted": "6da4ff6e89fb092a0cb27898162e9304bb44eb53c774bd9c9886757b964bbe59",
+              "current": "6204a2afba89abdef77691d839b1e43da2724ae74bc16039cf27a1b5cbdcfc56"
+            },
+            "tests/test_evaluation_pipeline_database.py": {
+              "accepted": "b63baffe9f76e219dfc4929b7ec518fdcea95cd9792f54920da565bfb657b489",
+              "current": "cf89134b01f68b6875dec9236f09326a12976e29bc38a7088644a1ec744335e9"
+            },
+            "tests/test_fen_reference_database.py": {
+              "accepted": "0fd2cc8d518accd43f798f021e533956e2e73e0f638a889c5c834612ce0aa4bd",
+              "current": "5f38f9e7e8bb55187e2b49a466e476b7ade8fc4e5cfe93b1f5b6428921911890"
+            },
+            "tests/test_pipeline_helpers.py": {
+              "accepted": "72a8d15371b0030e3b20f9b726580035ac765d5daeed7fdb68a5fecb87a1d0f8",
+              "current": "48ec694aa2bbacbb14ba9ad6d98a6da242e215d946e32c5d7783fd988ce09eee"
+            },
+            "tests/test_relational_storage.py": {
+              "accepted": "20d8700651bde7b5311c99cd1fd65392f93902e6b2a59108588740334de0927a",
+              "current": "4f49277fc43f5e7cfe084faa885477b2b67da19a264039eab04b0b5843a3fa58"
+            },
+            "tests/test_tablebase_lifecycle.py": {
+              "accepted": "e479830543c4341933a117aac68aef0c46ddca05b3079be3e86c5509194a9ce7",
+              "current": "52111d275fba8135b850de94f51d9749b60df69c1bfe85b5d8cc81981e1757f3"
+            }
+          },
+          "new_regressions": "20 real PostgreSQL tests: transaction ownership, typed nullable writes, alternatives, totals, rollback, concurrent writers, bounded statements, atomic cloud receipts, replay, lost acknowledgment, changed claims, malformed checkpoints, out-of-order tasks, prevalidation and repeated cancellation including rollback failure",
+          "p1_preservation": "All 68 accepted regressions retained; scheduling drops only the unused inner DBInterface patch because stage_fen_results is already mocked. No assertions changed.",
+          "mapping": "Existing pure evaluation validation and numeric-identity assertions retained. Four old evaluation pipeline behaviors plus bounded statements mapped to CanonicalEvaluationTests. Cloud atomicity/replay/failure behaviors mapped to CanonicalCloudReceiptTests. Old opt-in profile fixture conversion remains required before A4; no skip added. Backup helper body and backup modules unchanged.",
+          "reused_evidence": [
+            "198-check schema/ingestion gate at d51cd42",
+            "118-check selection/queue gate at a0a2af9"
           ],
-          "new_regressions": {
-            "postgres": 18,
-            "queue_cleanup": 2
+          "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
+          "monitor_command": "python3 /tmp/chessism-canonical-a2-evaluations-20261110-02/monitor.py",
+          "attempt": 2,
+          "commit_sha": null,
+          "correction": "Only new test fixture changes: complete deterministic legal MultiPV lines for normal positions in shared setup and sharded-task fixture. Existing validator, runtime, tests/assertions/timeouts unchanged. Pure checkpoint validation added before the foundation suite inside the pinned test image.",
+          "fixture_preflight": {
+            "passed": true,
+            "validated_records": 4,
+            "checks": [
+              {
+                "task": false,
+                "positions": 2,
+                "passed": true
+              },
+              {
+                "task": true,
+                "positions": 1,
+                "passed": true
+              },
+              {
+                "task": true,
+                "positions": 1,
+                "passed": true
+              }
+            ],
+            "production_access": false
           },
-          "p1_preservation": "Selection/job/ARQ regression files are byte-identical after reversing only their module name change; moved cleanup function body is unchanged after its function rename.",
-          "reused_evidence": {
-            "directory": "/tmp/chessism-canonical-a2-fens-20261110-01",
-            "checks": 198,
-            "reason": "Canonical schema and completed game/FEN persistence inputs unchanged; changed selector boundary is verified separately."
+          "preparation_sha256": {
+            "runner.py": "bb73fb6b88dc5b9e8df7d7cfc7e23806ce90abf4aa39f854cb46fa5fde5bb334",
+            "monitor.py": "7f21196f24e36d0050c5577d2f071229fb5595a23879ce160723d95f5ffa88f3",
+            "suite.py": "e0e9b01550f6a91ce09862c7800afe2ad667617d185758e3c21d2ea9e3c8adba",
+            "fixture-preflight.py": "2e718378a617c32bcbfc891f4de83411a6de2ac74b6ad64ca6441320e802030c",
+            "input-sha256.json": "d91971b75f674084e8d87dcde9574a15529084be0f6542c5e694ccaca533910d"
           },
-          "baseline_debt": "Existing API 3 failures/10 errors/276 skips, worker 7 skips and frontend 4 failures remain unresolved; final complete comparison at A4.",
-          "mapping": {
-            "GameFenQueueTests.test_build_preserves_legacy_minima_and_text_tiebreak": "test_build_preserves_game_minima_and_text_tiebreak retains ordering/no-frozen-claims assertions and replaces profile syntax assertions with public canonical table/is_white assertions.",
-            "AnalysisSelectionTests.test_player_fen_query_locks_rows_before_satisfying_limit": "Same EXISTS, LIMIT-before-SKIP-LOCKED, no-GROUP-BY assertions; SQL row alias is now f.",
-            "P1 selection/job regressions": "Same assertions and identities; imports and patch targets follow the extracted module."
-          },
-          "monitor_command": "python3 /tmp/chessism-canonical-a2-selection-20261110-03/monitor.py",
-          "attempt": 3,
-          "correction": "Move the missed ARQ session mock and standalone queue-checker patch from ask_db to analysis_selection. Only test module references changed; runtime source and all assertions unchanged.",
           "launch": {
-            "pid": 2403804,
-            "started_at": 1794361013.2879002,
+            "pid": 2456371,
             "startup_confirmed": true
           },
           "results": {
             "foundation": {
               "suite": "foundation",
-              "tests": 23,
+              "tests": 25,
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 3.82139253616333,
+              "elapsed_seconds": 5.6407270431518555,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
@@ -2080,11 +2234,11 @@
             },
             "workflow": {
               "suite": "workflow",
-              "tests": 27,
+              "tests": 43,
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 0.28087401390075684,
+              "elapsed_seconds": 0.3671727180480957,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
@@ -2096,53 +2250,61 @@
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 3.8957791328430176,
+              "elapsed_seconds": 4.10002875328064,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
               "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
             }
           },
-          "total_passed": 118,
-          "elapsed_seconds": 14.467718362808228,
+          "total_passed": 136,
+          "elapsed_seconds": 17.57947325706482,
           "cleanup": [
             {
-              "container": "chessism-canonical-a2-selection-76d8259528-p1",
+              "container": "chessism-canonical-a2-evaluations-7403bbab20-p1",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a2-selection-76d8259528-workflow",
+              "container": "chessism-canonical-a2-evaluations-7403bbab20-workflow",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a2-selection-76d8259528-foundation",
+              "container": "chessism-canonical-a2-evaluations-7403bbab20-foundation",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a2-selection-76d8259528-redis",
+              "container": "chessism-canonical-a2-evaluations-7403bbab20-redis",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a2-selection-76d8259528-postgres",
+              "container": "chessism-canonical-a2-evaluations-7403bbab20-postgres",
               "removed": true
             }
           ],
           "cleanup_independently_confirmed": true,
-          "source_integrity": "all 1720 frozen inputs match",
+          "source_integrity": {
+            "checked": 1722,
+            "mismatches": []
+          },
           "evidence_sha256": {
-            "results.json": "4b4a681a6f8587c266bb7e92adc90db69b616258f8f998bee888a4861910cc3c",
-            "input-sha256.json": "d4c573e7078ad8b7d364206e29373704f35d90feff0f4753ff9c75e67ef753c4",
-            "foundation-results.json": "e5e41fb75c69aff74f0e372b25d2417bee393d2fe9e60298f07691f3b8dd2928",
-            "workflow-results.json": "137f287e3df0eda34371c825ea6dd46ad45496b8aafed7628c16233bace3981b",
-            "p1-results.json": "3f0d81d81005834a13f3bb46f67f2ecef98f7c954040d533f5e7b2bed83860ce"
+            "results.json": "825732db8050f0eadb0f2b39b008d451f2aeae4fb3c6a35bac2a1e48a6d4e349",
+            "foundation-results.json": "15f7729e0253663be5ce91ab4d5ebaf3804819d9b2fad173f616e658436dc398",
+            "workflow-results.json": "f95b8ddb31ed4d4ea4949bd060d81873727e4731f071db4985f37d2332c6e1c9",
+            "p1-results.json": "c5f860fc1d1095eefd41e365190752afd120b34589d4e3a745d7e5e86bf162fc",
+            "foundation.log": "e3c1877e7f2838d629f162967e2a35e7ad1c71ea2ea2706d9b3471651e08bda8",
+            "workflow.log": "ebfcc426abdcb52b6286af513c9fe10a3cd49f8a6f7c10c3205e69cce097700b",
+            "p1.log": "205be2e14e1bc23fe73459234b17fe05a8611afe79b13e4796a26dbd492af63a",
+            "fixture-preflight.json": "16d081ed08ea2f57c18dd377cd127bbbdf3c4ab2811372242b460011c7b2bbd5",
+            "input-sha256.json": "d91971b75f674084e8d87dcde9574a15529084be0f6542c5e694ccaca533910d"
           }
         },
         "commit_sha": null,
         "started_at": "2026-11-11T01:12:16.420464+00:00",
-        "active_subgate": "canonical analysis selection and cloud game reservation queue",
+        "active_subgate": "canonical Stockfish evaluation publication and atomic cloud receipts",
         "subgates": [
-          "analysis selection and bounded cloud queue",
-          "evaluation writes, projection recovery and import receipts"
+          "analysis selection and bounded cloud queue (verified a0a2af9)",
+          "Stockfish evaluation publication and atomic cloud receipts",
+          "tablebase writes and durable projection recovery"
         ],
         "failed_verifications": [
           {
@@ -2401,6 +2563,282 @@
               "p1-results.json": "4c58aa537068141ea7eeb458c74b3354136c9ef30ffa5717670feda8594b604a",
               "input-sha256.json": "761981c18a54386f61d02ac5c8b38daddfd920a0c0db31cecab4e4ce03e85301"
             }
+          },
+          {
+            "status": "failed",
+            "gate": "canonical Stockfish publication and atomic cloud receipts",
+            "evidence_directory": "/tmp/chessism-canonical-a2-evaluations-20261110-01",
+            "planned_tests": {
+              "foundation": 25,
+              "workflow": 43,
+              "p1": 68
+            },
+            "planned_total": 136,
+            "offline_safety_passed": 5,
+            "syntax": "all changed Python parsed; git diff --check passed",
+            "source_input_count": 1722,
+            "protected_baseline_count": 1659,
+            "changed_baseline_inputs": {
+              "chessism_api/database/postgresql/ask_db.py": {
+                "accepted": "b71a0a83fcfb939c0798b89e98c3cf56314f920240381ab6b436374c2e469778",
+                "current": "d0211ebd4fee64a282e37377ef952db14e18c67c435c38b16c24ed658367c7ad"
+              },
+              "chessism_api/database/postgresql/db_interface.py": {
+                "accepted": "f0887421051ff63f457117fb19477e2fd05b9b67be998be791e8fbdfc33ebb31",
+                "current": "e0b1414d9024b19b2e093e9b9f063f14bbe60e3fe68cc4d113c908df8269e40d"
+              },
+              "chessism_api/database/postgresql/fen_claims.py": {
+                "accepted": "e75c06086d98a4aa0d1776cf3f8a9d6d724fccfa660605b1ba51dfffffff968f",
+                "current": "5ff72857e4dc9fdc1615d2c37a7e5f3125d82a6838bafbd33139b5988e6511b4"
+              },
+              "chessism_api/operations/analysis.py": {
+                "accepted": "bc4ee81a108b525e810404517874fb7cfb18dea85b5580b757286824c1004cda",
+                "current": "484f363b8cff2672e32a1d2d2cf8608cefa831b27f54fed91c2c00c1b42d7b27"
+              },
+              "chessism_api/operations/cloud_analysis/controller.py": {
+                "accepted": "6fad5347ae328eedc11d48a069deaf1591f96abc3002704941f4c2f90c2cde2b",
+                "current": "7ef03a120c18c68039eb0a4121fcd5253d9bcdeb61f0f9c22bbc61c582d32d12"
+              },
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py": {
+                "accepted": "29b1697897d425e11aff4da90bedc5d34e87363821427dfff6075236b101da1c",
+                "current": "04a7d410cf78c8c030ddeb13d891c0ce0119dce4883883cd1143736d1221f8a4"
+              },
+              "chessism_api/operations/cloud_analysis/importer.py": {
+                "accepted": "371fca16d9536fa672afc8db1ca55bc06795a977d7e48b240e6b67572fc0b86c",
+                "current": "80eb0da8aace00b5bbe890a7273be0d18de46ec369ae369f7196bc5d2f15515b"
+              },
+              "chessism_api/operations/cloud_analysis/input_preparation.py": {
+                "accepted": "a446c00ba9dd83aa9034f2cf781ad17fecd6731828233dab98aa585ee96ea87a",
+                "current": "c77e3a84fc3061bc0f865413ca44d5ac39d411bfbcde15fb40dad86ddef50f6d"
+              },
+              "chessism_api/operations/cloud_analysis/work_units_controller.py": {
+                "accepted": "e9d35c73349525cbb01aee3779e3dfc5f6a9f6e3c8e85bc23b9922982472cedd",
+                "current": "383ebdfd23878752220b1e0ed5e94ff011cf41bb8c4dfd2d7055a5af0681dd00"
+              },
+              "chessism_api/operations/evaluation_repair/publish.py": {
+                "accepted": "7c0d9614a1a9e80089a579c58bb805c81e0c42e757db995038536205e2404f25",
+                "current": "4b7a015abf7e987d6c71755a42ff070cfa502a62089a7dd40d21ae4789980e0e"
+              },
+              "chessism_api/operations/fen_results.py": {
+                "accepted": "5fcef4c77e82f46de8ce983c3daf16ba9c25dfd04b831d3a3d2fe10c7609e202",
+                "current": "d4a07ba6747e82075785d04206060252dd1150d189839004389c1d98971dda6a"
+              },
+              "chessism_api/operations/ingestion_pipeline/README.md": {
+                "accepted": "b1de8ee9e9021201cec7c5a10e1095a0bd9c159b63c37a3f55c2d2320f71c99a",
+                "current": "b62c962f712dd8bb7ec6a276bf5d084e071fa40747c5e615e643c6004d3f0c2b"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py": {
+                "accepted": "4c65fb22a536b29802727cf45f3dd92f557bd032cd4c3404d8689b39a76c4df2",
+                "current": "93d63b662c2f0ba3748630180f63ab21869afc946b2ed08daa9dc364115e3f96"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py": {
+                "accepted": "b43055dd7870e54ce2f4122b0b5066e508ddc591af12bd8f43897c1b1d6dede7",
+                "current": "0643494aa0a7aae87f47317ed3cc3745d43e85142c6cf239488d5300197d1e8d"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py": {
+                "accepted": "847acaf8935731b2767b8c7c04e7ce17f03f6371289b13524c9055f92fa8c004",
+                "current": "0a087c3bf1d08e9eb5c925336cbe259b97a13ac221b299abc70e897cedad4291"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py": {
+                "accepted": "f8b70c48b844044641d5100bf62c10f1f1b04ba1c8e81cbb4b209b50698406cc",
+                "current": "cec3467283861c5f57ea30e456a08c2b20a9e90ecf5025e6a6e28f524d29a3a2"
+              },
+              "chessism_api/operations/ingestion_pipeline/game_importer.py": {
+                "accepted": "2b69237be6ad30e64e7d8d3a220cd265bbe55c177fc0d01ad88d3e2c551d49c1",
+                "current": "58cf18c3657e40914bc88c34a988a4ba22f3c369fda01535c48dd76175c1a8e3"
+              },
+              "chessism_api/operations/ingestion_pipeline/jobs.py": {
+                "accepted": "773060e6f8dbeccbd411da86ec11fb4444856eab870d509c4102d4a946eae6d7",
+                "current": "6bd86a2b72c3272fbd35d6f673fe1284abb1cfb3426ac4dd0d43de79c8c8b3c2"
+              },
+              "chessism_api/operations/ingestion_pipeline/months.py": {
+                "accepted": "27a7c8d9ded5c4282a02adc53cfecc53722f5a587e6fb07bb6d7849a845b36f3",
+                "current": "3a01e10e0f0569c02485e0f8814692d8ee4aaf0143158729455dddd39f43c41e"
+              },
+              "chessism_api/operations/tablebase.py": {
+                "accepted": "f91812e0d3cd52c4f15725ce35a2f90e0a65d99d4e81d8a484fe44a488f94b1f",
+                "current": "ecde6e3270d9e5f67c8be5f5a3e8bc84a083dc008fbe8bf6c6e53baac2e5bf73"
+              },
+              "scripts/compact_db_application_checks.py": {
+                "accepted": "a3ccb0a8d0489547d3d28c345ac33c3f448dffef1d05f571aee3f8289e6ab5da",
+                "current": "a59b2da1a5a6d37ee41c5dcaa766b557d79805f0de1adfb263c4ea74d84ec641"
+              },
+              "scripts/db_refactor_write_checks.py": {
+                "accepted": "efa1138f3c207a7db87d23f05cf18509bae3fd40b9652074b8c1bc3d8fdceb26",
+                "current": "56ba603bd41c6f738e208622ffe89b539a8f40061010bc2c4e4b675651fca4f5"
+              },
+              "stockfish-batch-worker/benchmark_vm16/large_database.py": {
+                "accepted": "4b71bb9f8adceab7bc84f76cbeb0b6bdabf5735e1171617346161d1a3340141a",
+                "current": "1cd9ac3a700f99cf10217db179d322d1334ebbbd30cdc2e0ca2f167e0be65007"
+              },
+              "tests/check_cloud_game_queue_postgres.py": {
+                "accepted": "b90680744135b7fc4c4f0d9b9ddce7ca351c7a4d98f39582e0b56634f44d9c19",
+                "current": "78659bb835d5c8e6996ee97907af54f422f002cc743d0e437f1eca1ef9fd36d5"
+              },
+              "tests/check_compact_storage_postgres.py": {
+                "accepted": "0eff565f8c4c8f125c0d2b53738c5b8f52348d05f79f9dadc40d094f4e7ec914",
+                "current": "0dd87f9fc73f43282d4fd9b9d69ff65948937859cb282d4e87a26a741b60d5b0"
+              },
+              "tests/check_relational_application_postgres.py": {
+                "accepted": "d1bb3f0cb6c23291b44f198d6da83bdb4321a1825dc87b8371f660f2434186c8",
+                "current": "21e6c1feee8ad8ac7ba2145a4af989e6d6b0b2eaacce5a4cae3454c9a636ce2a"
+              },
+              "tests/test_analysis_failure_arq.py": {
+                "accepted": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
+                "current": "158d3760105cfafc5aef3f63a7a35c13c05b131d9e107b62f8f6a6ce7e77225f"
+              },
+              "tests/test_analysis_failure_jobs.py": {
+                "accepted": "7a3652ec50b4c46c0ae63ce15d10dfbc19115749a70db1c662d954c3a330e709",
+                "current": "bfa48a5f9447423ab2822768366e5c980fb80506b545468b5d7a9e649c3b3375"
+              },
+              "tests/test_analysis_failure_selection.py": {
+                "accepted": "c7f2f19686b37527d94ad57aaea4410eb71ce627dcbd64d5f297508cc776d032",
+                "current": "2fe93a13b3210934876c951c2ac0dd023a8b2a3e25f4c3932c2e9f9738a2e382"
+              },
+              "tests/test_analysis_scheduling.py": {
+                "accepted": "9cd66fc02453d87ea51131da29b679760268fb197630706994eaf303f1d3d73c",
+                "current": "4956c8371e8df606568b841686945d56497c537346bd4acd09c9ea7348e8ab90"
+              },
+              "tests/test_cloud_analysis_database.py": {
+                "accepted": "fd57b828c110338e8d3c597cc8a584ccee8cfddd0d7022451946195203682530",
+                "current": "699473902fe76ad6f01162921cfc7f04ef2e269b4c27c11f54cf0fbb0a2210d3"
+              },
+              "tests/test_cloud_game_queue.py": {
+                "accepted": "be1d94d34a03747c4cebe6bb5d585a02ceb4f9a69281264520980017527cb22a",
+                "current": "047bda27d1d75a546a567f99cc92c905cb1060add8f104ca31a4ec60d355bc92"
+              },
+              "tests/test_cloud_sequences_database.py": {
+                "accepted": "9204e1fc48763315ffeada0f26ca153b63dd59f50cad6d3a7a07d0a5f65e4274",
+                "current": "0d1f05a106541737a42b3979f7d75aad599b5b9d4204fb7918f010fdea5890de"
+              },
+              "tests/test_cloud_work_units_database.py": {
+                "accepted": "5d07663c88309859e150adf8ec79274d13a16856503f8efe5180d50cb59f5ee7",
+                "current": "0f9bcdcb8c75eb586f50c45cfef36dd0d3cf7efd08290e13cb0a2828bbb61cc7"
+              },
+              "tests/test_evaluation_contract.py": {
+                "accepted": "6da4ff6e89fb092a0cb27898162e9304bb44eb53c774bd9c9886757b964bbe59",
+                "current": "6204a2afba89abdef77691d839b1e43da2724ae74bc16039cf27a1b5cbdcfc56"
+              },
+              "tests/test_evaluation_pipeline_database.py": {
+                "accepted": "b63baffe9f76e219dfc4929b7ec518fdcea95cd9792f54920da565bfb657b489",
+                "current": "cf89134b01f68b6875dec9236f09326a12976e29bc38a7088644a1ec744335e9"
+              },
+              "tests/test_fen_reference_database.py": {
+                "accepted": "0fd2cc8d518accd43f798f021e533956e2e73e0f638a889c5c834612ce0aa4bd",
+                "current": "5f38f9e7e8bb55187e2b49a466e476b7ade8fc4e5cfe93b1f5b6428921911890"
+              },
+              "tests/test_pipeline_helpers.py": {
+                "accepted": "72a8d15371b0030e3b20f9b726580035ac765d5daeed7fdb68a5fecb87a1d0f8",
+                "current": "48ec694aa2bbacbb14ba9ad6d98a6da242e215d946e32c5d7783fd988ce09eee"
+              },
+              "tests/test_relational_storage.py": {
+                "accepted": "20d8700651bde7b5311c99cd1fd65392f93902e6b2a59108588740334de0927a",
+                "current": "4f49277fc43f5e7cfe084faa885477b2b67da19a264039eab04b0b5843a3fa58"
+              },
+              "tests/test_tablebase_lifecycle.py": {
+                "accepted": "e479830543c4341933a117aac68aef0c46ddca05b3079be3e86c5509194a9ce7",
+                "current": "52111d275fba8135b850de94f51d9749b60df69c1bfe85b5d8cc81981e1757f3"
+              }
+            },
+            "new_regressions": "20 real PostgreSQL tests: transaction ownership, typed nullable writes, alternatives, totals, rollback, concurrent writers, bounded statements, atomic cloud receipts, replay, lost acknowledgment, changed claims, malformed checkpoints, out-of-order tasks, prevalidation and repeated cancellation including rollback failure",
+            "p1_preservation": "All 68 accepted regressions retained; scheduling drops only the unused inner DBInterface patch because stage_fen_results is already mocked. No assertions changed.",
+            "mapping": "Existing pure evaluation validation and numeric-identity assertions retained. Four old evaluation pipeline behaviors plus bounded statements mapped to CanonicalEvaluationTests. Cloud atomicity/replay/failure behaviors mapped to CanonicalCloudReceiptTests. Old opt-in profile fixture conversion remains required before A4; no skip added. Backup helper body and backup modules unchanged.",
+            "reused_evidence": [
+              "198-check schema/ingestion gate at d51cd42",
+              "118-check selection/queue gate at a0a2af9"
+            ],
+            "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-evaluations-20261110-01/monitor.py",
+            "attempt": 1,
+            "commit_sha": null,
+            "launch": {
+              "pid": 2448661,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 25,
+                "failures": 0,
+                "errors": 10,
+                "skips": 0,
+                "elapsed_seconds": 4.205134868621826,
+                "failure_details": [],
+                "error_details": [
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_cloud_receipt_counts_claim_release_and_replay_are_atomic",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_concurrent_receipt_retries_commit_only_once",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_failed_cloud_publication_keeps_claims_and_no_receipt",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_invalid_bytes_and_checkpoint_indices_leave_all_state_intact",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_lost_acknowledgment_after_commit_retries_from_durable_receipt",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_missing_or_wrong_claim_refuses_publication",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_prevalidated_batch_rechecks_authoritative_input_and_remains_reusable",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_receipt_insert_failure_rolls_back_scores_claims_and_counters",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_repeated_cancellation_finishes_real_rollback_and_session_close",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  },
+                  {
+                    "test": "tests.check_canonical_evaluations_postgres.CanonicalCloudReceiptTests.test_task_receipts_import_out_of_order_without_losing_prior_results",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 87, in _callSetUp\n    self._callAsync(self.asyncSetUp)\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 104, in _callAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in asyncSetUp\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_evaluations_postgres.py\", line 199, in <listcomp>\n    records = [checkpoint.prepare(row, {'fen': row['fen'], 'is_valid': True,\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 161, in prepare\n    value, _ = self._prepare_encoded(row, result, elapsed_ms)\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 151, in _prepare_encoded\n    result_raw = validate_result(result, row, self.contract[\"settings\"][\"multipv\"])\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/stockfish-batch-worker/stockfish_batch/checkpoints.py\", line 90, in validate_result\n    raise ValueError(\"Incomplete MultiPV analysis\")\nValueError: Incomplete MultiPV analysis\n"
+                  }
+                ],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "elapsed_seconds": 7.071215867996216,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-evaluations-131bddb88d-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-131bddb88d-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-131bddb88d-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": {
+              "checked": 1722,
+              "mismatches": []
+            },
+            "failure_cause": "All ten cloud receipt cases failed in asyncSetUp: ValueError: Incomplete MultiPV analysis. The fixture supplied terminal output for nonterminal FENs. All ten direct canonical writer tests and five offline checks passed; workflow/P1 did not run.",
+            "evidence_sha256": {
+              "results.json": "987cd15c23f01a64389744eb4fe4dbaf9ecbfe16acb459bc48ff01483393f885",
+              "foundation-results.json": "61cafcdb62ef08c73ac4e384b233406a770f9557bb2423efc006d8f2e657bdec",
+              "foundation.log": "24b92e8684bc8eff5767c2206274c3e765506c73c44b14f84debf286777ab88c",
+              "technical-error.txt": "0ef434232d1b961bf43c1b76fb5c63804c1e243782b3a520ced234a61e3f7e8d",
+              "supervisor.log": "44199aec8dae709dbc317cd5178c105df050fac265dd0f2260009000022c5911",
+              "input-sha256.json": "4ddbce1a1cb9a98e8e8ef796ea95345d19ebfbe88560f76c4ed022e5d8d2e9e2"
+            }
           }
         ],
         "gates": [
@@ -2542,7 +2980,307 @@
               "workflow-results.json": "137f287e3df0eda34371c825ea6dd46ad45496b8aafed7628c16233bace3981b",
               "p1-results.json": "3f0d81d81005834a13f3bb46f67f2ecef98f7c954040d533f5e7b2bed83860ce"
             },
-            "commit_sha": null
+            "commit_sha": "a0a2af9"
+          },
+          {
+            "status": "passed",
+            "gate": "canonical Stockfish publication and atomic cloud receipts",
+            "evidence_directory": "/tmp/chessism-canonical-a2-evaluations-20261110-02",
+            "planned_tests": {
+              "foundation": 25,
+              "workflow": 43,
+              "p1": 68
+            },
+            "planned_total": 136,
+            "offline_safety_passed": 5,
+            "syntax": "all changed Python parsed; git diff --check passed",
+            "source_input_count": 1722,
+            "protected_baseline_count": 1659,
+            "changed_baseline_inputs": {
+              "chessism_api/database/postgresql/ask_db.py": {
+                "accepted": "b71a0a83fcfb939c0798b89e98c3cf56314f920240381ab6b436374c2e469778",
+                "current": "d0211ebd4fee64a282e37377ef952db14e18c67c435c38b16c24ed658367c7ad"
+              },
+              "chessism_api/database/postgresql/db_interface.py": {
+                "accepted": "f0887421051ff63f457117fb19477e2fd05b9b67be998be791e8fbdfc33ebb31",
+                "current": "e0b1414d9024b19b2e093e9b9f063f14bbe60e3fe68cc4d113c908df8269e40d"
+              },
+              "chessism_api/database/postgresql/fen_claims.py": {
+                "accepted": "e75c06086d98a4aa0d1776cf3f8a9d6d724fccfa660605b1ba51dfffffff968f",
+                "current": "5ff72857e4dc9fdc1615d2c37a7e5f3125d82a6838bafbd33139b5988e6511b4"
+              },
+              "chessism_api/operations/analysis.py": {
+                "accepted": "bc4ee81a108b525e810404517874fb7cfb18dea85b5580b757286824c1004cda",
+                "current": "484f363b8cff2672e32a1d2d2cf8608cefa831b27f54fed91c2c00c1b42d7b27"
+              },
+              "chessism_api/operations/cloud_analysis/controller.py": {
+                "accepted": "6fad5347ae328eedc11d48a069deaf1591f96abc3002704941f4c2f90c2cde2b",
+                "current": "7ef03a120c18c68039eb0a4121fcd5253d9bcdeb61f0f9c22bbc61c582d32d12"
+              },
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py": {
+                "accepted": "29b1697897d425e11aff4da90bedc5d34e87363821427dfff6075236b101da1c",
+                "current": "04a7d410cf78c8c030ddeb13d891c0ce0119dce4883883cd1143736d1221f8a4"
+              },
+              "chessism_api/operations/cloud_analysis/importer.py": {
+                "accepted": "371fca16d9536fa672afc8db1ca55bc06795a977d7e48b240e6b67572fc0b86c",
+                "current": "80eb0da8aace00b5bbe890a7273be0d18de46ec369ae369f7196bc5d2f15515b"
+              },
+              "chessism_api/operations/cloud_analysis/input_preparation.py": {
+                "accepted": "a446c00ba9dd83aa9034f2cf781ad17fecd6731828233dab98aa585ee96ea87a",
+                "current": "c77e3a84fc3061bc0f865413ca44d5ac39d411bfbcde15fb40dad86ddef50f6d"
+              },
+              "chessism_api/operations/cloud_analysis/work_units_controller.py": {
+                "accepted": "e9d35c73349525cbb01aee3779e3dfc5f6a9f6e3c8e85bc23b9922982472cedd",
+                "current": "383ebdfd23878752220b1e0ed5e94ff011cf41bb8c4dfd2d7055a5af0681dd00"
+              },
+              "chessism_api/operations/evaluation_repair/publish.py": {
+                "accepted": "7c0d9614a1a9e80089a579c58bb805c81e0c42e757db995038536205e2404f25",
+                "current": "4b7a015abf7e987d6c71755a42ff070cfa502a62089a7dd40d21ae4789980e0e"
+              },
+              "chessism_api/operations/fen_results.py": {
+                "accepted": "5fcef4c77e82f46de8ce983c3daf16ba9c25dfd04b831d3a3d2fe10c7609e202",
+                "current": "d4a07ba6747e82075785d04206060252dd1150d189839004389c1d98971dda6a"
+              },
+              "chessism_api/operations/ingestion_pipeline/README.md": {
+                "accepted": "b1de8ee9e9021201cec7c5a10e1095a0bd9c159b63c37a3f55c2d2320f71c99a",
+                "current": "b62c962f712dd8bb7ec6a276bf5d084e071fa40747c5e615e643c6004d3f0c2b"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py": {
+                "accepted": "4c65fb22a536b29802727cf45f3dd92f557bd032cd4c3404d8689b39a76c4df2",
+                "current": "93d63b662c2f0ba3748630180f63ab21869afc946b2ed08daa9dc364115e3f96"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py": {
+                "accepted": "b43055dd7870e54ce2f4122b0b5066e508ddc591af12bd8f43897c1b1d6dede7",
+                "current": "0643494aa0a7aae87f47317ed3cc3745d43e85142c6cf239488d5300197d1e8d"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py": {
+                "accepted": "847acaf8935731b2767b8c7c04e7ce17f03f6371289b13524c9055f92fa8c004",
+                "current": "0a087c3bf1d08e9eb5c925336cbe259b97a13ac221b299abc70e897cedad4291"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py": {
+                "accepted": "f8b70c48b844044641d5100bf62c10f1f1b04ba1c8e81cbb4b209b50698406cc",
+                "current": "cec3467283861c5f57ea30e456a08c2b20a9e90ecf5025e6a6e28f524d29a3a2"
+              },
+              "chessism_api/operations/ingestion_pipeline/game_importer.py": {
+                "accepted": "2b69237be6ad30e64e7d8d3a220cd265bbe55c177fc0d01ad88d3e2c551d49c1",
+                "current": "58cf18c3657e40914bc88c34a988a4ba22f3c369fda01535c48dd76175c1a8e3"
+              },
+              "chessism_api/operations/ingestion_pipeline/jobs.py": {
+                "accepted": "773060e6f8dbeccbd411da86ec11fb4444856eab870d509c4102d4a946eae6d7",
+                "current": "6bd86a2b72c3272fbd35d6f673fe1284abb1cfb3426ac4dd0d43de79c8c8b3c2"
+              },
+              "chessism_api/operations/ingestion_pipeline/months.py": {
+                "accepted": "27a7c8d9ded5c4282a02adc53cfecc53722f5a587e6fb07bb6d7849a845b36f3",
+                "current": "3a01e10e0f0569c02485e0f8814692d8ee4aaf0143158729455dddd39f43c41e"
+              },
+              "chessism_api/operations/tablebase.py": {
+                "accepted": "f91812e0d3cd52c4f15725ce35a2f90e0a65d99d4e81d8a484fe44a488f94b1f",
+                "current": "ecde6e3270d9e5f67c8be5f5a3e8bc84a083dc008fbe8bf6c6e53baac2e5bf73"
+              },
+              "scripts/compact_db_application_checks.py": {
+                "accepted": "a3ccb0a8d0489547d3d28c345ac33c3f448dffef1d05f571aee3f8289e6ab5da",
+                "current": "a59b2da1a5a6d37ee41c5dcaa766b557d79805f0de1adfb263c4ea74d84ec641"
+              },
+              "scripts/db_refactor_write_checks.py": {
+                "accepted": "efa1138f3c207a7db87d23f05cf18509bae3fd40b9652074b8c1bc3d8fdceb26",
+                "current": "56ba603bd41c6f738e208622ffe89b539a8f40061010bc2c4e4b675651fca4f5"
+              },
+              "stockfish-batch-worker/benchmark_vm16/large_database.py": {
+                "accepted": "4b71bb9f8adceab7bc84f76cbeb0b6bdabf5735e1171617346161d1a3340141a",
+                "current": "1cd9ac3a700f99cf10217db179d322d1334ebbbd30cdc2e0ca2f167e0be65007"
+              },
+              "tests/check_cloud_game_queue_postgres.py": {
+                "accepted": "b90680744135b7fc4c4f0d9b9ddce7ca351c7a4d98f39582e0b56634f44d9c19",
+                "current": "78659bb835d5c8e6996ee97907af54f422f002cc743d0e437f1eca1ef9fd36d5"
+              },
+              "tests/check_compact_storage_postgres.py": {
+                "accepted": "0eff565f8c4c8f125c0d2b53738c5b8f52348d05f79f9dadc40d094f4e7ec914",
+                "current": "0dd87f9fc73f43282d4fd9b9d69ff65948937859cb282d4e87a26a741b60d5b0"
+              },
+              "tests/check_relational_application_postgres.py": {
+                "accepted": "d1bb3f0cb6c23291b44f198d6da83bdb4321a1825dc87b8371f660f2434186c8",
+                "current": "21e6c1feee8ad8ac7ba2145a4af989e6d6b0b2eaacce5a4cae3454c9a636ce2a"
+              },
+              "tests/test_analysis_failure_arq.py": {
+                "accepted": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
+                "current": "158d3760105cfafc5aef3f63a7a35c13c05b131d9e107b62f8f6a6ce7e77225f"
+              },
+              "tests/test_analysis_failure_jobs.py": {
+                "accepted": "7a3652ec50b4c46c0ae63ce15d10dfbc19115749a70db1c662d954c3a330e709",
+                "current": "bfa48a5f9447423ab2822768366e5c980fb80506b545468b5d7a9e649c3b3375"
+              },
+              "tests/test_analysis_failure_selection.py": {
+                "accepted": "c7f2f19686b37527d94ad57aaea4410eb71ce627dcbd64d5f297508cc776d032",
+                "current": "2fe93a13b3210934876c951c2ac0dd023a8b2a3e25f4c3932c2e9f9738a2e382"
+              },
+              "tests/test_analysis_scheduling.py": {
+                "accepted": "9cd66fc02453d87ea51131da29b679760268fb197630706994eaf303f1d3d73c",
+                "current": "4956c8371e8df606568b841686945d56497c537346bd4acd09c9ea7348e8ab90"
+              },
+              "tests/test_cloud_analysis_database.py": {
+                "accepted": "fd57b828c110338e8d3c597cc8a584ccee8cfddd0d7022451946195203682530",
+                "current": "699473902fe76ad6f01162921cfc7f04ef2e269b4c27c11f54cf0fbb0a2210d3"
+              },
+              "tests/test_cloud_game_queue.py": {
+                "accepted": "be1d94d34a03747c4cebe6bb5d585a02ceb4f9a69281264520980017527cb22a",
+                "current": "047bda27d1d75a546a567f99cc92c905cb1060add8f104ca31a4ec60d355bc92"
+              },
+              "tests/test_cloud_sequences_database.py": {
+                "accepted": "9204e1fc48763315ffeada0f26ca153b63dd59f50cad6d3a7a07d0a5f65e4274",
+                "current": "0d1f05a106541737a42b3979f7d75aad599b5b9d4204fb7918f010fdea5890de"
+              },
+              "tests/test_cloud_work_units_database.py": {
+                "accepted": "5d07663c88309859e150adf8ec79274d13a16856503f8efe5180d50cb59f5ee7",
+                "current": "0f9bcdcb8c75eb586f50c45cfef36dd0d3cf7efd08290e13cb0a2828bbb61cc7"
+              },
+              "tests/test_evaluation_contract.py": {
+                "accepted": "6da4ff6e89fb092a0cb27898162e9304bb44eb53c774bd9c9886757b964bbe59",
+                "current": "6204a2afba89abdef77691d839b1e43da2724ae74bc16039cf27a1b5cbdcfc56"
+              },
+              "tests/test_evaluation_pipeline_database.py": {
+                "accepted": "b63baffe9f76e219dfc4929b7ec518fdcea95cd9792f54920da565bfb657b489",
+                "current": "cf89134b01f68b6875dec9236f09326a12976e29bc38a7088644a1ec744335e9"
+              },
+              "tests/test_fen_reference_database.py": {
+                "accepted": "0fd2cc8d518accd43f798f021e533956e2e73e0f638a889c5c834612ce0aa4bd",
+                "current": "5f38f9e7e8bb55187e2b49a466e476b7ade8fc4e5cfe93b1f5b6428921911890"
+              },
+              "tests/test_pipeline_helpers.py": {
+                "accepted": "72a8d15371b0030e3b20f9b726580035ac765d5daeed7fdb68a5fecb87a1d0f8",
+                "current": "48ec694aa2bbacbb14ba9ad6d98a6da242e215d946e32c5d7783fd988ce09eee"
+              },
+              "tests/test_relational_storage.py": {
+                "accepted": "20d8700651bde7b5311c99cd1fd65392f93902e6b2a59108588740334de0927a",
+                "current": "4f49277fc43f5e7cfe084faa885477b2b67da19a264039eab04b0b5843a3fa58"
+              },
+              "tests/test_tablebase_lifecycle.py": {
+                "accepted": "e479830543c4341933a117aac68aef0c46ddca05b3079be3e86c5509194a9ce7",
+                "current": "52111d275fba8135b850de94f51d9749b60df69c1bfe85b5d8cc81981e1757f3"
+              }
+            },
+            "new_regressions": "20 real PostgreSQL tests: transaction ownership, typed nullable writes, alternatives, totals, rollback, concurrent writers, bounded statements, atomic cloud receipts, replay, lost acknowledgment, changed claims, malformed checkpoints, out-of-order tasks, prevalidation and repeated cancellation including rollback failure",
+            "p1_preservation": "All 68 accepted regressions retained; scheduling drops only the unused inner DBInterface patch because stage_fen_results is already mocked. No assertions changed.",
+            "mapping": "Existing pure evaluation validation and numeric-identity assertions retained. Four old evaluation pipeline behaviors plus bounded statements mapped to CanonicalEvaluationTests. Cloud atomicity/replay/failure behaviors mapped to CanonicalCloudReceiptTests. Old opt-in profile fixture conversion remains required before A4; no skip added. Backup helper body and backup modules unchanged.",
+            "reused_evidence": [
+              "198-check schema/ingestion gate at d51cd42",
+              "118-check selection/queue gate at a0a2af9"
+            ],
+            "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-evaluations-20261110-02/monitor.py",
+            "attempt": 2,
+            "commit_sha": null,
+            "correction": "Only new test fixture changes: complete deterministic legal MultiPV lines for normal positions in shared setup and sharded-task fixture. Existing validator, runtime, tests/assertions/timeouts unchanged. Pure checkpoint validation added before the foundation suite inside the pinned test image.",
+            "fixture_preflight": {
+              "passed": true,
+              "validated_records": 4,
+              "checks": [
+                {
+                  "task": false,
+                  "positions": 2,
+                  "passed": true
+                },
+                {
+                  "task": true,
+                  "positions": 1,
+                  "passed": true
+                },
+                {
+                  "task": true,
+                  "positions": 1,
+                  "passed": true
+                }
+              ],
+              "production_access": false
+            },
+            "preparation_sha256": {
+              "runner.py": "bb73fb6b88dc5b9e8df7d7cfc7e23806ce90abf4aa39f854cb46fa5fde5bb334",
+              "monitor.py": "7f21196f24e36d0050c5577d2f071229fb5595a23879ce160723d95f5ffa88f3",
+              "suite.py": "e0e9b01550f6a91ce09862c7800afe2ad667617d185758e3c21d2ea9e3c8adba",
+              "fixture-preflight.py": "2e718378a617c32bcbfc891f4de83411a6de2ac74b6ad64ca6441320e802030c",
+              "input-sha256.json": "d91971b75f674084e8d87dcde9574a15529084be0f6542c5e694ccaca533910d"
+            },
+            "launch": {
+              "pid": 2456371,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 25,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 5.6407270431518555,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "workflow": {
+                "suite": "workflow",
+                "tests": 43,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.3671727180480957,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "p1": {
+                "suite": "p1",
+                "tests": 68,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 4.10002875328064,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "total_passed": 136,
+            "elapsed_seconds": 17.57947325706482,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-evaluations-7403bbab20-p1",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-7403bbab20-workflow",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-7403bbab20-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-7403bbab20-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-evaluations-7403bbab20-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": {
+              "checked": 1722,
+              "mismatches": []
+            },
+            "evidence_sha256": {
+              "results.json": "825732db8050f0eadb0f2b39b008d451f2aeae4fb3c6a35bac2a1e48a6d4e349",
+              "foundation-results.json": "15f7729e0253663be5ce91ab4d5ebaf3804819d9b2fad173f616e658436dc398",
+              "workflow-results.json": "f95b8ddb31ed4d4ea4949bd060d81873727e4731f071db4985f37d2332c6e1c9",
+              "p1-results.json": "c5f860fc1d1095eefd41e365190752afd120b34589d4e3a745d7e5e86bf162fc",
+              "foundation.log": "e3c1877e7f2838d629f162967e2a35e7ad1c71ea2ea2706d9b3471651e08bda8",
+              "workflow.log": "ebfcc426abdcb52b6286af513c9fe10a3cd49f8a6f7c10c3205e69cce097700b",
+              "p1.log": "205be2e14e1bc23fe73459234b17fe05a8611afe79b13e4796a26dbd492af63a",
+              "fixture-preflight.json": "16d081ed08ea2f57c18dd377cd127bbbdf3c4ab2811372242b460011c7b2bbd5",
+              "input-sha256.json": "d91971b75f674084e8d87dcde9574a15529084be0f6542c5e694ccaca533910d"
+            }
           }
         ]
       },

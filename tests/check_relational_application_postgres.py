@@ -76,7 +76,7 @@ async def check_application(engine, conn):
     from chessism_api.operations import player_game_scores, player_salience, player_salience_calculation, player_deletion, home_summary
     from chessism_api.operations.ingestion_pipeline import game_repository, fen_repository
     from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync, aggregate_fen_data
-    from chessism_api.operations.fen_results import stage_fen_results
+    from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     layout = RelationalStorage(C,A,V)
     factory = sessionmaker(engine,class_=AsyncSession,expire_on_commit=False,info={SESSION_KEY:layout})
     async with engine.connect() as connection:

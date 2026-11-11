@@ -92,6 +92,22 @@ checks, retain all P1 regressions, and run the four existing queue contract test
 Legacy opt-in database fixtures must be converted/mapped before the final A4 gate;
 do not introduce new skips. Evaluation publication remains the following subgate.
 
+Selection/reservation passed 118 checks and is committed as `a0a2af9`.
+The next focused gate moves live Stockfish publication to
+`database/postgresql/evaluation_results.py`: validate inputs before writes, require
+an existing transaction, lock canonical FEN identities in order, update at most
+1,000 FENs per statement, replace numeric continuations and increment totals in
+that same unit. Remove the now-unused DBInterface evaluation method and injection
+parameter; switch local/cloud/reviewed-repair imports and test patch targets.
+Keep the backup continuation helper and backup/restore implementation unchanged.
+Cloud import uses the shared cancellation-safe transaction owner; retain receipt
+identity, replay checks, claim release and counts in the same commit. Add actual
+canonical PostgreSQL publication and cloud receipt tests, including rollback,
+concurrency, lost acknowledgments and repeated cancellation. Retain all 68 P1
+checks and relevant formatting/identity/transaction unit assertions. Do not claim
+summary recovery is converted: tablebase and durable outbox conversion follow as
+the next A2.3 gate, before A3. No schema change is needed for this publication gate.
+
 ### A3.1 — Canonical game/player queries and summary readers
 Depends on A2.3. Convert routers and operations using game/player queries, navigation,
 rankings, pagination, `home_summary.py`, `player_*` summaries and `common_positions.py`.

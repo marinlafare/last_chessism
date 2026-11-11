@@ -1,6 +1,6 @@
 from typing import Any, List, Dict, TypeVar
 
-from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData, column, values, cast, null
+from sqlalchemy import select, Integer, func, update, bindparam, case, MetaData
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
@@ -273,38 +273,3 @@ class DBInterface:
                 )
         return True
     # --- END NEW METHOD ---
-
-
-    async def update_fen_analysis_data(self, session: AsyncSession,
-                                     analysis_data: ListOfDataObjects) -> int:
-        """Bounded set-based writes; caller owns row locks and the transaction.
-
-        Executemany would fire the statement-level summary trigger for every
-        FEN. UPDATE FROM VALUES fires it once per batch, deduplicating affected
-        games before queue writes. Never commit, round scores, or hide failures.
-        """
-        if not analysis_data:
-            return 0
-        from chessism_api.evaluations import validate_batch
-        validate_batch(analysis_data, source='stockfish')
-        layout = compact_for(session)
-        target = compact_table(Fen, layout.core) if layout else Fen.__table__
-        fields = ('fen', 'piece_count', 'score', 'next_moves', 'wdl_win', 'wdl_draw', 'wdl_loss')
-        prepared = [integer_result(row) if layout else row for row in analysis_data]
-        updated = 0
-        for start in range(0, len(prepared), 1000):
-            batch = prepared[start:start+1000]
-            # PostgreSQL otherwise resolves an all-NULL VALUES column as text.
-            payload = [tuple(cast(null(), target.c[name].type) if row.get(name) is None else row[name]
-                             for name in fields) for row in batch]
-            incoming = values(*(column(name, target.c[name].type) for name in fields),
-                              name='evaluation_input').data(payload)
-            statement = update(target).where(target.c.fen == incoming.c.fen).values(
-                piece_count=func.coalesce(target.c.piece_count, incoming.c.piece_count),
-                **{name: incoming.c[name] for name in fields[2:]},
-                analysis_source='stockfish', tablebase_wdl=None, tablebase_dtz=None, analyzed_at=func.now())
-            result = await session.execute(statement, execution_options={'synchronize_session': False})
-            if result.rowcount != len(batch):
-                raise ValueError('Not every evaluation matched a stored FEN; refusing a partial batch')
-            updated += result.rowcount
-        return updated

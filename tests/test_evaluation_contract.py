@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import AsyncMock
 
 from chessism_api import evaluations as contract
-from chessism_api.operations.fen_results import stage_fen_results
+from chessism_api.database.postgresql.evaluation_results import stage_fen_results
 
 
 def result(**values):
@@ -65,15 +65,15 @@ class EvaluationContractTests(unittest.TestCase):
 
 class EvaluationWriterTests(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_results_and_continuations_never_reach_writer(self):
-        session, interface = AsyncMock(), AsyncMock()
+        session = AsyncMock()
         invalid = [([result(score=None)], []), ([result(), result()], []),
             ([result()], [{'fen_fen': 'other', 'rank': 2, 'move': 'e2e4', 'score': 0}]),
             ([result()], [{'fen_fen': 'synthetic-position', 'rank': 2, 'move': 'e2e4', 'score': None}])]
         for rows, continuations in invalid:
             with self.assertRaises(ValueError):
-                await stage_fen_results(session, rows, continuations, interface=interface)
-        interface.update_fen_analysis_data.assert_not_awaited()
+                await stage_fen_results(session, rows, continuations)
         session.execute.assert_not_awaited()
+        session.connection.assert_not_awaited()
 
 
 if __name__ == '__main__':

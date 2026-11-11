@@ -295,3 +295,35 @@ inputs, rather than repeating that workload. Existing opt-in legacy database
 fixtures are still pending the final canonical integration mapping; none are
 silently skipped or treated as canonical verification. Evaluation publication,
 receipts, tablebase and durable projection recovery remain the next A2.3 subgate.
+
+
+## A2.3 Stockfish publication boundary
+
+`evaluation_results.py` stages canonical integer scores, exact nullable WDL,
+provenance, timestamps and numeric continuations in the caller's transaction.
+It validates the full input before writes, locks existing FENs in FEN-text order,
+and refuses missing identities or already-scored positions for live publication.
+Reviewed replacements retain their separate aggregate-adjustment responsibility.
+Typed-array updates are bounded to 1,000 FENs per statement, including all-NULL
+columns; alternatives use bounded COPY. No profile choice, generic repository,
+hidden commit or implicit transaction is introduced. Empty input is a no-op.
+
+Local analysis keeps its accepted lease/commit/cleanup/progress ordering. Cloud
+publication uses the existing cancellation-safe transaction owner for scores,
+claim release, job/run counts and immutable receipt identity. Optional timing is
+still recorded after the authoritative commit; a lost acknowledgment is resolved
+by the existing receipt replay check. Durable projection recovery and tablebase
+publication are still pending the next gate; this is not a runtime-ready checkout.
+
+The unused DBInterface evaluation method and its injectable instance are removed.
+The old `operations/fen_results.py` now serves only the unchanged backup
+continuation helper. Backup/restore code and behavior are untouched. Reviewed
+repair and old opt-in integration fixtures have their writer imports updated;
+their layout/setup conversion remains explicitly required before the A4 gate.
+New canonical integration checks cover their live-publication atomicity, bounded
+updates, receipt replay, counters and rollback behavior against the actual schema.
+
+The publication gate passed 136 checks: 25 offline/PostgreSQL, 43 related unit
+contracts and all 68 P1 regressions, with no failures, errors or skips. Synthetic
+cloud payloads were validated by the real checkpoint validator. This verifies
+canonical persistence and receipt behavior without live Stockfish or GCP access.

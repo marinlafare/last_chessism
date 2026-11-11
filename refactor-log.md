@@ -955,3 +955,78 @@ and their corrections remain recorded. No source changes after the passing gate.
 Canonical selection and queue work is ready for its local commit. A2.3 evaluation
 publication, receipts and durable projection recovery remain; Stage A is still
 in progress, with no acceptance, push, merge, deployment or production changes.
+
+## A2.3 evaluation publication gate started
+
+Selection/reservation is committed locally as `a0a2af9`. Repository/branch and
+clean working tree were rechecked after the editor closed; no pending process.
+The saved 118-check evidence remains the verified entry gate.
+
+Inspection found live publication still delegates to DBInterface/profile choices.
+The next bounded gate replaces that writer with canonical PostgreSQL functions,
+retaining application-owned transactions and atomic cloud receipts. Backup helper
+semantics remain unchanged; tablebase and durable summary recovery are the next
+explicit gate. This subdivides the approved A2.3 work without changing its scope.
+No runtime acceptance claim until the remaining consumers/startup are converted.
+
+Canonical Stockfish publication is implemented; verification is pending. Removed
+the unused DBInterface writer and instance. Local commit/cleanup/progress code is
+unchanged apart from the persistence call. Cloud result/claim/count/receipt units
+now use the accepted guarded transaction helper. Backup helper function body and
+all backup/restore modules are unchanged. Tablebase, outbox and repair setup
+conversion remain explicit subsequent work, not claimed complete.
+
+Prepared 136 checks: 25 offline/PostgreSQL (20 new), 43 related unit contracts,
+and all 68 P1 regressions. Five offline checks pass in 0.008s; syntax and diff
+whitespace checks pass. Frozen inputs: 1,722; 1,659 original baseline files are
+unchanged and 40 modified original inputs are listed explicitly. No new skips.
+Scheduling/formatting tests remove only unused inner DBInterface mocks; existing
+assertions remain. The invalid-input test now also asserts no connection borrow.
+Evidence directory: /tmp/chessism-canonical-a2-evaluations-20261110-01.
+
+A2.3 evaluation/receipt gate launched; supervisor PID 2448661. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-evaluations-20261110-01/monitor.py`.
+Returning control immediately without polling. Review completed evidence and
+owned-resource cleanup after the user reports completion; no commit before review.
+
+## A2.3 publication gate stopped — synthetic MultiPV fixture corrected
+
+First suite: 25 checks, 15 passes, 10 setup errors, zero failures/skips. All ten
+canonical writer tests and five offline checks passed. Every cloud receipt case
+failed before exercising import_batch: the synthetic fixture used terminal
+`{score:0,pv:[]}` output for nonterminal positions; the unchanged worker validator
+correctly raised `ValueError: Incomplete MultiPV analysis`. Workflow/P1 suites
+were not run after this stop. Exact identities/traces remain in foundation-results
+and foundation.log at /tmp/chessism-canonical-a2-evaluations-20261110-01.
+
+Supervisor 7.07s. All 1,722 frozen inputs matched; all three owned containers were
+removed, independently confirmed by the exact run label. No runtime correction
+is indicated by this failure. Failed evidence is preserved.
+
+Changed only the new fixture: deterministic legal first moves, complete MultiPV
+ranks, nodes and WDL in shared setup and the task fixture. No validator, runtime,
+assertion or timeout was weakened. A pure checkpoint preflight is added ahead of
+the PostgreSQL tests in the pinned container. An attempted host preflight lacked
+the chess dependency and stopped before validation; no packages were installed.
+
+Full 136-check retry prepared at /tmp/chessism-canonical-a2-evaluations-20261110-02.
+All application bytes match attempt 1, with the new test fixture the only changed
+frozen input. No implementation commit or advance before the gate passes.
+
+A2.3 publication retry launched; supervisor PID 2456371. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-evaluations-20261110-02/monitor.py`.
+Returning control without polling. Review saved results and owned cleanup after
+the user reports completion; no commit or next subgate before verification.
+
+## A2.3 evaluation publication gate passed and reviewed
+
+All 136 checks passed: 25 offline/PostgreSQL (20 new), 43 related unit contracts,
+and all 68 P1 regressions; zero failures/errors/skips. The fixture preflight also
+validated all four synthetic records. Supervisor 17.58s. Raw logs and structured
+results were reviewed; injected rollback-error logging is expected test evidence.
+All 1,722 frozen inputs match. All five disposable containers were removed,
+independently confirmed using the run label. The failed fixture run is retained.
+
+Publication and atomic receipts are ready for their local commit. Tablebase
+persistence, durable recovery and later Stage A consumers remain outstanding.
+No acceptance, push, merge, deployment or production-data operation.

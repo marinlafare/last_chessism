@@ -42,7 +42,7 @@ def fixture_bundle():
 async def run_checks(socket, pgdata, database='chessism_db', publish=None):
     from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync
     from chessism_api.operations.analysis import _format_engine_results
-    from chessism_api.operations.fen_results import stage_fen_results
+    from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     engine=create_async_engine(URL.create('postgresql+asyncpg',username='chessism_user',
         database=database,port=55432,query={'host':str(socket)}))
     report=[]

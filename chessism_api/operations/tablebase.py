@@ -360,7 +360,7 @@ async def _analyze_tablebase_positions(
             try:
                 async with reporter.step("save_endgames", len(solved)+len(unavailable_rows), "positions"):
                     await _save_tablebase_batch(session, solved, unavailable_rows)
-                    from chessism_api.operations.fen_results import increment_new_fen_counts
+                    from chessism_api.database.postgresql.evaluation_results import increment_new_fen_counts
                     await increment_new_fen_counts(session, solved)
                     await session.commit()
             except BaseException:

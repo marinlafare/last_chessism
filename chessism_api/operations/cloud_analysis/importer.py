@@ -7,11 +7,12 @@ from sqlalchemy import delete, select, text, update
 
 from . import runtime  # Set up the standalone package path for the host controller.
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import write_transaction
 from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
 from chessism_api.database.postgresql import cloud_columns
 from chessism_api.database.postgresql.cloud_codec import read_document, write_document, checksum
 from chessism_api.operations.analysis import _format_engine_results
-from chessism_api.operations.fen_results import stage_fen_results
+from chessism_api.database.postgresql.evaluation_results import stage_fen_results
 from .batch_validation import validate_batch, checked_batch
 
 
@@ -29,7 +30,7 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
     started = time.monotonic()
     if type(index) is not int or index < 0:
         raise ValueError('Invalid checkpoint index')
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         # Read only control references, not every selected FEN and all previous
         # receipts. A run lock serializes import/cleanup across process restarts.
         run = (await session.execute(select(CloudAnalysisRun.id, CloudAnalysisRun.job_id,
@@ -92,7 +93,7 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
         if len(formatted) != len(fens):
             raise ValueError("Not every downloaded result can be persisted")
         await stage_fen_results(session, formatted, continuations,
-            fen_ids={row.fen: row.fen_id for row in rows}, count_new=True)
+            count_new=True)
         await session.execute(delete(CloudFenClaim).where(
             CloudFenClaim.run_id == run.id, CloudFenClaim.fen.in_(fens)))
         await session.execute(update(CloudAnalysisJob).where(CloudAnalysisJob.id == run.job_id)
@@ -111,7 +112,7 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
             detail_record_id=detail))
     # Actual commit duration is observed only after COMMIT. An interruption
     # here leaves a valid receipt with optional timing absent, not a lost import.
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         await session.execute(update(CloudResultBatch).where(
             CloudResultBatch.run_id == run_id, CloudResultBatch.task_index == key['task_index'],
             CloudResultBatch.batch_index == index).values(transaction_seconds=time.monotonic() - started,

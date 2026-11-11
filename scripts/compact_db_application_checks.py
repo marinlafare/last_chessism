@@ -39,7 +39,7 @@ async def application_checks(conn, socket, database, passed):
     from chessism_api.operations import home_summary,player_game_scores
     from chessism_api.operations.cloud_analysis import controller,importer
     from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
-    from chessism_api.operations.fen_results import stage_fen_results
+    from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     from chessism_api.operations.fen_backup import database as fen_backup
     from chessism_api.operations.fen_backup.archive import validate_record
     from chessism_api.operations.tablebase import _save_tablebase_batch

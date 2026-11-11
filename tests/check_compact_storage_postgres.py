@@ -73,7 +73,7 @@ async def exercise(socket, conn):
     from chessism_api.database.postgresql.db_interface import DBInterface
     from chessism_api.operations.compact_writes import insert_associations
     from chessism_api.operations.compact_summaries import refresh_mode_summary
-    from chessism_api.operations.fen_results import stage_fen_results
+    from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     from chessism_api.operations.fen_backup import database as fen_backup
     from chessism_api.operations.ingestion_pipeline.game_repository import _sync_player_month_counts
     from chessism_api.operations.tablebase import _save_tablebase_batch

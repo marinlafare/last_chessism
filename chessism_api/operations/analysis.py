@@ -10,12 +10,9 @@ import sys
 from typing import Any, Awaitable, Callable, Dict, List, Optional, Tuple
 from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import delete, insert
 
 # --- FIXED IMPORTS ---
-from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
-from chessism_api.database.postgresql.db_interface import DBInterface
 from chessism_api.database.postgresql.analysis_selection import (
     count_game_set_fens_for_analysis,
     get_game_set_analysis_completion,
@@ -30,16 +27,13 @@ from chessism_api.database.postgresql.ask_db import (
     refresh_scored_rating_summary
 )
 from chessism_api.operations.analysis_times import record_analysis_times
-from chessism_api.operations.fen_results import stage_fen_results
+from chessism_api.database.postgresql.evaluation_results import stage_fen_results
 from chessism_api.operations.analysis_scheduling import balanced_analysis_batch_size
 from chessism_api.operations.tablebase import analyze_tablebase_positions
 # ---
 
 # --- Engine service URL ---
 ENGINE_URL = "http://stockfish-service:9999/analyze"
-
-# Initialize the DBInterface for Fen
-fen_interface = DBInterface(Fen)
 
 # Concurrency for analysis batches (number of parallel workers per job)
 ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "4")))
@@ -478,7 +472,7 @@ async def _run_analysis_job(
 
                     # 4. Save results (using the same session)
                     await stage_fen_results(session, db_ready_data, continuation_rows,
-                                            interface=fen_interface, count_new=True)
+                                            count_new=True)
 
                     # 5. Commit the transaction
                     # This saves the data AND releases the 'FOR UPDATE SKIP LOCKED'

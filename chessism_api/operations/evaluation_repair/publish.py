@@ -13,7 +13,7 @@ from stockfish_core.analysis import board_from_fen
 
 from chessism_api.database.postgresql.relational_storage import identifier, storage_for
 from chessism_api.evaluations import score_kind, validate_result
-from chessism_api.operations.fen_results import stage_fen_results
+from chessism_api.database.postgresql.evaluation_results import stage_fen_results
 from .artifacts import VERSION, MAX_FENS, digest, verify
 from .plan import require_idle, snapshot
 from .profile import profile as repair_profile
@@ -266,7 +266,7 @@ async def publish(session, plan, shadow, selected_ids, *, actor, plan_sha256, sh
                       'move': line['next_moves'].split()[0], 'score': line['score']}
                      for c in selected for rank, line in enumerate(c['alternative_lines'], 2)]
     await stage_fen_results(session, rows, continuations,
-                            fen_ids={c['before']['fen']: c['fen_id'] for c in selected}, count_new=False)
+                            count_new=False)
     # Shared writer timestamps normal live analysis at import. For this reviewed
     # shadow, retain the actual saved analysis time instead of publication time.
     stamps = [{'fen_id': c['fen_id'], 'analyzed_at': c['replacement']['analyzed_at']} for c in selected]

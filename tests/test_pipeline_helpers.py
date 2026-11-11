@@ -1696,11 +1696,6 @@ class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
             patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),
             patch.object(analysis, "_refresh_scored_projections_after_analysis", new_callable=AsyncMock),
-            patch.object(
-                analysis.fen_interface,
-                "update_fen_analysis_data",
-                new_callable=AsyncMock,
-            ),
         ):
             await analysis._run_analysis_job(
                 {},
@@ -1747,11 +1742,6 @@ class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):
             patch.object(analysis, "record_analysis_times", new_callable=AsyncMock),
             patch.object(analysis, "_increment_summary_for_analysis_results", new_callable=AsyncMock),
             patch.object(analysis, "_refresh_scored_projections_after_analysis", new_callable=AsyncMock),
-            patch.object(
-                analysis.fen_interface,
-                "update_fen_analysis_data",
-                new_callable=AsyncMock,
-            ),
         ):
             await analysis._run_analysis_job(
                 {},
