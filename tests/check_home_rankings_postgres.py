@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 import constants
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.ask_db import get_top_main_characters_by_time_control
+from chessism_api.operations.dashboard_views import get_top_main_characters_by_time_control
 
 
 async def check():

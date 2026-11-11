@@ -33,6 +33,7 @@ async def application_checks(conn, socket, database, passed):
         raise RuntimeError('Application probes require the owned empty schema clone')
     from scripts.db_refactor_write_checks import fixture_bundle,PLAYER,OTHER,LINKS
     from chessism_api.database.postgresql import ask_db,db_interface
+    from chessism_api.operations import mode_summary
     from chessism_api.database.postgresql.db_interface import DBInterface
     from chessism_api.database.postgresql.models import Fen,GameFenAssociation,PlayerStats,CloudAnalysisJob,CloudAnalysisRun,DatabaseSummary
     from chessism_api.operations.ingestion_pipeline import game_repository,fen_repository
@@ -66,7 +67,7 @@ async def application_checks(conn, socket, database, passed):
             await game_repository.insert_game_bundle(bundle['games'],bundle['moves'],bundle['game_players'],
                 bundle['game_openings'],[],player_name=PLAYER,affected_months={(2025,1),(2025,2)},affected_players={PLAYER,OTHER})
         with ExitStack() as patches:
-            for module in (ask_db,db_interface,game_repository,fen_repository,home_summary,player_game_scores,controller,importer,fen_backup):
+            for module in (ask_db,mode_summary,db_interface,game_repository,fen_repository,home_summary,player_game_scores,controller,importer,fen_backup):
                 patches.enter_context(patch.object(module,'AsyncDBSession',factory))
             await asyncio.wait_for(asyncio.gather(ingest(),ingest()),60)
             assert await conn.fetchval('SELECT count(*) FROM public.game')==3
@@ -106,7 +107,7 @@ async def application_checks(conn, socket, database, passed):
             await stats.create({'player_name':PLAYER,'chess_blitz_last_rating':2500})
             assert (await stats.update(PLAYER,{'chess_blitz_last_rating':2501}))['chess_blitz_last_rating']==2501
             assert (await stats.read(player_name=PLAYER))[0]['chess_blitz_last_rating']==2501
-            await ask_db.refresh_main_character_mode_summary_for_players({PLAYER,OTHER})
+            await mode_summary.refresh_main_character_mode_summary_for_players({PLAYER,OTHER})
             assert await conn.fetchval('SELECT sum(n_games) FROM chessism_reads.main_character_mode_summary WHERE player_name=$1',PLAYER)==3
             await passed('numeric_player_stats_and_mode_summaries')
             # Reserve/import real columnar control records, but never tick a cloud

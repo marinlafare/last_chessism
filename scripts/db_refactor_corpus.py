@@ -144,6 +144,7 @@ async def finalize(connection, pgdata, publish, *, inject=False):
     factory = sessionmaker(bind=connection, class_=AsyncSession, expire_on_commit=False,
         join_transaction_mode='create_savepoint', info={SESSION_KEY: LAYOUT})
     from chessism_api.database.postgresql import ask_db
+    from chessism_api.operations import mode_summary
     from chessism_api.operations.home_summary import refresh_home_summary
 
     await publish('refreshing_database_counts', steps_completed=0, steps_total=len(STAGES))
@@ -153,7 +154,7 @@ async def finalize(connection, pgdata, publish, *, inject=False):
     actions = (
         ('pipeline_counts', lambda: ask_db.refresh_fen_pipeline_summary(session_factory=factory)),
         ('scored_counts', lambda: ask_db.refresh_scored_position_summary(session_factory=factory,database_summary=database)),
-        ('player_modes', lambda: ask_db.refresh_main_character_mode_summary(session_factory=factory)),
+        ('player_modes', lambda: mode_summary.refresh_main_character_mode_summary(session_factory=factory)),
         ('salience_totals', lambda: refresh_salience_totals(factory)),
         ('rating_groups', lambda: ask_db.refresh_scored_rating_summary(session_factory=factory)),
         ('homepage_union', lambda: refresh_home_summary(session_factory=factory,transaction_managed=True)),

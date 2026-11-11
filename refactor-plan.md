@@ -1,5 +1,10 @@
 # Chessism V1 architectural refactoring
 
+**PAUSED BY USER — 2026-11-10.** The immediate safe-stop instruction supersedes
+continuous Stage A execution. Do not start implementation or verification without
+explicit renewed authorization. Resume from `docs/architecture/stage-a-resume.md`.
+Stage A remains incomplete and unaccepted.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.
@@ -281,6 +286,35 @@ read-only enforcement and repeated cancellation. Keep existing explorer/cache
 contracts and P1 checks. Schema stays version 6; broader fixture mappings remain A4.
 
 FEN browsing passed all 136 checks; remaining analytics follow.
+
+Next A3.1 subgate: dashboard counts and maintained mode rankings. Move core
+database/time-control counts, pipeline overview, remaining-extraction counts and
+mode rankings to `operations/dashboard_views.py` and a concrete
+`database/postgresql/dashboard_reads.py`. Read initialized singletons without HTTP
+rebuilds; missing required rows raise. Main-character game counts count each eligible
+game once, including self-play; rankings retain side-perspective totals and active
+profile/title filters before LIMIT. Preserve exact public fields and UTC dates.
+Pending extraction counts include in-progress games but exclude retained variants,
+custom starts and zero-move records, matching canonical analysis eligibility.
+
+Consolidate full/scoped mode-summary refresh with the existing ingestion calculation:
+move that SQL from `game_import_summaries.py` into `database/postgresql/mode_summary.py`,
+require a caller-owned transaction and serialize with the established ingestion
+commit lock. `operations/mode_summary.py` owns standalone refresh transactions at
+READ COMMITTED, so waiting on an importer cannot publish an older snapshot. Keep
+the A2 calculation, including date/link/white-side rating ties; full scope is None,
+empty explicit scope is a no-op. Delete/reinsert and returned counts are atomic;
+errors and repeated cancellation finish cleanup. Remove duplicate legacy mode
+writers and lazy ensure logic after updating callers. The obsolete ensure call in `main.py` is removed; other startup code only has
+its moved refresh import updated. Profile retirement remains A4. Reference tools/test imports move,
+with canonical fixture mapping retained as A4 debt; no production operation runs.
+
+Verify full/scoped equivalence with actual ingestion, independent mode/statistics
+oracles, ties, profile/title filters, empty/missing singleton behavior, UTC dates,
+rollback/failure/repeated cancellation, concurrent refreshes and refresh waiting on
+an actual importer. Repeat canonical ingestion and view regressions plus all P1
+checks. Other summary writers, home snapshots and analytics remain following gates;
+no schema, ingestion response, backup logic, deployment or Stage B change.
 
 ### A3.2 — Research, exports, graph, administration and synthetic plans
 Depends on A3.1. Define remaining canonical auxiliary structures and convert

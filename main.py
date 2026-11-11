@@ -20,7 +20,6 @@ from chessism_api.routers import graph_sync, graph_explorer
 
 # --- NEW: Import the init_db function ---
 from chessism_api.database.postgresql.runtime import init_runtime_db
-from chessism_api.database.postgresql.ask_db import ensure_main_character_mode_summary
 from chessism_api.operations.tablebase import ensure_tablebase_analysis_enqueued
 # --- NEW: Import Redis functions ---
 from chessism_api.redis_client import get_redis_pool, close_redis_pool
@@ -74,7 +73,6 @@ async def lifespan(app: FastAPI):
     if not CONN_STRING:
         raise ValueError("DATABASE_URL environment variable is not set.")
     await init_runtime_db(CONN_STRING)
-    await ensure_main_character_mode_summary()
     
     # --- NEW: Redis Setup ---
     # Initialize the pool on startup. The existing-position sweep runs in the

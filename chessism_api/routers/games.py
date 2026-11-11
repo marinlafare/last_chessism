@@ -22,14 +22,16 @@ from chessism_api.database.postgresql.ask_db import (
     get_player_time_control_top_openings,
     get_player_time_control_lengths,
     get_player_time_control_activity_trend,
-    get_games_database_generalities,
-    get_time_control_mode_counts,
     get_rating_time_control_chart,
     get_time_control_top_moves,
     get_time_control_top_openings,
     get_time_control_result_color_matrix,
     get_time_control_game_length_analytics,
     get_time_control_activity_trend,
+)
+from chessism_api.operations.dashboard_views import (
+    get_games_database_generalities,
+    get_time_control_mode_counts,
 )
 
 router = APIRouter()

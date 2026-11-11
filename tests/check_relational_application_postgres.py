@@ -72,6 +72,7 @@ async def setup(conn, pgdata):
 
 async def check_application(engine, conn):
     from chessism_api.database.postgresql import ask_db, db_interface
+    from chessism_api.operations import mode_summary
     from chessism_api.database.postgresql.models import Fen, GameFenAssociation
     from chessism_api.database.postgresql.db_interface import DBInterface
     from chessism_api.operations import player_game_scores, player_salience, player_salience_calculation, player_deletion, home_summary
@@ -93,7 +94,7 @@ async def check_application(engine, conn):
             player_name=PLAYER, affected_months={(2025,1),(2025,2)}, affected_players={PLAYER,OTHER})
 
     with ExitStack() as patches:
-        for module in (game_repository,fen_repository,ask_db,db_interface,player_game_scores,
+        for module in (game_repository,fen_repository,ask_db,mode_summary,db_interface,player_game_scores,
                        player_salience,player_salience_calculation,player_deletion,home_summary):
             patches.enter_context(patch.object(module,'AsyncDBSession',factory))
         # Concurrent duplicates exercise the real transaction owner, bulk COPY,
@@ -216,7 +217,7 @@ async def check_application(engine, conn):
         assert home['titled_games']==2,home # Neither archived Alice game belongs in the active count.
         await ask_db.refresh_database_summary_game_counts()
         await ask_db.refresh_fen_pipeline_summary()
-        await ask_db.refresh_main_character_mode_summary_for_players({PLAYER,OTHER})
+        await mode_summary.refresh_main_character_mode_summary_for_players({PLAYER,OTHER})
         await ask_db.refresh_scored_position_summary()
         await ask_db.sync_game_analytics_projection(tuple(LINKS[:3]))
         await ask_db.sync_game_analytics_projection(tuple(LINKS[:3]))

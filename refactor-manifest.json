@@ -1556,7 +1556,7 @@
   "stage_a_completion": {
     "authorization_source": "/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt",
     "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
-    "status": "in_progress",
+    "status": "paused",
     "current_chunk": "A3.1",
     "started_at": "2026-11-11T00:30:30.215098+00:00",
     "baseline_input_hashes_matched": 1699,
@@ -3913,26 +3913,54 @@
       {
         "id": "A3.1",
         "name": "Queries and summaries",
-        "status": "in_progress",
+        "status": "paused",
         "verification": {
           "status": "passed",
-          "gate": "canonical FEN browsing and aggregate reads",
+          "gate": "canonical dashboard counts and mode rankings",
           "attempt": 1,
           "commit_sha": null,
-          "entry_commit": "59a305c",
-          "evidence_directory": "/tmp/chessism-canonical-a3-fen-views-20261110-01",
+          "entry_commit": "c74864f",
+          "evidence_directory": "/tmp/chessism-canonical-a3-dashboard-20261110-01",
           "planned_tests": {
-            "foundation": 57,
-            "workflow": 11,
+            "foundation": 66,
+            "workflow": 19,
             "p1": 68
           },
-          "planned_total": 136,
+          "planned_total": 153,
           "new_postgres_regressions": 17,
           "offline_safety_passed": 5,
           "schema_version": 6,
-          "source_input_count": 1740,
-          "protected_baseline_count": 1633,
+          "source_input_count": 1745,
+          "protected_baseline_count": 1626,
           "changed_baseline_inputs": {
+            "chessism_api/database/postgresql/engine.py": {
+              "accepted": "c2c4db00651ccf5e6da3c273689fb70bccf3c7e565aa3c8d8eb69df8898aaecf",
+              "current": "db123ef3908b5ec23bafabd355b3fa1403a70304e56b2c1bfcdb1345c325cefe"
+            },
+            "chessism_api/operations/player_deletion.py": {
+              "accepted": "aebb10c59a1fa83b2285d69fb16bb4c94483427487b6edb09b77acd8e0789238",
+              "current": "bcf4a611ecbcf9f8236f4f6c34cb0b0185de949e5877ef6d2bad0d46a610ae7a"
+            },
+            "chessism_api/operations/players.py": {
+              "accepted": "bcf65886e46de609a6e21075594282c7cb791a5b4ebadaa612a883ecf748058d",
+              "current": "256410fb0271a84df1760a7037027557ac8024239c04949b253704c7a8bb2e39"
+            },
+            "main.py": {
+              "accepted": "27f7b982c47c82141ba61db0199d378c84eac9237562a1e459587cdff718d5c4",
+              "current": "87f1a7e98fca7979d22d2cc6d698f4a748563b854285219dfed8da8c51d5d2bd"
+            },
+            "scripts/db_refactor_corpus.py": {
+              "accepted": "de8c80dfedee05bedacff2df9b0f6486de955dc8166cb9fe924f9ae0e016450c",
+              "current": "1c4b5a54aca47c9e1612bf27c675a4f2854247dd8a11257870488ba6b223d9da"
+            },
+            "tests/check_home_rankings_postgres.py": {
+              "accepted": "1d20b002c2dc32c6eecb22f90b0cd047a8553007cbc66bd01ef64f4ad46ebac8",
+              "current": "828db59dbbb1caae3081167b84f35dffdd7541d425046939d83decfe1315d5d5"
+            },
+            "tests/test_db_refactor_corpus.py": {
+              "accepted": "2246d9b734c5afb6104225305a840881785769c2c942546e332cdac875a0c7c1",
+              "current": "6f3b861f526dcec2dfadfa84631615c641c03d7bdd25f8fedf36f6f6ebb97954"
+            },
             "chessism_api/operations/fen_explorer.py": {
               "accepted": "55284090235589d9295b95d5e61a32bd1da19f6f630fb4f987574d021619d3db",
               "current": "6d3dea514ed03e1aa806d38df9bb1ee8ad2d8b274257e473093ddc80309683d6"
@@ -3943,7 +3971,7 @@
             },
             "chessism_api/routers/games.py": {
               "accepted": "4885671b26e7ff74511d0c67e36abb897a611cbf2b7a61c18ccd6869a5a3bacb",
-              "current": "e619fb3e228defbc624671d2c98660d938dc022d372a54fb6d0436d47bc1ca6c"
+              "current": "4ce48d2d70a2d7a1431855aec67789def6aa3bbfacce1e8e7e85e96f28b74f1a"
             },
             "chessism_api/routers/players.py": {
               "accepted": "00971af66304faf80bd08f9e0717669adddf9a5fd4e4b2135331980f44fbb8a7",
@@ -3963,7 +3991,7 @@
             },
             "chessism_api/routers/fens.py": {
               "accepted": "66d79cbdd4faf535a3e059432459c5426701c49952e989babb19a426cbcef065",
-              "current": "a83e5c2d8d47d189413f043edecd93afe36737b1ce24c99b8c359d7afcfa1d7a"
+              "current": "9a227b94107e5f74f954b70fb080d213166fe4f5b41955dce997371f48fd8142"
             },
             "tests/test_cloud_prepared_benchmark_database.py": {
               "accepted": "451f48fa4bde41f2c0768ad63540a2023c9d810505b4ced20a204209ed30613d",
@@ -4019,7 +4047,7 @@
             },
             "chessism_api/database/postgresql/ask_db.py": {
               "accepted": "b71a0a83fcfb939c0798b89e98c3cf56314f920240381ab6b436374c2e469778",
-              "current": "3f6eb8a2d8e0984786b3a0e89c5a098fee92fe76daad4d7e36b9449fa3a668a0"
+              "current": "7e8303372d48e41296fffc271a7df8c395419f77d591ec1da91ad1547c0e7154"
             },
             "chessism_api/database/postgresql/db_interface.py": {
               "accepted": "f0887421051ff63f457117fb19477e2fd05b9b67be998be791e8fbdfc33ebb31",
@@ -4115,7 +4143,7 @@
             },
             "scripts/compact_db_application_checks.py": {
               "accepted": "a3ccb0a8d0489547d3d28c345ac33c3f448dffef1d05f571aee3f8289e6ab5da",
-              "current": "7d8db64bda75843293c5d876eb839e4553a36a029f7b92d435e863796feacc55"
+              "current": "cc910e06fb3b492e46f3f036e3ee21cff87c7a5d4b4fd632eff4b8c2750b0c77"
             },
             "scripts/db_refactor_write_checks.py": {
               "accepted": "efa1138f3c207a7db87d23f05cf18509bae3fd40b9652074b8c1bc3d8fdceb26",
@@ -4139,7 +4167,7 @@
             },
             "tests/check_relational_application_postgres.py": {
               "accepted": "d1bb3f0cb6c23291b44f198d6da83bdb4321a1825dc87b8371f660f2434186c8",
-              "current": "0a05d5a4936ff6231968b307776ff16a94ad6139ac4d8334a058561b4007e8ce"
+              "current": "bd3d670273cc6c4c951e6f62b3afb54dddfe6b95c89369bff9ce7e404dc09e2a"
             },
             "tests/test_analysis_failure_arq.py": {
               "accepted": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
@@ -4201,45 +4229,45 @@
           "removed_baseline_inputs": {
             "chessism_api/operations/tablebase_batches.py": "b53f6c957ec3dda1901f4d84d862d3f1ea974328feeade77154a3ff19bbf4e8b"
           },
-          "syntax": "All changed/new Python compiled; git diff --check clean. PostgreSQL execution is the isolated gate.",
-          "p1_preservation": "Accepted transaction/cleanup function ASTs unchanged; new read context delegates cleanup to them. All 68 P1 checks retained.",
-          "preserved_algorithms": "Summary arithmetic ASTs unchanged; explorer cache/account/token/TTL behavior unchanged. No schema changes.",
-          "new_regressions": "Independent FEN ordering/payload and aggregate arithmetic oracles; scopes, int32/numeric bounds, UTC, normalized owners/sides, deduplicated games, occurrence cap, verified replay, committed counts, missing singletons, snapshot races, query errors, read-only enforcement, repeated cancellation and actual routes.",
-          "mapping": "Pending-query tie assertion now matches canonical n_games DESC/fen ASC index. Scope SQL shape assertions map to PG membership checks. Cache/validation/payload assertions retained; closure assertions added. Old opt-in fixture conversion remains A4; no new skips.",
+          "syntax": "All 18 changed/new Python files compile; git diff --check clean. Five offline schema checks passed. All remaining ask_db function ASTs unchanged.",
+          "p1_preservation": "Accepted transaction/cleanup functions and analysis/progress paths unchanged. All 68 P1 checks retained.",
+          "preserved_algorithms": "A2 mode aggregation SQL identical apart from all-player scope predicate and RETURNING mode. Existing ingestion transaction/public result unchanged.",
+          "new_regressions": "Independent side/statistics oracle; full/scoped publication, normalization, filters before LIMIT, stable ordering, canonical eligibility, missing singletons, no read rebuilds, atomic rollback after delete, concurrent refreshes and actual importer lock wait, repeated cancellation, closure, caller ownership, READ COMMITTED, query failures and actual routes.",
+          "mapping": "Moved imports and factory binds in reference tools. Explicit-factory unit retains global DB prohibition and tests owned begin/commit/close at moved operation. Historical opt-in fixture conversion remains A4; no tests skipped/deleted.",
           "reused_evidence": [
             {
-              "directory": "/tmp/chessism-canonical-a3-player-views-20261110-01",
-              "checks": 123,
-              "reason": "Player suite repeated because shared read context changes; prior exact source/evidence reviewed and committed."
+              "directory": "/tmp/chessism-canonical-a3-fen-views-20261110-01",
+              "checks": 136,
+              "reason": "FEN and player PostgreSQL suites repeat for shared route imports; schema and read-transaction implementation unchanged."
             },
             {
               "directory": "/tmp/chessism-canonical-a3-summaries-20261110-01",
               "checks": 285,
-              "reason": "Schema, coverage/accuracy/recovery and ingestion writers unchanged."
+              "reason": "Schema, coverage/accuracy and recovery writers unchanged; ingestion cases repeated because shared mode calculation moved."
             }
           ],
-          "limitations": "Other summary/cache/global/player analytics and feature consumers remain A3; full suite baseline comparison/retirement remain A4. No production scale or readiness claim.",
+          "limitations": "Other summary writers, home snapshots, analytics/feature consumers remain A3. Runtime-profile removal, canonical startup validation and complete baseline comparison remain A4. Standalone refresh owns its transaction; historical managed-migration tool mapping remains A4. Synthetic scale only.",
           "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact historical evidence retained.",
-          "monitor_command": "python3 /tmp/chessism-canonical-a3-fen-views-20261110-01/monitor.py",
+          "monitor_command": "python3 /tmp/chessism-canonical-a3-dashboard-20261110-01/monitor.py",
           "preparation_sha256": {
-            "runner.py": "6a6ac702581a40df21f3c18673904b10e67c3c4a1185d1cf1cb29ee48b05dc0e",
-            "suite.py": "b2d3144ca0e967e63a732fa00170255a7333cacfdfbe1e5911d1ac4b00d2706c",
-            "monitor.py": "1acb9009c4820440e37a43d47c601d0f85aa353b4d88bfa4cec084c5e008ec50",
-            "input-sha256.json": "bc33193effeb5697478d32c09340d4e14210eb548bfda569139b86bf85df2f47",
+            "runner.py": "1c4366565d3ae6ba06d13bf60d8c70c7e436003465228fb03332117106c30512",
+            "suite.py": "edeb6f5fd0260611fe7ca9dfd85b53cf74ca7846bf89e5cc3f23a48d55dc7172",
+            "monitor.py": "7703be3ad63a1da9db6b13ef7539e52f107c9e138a23ba58deccef4837b58723",
+            "input-sha256.json": "a99e126c4c6a7cad6178d5d4fe0af5c95c4100495326f806ad0984ff3e69cc5d",
             "removed-baseline-inputs.json": "80ca6de5afd9b0366c1919a99b407d36f5688ce1fcef079a6febb78fdf919d9a"
           },
           "launch": {
-            "pid": 2642785,
+            "pid": 2682953,
             "startup_confirmed": true
           },
           "results": {
             "foundation": {
               "suite": "foundation",
-              "tests": 57,
+              "tests": 66,
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 13.167730331420898,
+              "elapsed_seconds": 14.958072423934937,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
@@ -4247,11 +4275,11 @@
             },
             "workflow": {
               "suite": "workflow",
-              "tests": 11,
+              "tests": 19,
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 0.11099553108215332,
+              "elapsed_seconds": 0.15021395683288574,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
@@ -4263,58 +4291,60 @@
               "failures": 0,
               "errors": 0,
               "skips": 0,
-              "elapsed_seconds": 3.881258964538574,
+              "elapsed_seconds": 3.9612417221069336,
               "failure_details": [],
               "error_details": [],
               "skip_details": [],
               "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
             }
           },
-          "total_passed": 136,
-          "elapsed_seconds": 24.07975721359253,
+          "total_passed": 153,
+          "elapsed_seconds": 26.118919849395752,
           "cleanup": [
             {
-              "container": "chessism-canonical-a3-fen-views-1800f235b3-p1",
+              "container": "chessism-canonical-a3-dashboard-01e4a3a922-p1",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a3-fen-views-1800f235b3-workflow",
+              "container": "chessism-canonical-a3-dashboard-01e4a3a922-workflow",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a3-fen-views-1800f235b3-foundation",
+              "container": "chessism-canonical-a3-dashboard-01e4a3a922-foundation",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a3-fen-views-1800f235b3-redis",
+              "container": "chessism-canonical-a3-dashboard-01e4a3a922-redis",
               "removed": true
             },
             {
-              "container": "chessism-canonical-a3-fen-views-1800f235b3-postgres",
+              "container": "chessism-canonical-a3-dashboard-01e4a3a922-postgres",
               "removed": true
             }
           ],
           "cleanup_independently_confirmed": true,
           "source_integrity": {
-            "checked": 1740,
+            "checked": 1745,
             "mismatches": [],
             "retired_paths_reappeared": []
           },
+          "run_id": "01e4a3a922864e89954effa32a5cf521",
           "evidence_sha256": {
-            "results.json": "f5f064b3a459933c25fa4b5667de076cc9d64e20dab6a38ccc644e6cc0e947c8",
-            "foundation-results.json": "f22db75b3d6993c280a33ba0fa1159fa02f09faf2c4ccc83e9a8d17221586378",
-            "workflow-results.json": "c3649a70e8d03081b7aeeb870915f1259bbb902778c9a5c9628a384a8104cf1b",
-            "p1-results.json": "985207887e80beed3f0e5cfadfc3dc495246a5d7e0843eab22965fb40a0ecf9e",
-            "foundation.log": "6be0b21d612fccbebf37212245857ac079e523a4a8edbd8dc0a3ecc9b45fd000",
-            "workflow.log": "ef102859cbb59d4fb9f33743c68e1e1718ba18a14a4f1a6db4433b3fcb13f9b3",
-            "p1.log": "eeac5c612eef48658700aa259b672f7de86dfbc436ec5f46eab4519c5e2bd1d2",
-            "input-sha256.json": "bc33193effeb5697478d32c09340d4e14210eb548bfda569139b86bf85df2f47",
+            "results.json": "6a7db50b031651c7ebcb6b0943971abf8ff9a55f718ccc1bd6b3dc9a94cdccb9",
+            "foundation-results.json": "54bed903ffad1aeda5bee60f9e235d598f5d7b8d31f978e7c79f948d00c11ea2",
+            "workflow-results.json": "8c61e460b79aa2abe1952a0bef4bc0843aba5ab47903669de2aed6599c3864a3",
+            "p1-results.json": "f1c32712e6f57814753143c1007b3305ab4953d50a47166514b9dfbb6b4af17e",
+            "foundation.log": "4d05895ec1132b6e9d0747b54ee5c3398b4cb6e4ae7d36bcc50a62e0a812ba9b",
+            "workflow.log": "450adfe93822d2d7534738a227909c78081fd1e318710bc75b17b21a6a10867e",
+            "p1.log": "c4a53634d4c95c992ed1d5217239a5ce64b239cda5fdc553ff8c1d878a65b29f",
+            "input-sha256.json": "a99e126c4c6a7cad6178d5d4fe0af5c95c4100495326f806ad0984ff3e69cc5d",
             "removed-baseline-inputs.json": "80ca6de5afd9b0366c1919a99b407d36f5688ce1fcef079a6febb78fdf919d9a"
-          }
+          },
+          "checkpoint_note": "Saved in the local WIP commit containing docs/architecture/stage-a-resume.md; Stage A remains incomplete."
         },
         "commit_sha": null,
         "started_at": "2026-11-11T02:37:22.966641+00:00",
-        "active_subgate": "canonical FEN browsing and aggregate reads",
+        "active_subgate": "canonical dashboard counts and mode rankings",
         "subgates": [
           "canonical coverage and player accuracy refresh",
           "game/player navigation and remaining summary readers"
@@ -5439,7 +5469,7 @@
             "status": "passed",
             "gate": "canonical FEN browsing and aggregate reads",
             "attempt": 1,
-            "commit_sha": null,
+            "commit_sha": "c74864f",
             "entry_commit": "59a305c",
             "evidence_directory": "/tmp/chessism-canonical-a3-fen-views-20261110-01",
             "planned_tests": {
@@ -5832,6 +5862,434 @@
               "input-sha256.json": "bc33193effeb5697478d32c09340d4e14210eb548bfda569139b86bf85df2f47",
               "removed-baseline-inputs.json": "80ca6de5afd9b0366c1919a99b407d36f5688ce1fcef079a6febb78fdf919d9a"
             }
+          },
+          {
+            "status": "passed",
+            "gate": "canonical dashboard counts and mode rankings",
+            "attempt": 1,
+            "commit_sha": null,
+            "entry_commit": "c74864f",
+            "evidence_directory": "/tmp/chessism-canonical-a3-dashboard-20261110-01",
+            "planned_tests": {
+              "foundation": 66,
+              "workflow": 19,
+              "p1": 68
+            },
+            "planned_total": 153,
+            "new_postgres_regressions": 17,
+            "offline_safety_passed": 5,
+            "schema_version": 6,
+            "source_input_count": 1745,
+            "protected_baseline_count": 1626,
+            "changed_baseline_inputs": {
+              "chessism_api/database/postgresql/engine.py": {
+                "accepted": "c2c4db00651ccf5e6da3c273689fb70bccf3c7e565aa3c8d8eb69df8898aaecf",
+                "current": "db123ef3908b5ec23bafabd355b3fa1403a70304e56b2c1bfcdb1345c325cefe"
+              },
+              "chessism_api/operations/player_deletion.py": {
+                "accepted": "aebb10c59a1fa83b2285d69fb16bb4c94483427487b6edb09b77acd8e0789238",
+                "current": "bcf4a611ecbcf9f8236f4f6c34cb0b0185de949e5877ef6d2bad0d46a610ae7a"
+              },
+              "chessism_api/operations/players.py": {
+                "accepted": "bcf65886e46de609a6e21075594282c7cb791a5b4ebadaa612a883ecf748058d",
+                "current": "256410fb0271a84df1760a7037027557ac8024239c04949b253704c7a8bb2e39"
+              },
+              "main.py": {
+                "accepted": "27f7b982c47c82141ba61db0199d378c84eac9237562a1e459587cdff718d5c4",
+                "current": "87f1a7e98fca7979d22d2cc6d698f4a748563b854285219dfed8da8c51d5d2bd"
+              },
+              "scripts/db_refactor_corpus.py": {
+                "accepted": "de8c80dfedee05bedacff2df9b0f6486de955dc8166cb9fe924f9ae0e016450c",
+                "current": "1c4b5a54aca47c9e1612bf27c675a4f2854247dd8a11257870488ba6b223d9da"
+              },
+              "tests/check_home_rankings_postgres.py": {
+                "accepted": "1d20b002c2dc32c6eecb22f90b0cd047a8553007cbc66bd01ef64f4ad46ebac8",
+                "current": "828db59dbbb1caae3081167b84f35dffdd7541d425046939d83decfe1315d5d5"
+              },
+              "tests/test_db_refactor_corpus.py": {
+                "accepted": "2246d9b734c5afb6104225305a840881785769c2c942546e332cdac875a0c7c1",
+                "current": "6f3b861f526dcec2dfadfa84631615c641c03d7bdd25f8fedf36f6f6ebb97954"
+              },
+              "chessism_api/operations/fen_explorer.py": {
+                "accepted": "55284090235589d9295b95d5e61a32bd1da19f6f630fb4f987574d021619d3db",
+                "current": "6d3dea514ed03e1aa806d38df9bb1ee8ad2d8b274257e473093ddc80309683d6"
+              },
+              "tests/test_fen_explorer.py": {
+                "accepted": "fbaf405bd9e7194998bdb3e1443f5da3cb1245614ed57ac2a4e2e2ab27fda191",
+                "current": "05b00635f4a862e74eed38269ea7d816335ff383902b08bc2ef94fe244faa85a"
+              },
+              "chessism_api/routers/games.py": {
+                "accepted": "4885671b26e7ff74511d0c67e36abb897a611cbf2b7a61c18ccd6869a5a3bacb",
+                "current": "4ce48d2d70a2d7a1431855aec67789def6aa3bbfacce1e8e7e85e96f28b74f1a"
+              },
+              "chessism_api/routers/players.py": {
+                "accepted": "00971af66304faf80bd08f9e0717669adddf9a5fd4e4b2135331980f44fbb8a7",
+                "current": "160751c59ad932e2c1c21ddd33a802e75549fb79a3566d6b7dde02a47723c8e2"
+              },
+              "scripts/run_compact_db_acceptance.py": {
+                "accepted": "090e5f17223b6f0b3b973921371448bf3db578b3d8f998b338d4123c03340f48",
+                "current": "8e8c22d023ad4fe8a0e495b07e6c3658f18060d8a9b81584ec16c57214af971e"
+              },
+              "tests/check_player_analytics_postgres.py": {
+                "accepted": "c7264df78a00d7532339274e65e132b1fe66ca355011f23a27fcb650f235ba67",
+                "current": "6e17cfe7c5b6b30f6cac8ce09550c43de5213fae27890e352982767aaa3174d1"
+              },
+              "chessism_api/routers/analysis.py": {
+                "accepted": "455ea03b87cfbbac4b704cdee48af56fd01d412fab3748ede600052ce654d932",
+                "current": "536e2c2272afe6a5766ef72319aeec25358ccbb4d6e7957fa1a578f05277546e"
+              },
+              "chessism_api/routers/fens.py": {
+                "accepted": "66d79cbdd4faf535a3e059432459c5426701c49952e989babb19a426cbcef065",
+                "current": "9a227b94107e5f74f954b70fb080d213166fe4f5b41955dce997371f48fd8142"
+              },
+              "tests/test_cloud_prepared_benchmark_database.py": {
+                "accepted": "451f48fa4bde41f2c0768ad63540a2023c9d810505b4ced20a204209ed30613d",
+                "current": "86acb0d916735dd577746ab8dc96fafbe9dbd667337b79b5ade5aef76b57fef2"
+              },
+              "tests/test_cloud_prepared_selections_database.py": {
+                "accepted": "0b485d5ae6d72ca20e0e3755ed2c05a67a300b0827fa7b85a934c1426b7ad1a7",
+                "current": "821a0d8db0067afab27b0b562853c9af057bb72607688c7ab0bd8b74ec919fd2"
+              },
+              "chessism_api/operations/analysis_backups.py": {
+                "accepted": "472c7edde21cfcdf9c4c95d18dda57cb8ac0f7efc1f278b28f2e8dd483c00227",
+                "current": "1f2d25915e794024fd17db36154721c9b68d5f5fc9b18c97151bc50e8e7c386f"
+              },
+              "chessism_api/operations/cuda_summaries/accuracy_compute.py": {
+                "accepted": "7307e124477563df448f39ca432be86ee695aaec62e64f938982566ad96ac473",
+                "current": "c24294326db7b7a3593b59cb731c85cea2e0dba26d33ec03f384529ad0e9b4ae"
+              },
+              "chessism_api/operations/player_game_explorer.py": {
+                "accepted": "ecd155d5fb1b83c0b87ac9afccaa5ebdd800b943b6c4713bf80fa3bcffc5efd5",
+                "current": "40b47a2b66490aa5b3e48729695568704f21800499decb42b8bddd18e2af2034"
+              },
+              "chessism_api/operations/player_game_scores.py": {
+                "accepted": "9bfc1dddd3f878c351b795534921482f4e5cb67c7c0fc822336491371e537c85",
+                "current": "767e96935597162a6c4e079265bac5dea9e563da0a980ceb6eebabc4b587590f"
+              },
+              "chessism_api/operations/player_hero_analytics.py": {
+                "accepted": "dfa6b52efe5cb14e620bc79a93eea3c129ca5cf39ae88af7b8ffd5adfba0ba7c",
+                "current": "ba70a802536b7e669f4b0377e905a81e74cf99824b9927edeea3ccebefcda998"
+              },
+              "chessism_api/operations/research_algorithms/blunder_fixed.py": {
+                "accepted": "4a924aa6fc326297bfb87e33c9cebf2daf87d65dab60debabcd6b56917f6ecde",
+                "current": "744545e1fdec38b23f43e938c40b4e7272b4b0cd60dd65c8ec44563193941c04"
+              },
+              "chessism_api/operations/research_algorithms/legacy_blunder_reference.py": {
+                "accepted": "32b69db24225338774abb4c60807f6ddf4b16dfa280c06f2b2e72cca6f31bba8",
+                "current": "996ea755ff6c13d434ee9182af798f30c9db482468696f1ea8d1fb33fd68206e"
+              },
+              "scripts/db_refactor_application_checks.py": {
+                "accepted": "cb77afdbac2033979a15143c85d6e1193fd01a9d598da9cdfa9ab3e3ddea1e4e",
+                "current": "31b3e8ee9c400a05e6aaa880c7b4a0563e589277d3147167f863093c2835107c"
+              },
+              "tests/check_canonical_coverage_postgres.py": {
+                "accepted": "bf879fac8f521dc9c58ceb3825309cd06ef323aa86dcc04e260e5db5afa915b4",
+                "current": "8d18a5f067b4118292ef0c8c0d13b97d5aafff479ebb1b1dc3e0a3411b724005"
+              },
+              "tests/test_cloud_completion_optimizations.py": {
+                "accepted": "3d30121f52ae0fcf7bd4e798b663d6160a1b545be7e2d1c611b48317c94cccb1",
+                "current": "a6a3a31a7b5dfdb876a9178cd3628d35aabb4a5e7b793b1c9790b92f1a5d64df"
+              },
+              "tests/test_coverage_optimization.py": {
+                "accepted": "64f6afeb15e27bfdc78c24d552d736550b762e051ae8741c59c2382bcfe98c44",
+                "current": "ed131e982436fe5c0837cc7c868aa857050d8c6cf36dc8680b027100b8e07b8b"
+              },
+              "chessism_api/database/postgresql/ask_db.py": {
+                "accepted": "b71a0a83fcfb939c0798b89e98c3cf56314f920240381ab6b436374c2e469778",
+                "current": "7e8303372d48e41296fffc271a7df8c395419f77d591ec1da91ad1547c0e7154"
+              },
+              "chessism_api/database/postgresql/db_interface.py": {
+                "accepted": "f0887421051ff63f457117fb19477e2fd05b9b67be998be791e8fbdfc33ebb31",
+                "current": "e0b1414d9024b19b2e093e9b9f063f14bbe60e3fe68cc4d113c908df8269e40d"
+              },
+              "chessism_api/database/postgresql/fen_claims.py": {
+                "accepted": "e75c06086d98a4aa0d1776cf3f8a9d6d724fccfa660605b1ba51dfffffff968f",
+                "current": "5ff72857e4dc9fdc1615d2c37a7e5f3125d82a6838bafbd33139b5988e6511b4"
+              },
+              "chessism_api/evaluations.py": {
+                "accepted": "6f30a5fa39bdf1e590257a1e297492b28f8b78599d80dc065e494c40680c03fe",
+                "current": "157da7b312d33115d9b0597c94adb461219845da688c16974412707ac8179ff5"
+              },
+              "chessism_api/operations/analysis.py": {
+                "accepted": "bc4ee81a108b525e810404517874fb7cfb18dea85b5580b757286824c1004cda",
+                "current": "d635f9237e969e3c9ca8e6046a2862d6fd0757ee8954f6338b59ccab2eb741f8"
+              },
+              "chessism_api/operations/cloud_analysis/controller.py": {
+                "accepted": "6fad5347ae328eedc11d48a069deaf1591f96abc3002704941f4c2f90c2cde2b",
+                "current": "7ef03a120c18c68039eb0a4121fcd5253d9bcdeb61f0f9c22bbc61c582d32d12"
+              },
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py": {
+                "accepted": "29b1697897d425e11aff4da90bedc5d34e87363821427dfff6075236b101da1c",
+                "current": "04a7d410cf78c8c030ddeb13d891c0ce0119dce4883883cd1143736d1221f8a4"
+              },
+              "chessism_api/operations/cloud_analysis/importer.py": {
+                "accepted": "371fca16d9536fa672afc8db1ca55bc06795a977d7e48b240e6b67572fc0b86c",
+                "current": "1dc1de3c632a739aa085ee5a2bdbaf252b61d0627909a8d358e947a626217d82"
+              },
+              "chessism_api/operations/cloud_analysis/input_preparation.py": {
+                "accepted": "a446c00ba9dd83aa9034f2cf781ad17fecd6731828233dab98aa585ee96ea87a",
+                "current": "c77e3a84fc3061bc0f865413ca44d5ac39d411bfbcde15fb40dad86ddef50f6d"
+              },
+              "chessism_api/operations/cloud_analysis/work_units_controller.py": {
+                "accepted": "e9d35c73349525cbb01aee3779e3dfc5f6a9f6e3c8e85bc23b9922982472cedd",
+                "current": "383ebdfd23878752220b1e0ed5e94ff011cf41bb8c4dfd2d7055a5af0681dd00"
+              },
+              "chessism_api/operations/evaluation_repair/publish.py": {
+                "accepted": "7c0d9614a1a9e80089a579c58bb805c81e0c42e757db995038536205e2404f25",
+                "current": "4b7a015abf7e987d6c71755a42ff070cfa502a62089a7dd40d21ae4789980e0e"
+              },
+              "chessism_api/operations/fen_results.py": {
+                "accepted": "5fcef4c77e82f46de8ce983c3daf16ba9c25dfd04b831d3a3d2fe10c7609e202",
+                "current": "d4a07ba6747e82075785d04206060252dd1150d189839004389c1d98971dda6a"
+              },
+              "chessism_api/operations/fen_summary_recovery.py": {
+                "accepted": "3fcb6abc5fdd06d1e51a4ddf126794cbb46e6e82d5ae1dcb0753b6adfb2dbc7f",
+                "current": "436fa090f8b3947a821bd1fcdbd8d4312fe5a971f79935c7bb0766c714ef83ca"
+              },
+              "chessism_api/operations/ingestion_pipeline/README.md": {
+                "accepted": "b1de8ee9e9021201cec7c5a10e1095a0bd9c159b63c37a3f55c2d2320f71c99a",
+                "current": "e2170fbb41ecd61dd153e663f3abbf31c9a916ffc37f93d771d1fae51662385c"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py": {
+                "accepted": "4c65fb22a536b29802727cf45f3dd92f557bd032cd4c3404d8689b39a76c4df2",
+                "current": "93d63b662c2f0ba3748630180f63ab21869afc946b2ed08daa9dc364115e3f96"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py": {
+                "accepted": "b43055dd7870e54ce2f4122b0b5066e508ddc591af12bd8f43897c1b1d6dede7",
+                "current": "0643494aa0a7aae87f47317ed3cc3745d43e85142c6cf239488d5300197d1e8d"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py": {
+                "accepted": "847acaf8935731b2767b8c7c04e7ce17f03f6371289b13524c9055f92fa8c004",
+                "current": "0a087c3bf1d08e9eb5c925336cbe259b97a13ac221b299abc70e897cedad4291"
+              },
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py": {
+                "accepted": "f8b70c48b844044641d5100bf62c10f1f1b04ba1c8e81cbb4b209b50698406cc",
+                "current": "cec3467283861c5f57ea30e456a08c2b20a9e90ecf5025e6a6e28f524d29a3a2"
+              },
+              "chessism_api/operations/ingestion_pipeline/game_importer.py": {
+                "accepted": "2b69237be6ad30e64e7d8d3a220cd265bbe55c177fc0d01ad88d3e2c551d49c1",
+                "current": "58cf18c3657e40914bc88c34a988a4ba22f3c369fda01535c48dd76175c1a8e3"
+              },
+              "chessism_api/operations/ingestion_pipeline/jobs.py": {
+                "accepted": "773060e6f8dbeccbd411da86ec11fb4444856eab870d509c4102d4a946eae6d7",
+                "current": "6bd86a2b72c3272fbd35d6f673fe1284abb1cfb3426ac4dd0d43de79c8c8b3c2"
+              },
+              "chessism_api/operations/ingestion_pipeline/months.py": {
+                "accepted": "27a7c8d9ded5c4282a02adc53cfecc53722f5a587e6fb07bb6d7849a845b36f3",
+                "current": "3a01e10e0f0569c02485e0f8814692d8ee4aaf0143158729455dddd39f43c41e"
+              },
+              "chessism_api/operations/tablebase.py": {
+                "accepted": "f91812e0d3cd52c4f15725ce35a2f90e0a65d99d4e81d8a484fe44a488f94b1f",
+                "current": "5338195e7b2608e0bbf702942d0ce09bf07328d646e7e62b6c6417768304020a"
+              },
+              "chessism_api/operations/tablebase_batches.py": {
+                "accepted": "b53f6c957ec3dda1901f4d84d862d3f1ea974328feeade77154a3ff19bbf4e8b",
+                "current": null
+              },
+              "chessism_api/operations/tablebase_probe.py": {
+                "accepted": "ed1d0093fff0059f207f7e017467e03b2b8ef4e45dd2e75982a0ee98f8530274",
+                "current": "d3b61141b95980e3028cc6d7688a92af4a689ccfc5fe6f85fc4555ff899713ab"
+              },
+              "scripts/compact_db_application_checks.py": {
+                "accepted": "a3ccb0a8d0489547d3d28c345ac33c3f448dffef1d05f571aee3f8289e6ab5da",
+                "current": "cc910e06fb3b492e46f3f036e3ee21cff87c7a5d4b4fd632eff4b8c2750b0c77"
+              },
+              "scripts/db_refactor_write_checks.py": {
+                "accepted": "efa1138f3c207a7db87d23f05cf18509bae3fd40b9652074b8c1bc3d8fdceb26",
+                "current": "56ba603bd41c6f738e208622ffe89b539a8f40061010bc2c4e4b675651fca4f5"
+              },
+              "stockfish-batch-worker/benchmark_vm16/large_database.py": {
+                "accepted": "4b71bb9f8adceab7bc84f76cbeb0b6bdabf5735e1171617346161d1a3340141a",
+                "current": "1cd9ac3a700f99cf10217db179d322d1334ebbbd30cdc2e0ca2f167e0be65007"
+              },
+              "tests/check_cloud_game_queue_postgres.py": {
+                "accepted": "b90680744135b7fc4c4f0d9b9ddce7ca351c7a4d98f39582e0b56634f44d9c19",
+                "current": "78659bb835d5c8e6996ee97907af54f422f002cc743d0e437f1eca1ef9fd36d5"
+              },
+              "tests/check_compact_storage_postgres.py": {
+                "accepted": "0eff565f8c4c8f125c0d2b53738c5b8f52348d05f79f9dadc40d094f4e7ec914",
+                "current": "a51c157b32a54f9197c0ae17d04eb219dce99f7890dc2a29206af3257b44d160"
+              },
+              "tests/check_ingestion_bulk_postgres.py": {
+                "accepted": "bc2a15107aae53a93b5148ed888ef07fae609c7c7cdfe86a3fdb127bb911897d",
+                "current": "b09a464ec69862690643db12033f48bf8f35e25bb41e1b25b63a03e55455a695"
+              },
+              "tests/check_relational_application_postgres.py": {
+                "accepted": "d1bb3f0cb6c23291b44f198d6da83bdb4321a1825dc87b8371f660f2434186c8",
+                "current": "bd3d670273cc6c4c951e6f62b3afb54dddfe6b95c89369bff9ce7e404dc09e2a"
+              },
+              "tests/test_analysis_failure_arq.py": {
+                "accepted": "c604c3816ccd7462ce9328595dd1ff3bd2f824c1310b3bf136febf24d5ee495f",
+                "current": "158d3760105cfafc5aef3f63a7a35c13c05b131d9e107b62f8f6a6ce7e77225f"
+              },
+              "tests/test_analysis_failure_jobs.py": {
+                "accepted": "7a3652ec50b4c46c0ae63ce15d10dfbc19115749a70db1c662d954c3a330e709",
+                "current": "bfa48a5f9447423ab2822768366e5c980fb80506b545468b5d7a9e649c3b3375"
+              },
+              "tests/test_analysis_failure_selection.py": {
+                "accepted": "c7f2f19686b37527d94ad57aaea4410eb71ce627dcbd64d5f297508cc776d032",
+                "current": "2fe93a13b3210934876c951c2ac0dd023a8b2a3e25f4c3932c2e9f9738a2e382"
+              },
+              "tests/test_analysis_scheduling.py": {
+                "accepted": "9cd66fc02453d87ea51131da29b679760268fb197630706994eaf303f1d3d73c",
+                "current": "4956c8371e8df606568b841686945d56497c537346bd4acd09c9ea7348e8ab90"
+              },
+              "tests/test_cloud_analysis_database.py": {
+                "accepted": "fd57b828c110338e8d3c597cc8a584ccee8cfddd0d7022451946195203682530",
+                "current": "699473902fe76ad6f01162921cfc7f04ef2e269b4c27c11f54cf0fbb0a2210d3"
+              },
+              "tests/test_cloud_game_queue.py": {
+                "accepted": "be1d94d34a03747c4cebe6bb5d585a02ceb4f9a69281264520980017527cb22a",
+                "current": "047bda27d1d75a546a567f99cc92c905cb1060add8f104ca31a4ec60d355bc92"
+              },
+              "tests/test_cloud_sequences_database.py": {
+                "accepted": "9204e1fc48763315ffeada0f26ca153b63dd59f50cad6d3a7a07d0a5f65e4274",
+                "current": "0d1f05a106541737a42b3979f7d75aad599b5b9d4204fb7918f010fdea5890de"
+              },
+              "tests/test_cloud_work_units_database.py": {
+                "accepted": "5d07663c88309859e150adf8ec79274d13a16856503f8efe5180d50cb59f5ee7",
+                "current": "0f9bcdcb8c75eb586f50c45cfef36dd0d3cf7efd08290e13cb0a2828bbb61cc7"
+              },
+              "tests/test_evaluation_contract.py": {
+                "accepted": "6da4ff6e89fb092a0cb27898162e9304bb44eb53c774bd9c9886757b964bbe59",
+                "current": "6204a2afba89abdef77691d839b1e43da2724ae74bc16039cf27a1b5cbdcfc56"
+              },
+              "tests/test_evaluation_pipeline_database.py": {
+                "accepted": "b63baffe9f76e219dfc4929b7ec518fdcea95cd9792f54920da565bfb657b489",
+                "current": "f4b015ca238c7eb7a2c7869a040cf8aef1713f555f5faec019cc4559e0c5956f"
+              },
+              "tests/test_fen_reference_database.py": {
+                "accepted": "0fd2cc8d518accd43f798f021e533956e2e73e0f638a889c5c834612ce0aa4bd",
+                "current": "1d8088f233024c5bd079578629cf755e0e68306f20a93694e33cb19b3a16881e"
+              },
+              "tests/test_pipeline_helpers.py": {
+                "accepted": "72a8d15371b0030e3b20f9b726580035ac765d5daeed7fdb68a5fecb87a1d0f8",
+                "current": "a597bf5cb7ea389e9a79ee666f745be4d33c8f9a5f972e25f98932d25980eb23"
+              },
+              "tests/test_relational_storage.py": {
+                "accepted": "20d8700651bde7b5311c99cd1fd65392f93902e6b2a59108588740334de0927a",
+                "current": "4f49277fc43f5e7cfe084faa885477b2b67da19a264039eab04b0b5843a3fa58"
+              },
+              "tests/test_tablebase_lifecycle.py": {
+                "accepted": "e479830543c4341933a117aac68aef0c46ddca05b3079be3e86c5509194a9ce7",
+                "current": "42e0bf4dc8edb0825d9f47eaf5686752e0f52e4c8cc30e8c87af750b632befb9"
+              }
+            },
+            "removed_baseline_inputs": {
+              "chessism_api/operations/tablebase_batches.py": "b53f6c957ec3dda1901f4d84d862d3f1ea974328feeade77154a3ff19bbf4e8b"
+            },
+            "syntax": "All 18 changed/new Python files compile; git diff --check clean. Five offline schema checks passed. All remaining ask_db function ASTs unchanged.",
+            "p1_preservation": "Accepted transaction/cleanup functions and analysis/progress paths unchanged. All 68 P1 checks retained.",
+            "preserved_algorithms": "A2 mode aggregation SQL identical apart from all-player scope predicate and RETURNING mode. Existing ingestion transaction/public result unchanged.",
+            "new_regressions": "Independent side/statistics oracle; full/scoped publication, normalization, filters before LIMIT, stable ordering, canonical eligibility, missing singletons, no read rebuilds, atomic rollback after delete, concurrent refreshes and actual importer lock wait, repeated cancellation, closure, caller ownership, READ COMMITTED, query failures and actual routes.",
+            "mapping": "Moved imports and factory binds in reference tools. Explicit-factory unit retains global DB prohibition and tests owned begin/commit/close at moved operation. Historical opt-in fixture conversion remains A4; no tests skipped/deleted.",
+            "reused_evidence": [
+              {
+                "directory": "/tmp/chessism-canonical-a3-fen-views-20261110-01",
+                "checks": 136,
+                "reason": "FEN and player PostgreSQL suites repeat for shared route imports; schema and read-transaction implementation unchanged."
+              },
+              {
+                "directory": "/tmp/chessism-canonical-a3-summaries-20261110-01",
+                "checks": 285,
+                "reason": "Schema, coverage/accuracy and recovery writers unchanged; ingestion cases repeated because shared mode calculation moved."
+              }
+            ],
+            "limitations": "Other summary writers, home snapshots, analytics/feature consumers remain A3. Runtime-profile removal, canonical startup validation and complete baseline comparison remain A4. Standalone refresh owns its transaction; historical managed-migration tool mapping remains A4. Synthetic scale only.",
+            "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact historical evidence retained.",
+            "monitor_command": "python3 /tmp/chessism-canonical-a3-dashboard-20261110-01/monitor.py",
+            "preparation_sha256": {
+              "runner.py": "1c4366565d3ae6ba06d13bf60d8c70c7e436003465228fb03332117106c30512",
+              "suite.py": "edeb6f5fd0260611fe7ca9dfd85b53cf74ca7846bf89e5cc3f23a48d55dc7172",
+              "monitor.py": "7703be3ad63a1da9db6b13ef7539e52f107c9e138a23ba58deccef4837b58723",
+              "input-sha256.json": "a99e126c4c6a7cad6178d5d4fe0af5c95c4100495326f806ad0984ff3e69cc5d",
+              "removed-baseline-inputs.json": "80ca6de5afd9b0366c1919a99b407d36f5688ce1fcef079a6febb78fdf919d9a"
+            },
+            "launch": {
+              "pid": 2682953,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 66,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 14.958072423934937,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "workflow": {
+                "suite": "workflow",
+                "tests": 19,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.15021395683288574,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "p1": {
+                "suite": "p1",
+                "tests": 68,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 3.9612417221069336,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "total_passed": 153,
+            "elapsed_seconds": 26.118919849395752,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a3-dashboard-01e4a3a922-p1",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a3-dashboard-01e4a3a922-workflow",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a3-dashboard-01e4a3a922-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a3-dashboard-01e4a3a922-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a3-dashboard-01e4a3a922-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": {
+              "checked": 1745,
+              "mismatches": [],
+              "retired_paths_reappeared": []
+            },
+            "run_id": "01e4a3a922864e89954effa32a5cf521",
+            "evidence_sha256": {
+              "results.json": "6a7db50b031651c7ebcb6b0943971abf8ff9a55f718ccc1bd6b3dc9a94cdccb9",
+              "foundation-results.json": "54bed903ffad1aeda5bee60f9e235d598f5d7b8d31f978e7c79f948d00c11ea2",
+              "workflow-results.json": "8c61e460b79aa2abe1952a0bef4bc0843aba5ab47903669de2aed6599c3864a3",
+              "p1-results.json": "f1c32712e6f57814753143c1007b3305ab4953d50a47166514b9dfbb6b4af17e",
+              "foundation.log": "4d05895ec1132b6e9d0747b54ee5c3398b4cb6e4ae7d36bcc50a62e0a812ba9b",
+              "workflow.log": "450adfe93822d2d7534738a227909c78081fd1e318710bc75b17b21a6a10867e",
+              "p1.log": "c4a53634d4c95c992ed1d5217239a5ce64b239cda5fdc553ff8c1d878a65b29f",
+              "input-sha256.json": "a99e126c4c6a7cad6178d5d4fe0af5c95c4100495326f806ad0984ff3e69cc5d",
+              "removed-baseline-inputs.json": "80ca6de5afd9b0366c1919a99b407d36f5688ce1fcef079a6febb78fdf919d9a"
+            },
+            "checkpoint_note": "Saved in the local WIP commit containing docs/architecture/stage-a-resume.md; Stage A remains incomplete."
           }
         ]
       },
@@ -5851,6 +6309,26 @@
       }
     ],
     "pending_process": null,
-    "accepted": false
+    "accepted": false,
+    "safe_stop": {
+      "date": "2026-11-10",
+      "timezone": "America/Mexico_City",
+      "requested_by": "user",
+      "resume_requires_explicit_authorization": true,
+      "handoff": "docs/architecture/stage-a-resume.md",
+      "parent_head": "c74864ff4b4a7628262f1dedf96aa482187cca45",
+      "checkpoint_commit_reference": "git log -1 --format=%H -- docs/architecture/stage-a-resume.md",
+      "supervisor_pid": 2682953,
+      "supervisor_exited_host_confirmed": true,
+      "active_owned_writers": [],
+      "containers_remaining": [],
+      "read_only_monitor_pid": 2698835,
+      "monitor_may_be_closed_with": "Ctrl+C",
+      "production_resources_untouched": true,
+      "evidence_archive": "docs/architecture/evidence/stage-a-stop-2026-11-10.tar.gz",
+      "archive_sha256": "e6db7951dc795f1a894ea0dd319fbf0026d9f2a7fa06579bd42f02ddc1f83c47",
+      "archive_contents_verified": true,
+      "archive_files": 350
+    }
   }
 }

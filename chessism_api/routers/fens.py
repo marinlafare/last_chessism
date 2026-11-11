@@ -21,11 +21,8 @@ from chessism_api.operations.fen_views import (
     get_scored_positions_overview,
     get_scored_positions_page,
 )
-from chessism_api.database.postgresql.ask_db import (
-    get_fen_pipeline_overview,
-    get_scored_advantage_by_rating,
-    _get_remaining_fens_count_committed,
-)
+from chessism_api.database.postgresql.ask_db import get_scored_advantage_by_rating
+from chessism_api.operations.dashboard_views import get_fen_pipeline_overview, get_remaining_extraction_count
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing
 from chessism_api.operations.ingestion_pipeline.history import (
@@ -101,7 +98,7 @@ async def api_get_remaining_games_needing_fens() -> JSONResponse:
     """
     Returns how many games still need FEN extraction.
     """
-    remaining = await _get_remaining_fens_count_committed()
+    remaining = await get_remaining_extraction_count()
     return JSONResponse(content={"remaining_games": int(remaining or 0)})
 
 

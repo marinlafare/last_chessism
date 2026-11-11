@@ -555,3 +555,50 @@ Focused gate: all 136 checks passed (57 foundation/PG, 11 related contracts,
 68 P1), including 17 new PostgreSQL cases, with no failures/errors/skips. All
 1,740 frozen inputs match; five owned containers removed, independently confirmed.
 Evidence: `/tmp/chessism-canonical-a3-fen-views-20261110-01`.
+
+## A3.1 dashboard counts and mode rankings (focused verification passed; Stage A paused)
+
+`dashboard_reads.py` contains canonical SQL and requires an application-owned
+transaction. `dashboard_views.py` owns guarded read-only snapshots and response
+formatting. Maintained totals are read directly; missing required singleton rows
+raise, while initialized empty data returns zero counts. Ranking reads no longer
+perform lazy rebuilds; the obsolete startup ensure call is removed. The remaining
+startup/storage-profile conversion is still A4, not claimed complete here.
+
+Main-character game counts use canonical participant IDs and count each eligible
+game once. Ranking projections retain both self-play perspectives, normalized mode
+filters and the exact A2 rating/statistics calculation. Ranked rosters require
+active tracked profiles; official-title filtering happens before LIMIT, with stable
+rating/game-count/name ordering. Game participation counts retain their existing
+joined-nonzero policy even for deleted profiles; hiding a profile does not erase
+recorded history. UTC output, null-rating defaults and existing public fields remain.
+Extraction counts include currently processing eligible games but exclude retained
+variants, custom starts and zero-move records.
+
+`database/postgresql/mode_summary.py` now contains the one calculation used by
+both ingestion and explicit full/scoped refresh. It accepts the caller's driver
+connection and never commits or closes it. None means all players; an explicitly
+empty scope is a no-op. `operations/mode_summary.py` owns standalone transactions.
+The shared ingestion advisory lock prevents import/rebuild overlap; standalone
+operations explicitly use READ COMMITTED so lock waiters see committed source
+changes. Delete/reinsert and returned counts form one atomic unit. The accepted
+rollback/close mechanism remains unchanged. Original A2 date/link/white-side rating
+ties are retained (the basic recent-game reader uses its separately documented
+black-side tie). These policies should be considered in the final stage review.
+
+Seventeen new real PostgreSQL cases cover independent side-record oracles, full vs
+scoped publication, normalization, self-play, title/deletion/unknown-profile filters,
+empty projections and missing singletons, dates/ties, guarded rollback after delete,
+concurrent refreshes, a refresh waiting for an actual importer to commit, repeated
+cancellation, explicit transaction ownership, read-only failures and actual routes.
+Existing explicit-factory tests retain their global-DB prohibition, now targeting
+the moved operation. Historical reference tools have updated imports/factory binds;
+their full canonical fixture mapping remains A4. Schema version remains 6. No
+backup/restore body, ingestion public result, production database or service changed.
+
+The completed dashboard gate passed 153 checks (66 foundation/PG, 19 related
+contracts, 68 P1) with no failures/errors/skips. All 1,745 frozen inputs match;
+the five disposable containers were removed, independently confirmed. Evidence:
+`/tmp/chessism-canonical-a3-dashboard-20261110-01`, also preserved in the safe-stop
+archive. No new test or implementation stage was started after the user's stop
+request. See `stage-a-resume.md`; Stage A remains incomplete and unaccepted.

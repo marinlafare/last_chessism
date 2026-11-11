@@ -5,9 +5,9 @@ from sqlalchemy.exc import IntegrityError
 from chessism_api.database.postgresql.db_interface import DBInterface
 from chessism_api.database.postgresql.models import Player, PlayerStats
 from chessism_api.database.postgresql.ask_db import open_async_request
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.dashboard_views import (
     get_main_character_time_control_counts,
-    get_top_main_characters_by_time_control
+    get_top_main_characters_by_time_control,
 )
 from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData
 from chessism_api.operations.ingestion_pipeline.chesscom import get_profile, get_player_stats

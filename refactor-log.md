@@ -1290,3 +1290,61 @@ All five owned containers were removed, independently confirmed by exact label.
 
 Ready for local commit. Remaining analytics/feature consumers and full-suite
 baseline comparison/retirement remain A3/A4. Stage A is not complete or accepted.
+
+## A3.1 dashboard counts and mode rankings gate started
+
+FEN browsing committed as `c74864f`; source tree clean. Dashboard counts and ranked
+players still use legacy game/player fields and read-triggered rebuilds. Two old
+mode writers duplicate the canonical ingestion calculation. Consolidate those
+writers and move the related views to explicit canonical boundaries. The plan
+records exact scope, preserved semantics and the required concurrency checks.
+
+Canonical dashboard/ranking changes implemented; verification pending. Six cohesive
+read operations now use canonical SQL and explicit read transactions. Mode summary
+publication is shared with ingestion, uses numeric identities and the existing A2
+calculation, and serializes full/scoped rebuilds with the ingestion commit lock.
+Standalone writes explicitly select READ COMMITTED and use accepted guarded cleanup.
+Removed two duplicate writers and lazy ensure paths; the obsolete main startup
+ensure call is gone, with other startup/storage-profile retirement still A4.
+
+Preflight compilation caught two indentation changes during import cleanup; both
+were corrected before test launch. All remaining ask_db function ASTs match HEAD.
+Prepared 153 checks: 66 offline/canonical PostgreSQL (17 new cases plus canonical
+ingestion and player/FEN views), 19 transaction/explicit-factory/automatic pipeline
+contracts and 68 P1 checks. Five offline checks passed; 18 changed/new Python files
+compile and diff checks pass. Frozen inputs: 1,745. No schema change. Historical
+reference tools have moved imports/factory bindings; their fixture conversion and
+complete baseline comparison remain A4. No new skips.
+Evidence: /tmp/chessism-canonical-a3-dashboard-20261110-01.
+
+A3.1 dashboard verification launched; supervisor PID 2682953.
+Startup confirmed. Monitor: `python3 /tmp/chessism-canonical-a3-dashboard-20261110-01/monitor.py`.
+Returning control without polling. Review saved results, frozen input integrity
+and owned cleanup after user completion. No commit before the gate passes.
+
+## User-requested safe stop — 2026-11-10 (America/Mexico_City)
+
+The user superseded continuous A2–A4 execution and requested a safe checkpoint and
+handoff, with no implementation/verification until explicit renewed authorization.
+Read only the already completed dashboard evidence: all 153 checks passed
+(66 foundation/PG, 19 contracts, 68 P1), no failures/errors/skips, 26.12s. All
+1,745 frozen inputs match, and retired paths remain absent. No new tests were run.
+
+Host process inspection confirms supervisor 2682953 exited. All five owned
+containers were removed; exact-label and canonical-container queries return none.
+No owned verification writer remains. User monitor 2698835 is a read-only viewer
+and may be closed with Ctrl+C; it was not killed. No active transaction needs
+cancellation or cleanup. No resource was forcefully terminated or deleted here.
+
+Preserved 350 top-level text evidence files from 16 Stage A run directories,
+including failed attempts, in docs/architecture/evidence/stage-a-stop-2026-11-10.tar.gz.
+Archive bytes were read back against per-file SHA256 hashes. Original /tmp evidence
+remains untouched; no database/socket/volume contents were copied. Existing DB,
+verified recovery checkpoint, Neo4j, Redis queues and production/GCP services were
+not accessed or modified. No push, merge or deployment.
+
+Tracking is paused, not completed or accepted. The local WIP checkpoint contains
+all task-related unfinished dashboard/ranking work and the resume handoff at
+`docs/architecture/stage-a-resume.md`. Stop after checkpointing; tomorrow requires
+explicit authorization. The most recent source changes have focused evidence;
+full integration, remaining A3 consumers and A4 remain unfinished.

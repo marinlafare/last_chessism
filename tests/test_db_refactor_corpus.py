@@ -8,6 +8,7 @@ from scripts.run_db_refactor_corpus import verify_acceptance
 from scripts.launch_db_refactor_http_backup import runner_command
 from scripts.watch_db_refactor import render
 from chessism_api.database.postgresql import ask_db
+from chessism_api.operations import mode_summary
 from chessism_api.operations.home_summary import refresh_home_summary
 
 
@@ -51,8 +52,15 @@ class ExplicitSummaryFactoryTests(unittest.IsolatedAsyncioTestCase):
             await ask_db.refresh_database_summary(session_factory=factory)
             await ask_db.refresh_fen_pipeline_summary(session_factory=factory)
             await ask_db.refresh_scored_position_summary(session_factory=factory,database_summary={})
-            await ask_db.refresh_main_character_mode_summary(session_factory=factory)
-        self.assertEqual(session.commit.await_count,4)
+        mode_session=AsyncMock()
+        mode_factory=MagicMock(return_value=mode_session)
+        with patch.object(mode_summary,'AsyncDBSession',side_effect=AssertionError('Global DB used')), \
+             patch.object(mode_summary,'driver_connection',AsyncMock(return_value=object())), \
+             patch.object(mode_summary,'refresh_modes',AsyncMock(return_value={'total':0})):
+            await mode_summary.refresh_main_character_mode_summary(session_factory=mode_factory)
+        self.assertEqual(session.commit.await_count+mode_session.commit.await_count,4)
+        mode_session.begin.assert_awaited_once()
+        mode_session.close.assert_awaited_once()
 
     async def test_incomplete_factory_arguments_rejected(self):
         with self.assertRaises(ValueError):
