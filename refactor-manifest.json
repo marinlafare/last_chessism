@@ -1421,7 +1421,7 @@
   "active_work": "stage_a_batch_1",
   "stage_a_batch_1": {
     "name": "Canonical schema and persistence contracts",
-    "status": "verified_pending_local_commit",
+    "status": "completed_pending_independent_review",
     "authorization": "User explicitly approved A1 only; stop for review after local commit.",
     "baseline_commit": "0fde829d9477b3f73714b52e820a67bad49dad77",
     "baseline_input_hashes_matched": 1699,
@@ -1443,7 +1443,7 @@
       "evidence_directory": "/tmp/chessism-canonical-a1-20261110-01",
       "monitor_command": "python3 /tmp/chessism-canonical-a1-20261110-01/monitor.py",
       "full_suite_reuse": "Full suites were not rerun: all 1699 protected inputs remain identical to the accepted baseline; exact existing failure/error/skip details retained. New foundation and existing focused P1 tests ran with zero failures/errors/skips.",
-      "commit_pending": true,
+      "commit_pending": false,
       "launch": {
         "pid": 2175427,
         "started_at": "2026-11-11T00:05:04.749332+00:00",
@@ -1523,9 +1523,16 @@
         "tests/canonical_schema_fixture.py": "dc866f0fe086c941e1af2187d3d3a46ebddf9d37bab10441130602c170c7c4bb",
         "tests/check_canonical_schema_postgres.py": "de3c43f95dd07db0ac9db5361a80445dcf5514a39ded70bf2d6c7a51c289af6f",
         "tests/test_canonical_schema.py": "84f012bf557f78e0c29743e7aa26424bd53516d1b23f6765711488b77b33ae54"
-      }
+      },
+      "final_offline_safety_tests": {
+        "tests": 5,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "final_staged_whitespace_check": "passed"
     },
-    "commit_sha": null,
+    "commit_sha": "22a406c60c84b3cc57e46e10c742094b5b4ff4d1",
     "started_at": "2026-11-10T23:52:21.976475+00:00",
     "next_authorized_batch": null,
     "schema_scope": {
@@ -1543,7 +1550,7 @@
       ]
     },
     "independent_review": "pending",
-    "completed_at": "2026-11-11T00:10:37.475128+00:00"
+    "completed_at": "2026-11-11T00:11:52.929963+00:00"
   },
   "chunk_counter_scope": "Historical P1 #1 chunks; active work is stage_a_batch_1."
 }
