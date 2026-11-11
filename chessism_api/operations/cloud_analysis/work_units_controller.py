@@ -23,7 +23,7 @@ from . import input_validation
 
 
 async def reserve_unit(job, root, launch, vm, limit):
-    from chessism_api.database.postgresql.ask_db import get_fens_for_analysis, get_player_fens_for_analysis
+    from chessism_api.database.postgresql.analysis_selection import get_fens_for_analysis, get_player_fens_for_analysis
     from .game_fen_queue import get_game_queue_fens
     selection, timings = job.selection, PreparationTimings()
     session, timing_run_id = None, root.id

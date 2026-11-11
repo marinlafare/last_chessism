@@ -13,7 +13,7 @@ from arq import create_pool
 from arq.connections import RedisSettings
 from arq.jobs import JobStatus
 from arq.worker import Worker
-from chessism_api.database.postgresql import ask_db
+from chessism_api.database.postgresql import analysis_selection
 from chessism_api.operations import analysis
 from analysis_failure_test_support import isolated_test_redis, isolated_test_redis_url
 
@@ -50,7 +50,7 @@ class AnalysisFailureArqTests(unittest.IsolatedAsyncioTestCase):
         self.addAsyncCleanup(worker.close)
         job = await self.pool.enqueue_job("run_analysis_job", 1, 1, 100000,
                                           _job_id=self.ident, _queue_name=self.queue)
-        with patch.object(ask_db, "AsyncDBSession", side_effect=[session, empty]), \
+        with patch.object(analysis_selection, "AsyncDBSession", side_effect=[session, empty]), \
              patch.object(analysis, "ANALYSIS_CONCURRENCY", 1), \
              patch.object(analysis, "_call_engine_service", new_callable=AsyncMock) as engine, \
              patch.object(analysis, "stage_fen_results", new_callable=AsyncMock) as write, \

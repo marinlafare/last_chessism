@@ -38,7 +38,7 @@ async def database(*, statement_timeout_ms=120000):
 
 async def reserve(plan, config):
     async with database() as sessions:
-        from chessism_api.database.postgresql.ask_db import get_fens_for_analysis
+        from chessism_api.database.postgresql.analysis_selection import get_fens_for_analysis
         from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim
         from chessism_api.operations.cloud_analysis.admission import require_available
         from sqlalchemy import insert

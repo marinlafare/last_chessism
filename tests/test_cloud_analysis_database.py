@@ -24,7 +24,7 @@ from chessism_api.database.postgresql.models import (
     Base, Fen, FenContinuation, DatabaseSummary, CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim,
     CloudControllerHeartbeat,
 )
-from chessism_api.database.postgresql.ask_db import get_fens_for_analysis
+from chessism_api.database.postgresql.analysis_selection import get_fens_for_analysis
 from chessism_api.operations.analysis import _format_engine_results
 from chessism_api.operations.cloud_analysis import controller, importer
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest

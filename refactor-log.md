@@ -840,3 +840,118 @@ A2.2 ingestion units are complete; remaining evaluation writers belong to A2.3,
 and derived feature readers/writers and obsolete adapters remain for A3/A4.
 Stage A is still incomplete and has not received independent acceptance. No push,
 merge, deployment, production access or changes to the recovery checkpoint.
+
+A2.2 committed locally as d51cd42. Starting A2.3 selection/reservation conversion.
+The canonical selectors will replace ask_db definitions; direct callers and tests
+move together. Accepted P1 cleanup semantics and existing outcome/progress code
+remain unchanged. Cloud queue construction uses the same canonical game ordering.
+Evaluation writes/receipt and projection recovery are the next focused subgate.
+
+## A2.3 selection and queue gate prepared
+
+Extracted global/player/frozen-game selectors and scope counters/completion from
+ask_db into analysis_selection. Three acquisition implementations share one lease
+lifecycle; the accepted cleanup body is unchanged except its function name. Direct
+analysis/cloud/benchmark consumers use the new module. No compatibility re-export.
+Player queries use numeric owners; frozen selection and durable queue share native
+is_white ordering SQL. Claim rechecks explicitly address the canonical public tables.
+
+Queue build checkpoints retain their two transactions. Candidate consumption is
+still handed off with FEN locks for atomic claim publication; rollback restores it.
+Acquisition now uses the accepted cleanup helper, and construction uses the existing
+explicit transaction helper. No cloud side effects or evaluation publication changed.
+
+Eighteen mandatory PostgreSQL regressions exercise actual selectors/queue state,
+concurrency, fresh claim snapshots, rollback/restart and cancellation. Two additional
+queue cleanup unit regressions cover rollback failure and repeated cancellation.
+All P1 selection/job assertions are byte-identical after reversing the module rename.
+The query-shape and queue-profile assertion mapping is recorded in the manifest.
+
+Five offline safety checks, syntax and whitespace checks pass. Prepared 118 checks:
+23 PostgreSQL/offline, 27 focused workflow, 68 P1. Freeze covers 1,720 inputs; 1,673
+original files remain unchanged, with 26 explicitly converted original inputs across
+Stage A. Reuse the completed 198-check ingestion evidence for unchanged persistence
+inputs. The full baseline comparison remains the A4 gate; no new skips or weakened
+assertions. Legacy opt-in fixture conversion/mapping remains required before A4.
+Evidence: /tmp/chessism-canonical-a2-selection-20261110-01. Integration results pending.
+
+A2.3 selection gate launched; supervisor PID 2372150. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-selection-20261110-01/monitor.py`.
+Returning control without waiting or polling. After the user reports completion,
+review saved results, source integrity and owned cleanup before committing. Then
+continue only the authorized A2.3 evaluation/publication and recovery work.
+
+## A2.3 first gate stopped — concurrency observer correction
+
+The 23-check first suite ran 22 passes and one error; no assertion failures/skips.
+The workflow and P1 suites did not run after that gate failed. Exact error:
+`CanonicalSelectionTests.test_recheck_sees_reservation_committed_while_initial_lock_waited`
+timed out after two seconds waiting for pg_stat_activity to report a lock.
+Supervisor 8.24s. All 1,720 frozen inputs matched; all three owned containers
+were removed, independently confirmed by run label. The failed evidence remains
+unchanged at /tmp/chessism-canonical-a2-selection-20261110-01.
+
+The test's lock observer used the same open transaction that held the FEN lock;
+its activity snapshot could remain stale. Other lock tests observed outside that
+transaction and passed. Corrected only the new test fixture: use a separate
+connection in autocommit, surface early waiter errors, require the specific blocker,
+and verify the initial selection actually returned the FEN before the fresh claim
+recheck excludes it. The two-second timeout is unchanged; no checks were dropped,
+skipped or weakened. Application code remains byte-identical to the failed run.
+
+Prepared a complete 118-check retry in
+/tmp/chessism-canonical-a2-selection-20261110-02 with fresh resources and frozen
+hashes. This correction still requires verification; no passing claim or commit.
+
+A2.3 selection retry launched; supervisor PID 2397865. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-selection-20261110-02/monitor.py`.
+Returning control without waiting or polling. Review the retry evidence only after
+the user reports completion. No additional implementation or commit before that gate.
+
+## A2.3 retry reviewed — stale ARQ fixture target
+
+118 checks ran: 116 passed, two failed, zero errors/skips. All 23 PostgreSQL/offline
+and all 27 workflow checks passed; P1 passed 66/68. The concurrency observer
+correction now passes, including the intended blocker and fresh-claim assertions.
+The two failures are AnalysisFailureArqTests.test_database_failure_is_stored_as_unsuccessful_with_failed_progress
+and AnalysisFailureArqTests.test_genuinely_empty_selection_remains_successful.
+Both reported their fake session rollback was never called. The actual ARQ logs
+show UnboundExecutionError: that fixture still patched ask_db.AsyncDBSession after
+the selector moved to analysis_selection. This was a missed test-adapter reference,
+not evidence that the new selector suppresses a real database failure.
+
+All 1,720 frozen inputs matched before correction, and all five containers were
+removed; independently confirmed by run label. Failed evidence is retained in
+/tmp/chessism-canonical-a2-selection-20261110-02 (15.45s supervisor).
+
+Corrected only the ARQ fixture import/patch target and the equivalent stale target
+in the standalone cloud queue checker. ARQ test contents match HEAD byte-for-byte
+after reversing the module rename; no assertions, timeouts or application code
+changed. A search of related selector fixtures found no other stale targets.
+
+These are the already-planned test-target updates inside the approved selection
+conversion. Applying the user's consolidated Stage A instruction to correct
+demonstrated defects before proceeding; no scope/public-contract change or new
+approval boundary is required for these mechanical corrections. The failed gate
+still blocks any implementation commit or advance to the next subgate.
+
+Prepared the full 118-check retry in /tmp/chessism-canonical-a2-selection-20261110-03.
+Frozen inputs remain 1,720; 1,672 original files remain unchanged, and 27 changed
+original inputs are explicitly recorded. Runtime sources are identical to attempt 2.
+
+A2.3 third selection gate launched; supervisor PID 2403804. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-selection-20261110-03/monitor.py`.
+Returning control without waiting or polling. Review completed evidence only after
+the user reports its status. No commit or further subgate work before verification.
+
+## A2.3 selection gate passed and reviewed
+
+All 118 checks pass: 23 PostgreSQL/offline, 27 workflow and 68 accepted P1 checks;
+zero failures/errors/skips. Supervisor 14.47s. Reviewed raw logs and structured
+results. All 1,720 frozen inputs match. All five disposable containers were
+removed, independently confirmed using the run label. Both earlier failed runs
+and their corrections remain recorded. No source changes after the passing gate.
+
+Canonical selection and queue work is ready for its local commit. A2.3 evaluation
+publication, receipts and durable projection recovery remain; Stage A is still
+in progress, with no acceptance, push, merge, deployment or production changes.

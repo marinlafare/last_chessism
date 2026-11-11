@@ -37,11 +37,11 @@ from chessism_api.operations.ingestion_pipeline import fen_orchestrator as fens
 from chessism_api.operations.ingestion_pipeline import jobs as games
 from chessism_api.operations.player_timezone import resolve_player_timezone
 from chessism_api.database.postgresql.ask_db import (
-    _player_fens_for_analysis_stmt,
     fair_sample_player_games_by_month,
     get_player_fen_score_counts,
     get_top_fens_unscored,
 )
+from chessism_api.database.postgresql.analysis_selection import _player_fens_for_analysis_stmt
 from chessism_api.operations.ingestion_pipeline.fen_core import (
     aggregate_fen_data,
     count_expected_fen_positions,
@@ -1887,7 +1887,7 @@ class AnalysisSelectionTests(unittest.TestCase):
         ).upper()
 
         self.assertIn("EXISTS (SELECT", sql)
-        self.assertIn("LIMIT 500 FOR UPDATE OF FEN SKIP LOCKED", sql)
+        self.assertIn("LIMIT 500 FOR UPDATE OF F SKIP LOCKED", sql)
         self.assertNotIn("GROUP BY", sql)
 
 

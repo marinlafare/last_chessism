@@ -76,6 +76,22 @@ cleanup / error propagation. Keep accepted progress/ARQ mechanisms. Tests exerci
 actual adapters against canonical PostgreSQL plus existing P1/Redis/ARQ regressions.
 Commit verified work; record A2 evidence before A3.
 
+A2.2 completed in `d51cd42` after 198 focused checks. A2.3 begins with the
+selection/reservation boundary, followed by evaluation publication and recovery.
+Extract selectors plus frozen-scope counts/completion into
+`database/postgresql/analysis_selection.py`, removing their `ask_db.py` definitions.
+Keep the accepted cleanup algorithm, session handoff, ordering and fresh-snapshot
+claim recheck. Replace player-name/side compatibility columns with canonical numeric
+relationships; qualify canonical tables in `fen_claims.py`. Reuse the frozen-game
+candidate SQL in `cloud_analysis/game_fen_queue.py`; retain durable queue identity,
+consumption/claim atomicity, skipped-lock recovery and page bounds. Use the shared
+transaction/cleanup helpers for queue construction and failed acquisition.
+Update direct imports in analysis/cloud/benchmark callers and corresponding test
+patch targets, without changing P1 assertions. Add real PostgreSQL selector/queue
+checks, retain all P1 regressions, and run the four existing queue contract tests.
+Legacy opt-in database fixtures must be converted/mapped before the final A4 gate;
+do not introduce new skips. Evaluation publication remains the following subgate.
+
 ### A3.1 — Canonical game/player queries and summary readers
 Depends on A2.3. Convert routers and operations using game/player queries, navigation,
 rankings, pagination, `home_summary.py`, `player_*` summaries and `common_positions.py`.

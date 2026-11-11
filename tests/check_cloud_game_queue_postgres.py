@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from chessism_api.database.postgresql import models as m, cloud_columns
 from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
-from chessism_api.database.postgresql.ask_db import get_game_set_fens_for_analysis
+from chessism_api.database.postgresql.analysis_selection import get_game_set_fens_for_analysis
 from chessism_api.operations import database_restore_tests as restore
 from chessism_api.operations.cloud_analysis import game_fen_queue as queue
 from chessism_api.operations.cloud_analysis.preparation import PreparationTimings
@@ -294,7 +294,7 @@ async def benchmark(engine,conn,factory):
     plan_job,_=await new_job(factory,links)
     await queue.ensure_queue(plan_job.id,links)
     async with factory() as session:
-        plan=await session.scalar(text('EXPLAIN (FORMAT JSON) '+queue.page_sql(queue.storage_for(session))),
+        plan=await session.scalar(text('EXPLAIN (FORMAT JSON) '+queue.page_sql()),
             {'job_id':plan_job.id,'after':0,'limit':batch})
     def nodes(node):
         yield node
@@ -325,7 +325,7 @@ async def main():
         factory=async_sessionmaker(engine,expire_on_commit=False,
             info={SESSION_KEY:RelationalStorage('public','archive','reads','relational_v3')})
         await fixture(engine,conn)
-        with patch.object(queue,'AsyncDBSession',factory),patch('chessism_api.database.postgresql.ask_db.AsyncDBSession',factory):
+        with patch.object(queue,'AsyncDBSession',factory),patch('chessism_api.database.postgresql.analysis_selection.AsyncDBSession',factory):
             await asyncio.wait_for(correctness(engine,conn,factory),90)
             await asyncio.wait_for(coordinator(conn,factory),45)
             await asyncio.wait_for(benchmark(engine,conn,factory),150)

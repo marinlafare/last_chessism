@@ -41,7 +41,7 @@ async def advance(controller, job, run):
 
 
 async def _advance(controller, job, run, timings):
-    from chessism_api.database.postgresql.ask_db import get_fens_for_analysis, get_player_fens_for_analysis
+    from chessism_api.database.postgresql.analysis_selection import get_fens_for_analysis, get_player_fens_for_analysis
     async with AsyncDBSession() as session:
         state = await session.get(CloudInputPreparation, run.id)
         if state is None:

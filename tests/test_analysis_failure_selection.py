@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 
-from chessism_api.database.postgresql import ask_db
+from chessism_api.database.postgresql import analysis_selection
 
 
 def selection_session(fens=("fen-b", "fen-a"), eligible=("fen-a", "fen-b")):
@@ -24,9 +24,9 @@ def selection_session(fens=("fen-b", "fen-a"), eligible=("fen-a", "fen-b")):
 
 
 SELECTORS = (
-    (ask_db.get_fens_for_analysis, (2,)),
-    (ask_db.get_player_fens_for_analysis, ("fixture", 2)),
-    (ask_db.get_game_set_fens_for_analysis, ([33, None, 11, 33], 2)),
+    (analysis_selection.get_fens_for_analysis, (2,)),
+    (analysis_selection.get_player_fens_for_analysis, ("fixture", 2)),
+    (analysis_selection.get_game_set_fens_for_analysis, ([33, None, 11, 33], 2)),
 )
 
 
@@ -43,7 +43,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                     session = selection_session()
                     failure = RuntimeError(f"database failure during {stage}")
                     getattr(session, stage).side_effect = failure
-                    with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                    with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                         with self.assertRaises(RuntimeError) as caught:
                             await selector(*args)
                     self.assertIs(caught.exception, failure)
@@ -62,7 +62,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                         session.rollback.side_effect = OSError("rollback failed")
                     if close_fails:
                         session.close.side_effect = OSError("close failed")
-                    with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                    with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                         with self.assertRaises(RuntimeError) as caught:
                             await selector(*args)
                     self.assertIs(caught.exception, failure)
@@ -86,7 +86,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                         if cleanup_fails:
                             session.rollback.side_effect = OSError("rollback failed")
                             session.close.side_effect = OSError("close failed")
-                        with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                        with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                             task = asyncio.create_task(selector(*args))
                             try:
                                 await asyncio.wait_for(entered.wait(), 2)
@@ -105,7 +105,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
             for initial in ([], ["claimed-elsewhere"]):
                 with self.subTest(selector=selector.__name__, initial=initial):
                     session = selection_session(initial, [])
-                    with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                    with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                         self.assertEqual(await selector(*args), (None, None))
                     session.rollback.assert_awaited_once()
                     session.close.assert_awaited_once()
@@ -118,7 +118,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                     session = selection_session([], [])
                     failure = OSError(f"empty {stage} failed")
                     getattr(session, stage).side_effect = failure
-                    with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                    with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                         with self.assertRaises(OSError) as caught:
                             await selector(*args)
                     self.assertIs(caught.exception, failure)
@@ -159,7 +159,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                                 cancellation_messages.append(error.args)
                                 raise
 
-                        with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                        with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                             task = asyncio.create_task(run_observed_selection())
                             try:
                                 await asyncio.wait_for(entered.wait(), 2)
@@ -200,7 +200,7 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
         for selector, args in SELECTORS:
             with self.subTest(selector=selector.__name__):
                 session = selection_session()
-                with patch.object(ask_db, "AsyncDBSession", return_value=session):
+                with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
                     selected_session, fens = await selector(*args)
                 self.assertIs(selected_session, session)
                 self.assertEqual(fens, ["fen-b", "fen-a"])
@@ -211,10 +211,10 @@ class AnalysisSelectionFailureTests(unittest.IsolatedAsyncioTestCase):
                 session.rollback.assert_not_awaited()
                 session.close.assert_not_awaited()
                 session.commit.assert_not_awaited()
-                if selector is ask_db.get_game_set_fens_for_analysis:
+                if selector is analysis_selection.get_game_set_fens_for_analysis:
                     self.assertEqual(session.execute.await_args.args[1], {"game_links": [33, 11, 33], "limit": 2})
 
     async def test_empty_frozen_input_does_not_open_a_session(self):
-        with patch.object(ask_db, "AsyncDBSession") as create:
-            self.assertEqual(await ask_db.get_game_set_fens_for_analysis([], 10), (None, None))
+        with patch.object(analysis_selection, "AsyncDBSession") as create:
+            self.assertEqual(await analysis_selection.get_game_set_fens_for_analysis([], 10), (None, None))
         create.assert_not_called()

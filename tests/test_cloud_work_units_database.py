@@ -123,7 +123,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_statistics_failure_stops_before_reservation(self):
         root = await self.root()
         with patch.object(fleet, 'refresh_claim_statistics', side_effect=RuntimeError('analyze failed')), \
-             patch('chessism_api.database.postgresql.ask_db.get_fens_for_analysis', new_callable=AsyncMock) as select_fens:
+             patch('chessism_api.database.postgresql.analysis_selection.get_fens_for_analysis', new_callable=AsyncMock) as select_fens:
             with self.assertRaisesRegex(RuntimeError, 'analyze failed'):
                 await fleet.reserve_unit(self.job, root, {'units': []}, 0, 1)
             select_fens.assert_not_awaited()

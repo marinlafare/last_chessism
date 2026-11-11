@@ -1762,7 +1762,7 @@
             "p1-results.json": "6fd3fd4771b527605e800858e0353556aa3254f8a037b16f58da3309542b7774"
           }
         },
-        "commit_sha": null,
+        "commit_sha": "d51cd42",
         "started_at": "2026-11-11T00:42:28.892717+00:00",
         "subgates": [
           "game application transaction and side-key pending work",
@@ -1988,7 +1988,7 @@
               "workflow-results.json": "5b01cd00b7c7e749bdc793244e6af8765d5a05fdc00c2329a480359716e0a00d",
               "p1-results.json": "6fd3fd4771b527605e800858e0353556aa3254f8a037b16f58da3309542b7774"
             },
-            "commit_sha": null
+            "commit_sha": "d51cd42"
           }
         ],
         "active_subgate": null,
@@ -1997,9 +1997,554 @@
       {
         "id": "A2.3",
         "name": "Evaluation writes and analysis selection",
-        "status": "pending",
-        "verification": null,
-        "commit_sha": null
+        "status": "in_progress",
+        "verification": {
+          "status": "passed",
+          "gate": "canonical_analysis_selection_and_cloud_queue",
+          "evidence_directory": "/tmp/chessism-canonical-a2-selection-20261110-03",
+          "planned_tests": {
+            "postgres_and_offline": 23,
+            "workflow": 27,
+            "p1": 68
+          },
+          "planned_total": 118,
+          "offline_safety_passed": 5,
+          "syntax": "passed",
+          "source_input_count": 1720,
+          "protected_baseline_count": 1672,
+          "changed_baseline_inputs": [
+            "chessism_api/database/postgresql/ask_db.py",
+            "chessism_api/database/postgresql/fen_claims.py",
+            "chessism_api/operations/analysis.py",
+            "chessism_api/operations/cloud_analysis/controller.py",
+            "chessism_api/operations/cloud_analysis/game_fen_queue.py",
+            "chessism_api/operations/cloud_analysis/input_preparation.py",
+            "chessism_api/operations/cloud_analysis/work_units_controller.py",
+            "chessism_api/operations/ingestion_pipeline/README.md",
+            "chessism_api/operations/ingestion_pipeline/fen_batches.py",
+            "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
+            "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
+            "chessism_api/operations/ingestion_pipeline/fen_repository.py",
+            "chessism_api/operations/ingestion_pipeline/game_importer.py",
+            "chessism_api/operations/ingestion_pipeline/jobs.py",
+            "chessism_api/operations/ingestion_pipeline/months.py",
+            "stockfish-batch-worker/benchmark_vm16/large_database.py",
+            "tests/check_cloud_game_queue_postgres.py",
+            "tests/test_analysis_failure_arq.py",
+            "tests/test_analysis_failure_jobs.py",
+            "tests/test_analysis_failure_selection.py",
+            "tests/test_cloud_analysis_database.py",
+            "tests/test_cloud_game_queue.py",
+            "tests/test_cloud_sequences_database.py",
+            "tests/test_cloud_work_units_database.py",
+            "tests/test_fen_reference_database.py",
+            "tests/test_pipeline_helpers.py",
+            "tests/test_relational_storage.py"
+          ],
+          "new_regressions": {
+            "postgres": 18,
+            "queue_cleanup": 2
+          },
+          "p1_preservation": "Selection/job/ARQ regression files are byte-identical after reversing only their module name change; moved cleanup function body is unchanged after its function rename.",
+          "reused_evidence": {
+            "directory": "/tmp/chessism-canonical-a2-fens-20261110-01",
+            "checks": 198,
+            "reason": "Canonical schema and completed game/FEN persistence inputs unchanged; changed selector boundary is verified separately."
+          },
+          "baseline_debt": "Existing API 3 failures/10 errors/276 skips, worker 7 skips and frontend 4 failures remain unresolved; final complete comparison at A4.",
+          "mapping": {
+            "GameFenQueueTests.test_build_preserves_legacy_minima_and_text_tiebreak": "test_build_preserves_game_minima_and_text_tiebreak retains ordering/no-frozen-claims assertions and replaces profile syntax assertions with public canonical table/is_white assertions.",
+            "AnalysisSelectionTests.test_player_fen_query_locks_rows_before_satisfying_limit": "Same EXISTS, LIMIT-before-SKIP-LOCKED, no-GROUP-BY assertions; SQL row alias is now f.",
+            "P1 selection/job regressions": "Same assertions and identities; imports and patch targets follow the extracted module."
+          },
+          "monitor_command": "python3 /tmp/chessism-canonical-a2-selection-20261110-03/monitor.py",
+          "attempt": 3,
+          "correction": "Move the missed ARQ session mock and standalone queue-checker patch from ask_db to analysis_selection. Only test module references changed; runtime source and all assertions unchanged.",
+          "launch": {
+            "pid": 2403804,
+            "started_at": 1794361013.2879002,
+            "startup_confirmed": true
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 23,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.82139253616333,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 27,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.28087401390075684,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.8957791328430176,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+            }
+          },
+          "total_passed": 118,
+          "elapsed_seconds": 14.467718362808228,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a2-selection-76d8259528-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-selection-76d8259528-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-selection-76d8259528-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-selection-76d8259528-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a2-selection-76d8259528-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity": "all 1720 frozen inputs match",
+          "evidence_sha256": {
+            "results.json": "4b4a681a6f8587c266bb7e92adc90db69b616258f8f998bee888a4861910cc3c",
+            "input-sha256.json": "d4c573e7078ad8b7d364206e29373704f35d90feff0f4753ff9c75e67ef753c4",
+            "foundation-results.json": "e5e41fb75c69aff74f0e372b25d2417bee393d2fe9e60298f07691f3b8dd2928",
+            "workflow-results.json": "137f287e3df0eda34371c825ea6dd46ad45496b8aafed7628c16233bace3981b",
+            "p1-results.json": "3f0d81d81005834a13f3bb46f67f2ecef98f7c954040d533f5e7b2bed83860ce"
+          }
+        },
+        "commit_sha": null,
+        "started_at": "2026-11-11T01:12:16.420464+00:00",
+        "active_subgate": "canonical analysis selection and cloud game reservation queue",
+        "subgates": [
+          "analysis selection and bounded cloud queue",
+          "evaluation writes, projection recovery and import receipts"
+        ],
+        "failed_verifications": [
+          {
+            "status": "failed",
+            "gate": "canonical_analysis_selection_and_cloud_queue",
+            "evidence_directory": "/tmp/chessism-canonical-a2-selection-20261110-01",
+            "planned_tests": {
+              "postgres_and_offline": 23,
+              "workflow": 27,
+              "p1": 68
+            },
+            "planned_total": 118,
+            "offline_safety_passed": 5,
+            "syntax": "passed",
+            "source_input_count": 1720,
+            "protected_baseline_count": 1673,
+            "changed_baseline_inputs": [
+              "chessism_api/database/postgresql/ask_db.py",
+              "chessism_api/database/postgresql/fen_claims.py",
+              "chessism_api/operations/analysis.py",
+              "chessism_api/operations/cloud_analysis/controller.py",
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py",
+              "chessism_api/operations/cloud_analysis/input_preparation.py",
+              "chessism_api/operations/cloud_analysis/work_units_controller.py",
+              "chessism_api/operations/ingestion_pipeline/README.md",
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py",
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py",
+              "chessism_api/operations/ingestion_pipeline/game_importer.py",
+              "chessism_api/operations/ingestion_pipeline/jobs.py",
+              "chessism_api/operations/ingestion_pipeline/months.py",
+              "stockfish-batch-worker/benchmark_vm16/large_database.py",
+              "tests/check_cloud_game_queue_postgres.py",
+              "tests/test_analysis_failure_jobs.py",
+              "tests/test_analysis_failure_selection.py",
+              "tests/test_cloud_analysis_database.py",
+              "tests/test_cloud_game_queue.py",
+              "tests/test_cloud_sequences_database.py",
+              "tests/test_cloud_work_units_database.py",
+              "tests/test_fen_reference_database.py",
+              "tests/test_pipeline_helpers.py",
+              "tests/test_relational_storage.py"
+            ],
+            "new_regressions": {
+              "postgres": 18,
+              "queue_cleanup": 2
+            },
+            "p1_preservation": "Both P1 selection/job test files are byte-identical after reversing only ask_db -> analysis_selection; moved cleanup function body is identical after reversing its function rename.",
+            "reused_evidence": {
+              "directory": "/tmp/chessism-canonical-a2-fens-20261110-01",
+              "checks": 198,
+              "reason": "Canonical schema and completed game/FEN persistence inputs unchanged; changed selector boundary is verified separately."
+            },
+            "baseline_debt": "Existing API 3 failures/10 errors/276 skips, worker 7 skips and frontend 4 failures remain unresolved; final complete comparison at A4.",
+            "mapping": {
+              "GameFenQueueTests.test_build_preserves_legacy_minima_and_text_tiebreak": "test_build_preserves_game_minima_and_text_tiebreak retains ordering/no-frozen-claims assertions and replaces profile syntax assertions with public canonical table/is_white assertions.",
+              "AnalysisSelectionTests.test_player_fen_query_locks_rows_before_satisfying_limit": "Same EXISTS, LIMIT-before-SKIP-LOCKED, no-GROUP-BY assertions; SQL row alias is now f.",
+              "P1 selection/job regressions": "Same assertions and identities; imports and patch targets follow the extracted module."
+            },
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-selection-20261110-01/monitor.py",
+            "launch": {
+              "pid": 2372150,
+              "started_at": 1794360033.3575625,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 23,
+                "failures": 0,
+                "errors": 1,
+                "skips": 0,
+                "elapsed_seconds": 5.847927808761597,
+                "failure_details": [],
+                "error_details": [
+                  {
+                    "test": "tests.check_canonical_selection_postgres.CanonicalSelectionTests.test_recheck_sees_reservation_committed_while_initial_lock_waited",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/asyncio/tasks.py\", line 500, in wait_for\n    return fut.result()\n           ^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_selection_postgres.py\", line 53, in wait\n    await asyncio.sleep(0.01)\n  File \"/usr/local/lib/python3.11/asyncio/tasks.py\", line 649, in sleep\n    return await future\n           ^^^^^^^^^^^^\nasyncio.exceptions.CancelledError\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 90, in _callTestMethod\n    if self._callMaybeAsync(method) is not None:\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 112, in _callMaybeAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/check_canonical_selection_postgres.py\", line 153, in test_recheck_sees_reservation_committed_while_initial_lock_waited\n    await self.wait_for_lock()\n  File \"/workspace/tests/check_canonical_selection_postgres.py\", line 54, in wait_for_lock\n    await asyncio.wait_for(wait(),2)\n  File \"/usr/local/lib/python3.11/asyncio/tasks.py\", line 502, in wait_for\n    raise exceptions.TimeoutError() from exc\nTimeoutError\n"
+                  }
+                ],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "elapsed_seconds": 8.235671997070312,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-selection-18bab85411-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-18bab85411-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-18bab85411-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": "all 1720 frozen inputs matched before correction",
+            "not_run": [
+              "workflow",
+              "p1"
+            ],
+            "evidence_sha256": {
+              "results.json": "8d0d100b56ca4755bd98092efc2820acb409dcc8fb33891bc5449b5b26952210",
+              "foundation-results.json": "fe3ad79b49f36a17172e64c3a1dccbe200f84483b384e7344cd58c9911bf0e6f",
+              "input-sha256.json": "735508d0eadf0f204b579b42171cce1efc95dd1d06268364e844ac9be669e828"
+            }
+          },
+          {
+            "status": "failed",
+            "gate": "canonical_analysis_selection_and_cloud_queue",
+            "evidence_directory": "/tmp/chessism-canonical-a2-selection-20261110-02",
+            "planned_tests": {
+              "postgres_and_offline": 23,
+              "workflow": 27,
+              "p1": 68
+            },
+            "planned_total": 118,
+            "offline_safety_passed": 5,
+            "syntax": "passed",
+            "source_input_count": 1720,
+            "protected_baseline_count": 1673,
+            "changed_baseline_inputs": [
+              "chessism_api/database/postgresql/ask_db.py",
+              "chessism_api/database/postgresql/fen_claims.py",
+              "chessism_api/operations/analysis.py",
+              "chessism_api/operations/cloud_analysis/controller.py",
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py",
+              "chessism_api/operations/cloud_analysis/input_preparation.py",
+              "chessism_api/operations/cloud_analysis/work_units_controller.py",
+              "chessism_api/operations/ingestion_pipeline/README.md",
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py",
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py",
+              "chessism_api/operations/ingestion_pipeline/game_importer.py",
+              "chessism_api/operations/ingestion_pipeline/jobs.py",
+              "chessism_api/operations/ingestion_pipeline/months.py",
+              "stockfish-batch-worker/benchmark_vm16/large_database.py",
+              "tests/check_cloud_game_queue_postgres.py",
+              "tests/test_analysis_failure_jobs.py",
+              "tests/test_analysis_failure_selection.py",
+              "tests/test_cloud_analysis_database.py",
+              "tests/test_cloud_game_queue.py",
+              "tests/test_cloud_sequences_database.py",
+              "tests/test_cloud_work_units_database.py",
+              "tests/test_fen_reference_database.py",
+              "tests/test_pipeline_helpers.py",
+              "tests/test_relational_storage.py"
+            ],
+            "new_regressions": {
+              "postgres": 18,
+              "queue_cleanup": 2
+            },
+            "p1_preservation": "Both P1 selection/job test files are byte-identical after reversing only ask_db -> analysis_selection; moved cleanup function body is identical after reversing its function rename.",
+            "reused_evidence": {
+              "directory": "/tmp/chessism-canonical-a2-fens-20261110-01",
+              "checks": 198,
+              "reason": "Canonical schema and completed game/FEN persistence inputs unchanged; changed selector boundary is verified separately."
+            },
+            "baseline_debt": "Existing API 3 failures/10 errors/276 skips, worker 7 skips and frontend 4 failures remain unresolved; final complete comparison at A4.",
+            "mapping": {
+              "GameFenQueueTests.test_build_preserves_legacy_minima_and_text_tiebreak": "test_build_preserves_game_minima_and_text_tiebreak retains ordering/no-frozen-claims assertions and replaces profile syntax assertions with public canonical table/is_white assertions.",
+              "AnalysisSelectionTests.test_player_fen_query_locks_rows_before_satisfying_limit": "Same EXISTS, LIMIT-before-SKIP-LOCKED, no-GROUP-BY assertions; SQL row alias is now f.",
+              "P1 selection/job regressions": "Same assertions and identities; imports and patch targets follow the extracted module."
+            },
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-selection-20261110-02/monitor.py",
+            "attempt": 2,
+            "correction": "Use an independent autocommit observer for PostgreSQL lock activity. Require the intended blocker and initial FEN before rejecting the newly committed cloud claim. No application code changed and timeouts unchanged.",
+            "launch": {
+              "pid": 2397865,
+              "started_at": 1794360852.6175764,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 23,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 4.179638385772705,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "workflow": {
+                "suite": "workflow",
+                "tests": 27,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.3263857364654541,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "p1": {
+                "suite": "p1",
+                "tests": 68,
+                "failures": 2,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 4.3059186935424805,
+                "failure_details": [
+                  {
+                    "test": "test_analysis_failure_arq.AnalysisFailureArqTests.test_database_failure_is_stored_as_unsuccessful_with_failed_progress",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 90, in _callTestMethod\n    if self._callMaybeAsync(method) is not None:\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 112, in _callMaybeAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/test_analysis_failure_arq.py\", line 74, in test_database_failure_is_stored_as_unsuccessful_with_failed_progress\n    result, progress = await self.execute(RuntimeError(\"database selection unavailable\"))\n                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/test_analysis_failure_arq.py\", line 61, in execute\n    session.rollback.assert_awaited_once()\n  File \"/usr/local/lib/python3.11/unittest/mock.py\", line 2283, in assert_awaited_once\n    raise AssertionError(msg)\nAssertionError: Expected mock to have been awaited once. Awaited 0 times.\n"
+                  },
+                  {
+                    "test": "test_analysis_failure_arq.AnalysisFailureArqTests.test_genuinely_empty_selection_remains_successful",
+                    "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 90, in _callTestMethod\n    if self._callMaybeAsync(method) is not None:\n       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/unittest/async_case.py\", line 112, in _callMaybeAsync\n    return self._asyncioRunner.run(\n           ^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/runners.py\", line 118, in run\n    return self._loop.run_until_complete(task)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/usr/local/lib/python3.11/asyncio/base_events.py\", line 654, in run_until_complete\n    return future.result()\n           ^^^^^^^^^^^^^^^\n  File \"/workspace/tests/test_analysis_failure_arq.py\", line 82, in test_genuinely_empty_selection_remains_successful\n    result, progress = await self.execute()\n                       ^^^^^^^^^^^^^^^^^^^^\n  File \"/workspace/tests/test_analysis_failure_arq.py\", line 61, in execute\n    session.rollback.assert_awaited_once()\n  File \"/usr/local/lib/python3.11/unittest/mock.py\", line 2283, in assert_awaited_once\n    raise AssertionError(msg)\nAssertionError: Expected mock to have been awaited once. Awaited 0 times.\n"
+                  }
+                ],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "total_passed": 116,
+            "elapsed_seconds": 15.448553323745728,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-selection-bfa9b10e85-p1",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-bfa9b10e85-workflow",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-bfa9b10e85-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-bfa9b10e85-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-bfa9b10e85-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": "all 1720 frozen inputs matched before correction",
+            "evidence_sha256": {
+              "results.json": "b8c11c90c485962752b52348e16e73d933022ecc00d6f71c0b64e9ad5d7da097",
+              "foundation-results.json": "86acaafb2f721c498d4443f7781054cbf24fc507ab5ff023f12d3d4042306933",
+              "workflow-results.json": "99511ec08c4bac0514851fee7a4889987417580d657b3cbaf14bb7c442761f3d",
+              "p1-results.json": "4c58aa537068141ea7eeb458c74b3354136c9ef30ffa5717670feda8594b604a",
+              "input-sha256.json": "761981c18a54386f61d02ac5c8b38daddfd920a0c0db31cecab4e4ce03e85301"
+            }
+          }
+        ],
+        "gates": [
+          {
+            "status": "passed",
+            "gate": "canonical_analysis_selection_and_cloud_queue",
+            "evidence_directory": "/tmp/chessism-canonical-a2-selection-20261110-03",
+            "planned_tests": {
+              "postgres_and_offline": 23,
+              "workflow": 27,
+              "p1": 68
+            },
+            "planned_total": 118,
+            "offline_safety_passed": 5,
+            "syntax": "passed",
+            "source_input_count": 1720,
+            "protected_baseline_count": 1672,
+            "changed_baseline_inputs": [
+              "chessism_api/database/postgresql/ask_db.py",
+              "chessism_api/database/postgresql/fen_claims.py",
+              "chessism_api/operations/analysis.py",
+              "chessism_api/operations/cloud_analysis/controller.py",
+              "chessism_api/operations/cloud_analysis/game_fen_queue.py",
+              "chessism_api/operations/cloud_analysis/input_preparation.py",
+              "chessism_api/operations/cloud_analysis/work_units_controller.py",
+              "chessism_api/operations/ingestion_pipeline/README.md",
+              "chessism_api/operations/ingestion_pipeline/fen_batches.py",
+              "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
+              "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
+              "chessism_api/operations/ingestion_pipeline/fen_repository.py",
+              "chessism_api/operations/ingestion_pipeline/game_importer.py",
+              "chessism_api/operations/ingestion_pipeline/jobs.py",
+              "chessism_api/operations/ingestion_pipeline/months.py",
+              "stockfish-batch-worker/benchmark_vm16/large_database.py",
+              "tests/check_cloud_game_queue_postgres.py",
+              "tests/test_analysis_failure_arq.py",
+              "tests/test_analysis_failure_jobs.py",
+              "tests/test_analysis_failure_selection.py",
+              "tests/test_cloud_analysis_database.py",
+              "tests/test_cloud_game_queue.py",
+              "tests/test_cloud_sequences_database.py",
+              "tests/test_cloud_work_units_database.py",
+              "tests/test_fen_reference_database.py",
+              "tests/test_pipeline_helpers.py",
+              "tests/test_relational_storage.py"
+            ],
+            "new_regressions": {
+              "postgres": 18,
+              "queue_cleanup": 2
+            },
+            "p1_preservation": "Selection/job/ARQ regression files are byte-identical after reversing only their module name change; moved cleanup function body is unchanged after its function rename.",
+            "reused_evidence": {
+              "directory": "/tmp/chessism-canonical-a2-fens-20261110-01",
+              "checks": 198,
+              "reason": "Canonical schema and completed game/FEN persistence inputs unchanged; changed selector boundary is verified separately."
+            },
+            "baseline_debt": "Existing API 3 failures/10 errors/276 skips, worker 7 skips and frontend 4 failures remain unresolved; final complete comparison at A4.",
+            "mapping": {
+              "GameFenQueueTests.test_build_preserves_legacy_minima_and_text_tiebreak": "test_build_preserves_game_minima_and_text_tiebreak retains ordering/no-frozen-claims assertions and replaces profile syntax assertions with public canonical table/is_white assertions.",
+              "AnalysisSelectionTests.test_player_fen_query_locks_rows_before_satisfying_limit": "Same EXISTS, LIMIT-before-SKIP-LOCKED, no-GROUP-BY assertions; SQL row alias is now f.",
+              "P1 selection/job regressions": "Same assertions and identities; imports and patch targets follow the extracted module."
+            },
+            "monitor_command": "python3 /tmp/chessism-canonical-a2-selection-20261110-03/monitor.py",
+            "attempt": 3,
+            "correction": "Move the missed ARQ session mock and standalone queue-checker patch from ask_db to analysis_selection. Only test module references changed; runtime source and all assertions unchanged.",
+            "launch": {
+              "pid": 2403804,
+              "started_at": 1794361013.2879002,
+              "startup_confirmed": true
+            },
+            "results": {
+              "foundation": {
+                "suite": "foundation",
+                "tests": 23,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 3.82139253616333,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "workflow": {
+                "suite": "workflow",
+                "tests": 27,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.28087401390075684,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              },
+              "p1": {
+                "suite": "p1",
+                "tests": 68,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 3.8957791328430176,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]"
+              }
+            },
+            "total_passed": 118,
+            "elapsed_seconds": 14.467718362808228,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a2-selection-76d8259528-p1",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-76d8259528-workflow",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-76d8259528-foundation",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-76d8259528-redis",
+                "removed": true
+              },
+              {
+                "container": "chessism-canonical-a2-selection-76d8259528-postgres",
+                "removed": true
+              }
+            ],
+            "cleanup_independently_confirmed": true,
+            "source_integrity": "all 1720 frozen inputs match",
+            "evidence_sha256": {
+              "results.json": "4b4a681a6f8587c266bb7e92adc90db69b616258f8f998bee888a4861910cc3c",
+              "input-sha256.json": "d4c573e7078ad8b7d364206e29373704f35d90feff0f4753ff9c75e67ef753c4",
+              "foundation-results.json": "e5e41fb75c69aff74f0e372b25d2417bee393d2fe9e60298f07691f3b8dd2928",
+              "workflow-results.json": "137f287e3df0eda34371c825ea6dd46ad45496b8aafed7628c16233bace3981b",
+              "p1-results.json": "3f0d81d81005834a13f3bb46f67f2ecef98f7c954040d533f5e7b2bed83860ce"
+            },
+            "commit_sha": null
+          }
+        ]
       },
       {
         "id": "A3.1",

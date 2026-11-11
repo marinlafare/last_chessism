@@ -16,12 +16,14 @@ from sqlalchemy import delete, insert
 from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.database.postgresql.db_interface import DBInterface
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.database.postgresql.analysis_selection import (
     count_game_set_fens_for_analysis,
     get_game_set_analysis_completion,
     get_game_set_fens_for_analysis,
     get_fens_for_analysis,
     get_player_fens_for_analysis,
+)
+from chessism_api.database.postgresql.ask_db import (
     increment_game_analysis_summary_for_scored_fens,
     refresh_game_analysis_summary,
     refresh_scored_position_summary,

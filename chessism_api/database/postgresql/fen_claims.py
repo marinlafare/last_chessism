@@ -10,10 +10,10 @@ RECHECK_BATCH_SIZE = 5000
 RECHECK_SQL = """
     SELECT f.fen
     FROM unnest(CAST(:fens AS text[])) wanted(fen)
-    JOIN fen f ON f.fen = wanted.fen
+    JOIN public.fen f ON f.fen = wanted.fen
     WHERE f.score IS NULL
     EXCEPT
-    SELECT c.fen FROM cloud_fen_claim c
+    SELECT c.fen FROM public.cloud_fen_claim c
     WHERE c.fen = ANY(CAST(:fens AS text[]))
 """
 

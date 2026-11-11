@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, Mock, call, patch
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 
-from chessism_api.database.postgresql import ask_db
+from chessism_api.database.postgresql import analysis_selection
 from chessism_api.operations import analysis
 
 
@@ -89,7 +89,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                 failure = RuntimeError("database unavailable")
                 failed = session_for()
                 failed.begin.side_effect = failure
-                with patch.object(ask_db, "AsyncDBSession", side_effect=[failed, session_for()]) as create, \
+                with patch.object(analysis_selection, "AsyncDBSession", side_effect=[failed, session_for()]) as create, \
                      patch.object(analysis, selector_name, wraps=getattr(analysis, selector_name)) as selector:
                     with self.assertRaises(RuntimeError) as caught:
                         await entry()
@@ -115,7 +115,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(entry=name):
                 self.progress.reset_mock()
                 session = session_for()
-                with patch.object(ask_db, "AsyncDBSession", return_value=session), \
+                with patch.object(analysis_selection, "AsyncDBSession", return_value=session), \
                      patch.object(analysis, selector_name, wraps=getattr(analysis, selector_name)) as selector:
                     await entry()
                 selector.assert_awaited_once_with(*expected_args)
@@ -190,11 +190,11 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
             if calls == 1:
                 await entered.wait()
                 raise failure
-            return await ask_db.get_fens_for_analysis(limit)
+            return await analysis_selection.get_fens_for_analysis(limit)
 
         self.sleep.side_effect = AssertionError("acquisition failure was retried")
         with patch.object(analysis, "ANALYSIS_CONCURRENCY", 2), \
-             patch.object(ask_db, "AsyncDBSession", return_value=session):
+             patch.object(analysis_selection, "AsyncDBSession", return_value=session):
             with self.assertRaises(RuntimeError) as caught:
                 await asyncio.wait_for(self.run_job(fetch), 2)
         self.assertIs(caught.exception, failure)
@@ -299,8 +299,8 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                     if cleanup_fails:
                         session.rollback.side_effect = OSError("rollback failed")
                         session.close.side_effect = OSError("close failed")
-                    with patch.object(ask_db, "AsyncDBSession", return_value=session):
-                        task = asyncio.create_task(self.run_job(ask_db.get_fens_for_analysis))
+                    with patch.object(analysis_selection, "AsyncDBSession", return_value=session):
+                        task = asyncio.create_task(self.run_job(analysis_selection.get_fens_for_analysis))
                         try:
                             await asyncio.wait_for(entered.wait(), 2)
                             task.cancel("external cancellation")
@@ -483,7 +483,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                 await fail_sibling.wait()
                 raise sibling_failure
             if owner == "selector":
-                return await ask_db.get_fens_for_analysis(limit)
+                return await analysis_selection.get_fens_for_analysis(limit)
             return session, ["fen"]
 
         async def run_observed_job():
@@ -502,7 +502,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
             session.rollback.side_effect = rollback
 
         with patch.object(analysis, "ANALYSIS_CONCURRENCY", 2), \
-             patch.object(ask_db, "AsyncDBSession", return_value=session), \
+             patch.object(analysis_selection, "AsyncDBSession", return_value=session), \
              patch.object(analysis.asyncio, "gather", observe_drain):
             task = asyncio.create_task(run_observed_job())
             try:
@@ -622,7 +622,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
         committed, failed, empty = session_for(["fen"]), session_for(), session_for()
         failure = RuntimeError("second pass unavailable")
         failed.begin.side_effect = failure
-        with patch.object(ask_db, "AsyncDBSession", side_effect=[committed, failed, empty]):
+        with patch.object(analysis_selection, "AsyncDBSession", side_effect=[committed, failed, empty]):
             with self.assertRaises(RuntimeError) as caught:
                 await analysis.run_analysis_loop_job(self.ctx, "all", 3, 1, 1, 60, 100000)
         self.assertIs(caught.exception, failure)
@@ -643,7 +643,7 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                 self.engine.reset_mock()
                 attempt = f"attempt-{name}"
                 self.reset.return_value = attempt
-                with patch.object(ask_db, "AsyncDBSession", side_effect=lambda: session_for(["fen"])):
+                with patch.object(analysis_selection, "AsyncDBSession", side_effect=lambda: session_for(["fen"])):
                     await entry()
                 self.reset.assert_awaited_once_with(self.ctx, self.ctx["job_id"])
                 self.assertGreater(self.engine.await_count, 1)

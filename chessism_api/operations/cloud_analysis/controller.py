@@ -83,7 +83,7 @@ async def reserve(job, limit):
             await session.flush()
             await history.transition(session, run, None, 'preparing')
         return
-    from chessism_api.database.postgresql.ask_db import (
+    from chessism_api.database.postgresql.analysis_selection import (
         get_fens_for_analysis, get_player_fens_for_analysis, get_game_set_fens_for_analysis,
     )
     selection = job.selection

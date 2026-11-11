@@ -264,3 +264,34 @@ Rating, tablebase and player-summary consumers are not yet converted; this is st
 an intermediate Stage A checkout, not a deployment-ready runtime. The focused gate
 uses actual PostgreSQL and synthetic child scheduling; it does not exercise live
 Chess.com, Stockfish, GCP or production-scale throughput.
+
+
+## A2.3 analysis selection and reservation boundary
+
+`analysis_selection.py` owns global, player and frozen-game acquisition, plus the
+frozen-scope remaining/completion reads. Their definitions are removed from
+`ask_db.py`; direct local/cloud callers and test patch targets move together.
+Successful empty selection returns `(None, None)`. A nonempty lease transfers an
+open transaction to its caller. Acquisition errors propagate after cleanup; cleanup
+failure is never successful exhaustion. The accepted P1 cleanup function body is
+unchanged, and the three duplicated acquisition lifecycles now share one function.
+
+Global/player frequency ordering is preserved. Player membership uses numeric
+participants and EXISTS, so repeated occurrences and self-play do not consume the
+batch limit. Frozen-game selection and durable cloud queue construction share the
+same candidate SQL, retaining independent minimum game/move priorities and the
+FEN-text tie-break. Queries use native `is_white`; no layout/profile is selected.
+
+Cloud queue identity and page limits are unchanged. Build checkpoints commit in
+their existing two stages; reservation hands off candidate removals with the FEN
+locks, to be committed atomically with claims by the application. Skipped locked
+candidates remain available. Failed/cancelled acquisition uses the same guarded
+cleanup as local selection, including rollback failure and repeated cancellation.
+Live claim subtraction still uses a separate, bounded fresh-snapshot statement.
+
+The focused selection gate includes actual PostgreSQL leases/queues and all P1
+regressions. It reuses the completed 198-check ingestion/schema gate for unchanged
+inputs, rather than repeating that workload. Existing opt-in legacy database
+fixtures are still pending the final canonical integration mapping; none are
+silently skipped or treated as canonical verification. Evaluation publication,
+receipts, tablebase and durable projection recovery remain the next A2.3 subgate.

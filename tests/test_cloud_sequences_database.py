@@ -163,7 +163,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         new_fen='8/8/8/8/8/8/2k5/6K1 w - -'
         async with AsyncDBSession() as session,session.begin():
             session.add(Fen(fen=new_fen,n_games=1000,moves_counter='{}'))
-        with self.cloud_stubs(objects), patch('chessism_api.database.postgresql.ask_db.get_fens_for_analysis', side_effect=AssertionError('reselected')):
+        with self.cloud_stubs(objects), patch('chessism_api.database.postgresql.analysis_selection.get_fens_for_analysis', side_effect=AssertionError('reselected')):
             stopped=False
             for _ in range(60):
                 await self.tick()
