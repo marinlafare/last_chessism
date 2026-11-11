@@ -8,8 +8,6 @@ import chess
 import chess.syzygy
 from arq.connections import ArqRedis
 from arq.jobs import Job, JobStatus
-from sqlalchemy import bindparam, func, text, update
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.ask_db import (
     increment_game_analysis_summary_for_scored_fens,
@@ -21,14 +19,17 @@ from chessism_api.database.postgresql.ask_db import (
     refresh_scored_rating_summary,
 )
 from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
-from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import Fen
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter
 from chessism_api.operations.ingestion_pipeline.progress import write_job_progress
 from chessism_api.operations.redis_ownership import release_owned
-from chessism_api.operations.tablebase_batches import CandidateSpool, save_compact_batch
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+from chessism_api.database.postgresql.analysis_selection import release_analysis_session
+from chessism_api.database.postgresql.tablebase_repository import (
+    CandidateSpool, clean_game_links, count_tablebase_candidates, has_tablebase_candidates,
+    read_tablebase_batch, lease_tablebase_batch, stage_tablebase_results,
+)
 from chessism_api.operations.tablebase_probe import (
-    TABLEBASE_MAX_PIECES, _best_tablebase_move, _move_rank, _tablebase_score_payload,
+    _best_tablebase_move, _move_rank, _tablebase_score_payload,
     _probe_batch_sync as probe_batch,
 )
 from chessism_api.operations.tablebase_parallel import TablebaseProber
@@ -52,18 +53,6 @@ ACTIVE_JOB_STATUSES = {
     JobStatus.deferred,
     JobStatus.in_progress,
 }
-
-PIECE_COUNT_SQL = (
-    "COALESCE(f.piece_count, "
-    "char_length(translate(split_part(f.fen, ' ', 1), '12345678/', '')))"
-)
-TABLEBASE_CANDIDATE_SQL = f"""
-    f.score IS NULL
-    AND NOT EXISTS (SELECT 1 FROM cloud_fen_claim c WHERE c.fen = f.fen)
-    AND COALESCE(f.analysis_source, '') <> 'tablebase_unavailable'
-    AND {PIECE_COUNT_SQL} BETWEEN 2 AND {TABLEBASE_MAX_PIECES}
-"""
-
 
 def _redis_text(value: Any) -> str:
     if isinstance(value, bytes):
@@ -106,187 +95,9 @@ async def _read_progress(redis: ArqRedis | None, job_id: str) -> dict[str, Any]:
         return {}
 
 
-def _clean_game_links(game_links: Sequence[int] | None) -> list[int]:
-    return list(dict.fromkeys(
-        int(link) for link in (game_links or []) if link is not None
-    ))
-
-
-async def count_tablebase_candidates(game_links: Sequence[int] | None = None) -> int:
-    clean_links = _clean_game_links(game_links)
-    if game_links is not None and not clean_links:
-        return 0
-
-    if clean_links:
-        query = f"""
-            SELECT COUNT(DISTINCT f.fen)::bigint
-            FROM game_fen_association gfa
-            JOIN fen f ON f.fen_id = gfa.fen_id
-            WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
-              AND {TABLEBASE_CANDIDATE_SQL};
-        """
-        params = {"game_links": clean_links}
-    else:
-        query = f"SELECT COUNT(*)::bigint FROM fen f WHERE {TABLEBASE_CANDIDATE_SQL};"
-        params = {}
-
-    async with AsyncDBSession() as session:
-        return int(await session.scalar(text(query), params) or 0)
-
-
-async def has_tablebase_candidates(game_links=None):
-    """Cheap admission check; the worker's single discovery determines the count."""
-    clean_links = _clean_game_links(game_links)
-    if game_links is not None and not clean_links: return False
-    scope = ('JOIN game_fen_association a ON a.fen_id=f.fen_id '
-             'WHERE a.game_link=ANY(CAST(:links AS bigint[])) AND ') if clean_links else 'WHERE '
-    async with AsyncDBSession() as session:
-        return bool(await session.scalar(text(
-            f'SELECT EXISTS(SELECT 1 FROM fen f {scope} {TABLEBASE_CANDIDATE_SQL})'), {'links':clean_links}))
-
-
-async def _read_tablebase_batch(identifiers):
-    """Close the read transaction before probing. Publication rechecks under locks."""
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION READ ONLY'))
-        rows = (await session.execute(text(f'''SELECT f.fen,{PIECE_COUNT_SQL}::smallint AS piece_count
-            FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[])) AND {TABLEBASE_CANDIDATE_SQL}
-            ORDER BY f.fen'''), {'ids':identifiers})).mappings().all()
-        return [dict(row) for row in rows]
-
-
-async def _lease_tablebase_batch(
-    game_links: Sequence[int] | None,
-    limit: int,
-    candidate_ids: list[int] | None = None,
-) -> tuple[AsyncSession | None, list[dict[str, Any]]]:
-    clean_links = _clean_game_links(game_links)
-    if game_links is not None and not clean_links:
-        return None, []
-
-    session = AsyncDBSession()
-    try:
-        await session.begin()
-        if candidate_ids is not None:
-            query = f"""SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
-                FROM fen f WHERE f.fen_id=ANY(CAST(:ids AS bigint[]))
-                  AND {TABLEBASE_CANDIDATE_SQL}
-                ORDER BY f.fen FOR UPDATE OF f"""
-            params = {"ids": candidate_ids}
-        elif clean_links:
-            query = f"""
-                WITH candidate_fens AS MATERIALIZED (
-                    SELECT f.fen, MIN(gfa.n_move) AS first_move
-                    FROM game_fen_association gfa
-                    JOIN fen f ON f.fen_id = gfa.fen_id
-                    WHERE gfa.game_link = ANY(CAST(:game_links AS BIGINT[]))
-                      AND {TABLEBASE_CANDIDATE_SQL}
-                    GROUP BY f.fen
-                )
-                SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
-                FROM candidate_fens candidate
-                JOIN fen f ON f.fen = candidate.fen
-                ORDER BY candidate.first_move, f.fen
-                LIMIT :limit
-                FOR UPDATE OF f SKIP LOCKED;
-            """
-            params = {"game_links": clean_links, "limit": max(1, int(limit))}
-        else:
-            query = f"""
-                SELECT f.fen, {PIECE_COUNT_SQL}::smallint AS piece_count
-                FROM fen f
-                WHERE {TABLEBASE_CANDIDATE_SQL}
-                ORDER BY f.n_games DESC, f.fen
-                LIMIT :limit
-                FOR UPDATE OF f SKIP LOCKED;
-            """
-            params = {"limit": max(1, int(limit))}
-
-        rows = [dict(row) for row in (await session.execute(text(query), params)).mappings()]
-        from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
-        unclaimed = set(await unclaimed_locked_fens(session, [row["fen"] for row in rows]))
-        rows = [row for row in rows if row["fen"] in unclaimed]
-        if not rows:
-            await session.rollback()
-            await session.close()
-            return None, []
-        return session, rows
-    except BaseException:
-        await session.rollback()
-        await session.close()
-        raise
-
-
 def _probe_batch_sync(tablebase, rows):
     # Preserve this shared entry point for callers and selection parity tests.
     return probe_batch(tablebase, rows, best_move=_best_tablebase_move)
-
-
-async def _save_tablebase_batch(
-    session: AsyncSession,
-    solved: list[dict[str, Any]],
-    unavailable: list[dict[str, Any]],
-) -> None:
-    from chessism_api.evaluations import validate_batch
-    validate_batch(solved, source='tablebase')
-    from chessism_api.database.postgresql.compact_storage import compact_for
-    layout = compact_for(session)
-    if layout:
-        await save_compact_batch(session, solved, unavailable)
-        return
-    target = Fen.__table__
-    if solved:
-        prepared = [{
-            "p_fen": item["fen"],
-            "p_piece_count": item["piece_count"],
-            "p_score": item["score"],
-            "p_next_moves": item["next_moves"],
-            "p_wdl_win": item["wdl_win"],
-            "p_wdl_draw": item["wdl_draw"],
-            "p_wdl_loss": item["wdl_loss"],
-            "p_tablebase_wdl": item["tablebase_wdl"],
-            "p_tablebase_dtz": item["tablebase_dtz"],
-        } for item in solved]
-        statement = (
-            update(target)
-            .where(target.c.fen == bindparam("p_fen"))
-            .values(
-                piece_count=bindparam("p_piece_count"),
-                score=bindparam("p_score"),
-                next_moves=bindparam("p_next_moves"),
-                wdl_win=bindparam("p_wdl_win"),
-                wdl_draw=bindparam("p_wdl_draw"),
-                wdl_loss=bindparam("p_wdl_loss"),
-                analysis_source="tablebase",
-                tablebase_wdl=bindparam("p_tablebase_wdl"),
-                tablebase_dtz=bindparam("p_tablebase_dtz"),
-                analyzed_at=func.now(),
-            )
-        )
-        await session.execute(
-            statement,
-            prepared,
-            execution_options={"synchronize_session": False},
-        )
-
-    if unavailable:
-        prepared_unavailable = [{
-            "p_fen": item["fen"],
-            "p_piece_count": item["piece_count"],
-        } for item in unavailable]
-        unavailable_statement = (
-            update(target)
-            .where(target.c.fen == bindparam("p_fen"))
-            .values(
-                piece_count=bindparam("p_piece_count"),
-                analysis_source="tablebase_unavailable",
-            )
-        )
-        await session.execute(
-            unavailable_statement,
-            prepared_unavailable,
-            execution_options={"synchronize_session": False},
-        )
 
 
 async def _analyze_tablebase_positions(
@@ -327,7 +138,7 @@ async def _analyze_tablebase_positions(
     try:
         async with reporter.step("discover_endgames", None, "positions"):
             limit = max(0, int(max_positions)) if max_positions is not None else None
-            await candidates.discover(game_links, limit, TABLEBASE_CANDIDATE_SQL, reporter)
+            await candidates.discover(game_links, limit, reporter.advance)
         target = candidates.count
         reporter.goal("claim_endgames", target)
         reporter.goal("probe_endgames", target)
@@ -337,37 +148,42 @@ async def _analyze_tablebase_positions(
             phase="tablebase", detail=f"Probing {target} positions with {prober.workers} Syzygy processes.",
             ingestion_run_id=ingestion_run_id)
         while identifiers := candidates.read(safe_batch_size):
-            rows = await _read_tablebase_batch(identifiers)
+            rows = await read_tablebase_batch(identifiers)
             async with reporter.step("probe_endgames", len(rows), "positions"):
                 solved, unavailable_rows = await prober.probe(rows)
             # No locks or database connection were held during CPU/file work.
             # A cloud claim or score that arrived meanwhile wins; never overwrite.
-            async with reporter.step("claim_endgames", len(identifiers), "positions"):
-                session, eligible = await _lease_tablebase_batch(
-                    game_links, len(identifiers), candidate_ids=identifiers,
-                ) if rows else (None, [])
-            allowed = {row['fen'] for row in eligible}
-            solved = [row for row in solved if row['fen'] in allowed]
-            unavailable_rows = [row for row in unavailable_rows if row['fen'] in allowed]
-            skipped_total += len(identifiers) - len(solved) - len(unavailable_rows)
-            if session is None:
-                processed += len(identifiers)
-                await _write_progress(redis, job_id, total=progress_total, processed=processed,
-                    failed=unavailable_total, phase="tablebase",
-                    detail=f"Solved {solved_total}; {skipped_total} already scored or reserved.",
-                    ingestion_run_id=ingestion_run_id)
-                continue
+            session = None
             try:
+                async with reporter.step("claim_endgames", len(identifiers), "positions"):
+                    session, eligible = await lease_tablebase_batch(
+                        game_links, len(identifiers), candidate_ids=identifiers,
+                    ) if rows else (None, [])
+                allowed = {row['fen'] for row in eligible}
+                solved = [row for row in solved if row['fen'] in allowed]
+                unavailable_rows = [row for row in unavailable_rows if row['fen'] in allowed]
+                skipped_total += len(identifiers) - len(solved) - len(unavailable_rows)
+                if session is None:
+                    processed += len(identifiers)
+                    await _write_progress(redis, job_id, total=progress_total, processed=processed,
+                        failed=unavailable_total, phase="tablebase",
+                        detail=f"Solved {solved_total}; {skipped_total} already scored or reserved.",
+                        ingestion_run_id=ingestion_run_id)
+                    continue
                 async with reporter.step("save_endgames", len(solved)+len(unavailable_rows), "positions"):
-                    await _save_tablebase_batch(session, solved, unavailable_rows)
+                    await stage_tablebase_results(session, solved, unavailable_rows)
                     from chessism_api.database.postgresql.evaluation_results import increment_new_fen_counts
                     await increment_new_fen_counts(session, solved)
                     await session.commit()
             except BaseException:
-                await session.rollback()
+                if session is not None:
+                    try:
+                        await release_analysis_session(session)
+                    except BaseException as error:
+                        print(f"Failed to release tablebase write session: {error!r}", flush=True)
                 raise
-            finally:
-                await session.close()
+            else:
+                await finish_analysis_cleanup(session.close())
 
             if solved:
                 try:
@@ -381,7 +197,7 @@ async def _analyze_tablebase_positions(
                     await refresh_database_summary_fen_counts()
                     await refresh_scored_position_summary()
                     await refresh_game_analysis_summary(
-                        _clean_game_links(game_links) if game_links is not None else None
+                        clean_game_links(game_links) if game_links is not None else None
                     )
                     raise
 
@@ -457,7 +273,7 @@ async def _enqueue_tablebase_job(redis, *, game_links, max_positions, batch_size
         max_positions=max_positions,
         batch_size=max(1, min(int(batch_size), 5_000)),
         candidate_count=None,
-        game_links=_clean_game_links(game_links) if game_links is not None else None,
+        game_links=clean_game_links(game_links) if game_links is not None else None,
         ingestion_run_id=ingestion_run_id,
         _queue_name='pipeline_queue',
     )
@@ -510,7 +326,7 @@ async def ensure_tablebase_analysis_enqueued(
     elif current_job_id == "reserving":
         return await already_active()
 
-    clean_links = _clean_game_links(game_links)
+    clean_links = clean_game_links(game_links)
     has_work = await has_tablebase_candidates(
         clean_links if game_links is not None else None
     )

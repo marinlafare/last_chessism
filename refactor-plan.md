@@ -108,6 +108,25 @@ checks and relevant formatting/identity/transaction unit assertions. Do not clai
 summary recovery is converted: tablebase and durable outbox conversion follow as
 the next A2.3 gate, before A3. No schema change is needed for this publication gate.
 
+Stockfish publication/receipts passed 136 checks and are committed as `853c720`.
+Next, convert the tablebase adapter in a separate focused gate. Move candidate
+count/admission, streamed numeric-ID discovery, short reads and leases from
+`operations/tablebase.py` / `tablebase_batches.py` into
+`database/postgresql/tablebase_repository.py`. Keep only the numeric-ID temporary
+spool, existing bounded discovery/probe/write sequence and existing ordering;
+use canonical tables and a shared candidate predicate. Move the five-piece policy
+constant to the pure evaluation contract so SQL and probing share it. Replace
+profile-selected publication with the existing bounded COPY/set-based algorithm,
+validate all rows, require a caller-owned transaction, verify identities/unscored
+state/claims under locks, and reject partial updates. Application code keeps the
+score/count commit. Use accepted guarded rollback/closure for leases, including
+errors from reporting immediately after acquisition. Retire tablebase_batches
+only after updating all callers/tests. Preserve probe algorithms/process budgets,
+public ingestion result and current post-commit projection calls. Add actual
+canonical PostgreSQL candidate/write/race/cancellation checks, retain tablebase
+behavior tests and P1 regressions. Durable projection recovery follows this gate;
+no schema change or Stage B work is included here.
+
 ### A3.1 — Canonical game/player queries and summary readers
 Depends on A2.3. Convert routers and operations using game/player queries, navigation,
 rankings, pagination, `home_summary.py`, `player_*` summaries and `common_positions.py`.

@@ -76,7 +76,7 @@ async def exercise(socket, conn):
     from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     from chessism_api.operations.fen_backup import database as fen_backup
     from chessism_api.operations.ingestion_pipeline.game_repository import _sync_player_month_counts
-    from chessism_api.operations.tablebase import _save_tablebase_batch
+    from chessism_api.database.postgresql.tablebase_repository import stage_tablebase_results
     layout=RelationalStorage('public','chessism_archive','chessism_reads','relational_v3')
     engine=create_async_engine(URL.create('postgresql+asyncpg',username='chessism_user',
         host=str(socket),port=55432,database='chessism_db'),
@@ -130,7 +130,7 @@ async def exercise(socket, conn):
                 except ValueError:
                     pass
             async with factory.begin() as session:
-                await _save_tablebase_batch(session,[{'fen':'test-fen-b','piece_count':3,'score':1000.0,
+                await stage_tablebase_results(session,[{'fen':'test-fen-b','piece_count':3,'score':1000.0,
                     'next_moves':'a1a2','wdl_win':1000.0,'wdl_draw':0.0,'wdl_loss':0.0,
                     'tablebase_wdl':2,'tablebase_dtz':1}],[])
             assert await conn.fetchval('SELECT score FROM fen WHERE fen_id=2')==1000

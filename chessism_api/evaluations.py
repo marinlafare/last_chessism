@@ -6,6 +6,7 @@ an engine, a timestamp, or a mate distance for an old evaluation.
 """
 import math
 
+TABLEBASE_MAX_PIECES = 5
 CONTRACT = 'verified_evaluation_v1'
 KINDS = {'unknown': -1, 'unscored': -1, 'cp': 0, 'mate': 1, 'tablebase': 2}
 

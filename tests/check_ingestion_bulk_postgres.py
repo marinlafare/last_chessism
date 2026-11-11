@@ -20,8 +20,8 @@ from chessism_api.database.postgresql.relational_storage import RelationalStorag
 from chessism_api.operations import database_restore_tests as restore
 from chessism_api.operations.ingestion_pipeline.fen_bulk import persist_positions
 from chessism_api.operations.ingestion_pipeline.fen_core import process_single_game_sync, aggregate_fen_data
-from chessism_api.operations import tablebase
-from chessism_api.operations.tablebase_batches import CandidateSpool
+from chessism_api.database.postgresql import tablebase_repository as tablebase
+from chessism_api.database.postgresql.tablebase_repository import CandidateSpool
 
 
 async def fixture(conn):
@@ -116,31 +116,31 @@ async def exercise(conn, factory):
         VALUES($1,0,'#0_1',2)""", endgame)
     identity = await conn.fetchval("SELECT fen_id FROM fen WHERE fen=$1", endgame)
     with patch.object(tablebase, "AsyncDBSession", factory):
-        session, selected = await tablebase._lease_tablebase_batch(None, 1, candidate_ids=[identity])
+        session, selected = await tablebase.lease_tablebase_batch(None, 1, candidate_ids=[identity])
         assert len(selected) == 1
         solved = {"fen": endgame, "piece_count": 2, "score": 0, "next_moves": "a1b1",
                   "wdl_win": 0, "wdl_draw": 1000, "wdl_loss": 0,
                   "tablebase_wdl": 0, "tablebase_dtz": 0}
-        await tablebase._save_tablebase_batch(session, [solved], [])
+        await tablebase.stage_tablebase_results(session, [solved], [])
         await session.commit()
         await session.close()
         assert await conn.fetchval("SELECT analysis_source FROM fen WHERE fen=$1", endgame) == "tablebase"
         await conn.execute("UPDATE fen SET score=NULL,analysis_source=NULL WHERE fen=$1", endgame)
         await conn.execute("INSERT INTO cloud_fen_claim VALUES($1)", endgame)
-        session, selected = await tablebase._lease_tablebase_batch(None, 1, candidate_ids=[identity])
+        session, selected = await tablebase.lease_tablebase_batch(None, 1, candidate_ids=[identity])
         assert session is None and selected == []
         await conn.execute("DELETE FROM cloud_fen_claim WHERE fen=$1", endgame)
         # Reads hold no FEN lock while probing. A concurrent score/claim wins at
         # publication, and is not mislabeled or counted as our tablebase result.
         for changed in ('claim','score'):
             await conn.execute("UPDATE fen SET score=NULL,analysis_source=NULL WHERE fen=$1",endgame)
-            initial=await tablebase._read_tablebase_batch([identity])
+            initial=await tablebase.read_tablebase_batch([identity])
             assert len(initial)==1
             async with conn.transaction():
                 await conn.execute('SELECT fen_id FROM fen WHERE fen_id=$1 FOR UPDATE NOWAIT',identity)
                 if changed=='claim':await conn.execute('INSERT INTO cloud_fen_claim VALUES($1)',endgame)
                 else:await conn.execute("UPDATE fen SET score=77,analysis_source='stockfish' WHERE fen_id=$1",identity)
-            session,selected=await tablebase._lease_tablebase_batch(None,1,candidate_ids=[identity])
+            session,selected=await tablebase.lease_tablebase_batch(None,1,candidate_ids=[identity])
             assert session is None and selected==[]
             if changed=='claim':await conn.execute('DELETE FROM cloud_fen_claim WHERE fen=$1',endgame)
             else:assert await conn.fetchval('SELECT score FROM fen WHERE fen_id=$1',identity)==77
@@ -149,17 +149,16 @@ async def exercise(conn, factory):
         # second, fresh snapshot must reject it rather than overwrite a claim.
         async with factory.begin() as reserver:
             await reserver.execute(text("SELECT fen FROM fen WHERE fen=:fen FOR UPDATE"), {"fen": endgame})
-            waiting = asyncio.create_task(tablebase._lease_tablebase_batch(None, 1, candidate_ids=[identity]))
+            waiting = asyncio.create_task(tablebase.lease_tablebase_batch(None, 1, candidate_ids=[identity]))
             await asyncio.sleep(0.05)
             await reserver.execute(text("INSERT INTO cloud_fen_claim VALUES(:fen)"), {"fen": endgame})
         session, selected = await asyncio.wait_for(waiting, 5)
         assert session is None and selected == []
         await conn.execute("DELETE FROM cloud_fen_claim WHERE fen=$1", endgame)
-    from chessism_api.operations import tablebase_batches
-    with patch.object(tablebase_batches, "AsyncDBSession", factory):
+    with patch.object(tablebase, "AsyncDBSession", factory):
         spool = CandidateSpool()
         try:
-            await spool.discover(None, 1000, tablebase.TABLEBASE_CANDIDATE_SQL, AsyncMock())
+            await spool.discover(None, 1000, AsyncMock())
             assert spool.count == 1
             assert spool.read(10) == [identity]
             assert spool.read(10) == []

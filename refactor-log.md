@@ -1030,3 +1030,44 @@ independently confirmed using the run label. The failed fixture run is retained.
 Publication and atomic receipts are ready for their local commit. Tablebase
 persistence, durable recovery and later Stage A consumers remain outstanding.
 No acceptance, push, merge, deployment or production-data operation.
+
+## A2.3 tablebase persistence gate started
+
+Verified publication/receipts committed locally as `853c720`; working tree was
+clean. Inspection found profile-selected tablebase writes, mixed query/orchestration
+responsibilities and unguarded lease cleanup, including the reporting boundary
+after acquisition. Convert those persistence responsibilities in a bounded gate
+using accepted P1 cleanup, preserving probe algorithms and application contracts.
+Durable projection recovery remains a separate mandatory A2.3 gate before A3.
+
+Canonical tablebase persistence is implemented; verification remains pending.
+The feature adapter owns candidate SQL, read-only discovery/spooling, lease
+acquisition and bounded COPY publication. The application owns the score/count
+commit and guarded cleanup, now covering reporting failures immediately after
+lease acquisition. Retired tablebase_batches only after its callers moved.
+No probe-algorithm/process-budget, backup, schema-version or public-result change.
+
+Prepared 131 checks: 21 offline/PostgreSQL (16 new), 42 related contracts (three
+new cleanup regressions), and 68 accepted P1 checks. Syntax and diff checks pass.
+The runner explicitly checks the retired module stays absent; its original hash
+is retained separately. Frozen existing inputs: 1,723; original unchanged: 1,655;
+changed/retired originals: 44, including one removed module. Failed attempts and
+prior evidence remain intact. Resource limits and cleanup are unchanged.
+Evidence: /tmp/chessism-canonical-a2-tablebase-20261110-01.
+
+A2.3 tablebase verification launched; supervisor PID 2482924. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-tablebase-20261110-01/monitor.py`.
+Returning control without polling. Review results/source integrity/owned cleanup
+after the user reports completion; no commit before the gate passes.
+
+## A2.3 tablebase persistence gate passed and reviewed
+
+All 131 checks passed: 21 offline/PostgreSQL (16 new), 42 related contracts
+(three new cleanup regressions), and all 68 accepted P1 checks; no failures,
+errors or skips. Supervisor 15.65s. Reviewed structured results and raw logs.
+All 1,723 frozen inputs match, and the retired tablebase_batches module remains
+absent. All five owned containers were removed, independently confirmed by the
+exact run label. Probe algorithms/process budgets remain unchanged.
+
+Ready for the local tablebase persistence commit. Durable projection recovery
+remains the next mandatory A2.3 gate; Stage A is not complete or accepted.

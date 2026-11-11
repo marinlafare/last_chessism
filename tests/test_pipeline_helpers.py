@@ -988,10 +988,10 @@ class TablebaseAnalysisAsyncTests(unittest.IsolatedAsyncioTestCase):
             patch.object(tablebase, "CandidateSpool", return_value=candidates),
             patch.object(tablebase.os.path, "isdir", return_value=True),
             patch.object(tablebase, 'TablebaseProber', return_value=fake_prober),
-            patch.object(tablebase, '_read_tablebase_batch', AsyncMock(return_value=[])),
+            patch.object(tablebase, 'read_tablebase_batch', AsyncMock(return_value=[])),
             patch.object(
                 tablebase,
-                "_lease_tablebase_batch",
+                "lease_tablebase_batch",
                 new_callable=AsyncMock,
                 return_value=(None, []),
             ),

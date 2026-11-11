@@ -3,7 +3,7 @@ from typing import Any
 import chess
 import chess.syzygy
 
-TABLEBASE_MAX_PIECES = 5
+from chessism_api.evaluations import TABLEBASE_MAX_PIECES
 
 
 def _move_rank(

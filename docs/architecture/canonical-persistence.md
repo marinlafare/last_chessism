@@ -327,3 +327,34 @@ The publication gate passed 136 checks: 25 offline/PostgreSQL, 43 related unit
 contracts and all 68 P1 regressions, with no failures, errors or skips. Synthetic
 cloud payloads were validated by the real checkpoint validator. This verifies
 canonical persistence and receipt behavior without live Stockfish or GCP access.
+
+
+## A2.3 tablebase persistence boundary
+
+`tablebase_repository.py` owns the shared canonical candidate predicate, numeric-ID
+spool, admission/counts, short reads, locked acquisition and bounded publication.
+The five-piece policy is shared with the unchanged pure probe algorithm through
+`evaluations.py`. Discovery streams 5,000 IDs at a time to temporary disk and
+closes its cursor/session; probing holds no database session or FEN locks. Global
+frequency order, scoped first-move order and SKIP LOCKED semantics are preserved.
+Explicit candidate-ID publication waits for the ordered locks and then performs
+the accepted fresh-snapshot score/claim recheck.
+
+The application owns the acquired write transaction, including exact new-score
+counts. Canonical publication validates the full bounded batch, refuses missing,
+scored or claimed FENs, and uses the existing COPY/set-based update without a
+storage-profile branch. Unavailable positions stay unscored and remain eligible
+for Stockfish. Partial updates and missing totals fail the whole write unit.
+Cleanup covers failures after lease acquisition as well as save/commit failures;
+rollback and closure use the accepted P1 shielded cleanup mechanism.
+
+`operations/tablebase_batches.py` is retired after its callers move to the concrete
+adapter. Probe algorithms, process limits, result contracts and post-commit
+projection calls are unchanged. Durable summary recovery is still the next gate;
+this intermediate runtime is not ready for deployment. New integration evidence
+will use synthetic probes and an isolated PostgreSQL instance, not actual Syzygy
+files, Stockfish, production data or GCP.
+
+The tablebase gate passed 131 checks: 21 offline/PostgreSQL, 42 related contracts
+and all 68 P1 regressions, with zero failures/errors/skips. It verifies actual
+canonical persistence with synthetic probes; real Syzygy files are not exercised.

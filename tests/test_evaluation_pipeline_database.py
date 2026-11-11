@@ -8,7 +8,7 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import Fen, FenContinuation, DatabaseSummary
 from chessism_api.database.postgresql.evaluation_results import stage_fen_results, increment_new_fen_counts
 from chessism_api.operations.fen_backup.database import restore_batch
-from chessism_api.operations.tablebase import _save_tablebase_batch
+from chessism_api.database.postgresql.tablebase_repository import stage_tablebase_results
 
 
 @unittest.skipUnless(cloud.TEST_URL, 'requires explicitly isolated PostgreSQL')
@@ -99,7 +99,7 @@ class EvaluationPipelineTests(unittest.IsolatedAsyncioTestCase):
         rows = [{'fen': self.fens[0], 'piece_count': 2, 'score': 0, 'next_moves': None,
                  'wdl_win': 0, 'wdl_draw': 1000, 'wdl_loss': 0, 'tablebase_wdl': 0, 'tablebase_dtz': 0}]
         async with AsyncDBSession() as s, s.begin():
-            await _save_tablebase_batch(s, rows, [])
+            await stage_tablebase_results(s, rows, [])
             await increment_new_fen_counts(s, rows)
         score, source, stamp, analyzed, unscored = await self.saved()
         self.assertEqual((score, source, analyzed, unscored), (0, 'tablebase', 1, 2))

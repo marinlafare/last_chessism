@@ -42,7 +42,7 @@ async def application_checks(conn, socket, database, passed):
     from chessism_api.database.postgresql.evaluation_results import stage_fen_results
     from chessism_api.operations.fen_backup import database as fen_backup
     from chessism_api.operations.fen_backup.archive import validate_record
-    from chessism_api.operations.tablebase import _save_tablebase_batch
+    from chessism_api.database.postgresql.tablebase_repository import stage_tablebase_results
     from chessism_api.database.postgresql.relational_storage import describe_contract,create_relational_engine
     engine,factory=factory_for(socket,database)
     try:
@@ -177,7 +177,7 @@ async def application_checks(conn, socket, database, passed):
             terminal='8/8/8/8/8/8/4k3/6K1 w - -'
             async with factory.begin() as session:
                 await DBInterface(Fen).create_all_with_session(session,[{'fen':terminal,'n_games':0,'moves_counter':'#0_1'}])
-                await _save_tablebase_batch(session,[{'fen':terminal,'piece_count':2,'score':0.0,'next_moves':'',
+                await stage_tablebase_results(session,[{'fen':terminal,'piece_count':2,'score':0.0,'next_moves':'',
                     'wdl_win':0.0,'wdl_draw':1000.0,'wdl_loss':0.0,'tablebase_wdl':0,'tablebase_dtz':0}],[])
             await passed('strict_integer_rejection_and_tablebase_writer')
             await conn.execute('INSERT INTO public.home_summary_source(id,revision) VALUES(1,1) ON CONFLICT DO NOTHING')

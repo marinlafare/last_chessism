@@ -17,7 +17,7 @@ jobs.py
        -> fen_core.py          pure chess replay and aggregation
        -> fen_repository.py    claims, move reads, state, scoped recounts
   -> tablebase.py       Syzygy marking (outside this package; shared analysis)
-       -> tablebase_batches.py numeric-ID work spool and bulk result updates
+       -> database/postgresql/tablebase_repository.py numeric-ID spool and canonical result writes
        -> tablebase_parallel.py bounded, persistent read-only probe processes
        -> tablebase_probe.py    pure WDL/DTZ/best-move rules
   -> player_salience.py final derived projection (outside this package)

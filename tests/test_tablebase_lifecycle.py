@@ -1,17 +1,79 @@
 """Endgame lifecycle cleanup contracts; no database, Redis or cloud access."""
+import asyncio
 import json
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from arq.jobs import JobStatus
 
 from chessism_api.operations import tablebase
+from chessism_api.database.postgresql import tablebase_repository
 from chessism_api.operations.ingestion_pipeline.progress import PROGRESS_TTL_SECONDS
 from chessism_api.operations.redis_ownership import RELEASE_OWNED_LUA
 
 
 class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
+    async def test_selection_error_survives_rollback_failure_and_closes_session(self):
+        session = AsyncMock()
+        session.begin.side_effect = ValueError('selection failed')
+        session.rollback.side_effect = OSError('rollback failed')
+        with patch.object(tablebase_repository, 'AsyncDBSession', return_value=session):
+            with self.assertRaisesRegex(ValueError, 'selection failed'):
+                await tablebase_repository.lease_tablebase_batch(None, 1)
+        session.rollback.assert_awaited_once()
+        session.close.assert_awaited_once()
+
+    async def test_empty_selection_cleanup_error_is_not_successful_exhaustion(self):
+        session = AsyncMock()
+        result = MagicMock()
+        result.mappings.return_value = []
+        session.execute.return_value = result
+        session.rollback.side_effect = OSError('rollback failed')
+        with patch.object(tablebase_repository, 'AsyncDBSession', return_value=session):
+            with self.assertRaisesRegex(OSError, 'rollback failed'):
+                await tablebase_repository.lease_tablebase_batch(None, 1)
+        session.close.assert_awaited_once()
+
+    async def test_cancelled_acquisition_drains_cleanup_through_repeated_cancellation(self):
+        for phase in ('rollback', 'close'):
+            for rollback_failure in (False, True):
+                with self.subTest(phase=phase, rollback_failure=rollback_failure):
+                    entered, cleaning, release = asyncio.Event(), asyncio.Event(), asyncio.Event()
+                    session = AsyncMock()
+                    async def query(*args):
+                        entered.set()
+                        await asyncio.Future()
+                    async def rollback():
+                        if phase == 'rollback':
+                            cleaning.set()
+                            await release.wait()
+                        if rollback_failure:
+                            raise OSError('rollback failed')
+                    async def close():
+                        if phase == 'close':
+                            cleaning.set()
+                            await release.wait()
+                    session.execute.side_effect = query
+                    session.rollback.side_effect = rollback
+                    session.close.side_effect = close
+                    with patch.object(tablebase_repository, 'AsyncDBSession', return_value=session):
+                        task = asyncio.create_task(tablebase_repository.lease_tablebase_batch(None, 1))
+                        await asyncio.wait_for(entered.wait(), 1)
+                        task.cancel()
+                        await asyncio.wait_for(cleaning.wait(), 1)
+                        try:
+                            for _ in range(2):
+                                task.cancel()
+                                await asyncio.sleep(0)
+                                self.assertFalse(task.done())
+                        finally:
+                            release.set()
+                            with self.assertRaises(asyncio.CancelledError):
+                                await asyncio.wait_for(task, 1)
+                    session.rollback.assert_awaited_once()
+                    session.close.assert_awaited_once()
+
     async def test_result_writer_drops_a_position_claimed_during_probing(self):
         candidates=SimpleNamespace(count=2,discover=AsyncMock(),read=unittest.mock.Mock(side_effect=[[1,2],[]]),close=unittest.mock.Mock())
         rows=[{'fen':'first','piece_count':3},{'fen':'second','piece_count':4}]
@@ -20,9 +82,9 @@ class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
         with (patch.object(tablebase.os.path,'isdir',return_value=True),
               patch.object(tablebase,'CandidateSpool',return_value=candidates),
               patch.object(tablebase,'TablebaseProber',return_value=prober),
-              patch.object(tablebase,'_read_tablebase_batch',AsyncMock(return_value=rows)),
-              patch.object(tablebase,'_lease_tablebase_batch',AsyncMock(return_value=(session,rows[1:]))),
-              patch.object(tablebase,'_save_tablebase_batch',AsyncMock()) as save,
+              patch.object(tablebase,'read_tablebase_batch',AsyncMock(return_value=rows)),
+              patch.object(tablebase,'lease_tablebase_batch',AsyncMock(return_value=(session,rows[1:]))),
+              patch.object(tablebase,'stage_tablebase_results',AsyncMock()) as save,
               patch('chessism_api.database.postgresql.evaluation_results.increment_new_fen_counts',AsyncMock()) as increment,
               patch.object(tablebase,'increment_scored_position_summary_for_scored_fens',AsyncMock()),
               patch.object(tablebase,'increment_game_analysis_summary_for_scored_fens',AsyncMock()),
@@ -42,8 +104,8 @@ class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
         with (patch.object(tablebase.os.path,'isdir',return_value=True),
               patch.object(tablebase,'CandidateSpool',return_value=candidates),
               patch.object(tablebase,'TablebaseProber',return_value=prober),
-              patch.object(tablebase,'_read_tablebase_batch',AsyncMock(return_value=[{'fen':'first'}])),
-              patch.object(tablebase,'_lease_tablebase_batch',AsyncMock()) as lease):
+              patch.object(tablebase,'read_tablebase_batch',AsyncMock(return_value=[{'fen':'first'}])),
+              patch.object(tablebase,'lease_tablebase_batch',AsyncMock()) as lease):
             with self.assertRaisesRegex(RuntimeError,'probe failed'):
                 await tablebase.analyze_tablebase_positions({},refresh_projections=False)
         lease.assert_not_awaited();prober.close.assert_awaited_once_with(abort=True)
