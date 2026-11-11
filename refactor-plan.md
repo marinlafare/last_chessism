@@ -160,6 +160,37 @@ keep global/player/historical distinctions. Move cohesive remaining functions fr
 `ask_db.py`; convert side-specific keys through all callers. Verify ties, stable
 pagination, empty output, dates/months, self-play and repeated FENs.
 
+First A3.1 subgate: complete the default durable recovery callback. Define the
+side-keyed `game_player_engine_summary` and manual CUDA control singleton in
+canonical projections, bump to version 6 and reject versions 1–5. Extract unchanged
+accuracy constants/pure functions to `chessism_api/accuracy.py`; existing CPU/GPU
+and research consumers import that policy directly. Move the existing CPU SQL
+calculation from `operations/player_game_scores.py` to the concrete caller-owned
+`database/postgresql/engine_summary.py`, using native boolean sides and canonical
+FEN/coverage relationships; preserve every numerical formula. Keep the application
+operation as transaction owner, preserve manual deferral and lock its control row
+against concurrent activation. Refresh locks games in order before a fresh read.
+Move full/affected-FEN coverage refreshes from `ask_db.py` to
+`operations/game_analysis_summary.py`, reuse `game_coverage`, preserve absolute
+replay and existing coverage-before-player commit boundaries. Remove the obsolete
+strict switch: the canonical path always propagates failures. Update all direct
+callers/imports/mock targets, including backup refresh imports only; no backup logic
+changes. Bind recovery's default callback to its supplied session factory, with
+no transaction held across the callback. Preserve injected callback semantics
+apart from removal of the redundant strict keyword. Do not convert remaining
+readers/GPU publication or delete the old coverage adapter before their A3/A4 gates.
+
+Verify actual default recovery, partial summary failure/backoff, repeated replay,
+side identities/self-play/owner changes, eligible/incomplete/zero/variant games,
+scoped vs full refresh, empty selections, repeated FENs and numerical equivalence
+against the existing independent scalar accuracy oracle. Cover transaction rollback,
+query errors, concurrent overlapping refresh, manual deferral/activation, cancellation
+and no connection leaks. Re-run affected canonical schema/writer/recovery suites
+and accepted P1 regressions; preserve baseline failures and old opt-in fixture
+conversion debt. Commit only after the focused gate passes.
+
+The first A3.1 subgate passed all 285 checks; remaining game/player readers follow.
+
 ### A3.2 — Research, exports, graph, administration and synthetic plans
 Depends on A3.1. Define remaining canonical auxiliary structures and convert
 `canonical_blunders/`, `cuda_summaries/`, `research_algorithms/`, `exports/`,

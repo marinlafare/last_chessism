@@ -140,14 +140,14 @@ class ProjectionTests(unittest.IsolatedAsyncioTestCase):
         session.__aenter__.return_value = session
         timings = StageTimings()
         with patch.object(importer, 'AsyncDBSession', return_value=session), \
-             patch('chessism_api.database.postgresql.ask_db.refresh_game_analysis_summary', new_callable=AsyncMock) as refresh:
+             patch('chessism_api.operations.game_analysis_summary.refresh_game_analysis_summary', new_callable=AsyncMock) as refresh:
             await importer.refresh_projections(run_id='run', timings=timings)
         self.assertEqual(session.scalars.await_count, 2)
         query, params = session.scalars.call_args.args
         self.assertIn('SELECT DISTINCT gfa.game_link', str(query))
         self.assertIn('unnest(p.fen)', str(query))
         self.assertEqual(params, {'refs': ['run:positions']})
-        refresh.assert_awaited_once_with([101, 202], strict=True)
+        refresh.assert_awaited_once_with([101, 202])
         self.assertEqual([r['phase'] for r in timings.rows],
                          ['summary_affected_games', 'summary_game_coverage_and_players'])
 
@@ -157,7 +157,7 @@ class ProjectionTests(unittest.IsolatedAsyncioTestCase):
             session.scalars.side_effect = [Mock(all=Mock(return_value=refs)), Mock(all=Mock(return_value=[]))]
             session.__aenter__.return_value = session
             with patch.object(importer, 'AsyncDBSession', return_value=session), \
-                 patch('chessism_api.database.postgresql.ask_db.refresh_game_analysis_summary', new_callable=AsyncMock) as refresh:
+                 patch('chessism_api.operations.game_analysis_summary.refresh_game_analysis_summary', new_callable=AsyncMock) as refresh:
                 if error:
                     with self.assertRaisesRegex(ValueError, 'Missing work-unit'):
                         await importer.refresh_projections(run_id='run')

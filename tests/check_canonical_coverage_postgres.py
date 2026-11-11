@@ -126,12 +126,11 @@ async def check(factory, connection, layout):
         assert all(item['game_link'] != 1 for item in data[2])
     await connection.execute("UPDATE candidate.fen_summary_refresh SET retry_after=now()-interval '1 second'")
     from chessism_api.operations.relational_coverage import refresh_coverage
-    async def real_coverage(links, *, strict):
-        assert strict
+    async def real_coverage(links):
         async with factory() as s, s.begin():
             await refresh_coverage(s, links)
-    async def racing_refresh(links, *, strict):
-        await real_coverage(links, strict=strict)
+    async def racing_refresh(links):
+        await real_coverage(links)
         await connection.execute('UPDATE candidate.fen SET score=score+1 WHERE fen_id=1')
     raced = await recovery.recover_batch(factory=factory, refresh=racing_refresh)
     assert raced['pending'] == pending  # Never acknowledge a newer source revision.
@@ -148,14 +147,12 @@ async def check(factory, connection, layout):
     await connection.execute('UPDATE candidate.fen SET score=score+1 WHERE fen_id=4')
     # The production refresh can commit coverage and then fail its CPU summary;
     # recovery must retain the request until both stages have succeeded.
-    from chessism_api.database.postgresql import ask_db
-    from chessism_api.operations import player_game_scores
+    from chessism_api.operations import game_analysis_summary
     cpu_summary = AsyncMock(side_effect=RuntimeError('synthetic engine-summary failure'))
-    with patch.object(ask_db, 'AsyncDBSession', factory), \
-            patch.object(player_game_scores, 'refresh_game_player_engine_summaries', cpu_summary), \
+    with patch.object(game_analysis_summary, 'refresh_game_player_engine_summaries', cpu_summary), \
             patch.object(recovery.LOG, 'exception'):
         assert (await recovery.recover_batch(factory=factory))['pending'] == 1
-        cpu_summary.assert_awaited_once_with((9,))
+        cpu_summary.assert_awaited_once_with((9,), factory=factory)
         await connection.execute("UPDATE candidate.fen_summary_refresh SET retry_after=now()-interval '1 second'")
         cpu_summary.side_effect = None
         assert (await recovery.recover_batch(factory=factory))['pending'] == 0

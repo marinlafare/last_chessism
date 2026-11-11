@@ -116,3 +116,26 @@ CREATE TABLE scored_position_summary (
     refreshed_at timestamptz NOT NULL DEFAULT now()
 );
 INSERT INTO scored_position_summary DEFAULT VALUES;
+
+-- Ownership comes from game_player's derived sides, never a second player key.
+CREATE TABLE game_player_engine_summary (
+    game_link bigint NOT NULL REFERENCES game(link) ON DELETE CASCADE,
+    is_white boolean NOT NULL,
+    analyzed_player_moves integer NOT NULL CHECK (analyzed_player_moves >= 0),
+    own_move_cp_gain double precision NOT NULL,
+    own_move_cp_loss double precision NOT NULL,
+    game_efficiency double precision,
+    mean_win_percent_loss double precision, median_win_percent_loss double precision,
+    mate_for_positions integer NOT NULL, mate_against_positions integer NOT NULL,
+    final_player_cp double precision,
+    result text NOT NULL CHECK (result IN ('win','draw','loss')),
+    end_by text NOT NULL,
+    PRIMARY KEY (game_link,is_white)
+);
+
+-- Preserve the existing manual-run switch. Other CUDA structures follow in A3.2.
+CREATE TABLE cuda_summary_control (
+    id boolean PRIMARY KEY DEFAULT true CHECK (id),
+    manual boolean NOT NULL DEFAULT false
+);
+INSERT INTO cuda_summary_control DEFAULT VALUES;

@@ -51,8 +51,7 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
         async with write_transaction(self.factory) as session:
             await stage_fen_results(session, [{'fen': fen, 'score': score, 'next_moves': None}], [], count_new=True)
 
-    async def coverage(self, links, *, strict):
-        self.assertTrue(strict)
+    async def coverage(self, links):
         self.assertEqual(self.engine.pool.checkedout(), 0)
         async with write_transaction(self.factory) as session:
             await refresh_coverage(session, links)
@@ -69,7 +68,7 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
         await self.publish()
         before = await self.pending()
         self.assertFalse(await canonical.initialize(self.db))
-        self.assertEqual(await canonical.validate(self.db), 5)
+        self.assertEqual(await canonical.validate(self.db), 6)
         self.assertEqual(await self.pending(), before)
 
     async def test_local_scores_and_refresh_requests_commit_or_rollback_together(self):
@@ -172,8 +171,8 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
 
     async def test_failed_refresh_after_projection_commit_retains_requests_and_backoff(self):
         await self.publish()
-        async def partial_refresh(links, *, strict):
-            await self.coverage(links, strict=strict)
+        async def partial_refresh(links):
+            await self.coverage(links)
             raise RuntimeError('later player summary failed')
         result = await self.recover(partial_refresh)
         self.assertEqual((result['processed'], result['pending']), (0, 2))
@@ -190,8 +189,8 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
     async def test_source_change_during_refresh_retains_newer_revision(self):
         await self.publish()
         before = {r['game_link']: r['revision'] for r in await self.pending()}
-        async def racing_refresh(links, *, strict):
-            await self.coverage(links, strict=strict)
+        async def racing_refresh(links):
+            await self.coverage(links)
             await self.db.execute('UPDATE fen SET score=score+1 WHERE fen=$1', FENS[0])
         result = await self.recover(racing_refresh)
         self.assertEqual((result['processed'], result['pending']), (2, 2))
@@ -200,7 +199,7 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
 
     async def test_failure_cannot_postpone_newer_change_and_fresh_change_clears_prior_error(self):
         await self.publish()
-        async def racing_failure(links, *, strict):
+        async def racing_failure(links):
             await self.db.execute('UPDATE fen SET score=score+1 WHERE fen=$1', FENS[0])
             raise RuntimeError('stale refresh failed')
         await self.recover(racing_failure)
@@ -215,7 +214,7 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
         await self.publish()
         both = asyncio.Event()
         calls = 0
-        async def refresh(links, *, strict):
+        async def refresh(links):
             nonlocal calls
             calls += 1
             if calls == 2:
@@ -223,7 +222,6 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
             await asyncio.wait_for(both.wait(), 2)
             # Another refresher may now own a connection; each operation still
             # performs the absolute refresh in its own transaction.
-            self.assertTrue(strict)
             async with write_transaction(self.factory) as session:
                 await refresh_coverage(session, links)
         results = await asyncio.wait_for(asyncio.gather(self.recover(refresh), self.recover(refresh)), 4)
@@ -236,8 +234,8 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
         await self.publish()
         before = await self.pending()
         entered = asyncio.Event()
-        async def interrupted_refresh(links, *, strict):
-            await self.coverage(links, strict=strict)
+        async def interrupted_refresh(links):
+            await self.coverage(links)
             entered.set()
             await asyncio.Future()
         task = self.start(self.recover(interrupted_refresh))

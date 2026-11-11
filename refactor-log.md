@@ -1122,3 +1122,47 @@ A2 persistence gates are complete and ready for the local recovery commit. A3
 must still convert the default player/analytics callback before claiming complete
 end-to-end recovery. Legacy installer retirement and startup validation remain A4.
 Stage A is not yet complete or accepted. No push, merge, deployment or data access.
+
+## A3.1 canonical summary callback gate started
+
+A2.3 recovery is committed as `9432d16`; entry tree was clean. Inspection confirms
+that the default recovery callback and CPU accuracy SQL still require old read
+views and game_player surrogate identities. Their conversion is the first A3.1
+gate, before page readers. Preserve numerical formulas and separate coverage/player
+commits, manual CUDA deferral and all accepted P1 mechanisms. Define the needed
+side-key projection/control schema first. Concrete steps and verification are in
+the plan. Other feature consumers and retired opt-in fixtures remain later gates.
+
+Canonical coverage/player summary conversion implemented; verification pending.
+Version 6 defines side-key accuracy and manual control. Operations own the existing
+two commits; SQL adapters require the caller's transaction. Default recovery uses
+its supplied factory; errors always propagate and the redundant strict flag is
+removed. Manual control is share-locked against concurrent activation. Shared
+formula function ASTs and accepted cleanup mechanisms remain unchanged. Backup
+refresh imports moved only; no backup body or public ingestion result change.
+
+Prepared 285 checks: 168 offline/canonical PostgreSQL (17 new summary cases),
+49 related contracts and 68 accepted P1 regressions. Five offline checks passed;
+changed Python compiles and diff checks pass. Existing opt-in fixture conversion
+and final full-suite comparison remain A4; no tests are newly skipped or weakened.
+Evidence: /tmp/chessism-canonical-a3-summaries-20261110-01.
+
+A3.1 summary verification launched; supervisor PID 2548302. Startup
+confirmed. Monitor: `python3 /tmp/chessism-canonical-a3-summaries-20261110-01/monitor.py`.
+Returning control without polling. Review saved evidence, source integrity and
+owned cleanup after the user reports completion; no commit before that gate.
+
+## A3.1 canonical summary callback gate passed and reviewed
+
+All 285 checks passed: 168 offline/canonical PostgreSQL (17 new cases), 49 related
+contracts and all 68 P1 regressions. No failures/errors/skips. Supervisor 54.80s.
+The actual default recovery callback succeeds; query failure/backoff, cancellation,
+manual deferral/activation and side ownership are exercised. The unchanged scalar
+accuracy oracle agrees across 13 games/842 positions, maximum error 1.4211e-14.
+The scoped SELECT measured 42.795ms on that fixture, not historical-scale evidence.
+All 1,730 frozen inputs match. All five containers were removed, independently
+confirmed by the exact run label. Raw and structured evidence reviewed.
+
+Ready for local commit. Remaining game/player readers, CUDA publication and
+other feature consumers remain A3; final retirement/full baseline comparison
+remain A4. Stage A is not complete or accepted.

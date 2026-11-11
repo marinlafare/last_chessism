@@ -30,7 +30,7 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
 
     async def test_empty_initialization_and_exact_repeat_preserve_data(self):
         self.assertTrue(await canonical.initialize(self.db))
-        self.assertEqual(await canonical.validate(self.db),5)
+        self.assertEqual(await canonical.validate(self.db),6)
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM public.account'),0)
         self.assertEqual(await self.db.fetch(SELECT_PENDING,10),[])
         await seed(self.db)
@@ -67,7 +67,7 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
             with self.assertRaises(canonical.SchemaMismatch):
                 await fn(self.db)
         self.assertEqual(await self.db.fetchval('SELECT version FROM canonical_schema_version'),99)
-        await self.db.execute('UPDATE canonical_schema_version SET version=5,ddl_sha256=\'wrong\'')
+        await self.db.execute('UPDATE canonical_schema_version SET version=6,ddl_sha256=\'wrong\'')
         with self.assertRaises(canonical.SchemaMismatch):
             await canonical.validate(self.db)
 
@@ -80,11 +80,11 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
     async def test_validation_works_in_read_only_transaction(self):
         await canonical.initialize(self.db)
         async with self.db.transaction(readonly=True):
-            self.assertEqual(await canonical.validate(self.db),5)
+            self.assertEqual(await canonical.validate(self.db),6)
 
     async def test_previous_versions_are_not_silently_reinterpreted(self):
         await canonical.initialize(self.db)
-        for version in (1,2,3,4):
+        for version in (1,2,3,4,5):
             await self.db.execute('UPDATE canonical_schema_version SET version=$1',version)
             for operation in (canonical.validate, canonical.initialize):
                 with self.assertRaises(canonical.SchemaMismatch):

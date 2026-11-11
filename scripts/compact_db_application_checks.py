@@ -3,6 +3,7 @@
 Factories use a private Unix socket; no engine service, Google call or Redis
 queue is started. Synthetic legal analysis results exercise persistence only.
 """
+from chessism_api.operations import game_analysis_summary
 import asyncio
 from contextlib import ExitStack
 from datetime import datetime, timezone
@@ -154,7 +155,7 @@ async def application_checks(conn, socket, database, passed):
             async with factory.begin() as session:
                 await stage_fen_results(session,[{'fen':fen,'score':0.0,'next_moves':'',
                     'wdl_win':0.0,'wdl_draw':1000.0,'wdl_loss':0.0} for fen in remaining],[])
-            assert (await ask_db.refresh_game_analysis_summary(tuple(LINKS[:3]),strict=True))['games']==3
+            assert (await game_analysis_summary.refresh_game_analysis_summary(tuple(LINKS[:3])))['games']==3
             assert await conn.fetchval('SELECT count(*) FROM public.game_analysis_coverage WHERE is_fully_analyzed')==3
             async with factory() as session:
                 exported=[row for batch in [b async for b in fen_backup.export_batches(session,datetime(2020,1,1,tzinfo=timezone.utc))] for row in batch]

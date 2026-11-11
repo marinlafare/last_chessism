@@ -1,33 +1,29 @@
 """Offline checks for bounded coverage reads and explicit empty selections."""
+from chessism_api.operations import game_analysis_summary
 import unittest
 from unittest.mock import AsyncMock, Mock, patch
 
-from chessism_api.database.postgresql import ask_db
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_game_scores
-from chessism_api.operations.relational_coverage import coverage_source_sql, refresh_coverage
-
-
-LAYOUT = RelationalStorage('core', 'archive', 'reads', 'relational_v3')
+from chessism_api.database.postgresql.game_coverage import coverage_source_sql, refresh_coverage
 
 
 class CoverageOptimizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_empty_selection_never_opens_a_database_session(self):
-        with patch.object(ask_db, 'AsyncDBSession') as sessions:
-            self.assertEqual(await ask_db.refresh_game_analysis_summary([]), {'games': 0, 'scope': 'links'})
-            self.assertEqual(await ask_db.refresh_game_analysis_summary([None]), {'games': 0, 'scope': 'links'})
+        with patch.object(game_analysis_summary, 'AsyncDBSession') as sessions:
+            self.assertEqual(await game_analysis_summary.refresh_game_analysis_summary([]), {'games': 0, 'scope': 'links'})
+            self.assertEqual(await game_analysis_summary.refresh_game_analysis_summary([None]), {'games': 0, 'scope': 'links'})
             sessions.assert_not_called()
         with patch.object(player_game_scores, 'AsyncDBSession') as sessions:
             self.assertEqual(await player_game_scores.refresh_game_player_engine_summaries(()),
                              {'games': 0, 'game_players': 0})
             sessions.assert_not_called()
-        session = AsyncMock(info={SESSION_KEY: LAYOUT})
+        session = AsyncMock(in_transaction=Mock(return_value=True))
         self.assertEqual(await refresh_coverage(session, []), [])
         self.assertEqual(await refresh_coverage(session, fens=[]), [])
         session.execute.assert_not_called()
 
     async def test_batch_statistics_precede_locks_and_bounded_aggregate(self):
-        session = AsyncMock(info={SESSION_KEY: LAYOUT})
+        session = AsyncMock(in_transaction=Mock(return_value=True))
         session.execute.return_value = Mock(mappings=Mock(return_value=[]))
         session.scalar.return_value = 2
         self.assertEqual(await refresh_coverage(session, [12, 13, 12]), [])
@@ -42,7 +38,7 @@ class CoverageOptimizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('WHERE a.game_link=t.link HAVING count(*)>0', sql[write])
 
     async def test_fen_scope_stays_scoped_even_without_game_ids(self):
-        session = AsyncMock(info={SESSION_KEY: LAYOUT})
+        session = AsyncMock(in_transaction=Mock(return_value=True))
         session.execute.return_value = Mock(mappings=Mock(return_value=[]))
         session.scalar.return_value = 1
         await refresh_coverage(session, fens=['position'])
@@ -51,7 +47,7 @@ class CoverageOptimizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn('CROSS JOIN LATERAL', sql[-1])
 
     async def test_large_cloud_scopes_keep_a_grouped_plan_and_missing_fens_do_no_writes(self):
-        session = AsyncMock(info={SESSION_KEY: LAYOUT})
+        session = AsyncMock(in_transaction=Mock(return_value=True))
         session.execute.return_value = Mock(mappings=Mock(return_value=[]))
         session.scalar.return_value = 10001
         await refresh_coverage(session, fens=['a-common-position'])
@@ -64,8 +60,8 @@ class CoverageOptimizationTests(unittest.IsolatedAsyncioTestCase):
                              for call in session.execute.call_args_list))
 
     def test_full_repair_retains_grouped_sql_and_both_paths_share_score_buckets(self):
-        scoped = coverage_source_sql(LAYOUT, scoped=True)
-        full = coverage_source_sql(LAYOUT, scoped=False)
+        scoped = coverage_source_sql(scoped=True)
+        full = coverage_source_sql(scoped=False)
         self.assertNotIn('LATERAL', full)
         self.assertIn('GROUP BY a.game_link', full)
         for expression in ('count(f.score)', 'abs(f.score)<50', 'abs(f.score)>=50',

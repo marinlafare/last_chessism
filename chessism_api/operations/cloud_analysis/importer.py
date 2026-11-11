@@ -129,9 +129,7 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
     if positions is None:
         raise ValueError('Summary refresh requires positions or a saved run')
     from chessism_api.database.postgresql.models import GameFenAssociation
-    from chessism_api.database.postgresql.ask_db import (
-        refresh_game_analysis_summary,
-    )
+    from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
     links = set()
     async with AsyncDBSession() as session:
         for offset in range(0, len(positions), 1000):
@@ -140,19 +138,22 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
                 Fen.fen.in_([row["fen"] for row in positions[offset:offset + 1000]])
             ).distinct())).all())
     if links:
-        await refresh_game_analysis_summary(links, strict=True)
+        await refresh_game_analysis_summary(links)
 
 
 async def refresh_global_projections():
     # Full-catalog scans run once per UI request, not once per uploaded file/chunk.
-    from chessism_api.database.postgresql.ask_db import refresh_scored_position_summary, refresh_scored_rating_summary
+    from chessism_api.database.postgresql.ask_db import (
+        refresh_scored_position_summary,
+        refresh_scored_rating_summary,
+    )
     await refresh_scored_position_summary()
     await refresh_scored_rating_summary()
 
 
 async def refresh_unit_projections(run_ids, *, timings=None):
     """Deduplicate affected games in SQL; never materialize the parent FEN set."""
-    from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary
+    from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
     measure = timings.measure if timings is not None else lambda phase: nullcontext()
     with measure('summary_affected_games'):
         async with AsyncDBSession() as session:
@@ -170,4 +171,4 @@ async def refresh_unit_projections(run_ids, *, timings=None):
             '''), {'refs': refs})).all()
     if links:
         with measure('summary_game_coverage_and_players'):
-            await refresh_game_analysis_summary(links, strict=True)
+            await refresh_game_analysis_summary(links)

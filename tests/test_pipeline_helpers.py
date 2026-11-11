@@ -1,4 +1,5 @@
 import gzip
+from chessism_api import accuracy
 import inspect
 import json
 import os
@@ -26,7 +27,6 @@ from chessism_api.operations import (
     database_restore_tests,
     player_analytics,
     player_deletion,
-    player_game_scores,
     player_game_explorer,
     player_hero_analytics,
     player_hero_efficiency,
@@ -802,9 +802,9 @@ class PlayerHeroAnalyticsTests(unittest.TestCase):
         )
 
     def test_lichess_move_accuracy_is_player_oriented_and_bounded(self):
-        self.assertEqual(player_game_scores.lichess_move_accuracy(20, 80), 100.0)
-        small_error = player_game_scores.lichess_move_accuracy(20, -20)
-        major_error = player_game_scores.lichess_move_accuracy(200, -300)
+        self.assertEqual(accuracy.lichess_move_accuracy(20, 80), 100.0)
+        small_error = accuracy.lichess_move_accuracy(20, -20)
+        major_error = accuracy.lichess_move_accuracy(200, -300)
 
         self.assertGreater(small_error, major_error)
         self.assertGreaterEqual(major_error, 0.0)

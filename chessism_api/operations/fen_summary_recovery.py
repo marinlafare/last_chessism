@@ -141,17 +141,16 @@ async def recover_batch(*, factory=None, refresh=None):
     """
     factory = factory or AsyncDBSession
     if refresh is None:
-        # This reader boundary is converted in A3. A failed reader leaves the
-        # canonical request pending; it never acknowledges incomplete summaries.
-        from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary
-        refresh = refresh_game_analysis_summary
+        from functools import partial
+        from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
+        refresh = partial(refresh_game_analysis_summary, factory=factory)
     async with write_transaction(factory) as session:
         await session.execute(text('SET TRANSACTION READ ONLY'))
         rows = await summary_refresh.pending_batch(await driver_connection(session), BATCH_GAMES)
     error = None
     if rows:
         try:
-            await refresh(tuple(row['game_link'] for row in rows), strict=True)
+            await refresh(tuple(row['game_link'] for row in rows))
         except Exception as failure:
             error = f'{type(failure).__name__}: {failure}'[:1000]
             LOG.exception('Game summary refresh retained for retry; FEN scores are safe.')

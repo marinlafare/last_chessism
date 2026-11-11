@@ -1,4 +1,5 @@
 """Actual application calls on an explicitly guarded private normalized copy."""
+from chessism_api.operations import game_analysis_summary
 import asyncio
 from contextlib import ExitStack
 import statistics
@@ -288,7 +289,7 @@ async def application_writes(conn, socket, publish, *, database='chessism_db'):
             # Recount bounded, pre-existing games without overwriting real scores.
             links = list(await conn.fetchval(f'SELECT array_agg(link) FROM (SELECT link FROM {C}.game WHERE fens_done ORDER BY link DESC LIMIT 100) s'))
             started = time.monotonic()
-            await asyncio.gather(*(ask_db.refresh_game_analysis_summary(tuple(links),strict=True) for _ in range(2)))
+            await asyncio.gather(*(game_analysis_summary.refresh_game_analysis_summary(tuple(links)) for _ in range(2)))
             bad = await conn.fetchval(f'''SELECT count(*) FROM {C}.game_analysis_coverage
                 WHERE link=ANY($1::bigint[]) AND (total_positions<>analyzed_positions+unscored_positions
                 OR is_fully_analyzed<>(total_positions>0 AND unscored_positions=0))''',links)

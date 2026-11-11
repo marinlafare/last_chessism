@@ -6,9 +6,11 @@ import logging
 import os
 from pathlib import Path
 
+from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
 from chessism_api.database.postgresql.ask_db import (
-    refresh_database_summary_fen_counts, refresh_game_analysis_summary,
-    refresh_scored_position_summary, refresh_scored_rating_summary,
+    refresh_database_summary_fen_counts,
+    refresh_scored_position_summary,
+    refresh_scored_rating_summary,
 )
 from .backup_coordination import ensure_backup_reservation, release_backup
 from .backup_files import atomic_write_json as _atomic_write_json, sha256 as _sha256

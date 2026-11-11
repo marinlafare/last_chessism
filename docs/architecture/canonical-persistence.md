@@ -8,7 +8,7 @@ for the foundation: `0fde829`. No historical data is required.
 
 ## Scope and sources
 
-The initializer creates 96 application tables, one semantic view, and a version
+The initializer creates 98 application tables, one semantic view, and a version
 record in one empty PostgreSQL 15 database. Ten core tables define the normalized
 chess relationships. `support.sql` preserves 78 existing account/session,
 appearance, ingestion/timing and cloud tables, including the typed cloud document
@@ -402,3 +402,43 @@ Evidence: `/tmp/chessism-canonical-a2-recovery-20261110-01`. All 1,726 frozen in
 match and all five disposable containers were removed. The synthetic metadata
 UPDATE used 2,005 FENs/4,006 associations: 31.949ms total, 0.989ms queue trigger.
 Default player-summary integration still requires the A3 gate described above.
+
+
+## A3.1 canonical coverage and player accuracy (verified)
+
+Version 6 adds the consumed per-game accuracy projection and manual-run control;
+versions 1–5 are rejected without automatic migration. Accuracy keys are
+`(game_link,is_white)`, with a cascading game FK; ownership is derived from game,
+so a second player name/id cannot contradict that relationship. The existing
+manual switch defaults false, matching the previous absent-switch behavior.
+Other CUDA publication/invalidation structures remain A3.2 work; no GPU run or
+manual activation is performed by initialization.
+
+`operations/game_analysis_summary.py` owns coverage commits and calls the player
+accuracy operation after commit, preserving the existing two-stage workflow.
+Both use guarded application transactions. The default recovery callback uses
+that same supplied session factory and acknowledges only after successful return.
+The strict switch and legacy suppression branch are removed: refresh failures
+always propagate. Affected-FEN refreshes read absolute counts, never replay deltas.
+
+`database/postgresql/engine_summary.py` owns the canonical SQL calculation without
+committing/closing its caller's transaction. It shares/locks the required manual
+control singleton against activation, then locks game identities in order before
+reading and replacing selected summaries. Manual mode does not touch saved CPU
+accuracy. Pure shared formula constants/functions moved unchanged into
+`chessism_api/accuracy.py`; CPU/GPU/research readers import them there. The SQL
+window, opening prior, score kinds and harmonic/weighted accuracy are preserved.
+
+The focused gate includes 17 actual PostgreSQL cases, including default recovery,
+failed accuracy publication after coverage commit, repeated cancellation, manual
+mode/activation, self-play/owner changes, repeated FENs and comparison to the
+existing independent scalar oracle across 13 synthetic games. Other page readers,
+manual CUDA durable publication and legacy fixture adapters remain pending in A3/A4.
+No runtime-ready or production-scale claim is made for this intermediate gate.
+
+Summary gate evidence: `/tmp/chessism-canonical-a3-summaries-20261110-01`.
+All 285 checks passed without failures/errors/skips, including 68 accepted P1
+regressions. All 1,730 frozen inputs match and five owned containers were removed.
+Numerical parity covered 13 games/842 positions (maximum error 1.4211e-14);
+the scoped SELECT measured 42.795ms. This verifies the default CPU recovery
+callback; remaining manual CUDA invalidation/publication is an A3.2 dependency.

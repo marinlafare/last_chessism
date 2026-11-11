@@ -20,11 +20,13 @@ from chessism_api.database.postgresql.analysis_selection import (
     get_fens_for_analysis,
     get_player_fens_for_analysis,
 )
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.game_analysis_summary import (
     increment_game_analysis_summary_for_scored_fens,
     refresh_game_analysis_summary,
+)
+from chessism_api.database.postgresql.ask_db import (
     refresh_scored_position_summary,
-    refresh_scored_rating_summary
+    refresh_scored_rating_summary,
 )
 from chessism_api.operations.analysis_times import record_analysis_times
 from chessism_api.database.postgresql.evaluation_results import stage_fen_results

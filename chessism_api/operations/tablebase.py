@@ -9,12 +9,14 @@ import chess.syzygy
 from arq.connections import ArqRedis
 from arq.jobs import Job, JobStatus
 
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.game_analysis_summary import (
     increment_game_analysis_summary_for_scored_fens,
+    refresh_game_analysis_summary,
+)
+from chessism_api.database.postgresql.ask_db import (
     increment_scored_position_summary_for_scored_fens,
     refresh_database_summary_fen_counts,
     refresh_fen_pipeline_summary,
-    refresh_game_analysis_summary,
     refresh_scored_position_summary,
     refresh_scored_rating_summary,
 )

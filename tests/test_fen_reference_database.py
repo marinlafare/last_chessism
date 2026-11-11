@@ -9,7 +9,10 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import Fen,Game,GameFenAssociation,GameAnalysisSummary
 from chessism_api.database.postgresql.db_interface import DBInterface
 from chessism_api.database.postgresql.analysis_selection import count_game_set_fens_for_analysis
-from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary,increment_game_analysis_summary_for_scored_fens
+from chessism_api.operations.game_analysis_summary import (
+    refresh_game_analysis_summary,
+    increment_game_analysis_summary_for_scored_fens,
+)
 from chessism_api.operations.ingestion_pipeline.fen_repository import refresh_fen_occurrence_counts
 from chessism_api.operations.cloud_analysis.importer import refresh_projections
 from chessism_api.operations.fen_explorer import position_games,describe_examples
@@ -38,7 +41,7 @@ class ReferenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await count_game_set_fens_for_analysis([101,102]),3)
 
     async def test_cloud_and_local_summary_refreshes_find_numeric_associations(self):
-        await refresh_game_analysis_summary([101,102,103],strict=True)
+        await refresh_game_analysis_summary([101,102,103])
         async with AsyncDBSession() as session,session.begin():
             await session.execute(update(Fen).where(Fen.fen==self.fens[0]).values(score=25))
         await increment_game_analysis_summary_for_scored_fens([{'fen':self.fens[0],'score':25}])

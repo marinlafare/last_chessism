@@ -3,7 +3,7 @@
 Never imported by production summaries, endpoints or canonical CUDA inference.
 Retained solely to reproduce old/new comparisons on isolated research inputs.
 """
-from ..player_game_scores import lichess_winning_chances
+from chessism_api.accuracy import lichess_winning_chances
 
 LICHESS_BLUNDER_THRESHOLD = 0.30
 

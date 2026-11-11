@@ -4,7 +4,7 @@ The legacy +/-1000 CP clamp, +15 CP opening prior, mate/tablebase treatment,
 window endpoints and zero-accuracy harmonic rule are deliberately preserved.
 """
 import numpy as np
-from .. import player_game_scores as constants
+from chessism_api import accuracy as constants
 from .score_compute import check_device, host
 
 VERSION = 'game_accuracy_v1'

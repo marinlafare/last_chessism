@@ -37,7 +37,7 @@ def kernel(xp, before, after, before_kind, after_kind):
 def reference(batch):
     # Frozen historical oracle, not a production calculation or fallback.
     from .legacy_blunder_reference import is_lichess_blunder, LICHESS_BLUNDER_THRESHOLD
-    from ..player_game_scores import LICHESS_WINNING_CHANCE_MULTIPLIER, LICHESS_CP_CEILING
+    from chessism_api.accuracy import LICHESS_WINNING_CHANCE_MULTIPLIER, LICHESS_CP_CEILING
     if (abs(LICHESS_WINNING_CHANCE_MULTIPLIER), LICHESS_BLUNDER_THRESHOLD, LICHESS_CP_CEILING) != (COEFFICIENT, 2*THRESHOLD, 1000):
         raise ValueError('The historical reference changed; create a new candidate version.')
     kinds = {0: 'cp', 1: 'mate'}

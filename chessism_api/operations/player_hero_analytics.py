@@ -12,10 +12,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.operations.player_game_scores import (
-    lichess_winning_chances,
-    refresh_game_player_engine_summaries,
-)
+from chessism_api.accuracy import lichess_winning_chances
+from chessism_api.operations.player_game_scores import refresh_game_player_engine_summaries
 from chessism_api.operations.player_timezone import (
     ResolvedPlayerTimezone,
     player_local_timestamp_sql,

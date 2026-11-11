@@ -3,6 +3,7 @@
 Never accepts a DSN or production mount. Run inside the pinned backup image
 with --network none, mounting source read-only at /candidate.
 """
+from chessism_api.operations import game_analysis_summary
 import asyncio
 from contextlib import ExitStack
 import os
@@ -147,14 +148,14 @@ async def check_application(engine, conn):
             assert await conn.fetchval(f'SELECT count(*) FROM {C}.game_fen_association WHERE game_link=$1',link)==len(extracted)
         await fen_repository.refresh_fen_occurrence_counts(list(all_fens))
         print('PASS real extraction: disjoint claims, numeric associations, duplicate retries',flush=True)
-        assert (await ask_db.refresh_game_analysis_summary(tuple(LINKS[:3]),strict=True))['games']==3
+        assert (await game_analysis_summary.refresh_game_analysis_summary(tuple(LINKS[:3])))['games']==3
         async with factory() as session:
             formatted=[{'fen':f,'score':0.0,'next_moves':'','wdl_win':0.1,'wdl_draw':0.8,'wdl_loss':0.1} for f in all_fens]
             await stage_fen_results(session,formatted,[])
             await session.commit()
         await asyncio.wait_for(asyncio.gather(
-            ask_db.increment_game_analysis_summary_for_scored_fens(formatted),
-            ask_db.increment_game_analysis_summary_for_scored_fens(formatted)),30)
+            game_analysis_summary.increment_game_analysis_summary_for_scored_fens(formatted),
+            game_analysis_summary.increment_game_analysis_summary_for_scored_fens(formatted)),30)
         coverage=await conn.fetch(f'SELECT * FROM {C}.game_analysis_coverage WHERE link=ANY($1::bigint[])',LINKS)
         assert len(coverage)==3 and all(r['is_fully_analyzed'] and r['analyzed_positions']==r['total_positions'] and r['equal_positions']==r['total_positions'] for r in coverage)
         assert await conn.fetchval(f'SELECT count(*) FROM {C}.game_player_engine_summary s JOIN {C}.game_player gp ON gp.id=s.game_player_id WHERE gp.game_link=ANY($1::bigint[])',LINKS)==6
