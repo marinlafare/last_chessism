@@ -4,18 +4,20 @@ Triggers only queue affected identities. Bounded background recovery rebuilds
 absolute coverage/engine summaries and acknowledges the exact captured revision.
 Cloud-reserved FENs retain their existing durable cloud projection/retry workflow.
 """
-import json
 import logging
 from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql import summary_refresh
+from chessism_api.database.postgresql.transactions import driver_connection, write_transaction
 from chessism_api.database.postgresql.relational_storage import identifier, storage_for
 
 LOG = logging.getLogger(__name__)
 BATCH_GAMES = 500
-SOURCE_ONLY_BATCH_GAMES = 32768
 PIPELINE_VERSION = 'evaluation_refresh_v4'
 
 
+# Legacy installation/upgrade entry points remain for the A3/A4 caller conversion.
+# Canonical initialization and recover_batch never invoke them.
 def table(layout):
     return layout.table('fen_summary_refresh')
 
@@ -132,40 +134,20 @@ async def install(connection, layout):
 
 
 async def recover_batch(*, factory=None, refresh=None):
+    """Refresh absolute projections, then acknowledge exactly the captured revisions.
+
+    No database transaction is held during the refresh callback. If the process
+    stops after a projection commit, the saved request safely repeats that work.
+    """
     factory = factory or AsyncDBSession
     if refresh is None:
+        # This reader boundary is converted in A3. A failed reader leaves the
+        # canonical request pending; it never acknowledges incomplete summaries.
         from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary
         refresh = refresh_game_analysis_summary
-    # Source-only updates do not touch coverage, accuracy, efficiency or legacy
-    # CPU blunders. Transfer their exact revisions to CUDA in one transaction.
-    # A concurrent real evaluation/association change either wins before the
-    # row lock (and remains full), or creates a fresh request after this commit.
-    async with factory() as session, session.begin():
-        await session.execute(text("SET LOCAL lock_timeout='2s'"))
-        await session.execute(text("SET LOCAL statement_timeout='10s'"))
-        layout = storage_for(session)
-        from .canonical_blunders.schema import table as canonical_table
-        source_only = [dict(r) for r in (await session.execute(text(f'''
-            SELECT game_link,revision FROM {table(layout)}
-            WHERE NOT refresh_engine AND retry_after<=clock_timestamp()
-            ORDER BY game_link LIMIT :limit FOR UPDATE SKIP LOCKED'''),
-            {'limit': SOURCE_ONLY_BATCH_GAMES})).mappings()]
-        if source_only:
-            await session.execute(text(f'''INSERT INTO {canonical_table(layout,'dirty')}(game_link)
-                SELECT unnest(CAST(:links AS bigint[])) ORDER BY 1
-                ON CONFLICT(game_link) DO UPDATE SET revision=EXCLUDED.revision'''),
-                {'links': [r['game_link'] for r in source_only]})
-            await session.execute(text(f'''DELETE FROM {table(layout)} q USING
-                jsonb_to_recordset(CAST(:rows AS jsonb)) AS r(game_link bigint,revision bigint)
-                WHERE q.game_link=r.game_link AND q.revision=r.revision AND NOT q.refresh_engine'''),
-                {'rows': json.dumps(source_only)})
-    async with factory() as session:
+    async with write_transaction(factory) as session:
         await session.execute(text('SET TRANSACTION READ ONLY'))
-        await session.execute(text("SET LOCAL statement_timeout='5s'"))
-        layout = storage_for(session)
-        rows = [dict(row) for row in (await session.execute(text(f'''
-            SELECT game_link,revision FROM {table(layout)} WHERE refresh_engine AND retry_after<=clock_timestamp()
-            ORDER BY queued_at,game_link LIMIT :limit'''), {'limit': BATCH_GAMES})).mappings()]
+        rows = await summary_refresh.pending_batch(await driver_connection(session), BATCH_GAMES)
     error = None
     if rows:
         try:
@@ -173,22 +155,13 @@ async def recover_batch(*, factory=None, refresh=None):
         except Exception as failure:
             error = f'{type(failure).__name__}: {failure}'[:1000]
             LOG.exception('Game summary refresh retained for retry; FEN scores are safe.')
-        async with factory() as session, session.begin():
-            await session.execute(text("SET LOCAL lock_timeout='2s'"))
-            await session.execute(text("SET LOCAL statement_timeout='5s'"))
-            captured = 'jsonb_to_recordset(CAST(:rows AS jsonb)) AS r(game_link bigint,revision bigint)'
-            if error:
-                await session.execute(text(f'''UPDATE {table(layout)} q SET attempts=q.attempts+1,
-                    error=:error,retry_after=clock_timestamp()+interval '60 seconds'
-                    FROM {captured} WHERE q.game_link=r.game_link AND q.revision=r.revision'''),
-                    {'rows': json.dumps(rows), 'error': error})
-            else:
-                await session.execute(text(f'''DELETE FROM {table(layout)} q USING {captured}
-                    WHERE q.game_link=r.game_link AND q.revision=r.revision'''), {'rows': json.dumps(rows)})
-    async with factory() as session:
+        async with write_transaction(factory) as session:
+            await summary_refresh.finish_batch(await driver_connection(session), rows, error)
+    async with write_transaction(factory) as session:
         await session.execute(text('SET TRANSACTION READ ONLY'))
-        await session.execute(text("SET LOCAL statement_timeout='5s'"))
-        pending = await session.scalar(text(f'SELECT count(*) FROM {table(layout)}'))
-    return {'processed': (len(rows) if error is None else 0) + len(source_only),
-            'source_only': len(source_only), 'engine_refreshed': len(rows) if error is None else 0,
+        pending = await summary_refresh.pending_count(await driver_connection(session))
+    processed = len(rows) if error is None else 0
+    # Canonical scored sources are known; historical provenance-only relabeling
+    # cannot enter this queue. Keep truthful existing report counters.
+    return {'processed': processed, 'source_only': 0, 'engine_refreshed': processed,
             'pending': pending, 'error': error}

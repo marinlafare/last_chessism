@@ -1071,3 +1071,54 @@ exact run label. Probe algorithms/process budgets remain unchanged.
 
 Ready for the local tablebase persistence commit. Durable projection recovery
 remains the next mandatory A2.3 gate; Stage A is not complete or accepted.
+
+## A2.3 durable summary recovery gate started
+
+Tablebase persistence is committed as `809e112`; entry working tree was clean.
+The remaining queue still depends on runtime layout installation and writable
+game_player rows. Canonical game_player is derived, so ownership triggers must
+observe game instead. New canonical schema version 5 will establish the queue
+and triggers atomically. Exact-revision acknowledgment/backoff and cloud claim
+exclusion remain. Canonical CHECK constraints prohibit historical scored unknown
+provenance, so the historical source-only relabel branch cannot occur; unscored
+unavailable metadata does not change evaluation semantics. The queue therefore
+needs no refresh_engine flag or direct CUDA dirty-table dependency. Recovery's
+existing report fields remain, with source_only=0. Default summary readers and
+legacy installer retirement remain explicitly A3/A4 work; not declared verified.
+
+Canonical recovery schema/adapter/orchestration implemented; verification pending.
+Version 5 installs the revisioned queue and statement triggers in the initializer.
+Recovered work uses exact captured revisions, guarded application transactions and
+strict callback completion before acknowledgment. Cloud exclusion and metadata
+fast paths are retained. Game owners are observed on game; deletion work has no
+game FK. Canonical provenance semantics remove the historical source-only branch
+without changing report fields. Legacy installer/upgrade callers remain for A3/A4.
+
+Prepared 237 checks: 151 offline/canonical PostgreSQL checks (20 new recovery
+cases and all affected writer/schema suites), 18 related transaction/evaluation/
+queue contracts, and 68 accepted P1 checks. Five offline checks pass in 0.011s;
+Python syntax and diff checks pass. The synthetic cost case records an actual
+trigger plan at 2,005 FENs/4,006 associations; it is not historical-scale evidence.
+Full API/worker comparison remains the A4 gate. Default player/analytics callback
+and GPU integration are explicitly unverified pending A3 conversion.
+Evidence: /tmp/chessism-canonical-a2-recovery-20261110-01.
+
+A2.3 durable recovery verification launched; supervisor PID 2513938. Startup
+confirmed. Monitor: `python3 /tmp/chessism-canonical-a2-recovery-20261110-01/monitor.py`.
+Returning control without polling. Review saved results, source integrity and
+owned-resource cleanup after the user reports completion; no commit before that.
+
+## A2.3 durable recovery gate passed and reviewed
+
+All 237 checks passed: 151 offline/canonical PostgreSQL checks (20 new recovery
+cases), 18 related contracts and all 68 accepted P1 regressions; no failures,
+errors or skips. Supervisor 46.88s. Reviewed raw logs and structured results.
+All 1,726 frozen inputs match; the retired module remains absent. All five owned
+containers were removed, confirmed independently using the exact runner label.
+The 2,005-FEN/4,006-association metadata plan measured 31.949ms execution and
+0.989ms in the statement trigger. This is synthetic, not historical-scale evidence.
+
+A2 persistence gates are complete and ready for the local recovery commit. A3
+must still convert the default player/analytics callback before claiming complete
+end-to-end recovery. Legacy installer retirement and startup validation remain A4.
+Stage A is not yet complete or accepted. No push, merge, deployment or data access.

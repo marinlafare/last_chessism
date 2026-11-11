@@ -8,11 +8,12 @@ for the foundation: `0fde829`. No historical data is required.
 
 ## Scope and sources
 
-The initializer creates 95 application tables, one semantic view, and a version
+The initializer creates 96 application tables, one semantic view, and a version
 record in one empty PostgreSQL 15 database. Ten core tables define the normalized
 chess relationships. `support.sql` preserves 78 existing account/session,
 appearance, ingestion/timing and cloud tables, including the typed cloud document
-children. Seven projection tables support game imports and bounded FEN persistence. The supporting
+children. Seven projection tables support game imports and bounded FEN persistence; one
+revisioned queue retains durable per-game summary refresh requests. The supporting
 declarations were rendered from the checkpoint's SQLAlchemy metadata;
 initialization imports neither that metadata nor the old runtime. Large typed
 cloud definitions are retained because their checksums, packed arrays, receipts
@@ -358,3 +359,46 @@ files, Stockfish, production data or GCP.
 The tablebase gate passed 131 checks: 21 offline/PostgreSQL, 42 related contracts
 and all 68 P1 regressions, with zero failures/errors/skips. It verifies actual
 canonical persistence with synthetic probes; real Syzygy files are not exercised.
+
+
+## A2.3 durable summary recovery (verified persistence gate)
+
+Version 5 adds `recovery.sql`; versions 1–4 are rejected without automatic
+migration. The initializer installs the queue and triggers atomically and catalog
+validation covers their definitions. `fen_summary_refresh` has one row per game,
+a monotonically allocated revision, retry timing and failure details. It has no
+game FK because deleting a game must retain work to remove its derived summaries.
+
+Statement triggers coalesce affected identities in game order. FEN triggers compare
+score and tablebase-kind changes before touching associations; metadata, no-op and
+empty writes do no association lookup. Cloud-claimed writes rely on their existing
+receipt/projection recovery path. Association changes and eligible game ownership
+changes retain recovery even when no FEN score changes. Canonical participants
+are observed on game, not on the derived game_player view.
+
+Canonical constraints prohibit scored unknown/historical provenance labels. The
+old provenance-only routing branch is therefore unnecessary here: unavailable
+unscored labels leave evaluation semantics unchanged, while score or tablebase
+kind changes require the full refresh. No refresh_engine flag, extra queue or
+CUDA dependency is added. Existing report keys remain, with source_only=0.
+
+`summary_refresh.py` contains bounded canonical queue reads and exact-revision
+acknowledgment/backoff SQL. `recover_batch` owns guarded transactions, closes its
+read session before the callback, requests strict absolute refresh, and only then
+acknowledges its captured revisions. A newer change survives success or failure
+of an older refresh. Cancellation/acknowledgment errors leave work retryable;
+committed scores and projection work survive. No queue code recalculates deltas.
+
+Integration verification uses the actual canonical coverage writer as the callback.
+The default player/analytics refresh callback still awaits A3 conversion; complete
+reader/GPU integration is not yet claimed. Legacy installer/upgrade entry points
+remain only for their A3/A4 caller conversion and are not used by canonical
+initialization or recovery. No runtime readiness or production-scale performance
+claim follows from this intermediate gate.
+
+Recovery verification: 237 checks passed without failures/errors/skips, including
+all canonical writer/schema suites, 20 recovery cases and 68 P1 regressions.
+Evidence: `/tmp/chessism-canonical-a2-recovery-20261110-01`. All 1,726 frozen inputs
+match and all five disposable containers were removed. The synthetic metadata
+UPDATE used 2,005 FENs/4,006 associations: 31.949ms total, 0.989ms queue trigger.
+Default player-summary integration still requires the A3 gate described above.

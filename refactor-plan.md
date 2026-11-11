@@ -127,6 +127,31 @@ canonical PostgreSQL candidate/write/race/cancellation checks, retain tablebase
 behavior tests and P1 regressions. Durable projection recovery follows this gate;
 no schema change or Stage B work is included here.
 
+Tablebase persistence passed 131 checks and is committed as `809e112`.
+The final A2.3 gate defines `canonical/recovery.sql` and schema version 5:
+a revisioned per-game recovery queue and statement triggers on relevant FEN,
+association and game-participant changes. Preserve cloud claim exclusion, skip
+metadata-only FEN writes before association access, retain recovery identities
+for deleted games, and use actual game owners instead of triggers on the derived
+`game_player` view. Reuse the existing sorted/coalescing queue semantics. Canonical
+sources are constrained to stockfish/tablebase (or unscored/unavailable), so there
+is no scored unknown-provenance relabeling path; omit the historical source-only
+queue branch and its CUDA-only dependency. Preserve recovery report fields with
+source_only=0. Add `database/postgresql/summary_refresh.py` for bounded queue reads
+and exact-revision acknowledgment/retry updates. Convert recover_batch to these
+functions with operation-owned guarded transactions; callback success is required
+before acknowledgment. Keep the existing default summary callback until its A3
+conversion, clearly marking that end-to-end reader integration remains pending.
+Legacy installer/upgrade entry points stay isolated for their remaining A3/A4
+callers and are not invoked by canonical initialization or recovery. Verify schema
+version/repeat/catalog behavior, all converted writer paths affected by triggers,
+metadata fast paths, claim/rollback/owner/deletion behavior, races, backoff and
+cancellation. Reuse absolute canonical coverage as the integration callback;
+no CUDA, production database, historical relabeling or Stage B work.
+
+A2.3 persistence gates passed; durable recovery passed all 237 checks. Default
+summary callback integration remains the first A3 concern.
+
 ### A3.1 — Canonical game/player queries and summary readers
 Depends on A2.3. Convert routers and operations using game/player queries, navigation,
 rankings, pagination, `home_summary.py`, `player_*` summaries and `common_positions.py`.
