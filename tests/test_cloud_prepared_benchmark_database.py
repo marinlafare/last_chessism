@@ -1,6 +1,4 @@
 """Opt-in synthetic Calculate + Add timings; never live player data."""
-import ast
-import inspect
 import json
 import time
 import unittest
@@ -10,7 +8,6 @@ import test_cloud_analysis_database as existing
 from test_cloud_game_drafts_database import DraftDatabaseTests
 from test_cloud_game_drafts import plan
 from unittest.mock import AsyncMock
-from chessism_api.database.postgresql.ask_db import preview_player_games_for_analysis
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.cloud_analysis import prepared_selection
 from chessism_api.routers.cloud_game_drafts import save_entry,remove_entry,AddSelection,Revision
@@ -30,9 +27,8 @@ class PreparedTiming(unittest.IsolatedAsyncioTestCase):
                 SELECT 101,fen_id,repeat,'white' FROM fen CROSS JOIN generate_series(1,10) repeat
                 WHERE fen LIKE 'prepared-benchmark-%'"""))
             await s.execute(text('ANALYZE fen'));await s.execute(text('ANALYZE game_fen_association'))
-        tree=ast.parse(inspect.getsource(preview_player_games_for_analysis))
-        old_sql=next(n.value for n in ast.walk(tree) if isinstance(n,ast.Constant) and isinstance(n.value,str)
-            and 'COUNT(DISTINCT gfa.fen_id)' in n.value)
+        from chessism_api.database.postgresql.game_analysis_reads import POSITION_COUNTS_SQL
+        old_sql = POSITION_COUNTS_SQL
         results=[]
         for version in ('prepared','old','old','prepared'):
             ident=uuid4().hex;start=time.monotonic()

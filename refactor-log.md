@@ -1166,3 +1166,45 @@ confirmed by the exact run label. Raw and structured evidence reviewed.
 Ready for local commit. Remaining game/player readers, CUDA publication and
 other feature consumers remain A3; final retirement/full baseline comparison
 remain A4. Stage A is not complete or accepted.
+
+## A3.1 analysis pages and previews gate started
+
+Summary callback gate committed as `eac036c`; entry working tree was clean.
+Inspection found game coverage pages, player scope and ordered previews still
+using historical ORM/views and opening their own unguarded sessions in ask_db.
+Move these cohesive reads into a canonical SQL adapter and explicit application
+transactions. Preserve normalized ordering, fair sampling and prepared-plan
+contracts. Scope details and required checks were added to the authorized A3.1
+plan before implementation. No schema change or GPU/engine work in this gate.
+
+Canonical analysis pages/previews implemented; verification pending. Removed the
+legacy/ORM page and scope branches from ask_db. A concrete SQL adapter owns shared
+eligibility and visible-page aggregation; application operations own read-only or
+prepared write transactions. Multi-query reads use repeatable-read snapshots and
+UTC; prepared metadata/expiry cleanup/chunks are one atomic unit. Sampler ASTs,
+prepared builder, schema version 6 and accepted cleanup mechanisms are unchanged.
+
+Prepared 135 checks: 41 offline/canonical PostgreSQL (18 new cases), 26 related
+transaction/route/sampling contracts and 68 P1 regressions. Five offline checks
+passed; changed Python compiles and diff checks pass. Frozen inputs: 1,733.
+Reuse the prior 285-check gate for untouched schema/summary writers. Full suite
+comparison and older opt-in fixture mapping remain A4; no new skips or weakened
+assertions. Evidence: /tmp/chessism-canonical-a3-views-20261110-01.
+
+A3.1 analysis views verification launched; supervisor PID 2576811.
+Startup confirmed. Monitor: `python3 /tmp/chessism-canonical-a3-views-20261110-01/monitor.py`.
+Returning control without polling. Review results, source integrity and owned
+cleanup after user completion; no commit or next gate before evidence review.
+
+## A3.1 analysis pages and previews gate passed and reviewed
+
+All 135 checks passed: 41 offline/canonical PostgreSQL (18 new cases), 26 related
+contracts and 68 accepted P1 regressions. No failures/errors/skips. Supervisor
+21.44s. Reviewed raw and structured evidence. All 1,733 frozen inputs match, and
+the retired module remains absent. All five containers were removed, independently
+confirmed with the exact run label. The 1,002-game/5,006-association page plan ran
+its aggregate twice for two visible rows, 0.458ms execution; synthetic scale only.
+
+Ready for local commit. Remaining player/global readers and feature consumers
+remain A3; full-suite comparison and retirement remain A4. No Stage A acceptance,
+push, merge, deployment or existing-database operation.

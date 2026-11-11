@@ -3,7 +3,7 @@
 Never accepts a DSN or production mount. Run inside the pinned backup image
 with --network none, mounting source read-only at /candidate.
 """
-from chessism_api.operations import game_analysis_summary
+from chessism_api.operations import game_analysis_summary, game_analysis_views
 import asyncio
 from contextlib import ExitStack
 import os
@@ -199,7 +199,7 @@ async def check_application(engine, conn):
                 'filters':{'players':[PLAYER],'max_rows':10}})
             _,select_sql,params=matrix_sql(config)
             assert len((await session.execute(text(select_sql),params)).all())==4
-        page=await ask_db.get_scored_game_analysis_page()
+        page=await game_analysis_views.get_scored_game_analysis_page()
         assert page['total']>=3 and all('avg_abs_score' in row for row in page['rows'])
         print('PASS real read consumers: saved matrix metrics, player salience matrix and scored-game page',flush=True)
         # Build only missing global-cache tables, inside the disposable layout.

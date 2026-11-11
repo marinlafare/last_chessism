@@ -442,3 +442,35 @@ regressions. All 1,730 frozen inputs match and five owned containers were remove
 Numerical parity covered 13 games/842 positions (maximum error 1.4211e-14);
 the scoped SELECT measured 42.795ms. This verifies the default CPU recovery
 callback; remaining manual CUDA invalidation/publication is an A3.2 dependency.
+
+
+## A3.1 analysis coverage pages and previews (verified)
+
+`operations/game_analysis_views.py` owns read/preparation transactions and response
+shapes. `database/postgresql/game_analysis_reads.py` accepts that transaction and
+queries canonical tables directly, sharing the exact player/eligibility predicate
+between scope and selection. Self-play is one selected game; position occurrences
+and distinct FEN counts remain separate. The normalized layout's page ordering,
+latest/oldest ordering and unchanged fair-month sampler are retained. UTC timestamps
+make boundaries reproducible. Score aggregates are computed only for visible rows.
+
+Multi-query pages and previews use repeatable-read snapshots so concurrent deletes
+or score changes cannot mix a count/selection from one snapshot with data from
+another. Ordinary views are read-only. Prepared previews call the unchanged
+prepared-selection builder inside the application-owned transaction; expiry cleanup,
+plan metadata and chunks commit or roll back together. Plain previews still count
+missing claimed FENs, and prepared previews report their claimed subset separately;
+launch remains responsible for its live claim recheck. Route/result fields remain.
+The prepared path's existing bounded numeric chunks/digest/TTL are unchanged.
+
+Schema version stays 6. The focused gate adds 18 actual PostgreSQL cases, including
+real router serialization, snapshot races, UTC month/date boundaries, duplicate
+occurrences, query errors and preparation rollback/cancellation. Existing selectors,
+route/sampling/transaction contracts and P1 regressions are retained. Previous
+285-check schema/summary evidence is reused for untouched inputs; final full-suite
+comparison and older opt-in fixture mappings remain required at A4.
+
+Views gate: `/tmp/chessism-canonical-a3-views-20261110-01`, 135 checks passed,
+no failures/errors/skips. All 1,733 frozen source hashes match and five containers
+were removed. The synthetic 1,002-game/5,006-association plan aggregated only the
+two visible games (0.458ms). This is not historical-scale performance evidence.

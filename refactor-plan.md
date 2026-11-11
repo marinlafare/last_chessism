@@ -191,6 +191,34 @@ conversion debt. Commit only after the focused gate passes.
 
 The first A3.1 subgate passed all 285 checks; remaining game/player readers follow.
 
+Next A3.1 subgate: canonical analysis pages and game selection previews. Move
+`get_scored_game_analysis_overview`, `get_scored_game_analysis_page`,
+`get_player_game_analysis_scope`, `preview_player_games_for_analysis` and their
+pure fair-month sampler out of `ask_db.py` into `operations/game_analysis_views.py`.
+Add `database/postgresql/game_analysis_reads.py` for concrete canonical SQL in
+caller-owned transactions. Reuse one player/eligibility predicate for scope and
+selection, counting self-play once per game. Preserve canonical normalized-page
+ordering (position count then link), page bounds and response fields; calculate
+score aggregates only for the visible page. Preserve latest/oldest/fair-range
+ordering, date boundaries, occurrence-vs-distinct FEN counts, tablebase eligibility,
+and the existing prepared-plan/digest/chunk contract without adding claim exclusion
+to ordinary preview counts. Claims are still rechecked at launch; prepared preview
+reports claimed counts separately. Keep the fair sampler's numerical algorithm.
+
+Operations own guarded transactions; multi-query views/previews use repeatable
+read, and ordinary views are explicitly read-only. Set UTC for reproducible timestamps/month sampling. Prepared preview
+uses the existing `prepared_selection.build` within that same owned transaction,
+so partial chunks never commit. Update routers and direct imports/mock targets;
+no route/result contract changes, legacy aliases or universal query framework.
+Verify real canonical overview/pages, ties/pagination/empty output, self-play and
+variant/zero exclusions, UTC boundaries, ordering/fair sampling, shared/repeated
+FENs, prepared commits/rollback/cancellation, read failures and snapshot consistency.
+Include reproducible synthetic page plans, existing route/sampling contracts and
+P1 checks. Schema version remains 6; existing schema/writer verification is reused
+unless a new change affects it. Older opt-in fixture mappings remain A4 work.
+
+Analysis pages and previews passed all 135 checks; player/global readers remain.
+
 ### A3.2 — Research, exports, graph, administration and synthetic plans
 Depends on A3.1. Define remaining canonical auxiliary structures and convert
 `canonical_blunders/`, `cuda_summaries/`, `research_algorithms/`, `exports/`,

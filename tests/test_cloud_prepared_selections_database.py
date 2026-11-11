@@ -10,7 +10,9 @@ import test_cloud_analysis_database as existing
 from test_cloud_game_drafts_database import DraftDatabaseTests
 from test_cloud_game_drafts import plan
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.ask_db import preview_player_games_for_analysis
+from chessism_api.operations.game_analysis_views import (
+    preview_player_games_for_analysis,
+)
 from chessism_api.database.postgresql.models import (CloudGamePreparedSelection, CloudGamePreparedChunk,
     CloudGameDraftEntryFen, CloudGameDraftFen, CloudAnalysisRun, CloudFenClaim, Fen, GameAnalysisSummary)
 from chessism_api.operations.cloud_analysis import prepared_selection as prepared, draft_cache

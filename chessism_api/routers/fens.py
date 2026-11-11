@@ -6,19 +6,21 @@ from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
 
 from chessism_api.redis_client import get_redis_pool
+from chessism_api.operations.game_analysis_views import (
+    get_scored_game_analysis_overview,
+    get_scored_game_analysis_page,
+)
 from chessism_api.database.postgresql.ask_db import (
-    get_top_fens, 
-    get_sum_n_games, 
+    get_top_fens,
+    get_sum_n_games,
     get_top_fens_unscored,
     get_fen_analysis_counts,
     get_fen_pipeline_overview,
     get_scored_positions_overview,
     get_scored_positions_page,
     get_scored_advantage_by_rating,
-    get_scored_game_analysis_overview,
-    get_scored_game_analysis_page,
     get_player_fen_score_counts,
-    _get_remaining_fens_count_committed
+    _get_remaining_fens_count_committed,
 )
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing

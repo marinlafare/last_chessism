@@ -36,8 +36,10 @@ from chessism_api.operations import (
 from chessism_api.operations.ingestion_pipeline import fen_orchestrator as fens
 from chessism_api.operations.ingestion_pipeline import jobs as games
 from chessism_api.operations.player_timezone import resolve_player_timezone
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.game_analysis_views import (
     fair_sample_player_games_by_month,
+)
+from chessism_api.database.postgresql.ask_db import (
     get_player_fen_score_counts,
     get_top_fens_unscored,
 )
