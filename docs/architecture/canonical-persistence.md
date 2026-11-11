@@ -474,3 +474,43 @@ Views gate: `/tmp/chessism-canonical-a3-views-20261110-01`, 135 checks passed,
 no failures/errors/skips. All 1,733 frozen source hashes match and five containers
 were removed. The synthetic 1,002-game/5,006-association plan aggregated only the
 two visible games (0.458ms). This is not historical-scale performance evidence.
+
+
+## A3.1 player navigation and basic statistics (verified)
+
+`operations/player_game_views.py` owns one guarded, read-only repeatable-read/UTC
+snapshot per response; its private context shares this resource setup across the
+related views. `database/postgresql/player_game_reads.py` contains fixed canonical
+queries and requires that transaction. A narrow, feature-specific side projection
+replaces the legacy field catalog/query rewrite; no new schema/view/profile exists.
+Repeated game-list response formatting is consolidated.
+
+Statistics explicitly select standard nonempty games, preserving the old active
+layout's exclusion of variants/custom starts/zero-move metadata. Both self-play
+sides count in player statistics and coverage occurrences. Navigation separately
+requires tracked, nondeleted profiles, with the existing official-title policy and
+alphabetic wrapping. Reading recorded game history does not silently drop rows
+merely because their player's profile is untracked/deleted.
+
+Existing public fields, empty aggregate nulls, Decimal averages, invalid-mode
+responses and out-of-range page behavior are preserved. Ordering is date, game
+identity and side; ties now consistently choose black before white (the existing
+recent-page color ordering). This resolves previously unspecified latest/mode
+rating ties without allowing a larger old-game ID to displace a newer timestamp.
+Opening-frequency ties use ECO ascending. Canonical timestamps cannot be NULL.
+
+Verification maps the prior coverage unit's three SQL-shape checks to stronger
+real-data tests: chronological date priority, larger-ID older games, same-date
+identity/side ties and the schema's nonnull timestamp constraint. All original
+coverage payload assertions remain; the unit now also checks transaction closure.
+The new PostgreSQL suite uses an independent in-memory side oracle for statistics,
+ratings, ordering and numeric types, and covers snapshots, query failures, repeated
+cancellation, profile filtering and actual route serialization. Older opt-in
+reference helpers have updated call locations; their fixture conversion remains A4.
+Hours/saved metadata snapshots, charts, rankings and other analytics remain the
+following A3 gates. Schema version stays 6; no full-runtime readiness claim.
+
+Focused gate: 123 checks passed (40 foundation/PG, 15 related contracts, 68 P1),
+including 17 new PostgreSQL cases, without failures/errors/skips. All 1,736 frozen
+inputs match; the five isolated containers were removed and independently checked.
+Evidence: `/tmp/chessism-canonical-a3-player-views-20261110-01`.

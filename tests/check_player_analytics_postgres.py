@@ -23,6 +23,7 @@ async def main():
     from chessism_api.database.postgresql.relational_storage import storage_for
     from chessism_api.operations import player_analytics_summary as summaries, player_hero_analytics as hero
     from chessism_api.operations import player_rating_distribution as histogram, player_game_catalog as catalog
+    from chessism_api.operations import player_game_views
     from chessism_api.database.postgresql import ask_db
 
     root = Path(tempfile.mkdtemp(prefix='db-refactor-baseline-player-summary-', dir='/restore-test'))
@@ -155,7 +156,7 @@ async def main():
                                             checks += 1
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
                     expected=await ask_db.get_player_hours_played(player)
-                    recent=await ask_db.get_player_games_page(player,page=1,page_size=1)
+                    recent=await player_game_views.get_player_games_page(player,page=1,page_size=1,factory=factory)
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='1'
                     assert clean(await ask_db.get_player_hours_played(player))==clean(expected)
                     latest=await summaries.get_latest_game(player)

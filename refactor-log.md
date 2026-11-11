@@ -1208,3 +1208,45 @@ its aggregate twice for two visible rows, 0.458ms execution; synthetic scale onl
 Ready for local commit. Remaining player/global readers and feature consumers
 remain A3; full-suite comparison and retirement remain A4. No Stage A acceptance,
 push, merge, deployment or existing-database operation.
+
+## A3.1 player navigation and basic game statistics gate started
+
+Analysis views committed as `3d2136f`; entry tree clean. The remaining player
+coverage/basic-game reads mix physical legacy fields, profile query rewriting and
+session ownership. Convert this cohesive feature to canonical side relationships,
+explicit standard/nonempty classification, guarded read snapshots and stable ties.
+Preserve player-perspective self-play counts and all response/null/type contracts.
+The concrete scope and tests are recorded in the plan before implementation;
+hours/snapshot and other analytics are explicitly subsequent gates.
+
+Canonical player navigation/basic views implemented; verification pending.
+Twelve related operations moved from ask_db to a guarded feature read boundary.
+The SQL adapter has one fixed canonical side projection, explicit eligibility and
+no runtime profile/field rewrite. Self-play perspectives, public response/null/
+numeric contracts and navigation policies are retained. Tie ordering is explicit;
+the independent PostgreSQL oracle exercises actual dates, identities and sides.
+Previous coverage SQL-shape assertions map to real-data tests and schema nullability;
+all payload assertions remain, with added resource closure checks.
+
+Prepared 123 checks: 40 offline/canonical PostgreSQL (17 new cases plus existing
+analysis views), 15 transaction/coverage/read-comparison contracts and 68 P1 checks.
+Five offline checks passed; changed Python compiles and diff checks pass. Frozen
+inputs: 1,736. Reuse untouched schema/writer/recovery and selector evidence from
+the 285/135-check gates. Full baseline comparison and old fixture mapping remain A4.
+Evidence: /tmp/chessism-canonical-a3-player-views-20261110-01.
+
+A3.1 player views verification launched; supervisor PID 2608471.
+Startup confirmed. Monitor: `python3 /tmp/chessism-canonical-a3-player-views-20261110-01/monitor.py`.
+Returning control without polling. Review saved results, source integrity and
+owned cleanup after user completion; no commit before evidence review.
+
+## A3.1 player navigation and basic statistics passed and reviewed
+
+All 123 checks passed: 40 offline/canonical PostgreSQL (17 new cases), 15 related
+contracts and 68 accepted P1 regressions. No failures/errors/skips. Supervisor
+20.00s. Reviewed raw and structured evidence. All 1,736 frozen inputs match and
+the retired module remains absent. All five containers were removed, independently
+confirmed with the exact run label. No production access or service changes.
+
+Ready for local commit. Remaining analytics and feature consumers remain A3;
+full-suite baseline comparison and retirement remain A4. Stage A is not accepted.

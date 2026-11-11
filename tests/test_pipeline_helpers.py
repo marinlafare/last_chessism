@@ -39,8 +39,10 @@ from chessism_api.operations.player_timezone import resolve_player_timezone
 from chessism_api.operations.game_analysis_views import (
     fair_sample_player_games_by_month,
 )
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.player_game_views import (
     get_player_fen_score_counts,
+)
+from chessism_api.database.postgresql.ask_db import (
     get_top_fens_unscored,
 )
 from chessism_api.database.postgresql.analysis_selection import _player_fens_for_analysis_stmt
@@ -2182,7 +2184,7 @@ class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
 class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
     async def test_player_coverage_includes_complete_games_and_fen_occurrences(self):
         query_result = MagicMock()
-        query_result.mappings.return_value.first.return_value = {
+        query_result.mappings.return_value.one.return_value = {
             "total_games": 120,
             "analyzed_games": 45,
             "total_positions": 6_400,
@@ -2194,13 +2196,11 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         }
         session = AsyncMock()
         session.execute.return_value = query_result
-        session_context = MagicMock()
-        session_context.__aenter__ = AsyncMock(return_value=session)
-        session_context.__aexit__ = AsyncMock(return_value=False)
+        session.in_transaction = MagicMock(return_value=True)
 
         with patch(
-            "chessism_api.database.postgresql.ask_db.AsyncDBSession",
-            return_value=session_context,
+            "chessism_api.operations.player_game_views.AsyncDBSession",
+            return_value=session,
         ):
             coverage = await get_player_fen_score_counts("hikaru")
 
@@ -2213,10 +2213,8 @@ class PlayerCoverageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(coverage["latest_rating"], 3_225)
         self.assertEqual(coverage["latest_rating_mode"], "blitz")
         self.assertEqual(coverage["latest_rating_at"], "2026-08-11T18:30:00+00:00")
-        sql = str(session.execute.await_args.args[0])
-        self.assertIn("played_at IS NOT NULL", sql)
-        self.assertIn("ORDER BY played_at DESC", sql)
-        self.assertNotIn("link DESC", sql)
+        session.commit.assert_awaited_once()
+        session.close.assert_awaited_once()
 
     async def test_most_repeated_unscored_query_matches_partial_index_order(self):
         expected = [{"fen": "8/8/8/8/8/8/8/K6k w - - 0 1", "n_games": 10, "score": None}]

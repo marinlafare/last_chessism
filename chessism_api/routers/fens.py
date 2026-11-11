@@ -10,6 +10,9 @@ from chessism_api.operations.game_analysis_views import (
     get_scored_game_analysis_overview,
     get_scored_game_analysis_page,
 )
+from chessism_api.operations.player_game_views import (
+    get_player_fen_score_counts,
+)
 from chessism_api.database.postgresql.ask_db import (
     get_top_fens,
     get_sum_n_games,
@@ -19,7 +22,6 @@ from chessism_api.database.postgresql.ask_db import (
     get_scored_positions_overview,
     get_scored_positions_page,
     get_scored_advantage_by_rating,
-    get_player_fen_score_counts,
     _get_remaining_fens_count_committed,
 )
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued

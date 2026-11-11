@@ -111,7 +111,7 @@ async def prepare_application_copy(conn, pgdata, publish):
 
 
 def read_cases(players):
-    from chessism_api.database.postgresql import ask_db
+    from chessism_api.operations import player_game_views
     from chessism_api.operations import player_analytics, player_hero_analytics
     result = []
     for player in players:
@@ -119,7 +119,7 @@ def read_cases(players):
         for method in ('get_player_games_page', 'get_player_game_summary',
                        'get_player_performance_summary', 'get_player_game_averages',
                        'get_player_termination_stats'):
-            result.append((cohort + '/' + method, ask_db, method, (name,)))
+            result.append((cohort + '/' + method, player_game_views, method, (name,)))
         for method in ('get_player_behavioural_activity', 'get_player_behavioural_ratings'):
             result.append((cohort + '/' + method, player_hero_analytics, method, (name,)))
         filters = player_analytics.normalize_player_analytics_filters(name, 'all', None, None)
@@ -148,7 +148,8 @@ async def measure_application_reads(socket, players, publish, save, *, database=
     """Interleave old/new calls; preserve strict output values and array order."""
     from chessism_api.database.postgresql import ask_db
     from chessism_api.operations import player_analytics, player_hero_analytics
-    modules = (ask_db, player_analytics, player_hero_analytics)
+    from chessism_api.operations import player_game_views
+    modules = (ask_db, player_analytics, player_hero_analytics, player_game_views)
     # The retained reference associations are text-keyed. Use the deployed
     # image's exact legacy analytics SQL there, not numeric SQL against columns
     # that never existed. Function entry points/payload formatting remain real.

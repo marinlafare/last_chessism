@@ -9,15 +9,17 @@ from fastapi.responses import JSONResponse
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.ingestion_pipeline.jobs import read_game
 from chessism_api.operations.player_game_explorer import get_game_score
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.player_game_views import (
     get_player_performance_summary,
     get_player_games_page,
     get_player_game_summary,
     get_player_mode_games,
+    get_player_time_control_results,
+)
+from chessism_api.database.postgresql.ask_db import (
     get_player_hours_played,
     get_player_time_control_top_moves,
     get_player_time_control_top_openings,
-    get_player_time_control_results,
     get_player_time_control_lengths,
     get_player_time_control_activity_trend,
     get_games_database_generalities,

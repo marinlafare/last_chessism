@@ -8,13 +8,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.redis_client import get_redis_pool
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.player_game_views import (
     get_player_fen_score_counts,
     get_player_neighbors,
     get_tracked_player_navigation,
     get_player_performance_summary,
     get_player_modes_stats,
-    get_player_mode_chart
+)
+from chessism_api.database.postgresql.ask_db import (
+    get_player_mode_chart,
 )
 from chessism_api.operations.players import (
     get_current_players_with_games_in_db, 

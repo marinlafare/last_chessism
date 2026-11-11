@@ -219,6 +219,40 @@ unless a new change affects it. Older opt-in fixture mappings remain A4 work.
 
 Analysis pages and previews passed all 135 checks; player/global readers remain.
 
+Next A3.1 subgate: player navigation and basic game statistics. Convert the
+player coverage/latest-rating, neighbors/title-group navigation, performance,
+averages/termination/opening statistics, recent games, game summary, mode games
+and mode-stat functions in `ask_db.py` to `operations/player_game_views.py` and
+`database/postgresql/player_game_reads.py`. Move the time-control results wrapper
+with its existing invalid-mode response. Keep hours/saved snapshots, charts and
+other analytics for their following gates. Preserve old public fields, null-vs-zero
+behavior and numeric types. A fixed feature-specific side projection derives
+rating/result/endings from canonical game/player relationships; no field catalog,
+query rewriter, schema views or runtime profile. Filter standard/nonempty games
+explicitly because the previous active tables excluded variants/zero-move rows.
+Keep player-perspective self-play counts (both sides), distinct from game selection.
+Navigation retains tracked/active/title predicates and alphabetical wraparound.
+
+Use a private operation context to share guarded read-only repeatable-read/UTC
+setup across these related views; persistence functions require its transaction.
+Consolidate duplicate game response formatting. Preserve page bounds; provide
+stable date/link/side ordering. Previously unspecified same-timestamp/side ties
+in latest-rating and mode ratings use black-before-white, matching recent-game
+color ordering; date is always primary. Opening frequency ties use ECO ascending.
+Update callers, route imports and reference helpers; no caller aliases or public
+endpoint changes. Old opt-in layout fixtures remain scheduled for A4 mapping.
+
+Verify canonical player/profile and game fixtures: empty/missing/deleted/untracked
+players, title groups and wrapping, variants/zero games, both self-play sides,
+coverage occurrences, rating date-vs-link priority, ties and pagination, UTC dates,
+results/modes/unknown modes, raw empty aggregate nulls, concurrent snapshot reads,
+read-only/query errors and repeated cancellation cleanup. Compare numeric/result
+aggregates to a simple independent in-memory fixture oracle; exercise actual routes.
+Retain relevant existing contracts and P1 checks, reuse unchanged schema evidence.
+Version remains 6. No hours/snapshot, CUDA, production data or Stage B work.
+
+Player navigation/basic statistics passed all 123 checks; remaining analytics follow.
+
 ### A3.2 — Research, exports, graph, administration and synthetic plans
 Depends on A3.1. Define remaining canonical auxiliary structures and convert
 `canonical_blunders/`, `cuda_summaries/`, `research_algorithms/`, `exports/`,

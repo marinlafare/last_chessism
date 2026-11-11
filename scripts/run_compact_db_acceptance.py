@@ -147,10 +147,10 @@ async def run(args):
             # injected; no runtime startup migration or external service runs.
             await reporter.publish('checking_application_reads')
             from unittest.mock import patch
-            from chessism_api.database.postgresql import ask_db
-            with patch.object(ask_db,'AsyncDBSession',factory):
+            from chessism_api.operations import player_game_views
+            with patch.object(player_game_views,'AsyncDBSession',factory):
                 for player in baseline['inputs']:
-                    page=await ask_db.get_player_games_page(player['player_name'])
+                    page=await player_game_views.get_player_games_page(player['player_name'])
                     if not isinstance(page,dict) or not page:
                         raise AssertionError('Player game API returned no data')
                     await passed('player_games_api/'+player['player_name'])
