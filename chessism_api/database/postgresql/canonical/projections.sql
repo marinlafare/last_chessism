@@ -81,3 +81,38 @@ CREATE TABLE fen_pipeline_summary (
 -- Empty database operation has valid zero totals; startup never creates caches.
 INSERT INTO database_summary DEFAULT VALUES;
 INSERT INTO fen_pipeline_summary DEFAULT VALUES;
+
+CREATE TABLE scored_position_summary (
+    id integer PRIMARY KEY DEFAULT 1 CHECK (id=1),
+    total_positions bigint NOT NULL DEFAULT 0,
+    analyzed_fens bigint NOT NULL DEFAULT 0,
+    scored_positions bigint NOT NULL DEFAULT 0,
+    nonzero_scored_fens bigint NOT NULL DEFAULT 0,
+    unscored_fens bigint NOT NULL DEFAULT 0,
+    equal_positions bigint NOT NULL DEFAULT 0,
+    small_positions bigint NOT NULL DEFAULT 0,
+    clear_positions bigint NOT NULL DEFAULT 0,
+    decisive_positions bigint NOT NULL DEFAULT 0,
+    mate_positions bigint NOT NULL DEFAULT 0,
+    equal_appearances bigint NOT NULL DEFAULT 0,
+    small_appearances bigint NOT NULL DEFAULT 0,
+    clear_appearances bigint NOT NULL DEFAULT 0,
+    decisive_appearances bigint NOT NULL DEFAULT 0,
+    mate_appearances bigint NOT NULL DEFAULT 0,
+    equal_abs_score_sum double precision NOT NULL DEFAULT 0,
+    small_abs_score_sum double precision NOT NULL DEFAULT 0,
+    clear_abs_score_sum double precision NOT NULL DEFAULT 0,
+    decisive_abs_score_sum double precision NOT NULL DEFAULT 0,
+    mate_abs_score_sum double precision NOT NULL DEFAULT 0,
+    white_better bigint NOT NULL DEFAULT 0,
+    black_better bigint NOT NULL DEFAULT 0,
+    balanced bigint NOT NULL DEFAULT 0,
+    score_sum double precision NOT NULL DEFAULT 0,
+    abs_score_sum double precision NOT NULL DEFAULT 0,
+    wdl_win_sum double precision NOT NULL DEFAULT 0,
+    wdl_draw_sum double precision NOT NULL DEFAULT 0,
+    wdl_loss_sum double precision NOT NULL DEFAULT 0,
+    wdl_positions bigint NOT NULL DEFAULT 0,
+    refreshed_at timestamptz NOT NULL DEFAULT now()
+);
+INSERT INTO scored_position_summary DEFAULT VALUES;

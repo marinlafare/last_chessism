@@ -2,17 +2,17 @@
 
 Status: Batch 1 independently accepted with documented limitations at `35be4fc`.
 Stage A2–A4 are now authorized and in progress. This remains **not a runtime-ready
-replacement database**. Game-import callers now use canonical persistence; remaining
+replacement database**. Game-import and bounded FEN ingestion now use canonical persistence; remaining
 consumers and runtime startup conversion are still pending. Entry code checkpoint
 for the foundation: `0fde829`. No historical data is required.
 
 ## Scope and sources
 
-The initializer creates 94 application tables, one semantic view, and a version
+The initializer creates 95 application tables, one semantic view, and a version
 record in one empty PostgreSQL 15 database. Ten core tables define the normalized
 chess relationships. `support.sql` preserves 78 existing account/session,
 appearance, ingestion/timing and cloud tables, including the typed cloud document
-children. Six projection tables support the game-import write unit. The supporting
+children. Seven projection tables support game imports and bounded FEN persistence. The supporting
 declarations were rendered from the checkpoint's SQLAlchemy metadata;
 initialization imports neither that metadata nor the old runtime. Large typed
 cloud definitions are retained because their checksums, packed arrays, receipts
@@ -230,6 +230,37 @@ the deployed relational_v3 behavior. Position counters are untouched by game imp
 Version 3 defines `player_salience_summary`, `player_salience_pending_game`,
 `main_character_mode_summary`, `game_analysis_coverage`, `database_summary` and
 `fen_pipeline_summary`. The latter two start with zero singleton totals. Other
-projection/feature definitions and FEN write conversion remain for the subsequent
-A2/A3 work. Historical import adapters have no new runtime callers and await A4
+projection/feature definitions remain for the subsequent A2/A3 work. Historical import adapters have no new runtime callers and await A4
 retirement; no additional selectable storage profile was introduced.
+
+
+## A2.2 bounded FEN persistence
+
+Version 4 adds the consumed `scored_position_summary` singleton with existing
+score-bin, appearance and aggregate fields. Initialization seeds zero totals;
+versions 1–3 are rejected, never silently upgraded. No existing database is changed.
+
+`fen_batches` owns each bounded replay/persistence transaction. `fen_repository`
+selects only standard, nonempty, incomplete, unclaimed games in link order using
+`FOR UPDATE SKIP LOCKED`. Replay remains pure. `fen_bulk` borrows the active driver
+transaction for COPY and resolves numeric identities once. Its existing ordered
+FEN locks, conflict rejection and inserted-link counter deltas remain unchanged.
+Repeated positions count occurrences; duplicate retries add nothing. Scores,
+continuations and cloud claims are preserved. Missing required summary rows fail
+and roll back the batch. Commit/rollback/closure use the accepted cleanup helper.
+
+The coordinator joins every known child before releasing claims, including after
+external/repeated cancellation or an enqueue/worker error. After workers commit,
+one application transaction writes absolute coverage, final game flags and pipeline
+totals. Failure here retains committed FEN/link/count data, rolls back finalization,
+and permits exact retries. Progress is published after the corresponding commit.
+`game_coverage` contains canonical SQL and never commits; `None` denotes intentional
+whole-corpus repair while an empty scope does nothing. Small scopes retain indexed
+per-game aggregation and sorted game locks followed by fresh snapshot reads.
+
+The duplicate legacy orchestration branch is removed. Old worker exports and the
+profile-based coverage module remain only for callers awaiting A2.3/A4 retirement.
+Rating, tablebase and player-summary consumers are not yet converted; this is still
+an intermediate Stage A checkout, not a deployment-ready runtime. The focused gate
+uses actual PostgreSQL and synthetic child scheduling; it does not exercise live
+Chess.com, Stockfish, GCP or production-scale throughput.

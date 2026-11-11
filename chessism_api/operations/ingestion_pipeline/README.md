@@ -44,18 +44,19 @@ Supporting modules:
   retained; month/global totals explicitly exclude variants/custom starts and
   zero-move games. Side-specific projections retain both self-play perspectives.
 - `game_repository.py` and `relational_repository.py` remain only for the obsolete
-  persistence paths pending their Stage A4 retirement. The FEN path below is still
-  awaiting its canonical conversion; this intermediate stage is not runtime-ready.
+  persistence paths pending their Stage A4 retirement. Game imports and bounded FEN
+  persistence now use canonical tables; other consumers are still being converted.
 - `pgn.py` rejects games without a clock for every played half-move. Such games
   are intentionally unusable for Chessism and must not be silently accepted.
 - FEN child workers claim games with `FOR UPDATE SKIP LOCKED`. A game becomes
   `fens_done` only after both the unique FEN rows and all game-position links
-  have committed.
-- Failed or interrupted claims are released before a retry.
-- In compact storage, new associations and their exact occurrence/summary
+  have committed. Coverage, final flags and pipeline totals commit in one final unit.
+- Failed or interrupted claims are released after all known child writers finish;
+  repeated cancellation cannot abandon that cleanup.
+- In canonical storage, new associations and their exact occurrence/summary
   deltas commit together. Retrying the same links adds zero to their counters.
   An existing move pointing to a different FEN aborts the whole batch.
-  Full recounts remain compatibility/repair paths, not routine compact ingestion.
+  Full recounts remain explicit repair paths, not routine ingestion.
 - Tablebase discovery is scoped to the games completed by the current pass.
 - New game ownership rows are recorded in `player_salience_pending_game` in the
   same transaction as ingestion. The drained pipeline queues those players for

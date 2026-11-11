@@ -1,4 +1,5 @@
 """Game-import projections, written within the same caller-owned transaction."""
+from .game_coverage import refresh_pipeline_summary
 
 
 async def refresh_import_summaries(connection, player_names, new_analyzable_links):
@@ -25,15 +26,8 @@ async def refresh_import_summaries(connection, player_names, new_analyzable_link
         CROSS JOIN (SELECT count(*) FILTER(WHERE joined IS NOT NULL AND joined<>0)::bigint AS main,
             count(*) FILTER(WHERE joined IS NULL OR joined=0)::bigint AS secondary FROM public.player) players
         WHERE id=1;
-        UPDATE public.fen_pipeline_summary SET
-            parsed_games=counts.games,analyzable_games=counts.games,excluded_games=0,
-            fen_extracted_games=counts.extracted,
-            tablebase_marked_games=least(tablebase_marked_games,counts.extracted),refreshed_at=now()
-        FROM (SELECT count(*)::bigint AS games,
-            count(*) FILTER(WHERE c.total_positions>0)::bigint AS extracted
-            FROM public.game g LEFT JOIN public.game_analysis_coverage c ON c.link=g.link
-            WHERE g.is_standard AND g.n_moves>0) counts WHERE id=1;
     ''')
+    await refresh_pipeline_summary(connection)
 
 
 async def _mark_pending(connection, links):

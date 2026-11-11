@@ -54,6 +54,19 @@ Map existing formatting/archival tests to canonical behavior without weakening t
 Test real complete imports, derived writes, failures,
 repeated imports and cancellation. Commit only after the focused gate passes.
 
+The game-import subgate passed all 149 checks and is committed as `4eee021`.
+The FEN subgate converts `fen_bulk.py`, `fen_repository.py`, `fen_batches.py` and
+`fen_orchestrator.py` to canonical storage. Add `database/postgresql/game_coverage.py`
+for caller-owned coverage and pipeline totals; reuse it in `game_import_summaries.py`.
+Define the consumed scored-position singleton in `canonical/projections.sql`, bump
+schema version to 4, and reject versions 1–3. Remove the legacy orchestration branch;
+its worker exports remain until A4's caller audit. Preserve bounded replay/COPY,
+ordered locks, exact insertion deltas, evaluation/claim preservation and retry policy.
+Application finalization commits coverage, flags and pipeline totals together.
+Cancellation drains known workers before releasing claims. Add real PostgreSQL
+FEN tests and focused coordinator regressions, retaining existing parser, progress,
+automatic scheduling and P1 checks. Record the replaced compatibility coverage.
+
 ### A2.3 — Canonical evaluation writes and analysis selection
 Depends on A2.2. Convert `fen_results.py`, `fen_summary_recovery.py`, tablebase writes,
 `fen_claims.py`, cloud importer/reservation/input preparation, and selectors currently

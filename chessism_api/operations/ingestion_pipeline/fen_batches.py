@@ -4,12 +4,14 @@ import logging
 import random
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.ask_db import refresh_game_analysis_summary, refresh_fen_pipeline_summary
+from chessism_api.database.postgresql.game_coverage import refresh_coverage, refresh_pipeline_summary
+from chessism_api.database.postgresql.transactions import write_transaction, driver_connection
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from .fen_bulk import persist_positions
 from .fen_core import process_single_game_sync, aggregate_fen_data, count_expected_fen_positions
 from .fen_repository import (
     claim_games_needing_fens, read_moves_for_games, set_game_fen_state,
-    finalize_fen_game_states, release_fen_processing_claims,
+    release_fen_processing_claims,
 )
 from .progress import increment_stage_progress, reset_stage_progress
 from .steps import StepReporter
@@ -55,7 +57,7 @@ async def _commit_batch(limit, reporter):
     for attempt in range(1, MAX_BATCH_ATTEMPTS + 1):
         checkpoint = reporter.checkpoint()
         try:
-            async with AsyncDBSession() as session, session.begin():
+            async with write_transaction(AsyncDBSession) as session:
                 links = await claim_games_needing_fens(session, limit)
                 if not links:
                     return None
@@ -104,7 +106,7 @@ async def run_fen_batch_job(ctx, total_games_to_process, batch_size=BATCH_GAMES,
     async with StepReporter(ctx, ingestion_run_id) as reporter:
         reporter.goal("extract_positions", remaining)
         while remaining > 0:
-            result = await _commit_batch(min(remaining, batch_size, BATCH_GAMES), reporter)
+            result = await _commit_batch(min(remaining, max(1, batch_size), BATCH_GAMES), reporter)
             if result is None:
                 break
             links, good, bad, batch_positions, counts = result
@@ -123,8 +125,21 @@ async def run_fen_batch_job(ctx, total_games_to_process, batch_size=BATCH_GAMES,
             "positions": positions, "new_positions": new_positions, "new_links": new_links}
 
 
+async def _join_workers(children):
+    results, errors = [], []
+    for child in children:
+        try:
+            results.append(await child.result(timeout=None))
+        except (Exception, asyncio.CancelledError) as error:
+            errors.append(error)
+    return results, errors
+
+
 async def run_bounded_pipeline(ctx, total_games_to_process, batch_size, num_workers,
                                ingestion_run_id=None, **_kwargs):
+    if total_games_to_process <= 0:
+        return {"claimed_games": 0, "successful_games": 0, "failed_games": 0,
+                "successful_game_links": []}
     redis, job_id = ctx["redis"], str(ctx["job_id"])
     await start_ingestion_stage(ingestion_run_id, "fen_extraction",
         detail="Extracting, saving and counting bounded position batches.")
@@ -133,54 +148,63 @@ async def run_bounded_pipeline(ctx, total_games_to_process, batch_size, num_work
         detail="Extracting and committing bounded game batches.")
     count = min(max(1, num_workers), total_games_to_process)
     per_worker, extra = divmod(total_games_to_process, count)
-    children, errors = [], []
-    for index in range(count):
-        try:
-            child = await redis.enqueue_job("run_fen_batch_job",
-                total_games_to_process=per_worker + (index < extra),
-                batch_size=min(batch_size, BATCH_GAMES), parent_job_id=job_id,
-                ingestion_run_id=ingestion_run_id, _queue_name="fen_queue")
-            if child is None:
-                raise RuntimeError("Could not queue bounded FEN worker")
-            children.append(child)
-        except Exception as error:
-            errors.append(error)
-            break
-    results = []
-    # Always join every writer before releasing claims after a failure.
-    for child in children:
-        try:
-            results.append(await child.result(timeout=None))
-        except Exception as error:
-            errors.append(error)
-    if errors:
-        await release_fen_processing_claims()
-        raise RuntimeError(f"Bounded FEN worker failed: {errors[0]}")
-    successful = sorted({link for result in results for link in result["successful_game_links"]})
-    failed = sorted({link for result in results for link in result["failed_game_links"]})
-    await finish_ingestion_stage(ingestion_run_id, "fen_extraction",
-        processed=sum(r["positions"] for r in results),
-        total=sum(r["positions"] for r in results),
-        detail="Position batches and exact appearance deltas committed.")
+    children, enqueue_errors = [], []
+    joined = None
     try:
+        for index in range(count):
+            try:
+                child = await redis.enqueue_job("run_fen_batch_job",
+                    total_games_to_process=per_worker + (index < extra),
+                    batch_size=min(max(1, batch_size), BATCH_GAMES), parent_job_id=job_id,
+                    ingestion_run_id=ingestion_run_id, _queue_name="fen_queue")
+                if child is None:
+                    raise RuntimeError("Could not queue bounded FEN worker")
+                children.append(child)
+            except Exception as error:
+                enqueue_errors.append(error)
+                break
+        # Shield the join itself: cancellation must not abandon a writer while
+        # its committed claims are released by recovery/the next coordinator.
+        joined = asyncio.create_task(_join_workers(children))
+        results, errors = await asyncio.shield(joined)
+        errors = enqueue_errors + errors
+        if errors:
+            raise RuntimeError(f"Bounded FEN worker failed: {errors[0]}") from errors[0]
+        successful = sorted({link for result in results for link in result["successful_game_links"]})
+        failed = sorted({link for result in results for link in result["failed_game_links"]})
+        await finish_ingestion_stage(ingestion_run_id, "fen_extraction",
+            processed=sum(r["positions"] for r in results),
+            total=sum(r["positions"] for r in results),
+            detail="Position batches and exact appearance deltas committed.")
         async with StepReporter(ctx, ingestion_run_id) as reporter:
             await reset_stage_progress(redis, job_id=job_id, ingestion_run_id=ingestion_run_id,
                 phase="refreshing_statistics", total=len(successful), processed=0,
                 detail="Refreshing coverage for imported games.")
-            async with reporter.step("coverage", len(successful), "games"):
-                for offset in range(0, len(successful), 1000):
-                    chunk = successful[offset:offset + 1000]
-                    await refresh_game_analysis_summary(tuple(chunk))
-                    await reporter.advance(len(chunk))
-                    await increment_stage_progress(redis, job_id=job_id,
-                        ingestion_run_id=ingestion_run_id, phase="refreshing_statistics",
-                        processed_delta=len(chunk), detail="Refreshing coverage for imported games.")
-            async with reporter.step("ingestion_summaries", 1, "refreshes"):
-                await finalize_fen_game_states(successful, failed)
-                await refresh_fen_pipeline_summary()
+            async with write_transaction(AsyncDBSession) as session:
+                async with reporter.step("coverage", len(successful), "games"):
+                    for offset in range(0, len(successful), 1000):
+                        chunk = successful[offset:offset + 1000]
+                        await refresh_coverage(session, chunk)
+                        await reporter.advance(len(chunk))
+                async with reporter.step("ingestion_summaries", 1, "refreshes"):
+                    await set_game_fen_state(session, successful, done=True, processing=False)
+                    await set_game_fen_state(session, failed, done=False, processing=False)
+                    await refresh_pipeline_summary(await driver_connection(session))
+            await increment_stage_progress(redis, job_id=job_id,
+                ingestion_run_id=ingestion_run_id, phase="refreshing_statistics",
+                processed_delta=len(successful), detail="Coverage and game states committed.")
+        return {"claimed_games": len(successful) + len(failed),
+                "successful_games": len(successful), "failed_games": len(failed),
+                "successful_game_links": successful}
     except BaseException:
-        await release_fen_processing_claims(successful + failed)
+        async def cleanup():
+            if joined is None:
+                await _join_workers(children)
+            else:
+                await joined
+            await release_fen_processing_claims()
+        try:
+            await finish_analysis_cleanup(cleanup())
+        except BaseException:
+            logger.exception("FEN recovery failed; preserving the operation error")
         raise
-    return {"claimed_games": len(successful) + len(failed),
-            "successful_games": len(successful), "failed_games": len(failed),
-            "successful_game_links": successful}

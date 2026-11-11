@@ -791,3 +791,52 @@ All five owned containers removed; independently confirmed by Docker run label.
 Reviewed raw logs and structured results. No source correction was needed.
 Recording and committing the game application transaction before continuing FEN
 persistence/coverage. Full A2.2 and Stage A remain in progress, not accepted.
+
+A2.2 game-import work committed locally as 4eee021. Working tree was clean.
+Starting the planned canonical FEN subgate: bounded persistence/claims, coverage,
+required scored-position projection, and application orchestration. The existing
+coverage algorithm is retained with direct canonical tables; its old profile-based
+module remains temporarily for unconverted evaluation callers until A2.3/A4.
+No new approval is needed within the authorized Stage A conversion.
+
+## A2.2 canonical FEN workflow prepared for verification
+
+Converted bounded FEN selection/replay/persistence and finalization to canonical
+SQL. The legacy orchestration branch is removed; old registered worker exports
+remain for A4 retirement. Profile-based coverage remains temporarily for callers
+awaiting A2.3 conversion. Schema version 4 adds the actual scored-position singleton;
+versions 1–3 fail validation. Game imports reuse canonical pipeline-total SQL.
+
+Batch ownership includes claims, COPY, numeric references and exact occurrence
+increments. Coverage, completion flags and pipeline totals share a final application
+transaction. Failed finalization preserves committed positions and permits exact
+retry. Known child writers are joined through repeated cancellation before claim
+release. Accepted P1 cleanup/progress mechanisms are unchanged.
+
+Added 18 mandatory PostgreSQL cases and eight coordinator regressions. Existing
+parser/aggregation, automatic scheduling, progress, transaction and P1 checks are
+included. Five offline schema checks pass; syntax and whitespace checks pass.
+Prepared 198-check gate (77 foundation/PostgreSQL, 53 workflow, 68 P1), with 1,718
+frozen inputs. Ten original baseline inputs are intentionally converted; the other
+1,689 remain unchanged. Prior baseline debt is unchanged and not claimed resolved.
+No full-suite rerun, production access or deployment. Evidence directory:
+/tmp/chessism-canonical-a2-fens-20261110-01. No passing integration claim yet.
+
+A2.2 FEN gate launched; supervisor PID 2332736. Startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a2-fens-20261110-01/monitor.py`.
+Returning control without waiting or polling. After the user's completion report,
+review structured results, source hashes and owned cleanup; correct any demonstrated
+conversion defects before committing. Stage A remains in progress, not accepted.
+
+## A2.2 FEN evidence reviewed
+
+All 198 checks passed: 77 foundation/PostgreSQL, 53 workflow, 68 accepted P1 checks;
+zero failures/errors/skips. Supervisor 27.81s. Read raw test logs and structured
+reports; all 1,718 frozen inputs still match. All five containers were removed,
+independently confirmed using the unique Docker run label. No implementation
+correction was required. Committing the verified FEN conversion locally.
+
+A2.2 ingestion units are complete; remaining evaluation writers belong to A2.3,
+and derived feature readers/writers and obsolete adapters remain for A3/A4.
+Stage A is still incomplete and has not received independent acceptance. No push,
+merge, deployment, production access or changes to the recovery checkpoint.

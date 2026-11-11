@@ -1,11 +1,10 @@
-"""Bounded COPY staging and retry-safe position persistence for compact storage."""
+"""Bounded COPY staging and retry-safe canonical position persistence."""
 from contextlib import asynccontextmanager
 import json
 import logging
 from time import perf_counter
 
-from chessism_api.database.postgresql.compact_storage import compact_for
-from chessism_api.database.postgresql.relational_storage import driver_connection
+from chessism_api.database.postgresql.transactions import driver_connection
 
 LOG = logging.getLogger(__name__)
 
@@ -26,9 +25,6 @@ async def persist_positions(session, fens, associations, reporter=None, *, timin
     Existing scores and cloud claims are never replaced. New and existing FENs
     acquire locks in one textual order, matching cloud reservation/import order.
     """
-    layout = compact_for(session)
-    if not layout:
-        raise RuntimeError("Bulk ingestion requires compact storage")
     if any(row["move_color"] not in ("white", "black") for row in associations):
         raise ValueError("Invalid move side")
     identities = {row['fen']: key for key, row in enumerate(fens)}
@@ -43,8 +39,8 @@ async def persist_positions(session, fens, associations, reporter=None, *, timin
         raise ValueError('A game-position link has no canonical FEN input') from error
     timings = timings if timings is not None else {}
     conn = await driver_connection(session)
-    fen = layout.table("fen")
-    links = layout.table("game_fen_association")
+    fen = "public.fen"
+    links = "public.game_fen_association"
     await conn.execute("""
         CREATE TEMP TABLE ingestion_fen_input (
             fen_key integer PRIMARY KEY, fen text UNIQUE NOT NULL, piece_count smallint, moves_counter text
@@ -135,12 +131,12 @@ async def persist_positions(session, fens, associations, reporter=None, *, timin
         # Fail closed if the required singleton caches are missing, rather than
         # committing links with silently absent counter deltas.
         for table in ("database_summary", "scored_position_summary"):
-            if not await conn.fetchval(f"SELECT EXISTS(SELECT 1 FROM {layout.table(table)} WHERE id=1)"):
+            if await conn.fetchval(f"SELECT id FROM public.{table} WHERE id=1 FOR UPDATE") != 1:
                 raise RuntimeError(f"Missing {table}; initialize summaries before ingestion")
-        await conn.execute(f"""UPDATE {layout.table('database_summary')}
+        await conn.execute("""UPDATE public.database_summary
             SET n_positions=n_positions+$1,unscored_fens=unscored_fens+$1,
                 refreshed_at=CURRENT_TIMESTAMP WHERE id=1""", new_count)
-        await conn.execute(f"""UPDATE {layout.table('scored_position_summary')}
+        await conn.execute("""UPDATE public.scored_position_summary
             SET total_positions=total_positions+$1,unscored_fens=unscored_fens+$1,
                 equal_appearances=equal_appearances+$2,small_appearances=small_appearances+$3,
                 clear_appearances=clear_appearances+$4,decisive_appearances=decisive_appearances+$5,

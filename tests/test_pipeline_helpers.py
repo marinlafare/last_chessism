@@ -1069,7 +1069,7 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 fens,
-                "_get_remaining_fens_count_committed",
+                "count_pending_games",
                 new_callable=AsyncMock,
                 return_value=125,
             ),
@@ -1116,7 +1116,7 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
         with (
             patch.object(
                 fens,
-                "_get_remaining_fens_count_committed",
+                "count_pending_games",
                 new_callable=AsyncMock,
                 return_value=50,
             ),
