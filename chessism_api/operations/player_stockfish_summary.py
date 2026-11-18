@@ -3,7 +3,7 @@
 No blunder/accuracy/salience formula changes. No engine runs. Readers never
 build summaries. Publication is atomic; concurrent changes cannot be lost.
 """
-from datetime import timezone
+from datetime import date, datetime, time, timedelta, timezone
 import hashlib
 import json
 import logging
@@ -13,12 +13,41 @@ from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
-from .player_analytics_summary import day_params, source_rows_sql, NULL_DAY
 from .player_score_distribution import MODES, bins, games_sql, positions_sql, endings_sql
 from .player_score_histogram import BATCH_SELECTION, BATCH_GAMES
 from .mate_distance import mate_distance_sql
 
 LOG = logging.getLogger(__name__)
+NULL_DAY = date(1, 1, 1)
+
+
+def source_rows_sql(session, *, dates_only=False):
+    layout = storage_for(session)
+    bound = '''(:all_days OR (:null_day AND played_at IS NULL) OR
+        (NOT :null_day AND played_at>=:start AND played_at<:end))'''
+    if not layout:
+        return text(f'''SELECT {'DISTINCT played_at' if dates_only else '*'}
+            FROM game_player WHERE player_name=:player AND {bound}''')
+    branches = []
+    for side, other, white in (('white', 'black', 'true'), ('black', 'white', 'false')):
+        fields = 'g.played_at' if dates_only else f'''g.link,'{side}'::text AS color,g.played_at,m.name AS mode,
+            g.{side}_elo AS rating,g.{side}_result AS result,g.time_elapsed,g.eco,
+            opponent.player_name AS opponent_name'''
+        joins = '' if dates_only else f'''LEFT JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
+            LEFT JOIN {layout.table('player')} opponent ON opponent.id=g.{other}_player_id'''
+        branches.append(f'''SELECT {fields} FROM {layout.table('game')} g {joins}
+            WHERE g.{side}_player_id=(SELECT id FROM owner)
+            AND {bound.replace('played_at', 'g.played_at')}
+            AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
+                WHERE gp.game_link=g.link AND gp.player_id=(SELECT id FROM owner) AND gp.is_white={white})''')
+    return text(f'''WITH owner AS (SELECT id FROM {layout.table('player')} WHERE player_name=:player)
+        {' UNION ALL '.join(branches)}''')
+
+
+def day_params(player, day=NULL_DAY, *, all_days=False):
+    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
+    return {'player': player, 'all_days': all_days, 'null_day': day == NULL_DAY,
+            'start': start, 'end': start + timedelta(days=1)}
 
 
 def enabled():

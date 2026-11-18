@@ -24,7 +24,7 @@ async def main():
     from chessism_api.operations import player_analytics_summary as summaries, player_hero_analytics as hero
     from chessism_api.operations import player_rating_distribution as histogram, player_game_catalog as catalog
     from chessism_api.operations import player_game_views
-    from chessism_api.database.postgresql import ask_db
+    from chessism_api.operations import player_analytics_summary as hours
 
     root = Path(tempfile.mkdtemp(prefix='db-refactor-baseline-player-summary-', dir='/restore-test'))
     socket = root / 'socket'; socket.mkdir()
@@ -119,7 +119,7 @@ async def main():
                     if result['status'] != 'building': break
                     result = await summaries.refresh_player(player, batch_days=1, session_factory=factory)
                 assert result['status'] == 'ready', result
-            with patch.object(hero,'AsyncDBSession',factory), patch.object(ask_db,'AsyncDBSession',factory), \
+            with patch.object(hero,'AsyncDBSession',factory), patch.object(hours,'AsyncDBSession',factory), \
                  patch.object(histogram,'AsyncDBSession',factory), patch.object(catalog,'AsyncDBSession',factory), \
                  patch.object(summaries,'AsyncDBSession',factory):
                 legacy_cache, summary_cache = Redis(), Redis()
@@ -155,10 +155,10 @@ async def main():
                                             assert all(row['games'] >= minimum for row in actual['rows'])
                                             checks += 1
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='0'
-                    expected=await ask_db.get_player_hours_played(player)
+                    expected=await hours.get_player_hours_played(player)
                     recent=await player_game_views.get_player_games_page(player,page=1,page_size=1,factory=factory)
                     os.environ['CHESSISM_PLAYER_SUMMARIES']='1'
-                    assert clean(await ask_db.get_player_hours_played(player))==clean(expected)
+                    assert clean(await hours.get_player_hours_played(player))==clean(expected)
                     latest=await summaries.get_latest_game(player)
                     # Unlike the old query, NULL dates never displace a real last-play date.
                     assert latest['played_at'] is None or 'T' in latest['played_at']

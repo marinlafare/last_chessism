@@ -694,3 +694,44 @@ uses constants.CONN_STRING. The private historical finalization script consumes 
 new JSON roster and no longer needs the migration-only transaction_managed option.
 Version validation rejects 1–7 without modifying an existing database. No historical
 import/backup restore or deployed resources were used to implement this change.
+
+## A3 player metadata snapshots and hours (canonical version 9)
+
+`canonical/player_analytics.sql` owns state, dirty UTC dates, daily partitions and
+seven section snapshots by canonical player ID, with cascading derived-data foreign
+keys. No nullable-date migration bucket is needed: canonical game dates are required.
+The existing pure aggregation remains unchanged, including both self-play sides,
+local timezone/DST handling, last-rating ties, catalog contributions and rounding.
+
+Game transition triggers queue distinct affected owner/day pairs, including old and
+new ownership, dates, standard/nonempty eligibility, ratings/results and mode changes.
+Profile changes queue full rebuilds; renames also invalidate opponent catalogs.
+Game truncation invalidates retained partitions. Score/FEN/processing/avatar/title
+updates and duplicate inserts do not dirty metadata. Physical profile deletion
+cascades its derived data; demotion/soft deletion hides snapshots and queues removal.
+
+`player_metadata.py` contains canonical SQL. `player_analytics_summary.py` owns the
+shared cancellation-safe transaction boundary, calculation and bounded publication.
+A batch reads a REPEATABLE READ snapshot, calculates before taking producer locks,
+then locks source state before dirty dates, matching ingestion's order. Concurrent
+invalidation raises a serialization error before publication. Source changes after
+that lock wait and leave a new dirty revision after commit. Partial daily batches
+retain old complete sections; the final batch publishes all seven atomically.
+Failure metadata cannot overwrite a newer revision or successful publication.
+
+Hours/latest routes use one read-only transaction for cache selection and canonical
+fallback; query/database failures propagate. The catalog reader consumes one saved
+snapshot, eliminating its metadata/payload read race. Redis ranking keys include
+canonical player ID and revision, so deleting/recreating a public name cannot reuse
+its old counts. Existing public fields, summary feature flag, empty behavior and
+manual CUDA ownership remain. CPU refreshes hold the existing manual-control share
+lock when present; no CUDA jobs are launched by this conversion.
+
+Remaining legacy dependency is explicit: the old date/source helpers still used by
+Stockfish partitions move unchanged into that consumer, not a compatibility alias
+in the canonical metadata operation. Its historical CUDA test imports follow that
+move. Stockfish/CUDA/frequency publishers and historical schema installers require
+their already planned conversions before A4 retirement. Historical multi-profile
+parity scripts remain mapping debt; they are not claimed to pass on canonical V9.
+The new focused PostgreSQL suite covers metadata/hours behavior; broader catalog,
+distribution and CUDA parity belongs with those consumer conversions.

@@ -1695,3 +1695,88 @@ docs/architecture/evidence/stage-a-home-2026-11-18.tar.gz.
 Version 8 and homepage snapshot are ready for local checkpoint. Original database,
 recovery checkpoint and deployed services remain untouched. Stage A is incomplete
 and unaccepted; next is player analytics snapshots and hours.
+
+### Canonical player metadata snapshots and hours — started 2026-11-18
+
+Homepage committed locally as 870c035 with clean tree. Next scoped consumer keeps
+existing pure aggregation while replacing profile-selected persistence with canonical
+ID-owned derived tables, transactional invalidation, bounded publication and guarded
+session cleanup. Hours/latest and catalog snapshot reads move with their publisher.
+CUDA/frequency publishers and broad catalog SQL remain their recorded A3.2/A3 work,
+not hidden behind new compatibility branches. No verification process is running.
+
+Player metadata implementation prepared: version 9 adds ID-owned derived tables,
+FK cascades and transactional source invalidation. Seven calculation sections are
+unchanged (six pure functions AST-identical). The batch computes first, then takes
+state/dirty locks in the producer order; concurrent invalidation fails with 40001
+and previous published sections remain intact. Hours/latest and cached catalog reads
+use canonical persistence; catalog keys include player ID to isolate name reuse.
+
+Source inspection found Stockfish's pending conversion still consumes the old date
+helpers. Those two helpers move AST-identically into that actual consumer; its CUDA
+parity test import follows. No compatibility alias or extra storage profile is added.
+Historical broad metadata/CUDA parity scripts remain explicit mapping debt; they are
+not this gate. The 23 new PostgreSQL cases cover canonical metadata/hours, including
+DST, self-play, bounded batches, deletes/renames/eligibility, corruption, manual mode,
+concurrent publication/invalidation, failure/cancellation, cache identity and routes.
+
+Five offline schema checks, changed Python AST parsing, aggregation/helper identity
+and git diff --check pass. Prepared gate: 105 foundation + 20 calculations/transactions
++ all 68 P1 = 193 checks, zero skips permitted. Frozen source and runner evidence:
+/tmp/chessism-canonical-a3-player-metadata-20261118-01.
+Private networkless bounded PostgreSQL/Redis only; original DB/checkpoint/services
+untouched. Stage A remains incomplete and unaccepted. Review before the next chunk.
+
+Player metadata gate launched: supervisor PID 834357; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-player-metadata-20261118-01/monitor.py`. Returning control without polling.
+Review all results, frozen hashes and owned cleanup before any local commit.
+
+### Player metadata launch 1 — three new-test assumptions corrected
+
+The supervisor exited in 42.42 seconds. Foundation ran all 105 checks: 102 passed,
+1 failure, 2 errors, zero skips. Workflow and P1 suites were not started. Exact
+identities and tracebacks are preserved in foundation-results.json/foundation.log:
+- CanonicalPlayerMetadataTests.test_bounded_batches_keep_previous_complete_snapshot:
+  expected two remaining days but three remained. The synthetic games originally
+  occupied 2026-01-01; moving them correctly queued that old day along with the three
+  new dates. The test now asserts all four exact dirty dates, checks that each
+  one-day batch retains unpublished state, and verifies the old-day partition is empty.
+- CanonicalPlayerMetadataTests.test_cached_hours_and_latest_routes_match_live_readonly_fallback:
+  the route lowercases but does not strip whitespace (unchanged public behavior).
+  Its spaced input missed the saved player and hit the deliberately unavailable
+  game table. Use uppercase ALICE to test the actual case-normalization contract;
+  all cached-route, missing-source, readonly and retained-data assertions remain.
+- CanonicalPlayerMetadataTests.test_manual_metadata_ownership_and_missing_snapshot_placeholder:
+  DuplicateTableError during setup because canonical DDL already initializes
+  cuda_summary_control. Assert that singleton exists and metadata mode starts off,
+  then add the metadata column exactly as the existing opt-in installer does and
+  enable its flags. The test no longer attempts to recreate the canonical table.
+
+All 1,761 hashes matched before correction. Supervisor exited; all three owned
+containers removed, independently confirmed by exact-label inspection. Corrections
+change only the new PostgreSQL test file; all other 1,760 frozen inputs match.
+No application/schema changes, assertion removal, skip, limit or suite-count change.
+Gate remains 105+20+68=193; all 23 new cases retained. No next implementation or
+commit until the complete rerun passes and evidence is reviewed.
+
+Prepared corrected gate at /tmp/chessism-canonical-a3-player-metadata-20261118-02.
+Harness/dispatch, limits, test counts and all application/schema hashes unchanged.
+Only the reviewed PostgreSQL test correction is permitted in the frozen inventory.
+
+Player metadata launch 2: supervisor PID 857672; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-player-metadata-20261118-02/monitor.py`. Returning control without polling.
+
+### Player metadata verification passed — 2026-11-18
+
+105 foundation, 20 calculation/transaction and all 68 P1 checks passed: 193 total,
+zero failures/errors/skips in 49.78 seconds on Python 3.10.22. Raw and structured
+results agree; all 1,761 frozen source hashes match. Supervisor exited. All five
+owned containers removed, independently confirmed by exact-label inspection.
+No application changes after the pass; no redundant full-suite run.
+
+Both launches, including original failure identities/tracebacks, archived, read back
+and byte-checked at docs/architecture/evidence/stage-a-player-metadata-2026-11-18.tar.gz.
+Version 9, ID-owned derived snapshots and canonical hours/latest reads are ready for
+local checkpoint. Source invalidation, both concurrency orders, cancellation and
+late failure tests passed. Original DB/checkpoint/services remain untouched.
+Stage A remains incomplete/unaccepted. Next: canonical catalogs/rating distribution.

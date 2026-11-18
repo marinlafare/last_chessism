@@ -5,10 +5,7 @@ import hashlib
 import json
 
 from redis.exceptions import RedisError
-from sqlalchemy import text
 
-from chessism_api.database.postgresql.player_analytics_schema import analytics_table
-from chessism_api.database.postgresql.relational_storage import storage_for
 from .player_analytics_summary import enabled, read_snapshot, counts
 
 CATALOG_SORTS = ('games', 'wins', 'losses', 'draws')
@@ -66,19 +63,15 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
     ratio_bin = catalog_ratio_bin(sort_by, ratio_bin)
     if not enabled():
         return None
-    meta = (await session.execute(text(f'''SELECT revision,generated_at FROM
-        {analytics_table(storage_for(session), 'snapshot')} WHERE player_name=:player AND section=:kind'''),
-        {'player': scope.player, 'kind': kind})).mappings().first()
-    if not meta:
-        from .cuda_summaries.metadata_store import enabled as cuda_metadata
-        if not await cuda_metadata(session):return None
-        meta={'revision':0,'generated_at':None}
+    saved = await read_snapshot(session, scope.player, kind)
+    if saved is None:
+        return None
     # Reuse the saved counts across outcomes; filter and rank before paging.
     minimum = catalog_min_games(kind, search)
     # Separate the searchable ranking from the repeated-only browsing ranking,
     # but reuse it across search strings rather than rebuilding per keystroke.
-    identity = [scope.player, kind, mode, color, meta['revision'], minimum]
-    key = 'chessism:catalog-ranking:v7:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
+    identity = [saved['_player_id'], scope.player, kind, mode, color, saved['summary_revision'], minimum]
+    key = 'chessism:catalog-ranking:v8:' + hashlib.sha256(json.dumps(identity).encode()).hexdigest()
     ranked = None
     try:
         raw = await redis.get(key)
@@ -86,17 +79,11 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
     except (RedisError, TypeError, ValueError):
         pass
     if not isinstance(ranked, list):
-        saved = await read_snapshot(session, scope.player, kind)
-        if not saved:
-            return None
         ranked = rank_catalog(saved['rows'], mode, color, min_games=minimum)
-        # A refresh between reads must not cache a new ranking under an old key.
-        if saved['summary_revision'] == meta['revision']:
-            try:
-                await redis.set(key, json.dumps(ranked), ex=3600)
-            except RedisError:
-                pass
-        meta = {**meta, 'revision': saved['summary_revision']}
+        try:
+            await redis.set(key, json.dumps(ranked), ex=3600)
+        except RedisError:
+            pass
     def matches(row):
         label = (row['key'].replace('-', ' ') or 'Unknown opening') if kind == 'openings' else (row['key'] or 'Unknown opponent')
         return not search or search in row['key'].lower() or search in label.lower()
@@ -109,6 +96,6 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
             row['latest_ratings'] = ratings.get(row['key'], dict.fromkeys(RATING_MODES if mode == 'all' else [mode]))
     total = len(matching)
     return {'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search, 'sort_by': sort_by, 'ratio_bin': ratio_bin,
-            'rows': rows, 'total_games': sum(row['games'] for row in matching), 'summary_revision': meta['revision'],
+            'rows': rows, 'total_games': sum(row['games'] for row in matching), 'summary_revision': saved['summary_revision'],
             'max_age_seconds': 0, 'pagination': {'page': page, 'limit': limit, 'total_groups': total,
                 'total_pages': (total + limit - 1) // limit, 'has_more': page * limit < total}}

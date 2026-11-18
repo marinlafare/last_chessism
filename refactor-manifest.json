@@ -6345,30 +6345,33 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical homepage snapshot \u2014 passed, local commit pending",
+      "current_gate": "canonical player metadata snapshots and hours \u2014 passed, local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "evidence_directory": "/tmp/chessism-canonical-a3-home-20261118-01",
+        "attempt": 2,
+        "entry_commit": "870c035c1a56bc9c5ea5085492c484a55daf079b",
+        "evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-02",
         "expected_checks": {
-          "foundation": 112,
-          "workflow": 10,
+          "foundation": 105,
+          "workflow": 20,
           "p1": 68
         },
-        "total_checks": 190,
-        "frozen_source_files": 1758,
-        "protected_baseline_files": 1623,
-        "entry_commit": "71f231bbb9a10e3a2a2cbb421b11d733b095b7b6",
-        "supervisor_pid": 753734,
+        "total_checks": 193,
+        "frozen_source_files": 1761,
+        "protected_baseline_files": 1619,
+        "correction_scope": "new PostgreSQL test fixture/contract assumptions only",
+        "previous_evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-01",
+        "supervisor_pid": 857672,
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 112,
+            "tests": 105,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 39.060572147369385,
+            "elapsed_seconds": 37.62095093727112,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6376,11 +6379,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 10,
+            "tests": 20,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.130873441696167,
+            "elapsed_seconds": 0.16207170486450195,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6392,41 +6395,41 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 3.747255563735962,
+            "elapsed_seconds": 3.8770360946655273,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "total_passed": 190,
-        "elapsed_seconds": 51.73700189590454,
-        "source_integrity": "All 1758 frozen hashes match",
+        "total_passed": 193,
+        "elapsed_seconds": 49.77635192871094,
+        "source_integrity": "All 1761 frozen source hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-home-1b29982096-p1",
+            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-home-1b29982096-workflow",
+            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-home-1b29982096-foundation",
+            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-home-1b29982096-redis",
+            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-home-1b29982096-postgres",
+            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "evidence_archive": "docs/architecture/evidence/stage-a-home-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "22f1c2883b5408c23c850b16378f170d149324da57cb115648ff0561f4e2255f",
+        "evidence_archive": "docs/architecture/evidence/stage-a-player-metadata-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "2c3164ab68fcc697d3085051700aff01dce3163b9535fce5097c36d2b5319c91",
         "commit_pending": true
       },
       "verification_attempts": [
@@ -6722,6 +6725,67 @@
             }
           ],
           "cleanup_independently_confirmed": true
+        },
+        {
+          "status": "failed",
+          "entry_commit": "870c035c1a56bc9c5ea5085492c484a55daf079b",
+          "evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-01",
+          "expected_checks": {
+            "foundation": 105,
+            "workflow": 20,
+            "p1": 68
+          },
+          "total_checks": 193,
+          "frozen_source_files": 1761,
+          "protected_baseline_files": 1619,
+          "supervisor_pid": 834357,
+          "attempt": 1,
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 105,
+              "failures": 1,
+              "errors": 2,
+              "skips": 0,
+              "elapsed_seconds": 37.49458169937134,
+              "failure_details": [
+                {
+                  "test": "tests.check_canonical_player_metadata_postgres.CanonicalPlayerMetadataTests.test_bounded_batches_keep_previous_complete_snapshot",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/check_canonical_player_metadata_postgres.py\", line 124, in test_bounded_batches_keep_previous_complete_snapshot\n    first=await self.refresh(batch_days=1);self.assertEqual(first,{'status':'building','days':1,'remaining':2})\nAssertionError: {'status': 'building', 'days': 1, 'remaining': 3} != {'status': 'building', 'days': 1, 'remaining': 2}\n- {'days': 1, 'remaining': 3, 'status': 'building'}\n?                          ^\n\n+ {'days': 1, 'remaining': 2, 'status': 'building'}\n?                          ^\n\n"
+                }
+              ],
+              "error_details": [
+                {
+                  "test": "tests.check_canonical_player_metadata_postgres.CanonicalPlayerMetadataTests.test_cached_hours_and_latest_routes_match_live_readonly_fallback",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 550, in _prepare_and_execute\n    self._rows = deque(await prepared_stmt.fetch(*parameters))\n  File \"/usr/local/lib/python3.10/site-packages/asyncpg/prepared_stmt.py\", line 177, in fetch\n    data = await self.__bind_execute(args, 0, timeout)\n  File \"/usr/local/lib/python3.10/site-packages/asyncpg/prepared_stmt.py\", line 268, in __bind_execute\n    data, status, _ = await self.__do_execute(\n  File \"/usr/local/lib/python3.10/site-packages/asyncpg/prepared_stmt.py\", line 257, in __do_execute\n    return await executor(protocol)\n  File \"asyncpg/protocol/protocol.pyx\", line 197, in bind_execute\nasyncpg.exceptions.UndefinedTableError: relation \"public.game\" does not exist\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1969, in _exec_single_context\n    self.dialect.do_execute(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/default.py\", line 952, in do_execute\n    cursor.execute(statement, parameters)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 585, in execute\n    self._adapt_connection.await_(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 132, in await_only\n    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 196, in greenlet_spawn\n    value = await result\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in _prepare_and_execute\n    self._handle_exception(error)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 513, in _handle_exception\n    self._adapt_connection._handle_exception(error)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 797, in _handle_exception\n    raise translated_error from error\nsqlalchemy.dialects.postgresql.asyncpg.AsyncAdapt_asyncpg_dbapi.ProgrammingError: <class 'asyncpg.exceptions.UndefinedTableError'>: relation \"public.game\" does not exist\n\nThe above exception was the direct cause of the following exception:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/check_canonical_player_metadata_postgres.py\", line 233, in test_cached_hours_and_latest_routes_match_live_readonly_fallback\n    response=await games.api_get_player_hours_played(' ALICE ')\n  File \"/workspace/chessism_api/routers/games.py\", line 419, in api_get_player_hours_played\n    result = await get_player_hours_played(player_name_lower)\n  File \"/workspace/chessism_api/operations/player_analytics_summary.py\", line 157, in get_player_hours_played\n    payload = saved if saved is not None else await storage.live_hours(session, player_name)\n  File \"/workspace/chessism_api/database/postgresql/player_metadata.py\", line 165, in live_hours\n    result = await execute(session, '''SELECT m.name AS mode,count(*) AS games,\n  File \"/workspace/chessism_api/database/postgresql/player_metadata.py\", line 11, in execute\n    return await session.execute(text(sql), params)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/ext/asyncio/session.py\", line 449, in execute\n    result = await greenlet_spawn(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 201, in greenlet_spawn\n    result = context.throw(*sys.exc_info())\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/orm/session.py\", line 2373, in execute\n    return self._execute_internal(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/orm/session.py\", line 2280, in _execute_internal\n    result = conn.execute(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1421, in execute\n    return meth(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/sql/elements.py\", line 526, in _execute_on_connection\n    return connection._execute_clauseelement(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1643, in _execute_clauseelement\n    ret = self._execute_context(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1848, in _execute_context\n    return self._exec_single_context(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1988, in _exec_single_context\n    self._handle_dbapi_exception(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 2365, in _handle_dbapi_exception\n    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/base.py\", line 1969, in _exec_single_context\n    self.dialect.do_execute(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/engine/default.py\", line 952, in do_execute\n    cursor.execute(statement, parameters)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 585, in execute\n    self._adapt_connection.await_(\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 132, in await_only\n    return current.parent.switch(awaitable)  # type: ignore[no-any-return,attr-defined] # noqa: E501\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/util/_concurrency_py3k.py\", line 196, in greenlet_spawn\n    value = await result\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 563, in _prepare_and_execute\n    self._handle_exception(error)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 513, in _handle_exception\n    self._adapt_connection._handle_exception(error)\n  File \"/usr/local/lib/python3.10/site-packages/sqlalchemy/dialects/postgresql/asyncpg.py\", line 797, in _handle_exception\n    raise translated_error from error\nsqlalchemy.exc.ProgrammingError: (sqlalchemy.dialects.postgresql.asyncpg.ProgrammingError) <class 'asyncpg.exceptions.UndefinedTableError'>: relation \"public.game\" does not exist\n[SQL: SELECT m.name AS mode,count(*) AS games,\n        coalesce(sum(g.time_elapsed),0) AS seconds,max(g.played_at) AS latest\n        FROM public.player p JOIN public.game_player gp ON gp.player_id=p.id\n        JOIN public.game g ON g.link=gp.game_link LEFT JOIN public.game_mode m ON m.id=g.mode_id\n        WHERE p.player_name=$1 AND g.is_standard AND g.n_moves>0 GROUP BY m.name]\n[parameters: (' alice ',)]\n(Background on this error at: https://sqlalche.me/e/20/f405)\n"
+                },
+                {
+                  "test": "tests.check_canonical_player_metadata_postgres.CanonicalPlayerMetadataTests.test_manual_metadata_ownership_and_missing_snapshot_placeholder",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/check_canonical_player_metadata_postgres.py\", line 373, in test_manual_metadata_ownership_and_missing_snapshot_placeholder\n    await self.db.execute('''CREATE TABLE cuda_summary_control(id boolean PRIMARY KEY,manual boolean,metadata boolean);\n  File \"/usr/local/lib/python3.10/site-packages/asyncpg/connection.py\", line 377, in execute\n    result = await self._protocol.query(query, timeout)\n  File \"asyncpg/protocol/protocol.pyx\", line 341, in query\nasyncpg.exceptions.DuplicateTableError: relation \"cuda_summary_control\" already exists\n"
+                }
+              ],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "elapsed_seconds": 42.41506338119507,
+          "source_integrity": "All 1761 source hashes matched at evidence review before fixture correction",
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-player-metadata-6f05041aa7-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-6f05041aa7-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-6f05041aa7-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "failure_category": "Three new-test assumptions: fourth dirty day, route whitespace, existing CUDA control table"
         }
       ],
       "completed_verifications": [
@@ -7043,6 +7107,88 @@
           "evidence_archive": "docs/architecture/evidence/stage-a-global-summaries-2026-11-18.tar.gz",
           "evidence_archive_sha256": "75ea05dd83653815958a7406ed1ae3d8f786b7674356a1d57b827a55c36a554c",
           "commit_sha": "71f231bbb9a10e3a2a2cbb421b11d733b095b7b6"
+        },
+        {
+          "status": "passed",
+          "evidence_directory": "/tmp/chessism-canonical-a3-home-20261118-01",
+          "expected_checks": {
+            "foundation": 112,
+            "workflow": 10,
+            "p1": 68
+          },
+          "total_checks": 190,
+          "frozen_source_files": 1758,
+          "protected_baseline_files": 1623,
+          "entry_commit": "71f231bbb9a10e3a2a2cbb421b11d733b095b7b6",
+          "supervisor_pid": 753734,
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 112,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 39.060572147369385,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 10,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.130873441696167,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.747255563735962,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 190,
+          "elapsed_seconds": 51.73700189590454,
+          "source_integrity": "All 1758 frozen hashes match",
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-home-1b29982096-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-home-1b29982096-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-home-1b29982096-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-home-1b29982096-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-home-1b29982096-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "evidence_archive": "docs/architecture/evidence/stage-a-home-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "22f1c2883b5408c23c850b16378f170d149324da57cb115648ff0561f4e2255f",
+          "commit_pending": false,
+          "commit_sha": "870c035c1a56bc9c5ea5085492c484a55daf079b"
         }
       ]
     }

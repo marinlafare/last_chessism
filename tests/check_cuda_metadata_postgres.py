@@ -63,7 +63,8 @@ async def check(factory,connection,layout):
     async def compare():
         for player in ('alice','bob'):
             async with factory() as s:
-                rows=(await s.execute(legacy.source_rows_sql(s),legacy.day_params(player,all_days=True))).mappings().all()
+                from chessism_api.operations import player_stockfish_summary as source
+                rows=(await s.execute(source.source_rows_sql(s),source.day_params(player,all_days=True))).mappings().all()
                 profile=(await s.execute(text('SELECT * FROM candidate.player WHERE player_name=:p'),{'p':player})).mappings().one()
                 expected=legacy.combine_partitions([legacy.summarize_day(rows,legacy.resolve_player_timezone(profile))])
                 actual={r[0]:r[1] for r in (await s.execute(text('SELECT section,payload FROM candidate.player_analytics_snapshot WHERE player_name=:p'),{'p':player})).all()}

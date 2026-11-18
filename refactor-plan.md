@@ -141,6 +141,32 @@ snapshot publication races, failure metadata ordering, missing rows, read-only
 requests, concurrency, cancellation/lock cleanup, schema version rejection and P1.
 Run one focused gate. Player metadata snapshots/hours remain the next consumer group.
 
+## Completed logical change — canonical player metadata snapshots and hours (193 checks passed)
+
+Entry: homepage gate passed 190 checks; local commit `870c035`.
+Keep the existing pure daily/combined calculations and seven snapshot sections.
+Canonical version 9 adds ID-owned state, dirty UTC days, partitions and snapshots;
+foreign keys cascade derived data on profile deletion. Source game/profile changes
+invalidate transactionally, including eligibility, ownership, timezones and opponent
+renames; score/FEN work does not. Preserve bounded daily rebuilds and old complete
+snapshots until all dirty partitions are processed. Detect concurrent invalidation
+at publication under REPEATABLE READ. Shared guarded transactions own all cleanup.
+
+Use one concrete metadata adapter; remove storage-profile branches from this path.
+Move hours/latest reads to the operation with canonical fallback inside one guarded
+read snapshot. Update the route and catalog snapshot reader; keep public calculations,
+feature flag and manual CUDA ownership. No new schema installer: the legacy worker
+installer is retired in A4 with the remaining runtime initialization paths.
+CUDA/frequency writers still require their separately planned A3.2 canonical conversion;
+no compatibility layer will be added for them. Legacy cross-profile parity scripts
+are mapping debt; keep their unrelated catalog/distribution contracts for later gates.
+
+Verify canonical section values, bounded incremental repair, timezone/DST/self-play,
+correction/delete/eligibility/ownership changes, rename/delete/FK integrity, concurrent
+refresh/invalidation, late failure metadata, cancellation/rollback/lock release, readonly
+hours/latest routes, manual ownership, schema initialization and relevant P1 checks.
+Do not run broad suites or real application services for this focused change.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.

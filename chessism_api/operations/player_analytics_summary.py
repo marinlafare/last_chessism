@@ -1,26 +1,17 @@
-"""Incremental, durable summaries of game metadata (no engine/FEN scans).
-
-Rebuild changed UTC-day partitions, then atomically publish all sections.
-Retries replace partitions, never add a game twice. API reads never rebuild.
-"""
+"""Bounded daily metadata rebuilding and atomic publication of complete snapshots."""
 from collections import defaultdict
-from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal, ROUND_HALF_UP
-import json
 import logging
 import os
 import re
 
-from sqlalchemy import text
-
+from chessism_api.database.postgresql import player_metadata as storage
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.player_analytics_schema import analytics_table
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.operations.player_timezone import resolve_player_timezone
 
 LOG = logging.getLogger(__name__)
 MODES = ('bullet', 'blitz', 'rapid')
-NULL_DAY = date(1, 1, 1)
 
 
 def enabled():
@@ -30,24 +21,20 @@ def enabled():
 async def read_snapshot(session, player, section):
     if not enabled():
         return None
-    table = lambda name: analytics_table(storage_for(session), name)
-    row = (await session.execute(text(f'''SELECT s.payload,s.revision,s.generated_at,
-        state.revision AS current_revision FROM {table('snapshot')} s
-        JOIN {table('state')} state USING(player_name)
-        WHERE s.player_name=:player AND s.section=:section'''),
-        {'player': player, 'section': section})).mappings().first()
-    from .cuda_summaries.metadata_store import enabled as cuda_metadata
-    manual=await cuda_metadata(session)
+    row = await storage.snapshot(session, player, section)
+    manual = await storage.manual_metadata(session)
     if not row:
-        if not manual:return None
-        payload={'modes':{},'latest_played_at':None} if section=='hours' else {'counts':[]} if section=='distribution' else {'rows':[]}
-        profile=(await session.execute(text('SELECT country,location,timezone,timezone_source FROM player WHERE player_name=:p'),{'p':player})).mappings().first()
-        return {**payload,'time_context':resolve_player_timezone(dict(profile or {})).payload(),
-            'summary_revision':0,'summary_stale':True,'summary_pending':True,'manual':True,'generated_at':None}
-    return {**row['payload'], 'summary_revision': int(row['revision']),
-            'summary_stale': row['revision'] != row['current_revision'],
-            **({'manual':True} if manual else {}),
-            'generated_at': row['generated_at'].isoformat()}
+        if not manual:
+            return None
+        payload = {'modes':{}, 'latest_played_at':None} if section == 'hours' else {'counts':[]} if section == 'distribution' else {'rows':[]}
+        profile = await storage.profile(session, player)
+        return {**payload, 'time_context':resolve_player_timezone(dict(profile or {})).payload(),
+            'summary_revision':0, 'summary_stale':True, 'summary_pending':True, 'manual':True,
+            '_player_id':profile['id'] if profile else None, 'generated_at':None}
+    return {**row['payload'], 'summary_revision':int(row['revision']),
+            'summary_stale':row['revision'] != row['current_revision'],
+            **({'manual':True} if manual else {}), '_player_id':row['player_id'],
+            'generated_at':row['generated_at'].isoformat()}
 
 
 def counts():
@@ -154,136 +141,93 @@ def combine_partitions(partitions):
     }
 
 
-def source_rows_sql(session, *, dates_only=False):
-    layout = storage_for(session)
-    bound = '''(:all_days OR (:null_day AND played_at IS NULL) OR
-        (NOT :null_day AND played_at>=:start AND played_at<:end))'''
-    if not layout:
-        return text(f'''SELECT {'DISTINCT played_at' if dates_only else '*'}
-            FROM game_player WHERE player_name=:player AND {bound}''')
-    branches = []
-    for side, other, white in (('white', 'black', 'true'), ('black', 'white', 'false')):
-        fields = 'g.played_at' if dates_only else f'''g.link,'{side}'::text AS color,g.played_at,m.name AS mode,
-            g.{side}_elo AS rating,g.{side}_result AS result,g.time_elapsed,g.eco,
-            opponent.player_name AS opponent_name'''
-        joins = '' if dates_only else f'''LEFT JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
-            LEFT JOIN {layout.table('player')} opponent ON opponent.id=g.{other}_player_id'''
-        branches.append(f'''SELECT {fields} FROM {layout.table('game')} g {joins}
-            WHERE g.{side}_player_id=(SELECT id FROM owner)
-            AND {bound.replace('played_at', 'g.played_at')}
-            AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
-                WHERE gp.game_link=g.link AND gp.player_id=(SELECT id FROM owner) AND gp.is_white={white})''')
-    return text(f'''WITH owner AS (SELECT id FROM {layout.table('player')} WHERE player_name=:player)
-        {' UNION ALL '.join(branches)}''')
-
-
-def day_params(player, day=NULL_DAY, *, all_days=False):
-    start = datetime.combine(day, time.min, tzinfo=timezone.utc)
-    return {'player': player, 'all_days': all_days, 'null_day': day == NULL_DAY,
-            'start': start, 'end': start + timedelta(days=1)}
-
-
-async def get_latest_game(player):
-    async with AsyncDBSession() as session:
+async def get_latest_game(player, *, session_factory=None):
+    async with read_transaction(session_factory or AsyncDBSession) as session:
         saved = await read_snapshot(session, player, 'hours')
         if saved is not None:
-            return {'player_name': player, 'played_at': saved['latest_played_at'],
-                    'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale']}
-        from chessism_api.database.postgresql.relational_reads import player_rows_sql
-        stamp = await session.scalar(player_rows_sql(session, '''SELECT gp.played_at
-            FROM game_player gp WHERE gp.player_name=:player AND gp.played_at IS NOT NULL
-            ORDER BY gp.played_at DESC LIMIT 1''', ('played_at',)), {'player': player})
-        return {'player_name': player, 'played_at': stamp.isoformat() if stamp else None}
+            return {'player_name':player, 'played_at':saved['latest_played_at'],
+                    'summary_revision':saved['summary_revision'], 'summary_stale':saved['summary_stale']}
+        stamp = await storage.latest_game(session, player)
+        return {'player_name':player, 'played_at':stamp.isoformat() if stamp else None}
+
+
+async def get_player_hours_played(player_name, *, session_factory=None):
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        saved = await read_snapshot(session, player_name, 'hours')
+        payload = saved if saved is not None else await storage.live_hours(session, player_name)
+    modes = payload['modes']
+    return {'player_name':player_name,
+        'total_hours':played_hours(sum(row['seconds'] for row in modes.values())),
+        **{f'{mode}_games':modes.get(mode, {}).get('games',0) for mode in MODES},
+        **{f'{mode}_hours':played_hours(modes.get(mode, {}).get('seconds',0)) for mode in MODES},
+        **({key:saved[key] for key in ('summary_revision','summary_stale')} if saved is not None else {})}
 
 
 async def refresh_player(player, *, batch_days=32, session_factory=None):
-    factory = session_factory or AsyncDBSession
-    async with factory() as session:
-        from .cuda_summaries.metadata_store import enabled as cuda_metadata
-        if await cuda_metadata(session):return {'status':'awaiting_cuda'}
-        await session.rollback()
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ'))
-        from .cuda_summaries.schema import CONTROL
-        if await session.scalar(text('SELECT to_regclass(:t) IS NOT NULL'),{'t':CONTROL}):
-            manual=await session.scalar(text(f"SELECT COALESCE((to_jsonb(c)->>'metadata')::boolean,false) AND manual FROM {CONTROL} c WHERE id FOR SHARE"))
-            if manual:return {'status':'awaiting_cuda'}
-        await session.execute(text("SET LOCAL statement_timeout='30s'"))
-        await session.execute(text("SET LOCAL lock_timeout='1s'"))
-        await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
-        if not await session.scalar(text('SELECT pg_try_advisory_xact_lock(hashtextextended(:key,0))'),
-                                    {'key': 'player-analytics:' + player}):
-            return {'status': 'busy'}
-        table = lambda name: analytics_table(storage_for(session), name)
-        state = (await session.execute(text(f'SELECT * FROM {table("state")} WHERE player_name=:player'),
-                                       {'player': player})).mappings().first()
-        if not state or state['revision'] == state['published_revision']:
-            return {'status': 'ready'}
-        profile = (await session.execute(text('''SELECT player_name,joined,deleted_at,country,location,
-            timezone,timezone_source FROM player WHERE player_name=:player'''), {'player': player})).mappings().first()
-        if not profile or not profile['joined'] or profile['joined'] <= 0 or profile['deleted_at']:
-            for name in ('dirty', 'partition', 'snapshot'):
-                await session.execute(text(f'DELETE FROM {table(name)} WHERE player_name=:player'), {'player': player})
-            await session.execute(text(f'''UPDATE {table('state')} SET published_revision=revision,
-                full_rebuild=true,attempted_at=clock_timestamp(),error=NULL WHERE player_name=:player'''), {'player': player})
-            await session.commit()
-            return {'status': 'ineligible'}
-        if state['full_rebuild']:
-            # Initial build / timezone change only. Ordinary ingestion skips
-            # this history enumeration and reads only queued days.
-            rows = (await session.execute(source_rows_sql(session, dates_only=True), day_params(player, all_days=True))).mappings()
-            days = {row['played_at'].astimezone(timezone.utc).date() if row['played_at'] else NULL_DAY for row in rows}
-            days.update((await session.execute(text(f'SELECT day FROM {table("partition")} WHERE player_name=:player'),
-                                                {'player': player})).scalars())
-            for day in sorted(days or {NULL_DAY}):
-                await session.execute(text(f'''INSERT INTO {table('dirty')}(player_name,day)
-                    VALUES(:player,:day) ON CONFLICT DO NOTHING'''), {'player': player, 'day': day})
-            await session.execute(text(f'UPDATE {table("state")} SET full_rebuild=false WHERE player_name=:player'), {'player': player})
-        dirty = (await session.execute(text(f'''SELECT day FROM {table('dirty')} WHERE player_name=:player
-            ORDER BY day LIMIT :limit'''), {'player': player, 'limit': batch_days})).scalars().all()
+    if type(batch_days) is not int or batch_days<=0:
+        raise ValueError('batch_days must be a positive integer')
+    async with write_transaction(session_factory or AsyncDBSession) as session:
+        await storage.begin_refresh(session)
+        if await storage.manual_metadata(session, lock=True):
+            return {'status':'awaiting_cuda'}
+        profile = await storage.profile(session, player)
+        if not profile:
+            return {'status':'ready'}
+        owner = profile['id']
+        attempt = await storage.acquire_refresh(session, owner)
+        if not attempt['acquired']:
+            return {'status':'busy'}
+        state = await storage.state(session, owner)
+        if not state:
+            if profile['joined'] and profile['joined']>0 and not profile['deleted_at']:
+                raise RuntimeError('Required player analytics state is missing')
+            return {'status':'ready'}
+        if state['revision'] == state['published_revision']:
+            return {'status':'ready'}
+        if not profile['joined'] or profile['joined']<=0 or profile['deleted_at']:
+            await storage.lock_source(session, owner)
+            await storage.remove_ineligible(session, owner)
+            return {'status':'ineligible'}
+        rebuild = await storage.rebuild_days(session, owner) if state['full_rebuild'] else None
+        dirty = rebuild[:batch_days] if rebuild is not None else await storage.dirty_days(session, owner, batch_days)
         resolved = resolve_player_timezone(dict(profile))
+        calculated = []
         for day in dirty:
-            rows = (await session.execute(source_rows_sql(session), day_params(player, day))).mappings().all()
-            payload = summarize_day(rows, resolved)
-            await session.execute(text(f'''INSERT INTO {table('partition')}(player_name,day,payload)
-                VALUES(:player,:day,CAST(:payload AS jsonb)) ON CONFLICT(player_name,day)
-                DO UPDATE SET payload=EXCLUDED.payload'''), {'player': player, 'day': day, 'payload': json.dumps(payload)})
-            await session.execute(text(f'DELETE FROM {table("dirty")} WHERE player_name=:player AND day=:day'),
-                                  {'player': player, 'day': day})
-        remaining = await session.scalar(text(f'SELECT count(*) FROM {table("dirty")} WHERE player_name=:player'), {'player': player})
+            rows = await storage.day_rows(session, owner, day)
+            calculated.append((day, summarize_day(rows, resolved)))
+        # Compute before taking producer locks. Both writers lock state before
+        # dirty days; RR rejects a concurrent invalidation before any mutation.
+        await storage.lock_source(session, owner)
+        if rebuild is not None:
+            await storage.queue_full_rebuild(session, owner, rebuild)
+        for day, payload in calculated:
+            await storage.replace_day(session, owner, day, payload)
+        remaining = await storage.remaining_days(session, owner)
         if not remaining:
-            partitions = (await session.execute(text(f'SELECT payload FROM {table("partition")} WHERE player_name=:player ORDER BY day'),
-                                                {'player': player})).scalars()
-            for section, payload in combine_partitions(partitions).items():
+            sections = combine_partitions(await storage.partitions(session, owner))
+            for payload in sections.values():
                 payload['time_context'] = resolved.payload()
-                await session.execute(text(f'''INSERT INTO {table('snapshot')}(player_name,section,revision,payload)
-                    VALUES(:player,:section,:revision,CAST(:payload AS jsonb)) ON CONFLICT(player_name,section)
-                    DO UPDATE SET revision=EXCLUDED.revision,payload=EXCLUDED.payload,generated_at=clock_timestamp()'''),
-                    {'player': player, 'section': section, 'revision': state['revision'], 'payload': json.dumps(payload)})
-        # Updating the source row under REPEATABLE READ detects a concurrent
-        # invalidation (serialization failure); nothing stale is published.
-        await session.execute(text(f'''UPDATE {table('state')} SET attempted_at=clock_timestamp(),error=NULL,
-            published_revision=CASE WHEN :ready THEN :revision ELSE published_revision END WHERE player_name=:player'''),
-            {'player': player, 'ready': not remaining, 'revision': state['revision']})
-        await session.commit()
-        return {'status': 'ready' if not remaining else 'building', 'days': len(dirty), 'remaining': remaining}
+            await storage.publish(session, owner, state['revision'], sections)
+        await storage.finish_batch(session, owner, state['revision'], not remaining, attempt['attempted_at'])
+        return {'status':'building' if remaining else 'ready', 'days':len(dirty), 'remaining':remaining}
 
 
 async def refresh_pending(*, session_factory=None):
     factory = session_factory or AsyncDBSession
-    async with factory() as session:
-        from .cuda_summaries.metadata_store import enabled as cuda_metadata
-        if await cuda_metadata(session):return None
-        table = analytics_table(storage_for(session), 'state')
-        player = await session.scalar(text(f'''SELECT player_name FROM {table}
-            WHERE revision<>published_revision AND (error IS NULL OR attempted_at<now()-interval '30 seconds')
-            ORDER BY attempted_at NULLS FIRST,player_name LIMIT 1'''))
-    if not player:
+    async with read_transaction(factory) as session:
+        if await storage.manual_metadata(session):
+            return None
+        pending = await storage.next_pending(session)
+    if not pending:
         return None
+    player = pending['player_name']
     try:
-        return {'player': player, **await refresh_player(player, session_factory=factory)}
+        return {'player':player, **await refresh_player(player, session_factory=factory)}
     except Exception:
         LOG.exception('Player summaries retained; refresh will retry for %s', player)
-        async with factory.begin() as session:
-            await session.execute(text(f'''UPDATE {table} SET attempted_at=clock_timestamp(),
-                error='Refresh failed; retained previous complete summary. Will retry.' WHERE player_name=:player'''), {'player': player})
-        return {'player': player, 'status': 'retrying'}
+        try:
+            async with write_transaction(factory) as session:
+                await storage.record_failure(session, pending)
+        except Exception:
+            LOG.exception('Could not record refresh failure for %s', player)
+        return {'player':player, 'status':'retrying'}
