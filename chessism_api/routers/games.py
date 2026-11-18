@@ -16,8 +16,8 @@ from chessism_api.operations.player_game_views import (
     get_player_mode_games,
     get_player_time_control_results,
 )
-from chessism_api.database.postgresql.ask_db import (
-    get_player_hours_played,
+from chessism_api.database.postgresql.ask_db import get_player_hours_played
+from chessism_api.operations.time_control_views import (
     get_player_time_control_top_moves,
     get_player_time_control_top_openings,
     get_player_time_control_lengths,

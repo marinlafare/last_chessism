@@ -15,7 +15,7 @@ from chessism_api.operations.player_game_views import (
     get_player_performance_summary,
     get_player_modes_stats,
 )
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.time_control_views import (
     get_player_mode_chart,
 )
 from chessism_api.operations.players import (

@@ -1,9 +1,65 @@
 # Chessism V1 architectural refactoring
 
-**PAUSED BY USER — 2026-11-10.** The immediate safe-stop instruction supersedes
-continuous Stage A execution. Do not start implementation or verification without
-explicit renewed authorization. Resume from `docs/architecture/stage-a-resume.md`.
+**RESUMED — 2026-11-18, fast-track Stage A authorization.** Resume from
+`b00885a`; preserve the existing A1/A2 and five A3.1 checkpoints. Source inventory
+matches all 1,744 application/test inputs plus the documented handoff-only change.
 Stage A remains incomplete and unaccepted.
+
+## Fast-track remaining-work inventory and next interval
+
+Authorization: `/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt`.
+This supersedes the pause and the earlier compatibility/procedural requirements.
+No historical migration framework or importer. Focused gates after coherent changes;
+one broad comparison and independent review at the Stage A boundary. No further
+approval is needed for in-scope implementation/local commits. Public feature removal
+or material API changes still require approval. Protect the original DB/checkpoint,
+Redis, Neo4j and deployed resources. No Stage B/C, push, merge or deployment.
+
+Bounded source assessment (2026-11-18): `ask_db.py` retains 2,970 lines and 11 runtime
+importers; four files mention DBInterface; 76 files still call/import storage_for,
+seven compact_for (overlapping counts, not distinct consumers). Already converted:
+canonical imports/month accounting, FEN extraction/coverage, analysis selection and
+receipts, tablebases/recovery, accuracy refresh, analysis/player/FEN/dashboard reads
+and shared mode summaries. Do not repeat those implementations or their last gate.
+
+Remaining groups, in implementation order:
+1. Essential application analytics: time-control/player charts and moves/openings,
+   result/length/activity queries; remaining FEN/scored-rating projection writers;
+   home/player metadata snapshots, hours, distribution/catalog/explorer consumers.
+   Preserve global one-game versus player two-side counting and UTC/calendar policy.
+2. Required research/export/graph/admin consumers: 21 CUDA and 11 canonical-blunder
+   modules use profile-dependent storage, alongside seven research modules. Preserve
+   user-facing feature contracts; translate native side identities and add required
+   canonical auxiliary tables. The costly duplication is schema selection, source
+   queries and cache publication, not evidence that these features are obsolete.
+3. A4: retire profile selection/adapters/views, DBInterface, ask_db, legacy startup
+   DDL and historical-only migration tooling after caller conversion. Auth and cloud
+   state stay. Month accounting/evaluation constraints were corrected in A2; disabled
+   FK-trigger validation remains relevant and is still due at canonical startup.
+
+No user-visible feature removal is proposed from this bounded assessment. Historical
+repair/migration tools and permanent legacy adapter branches are removal candidates.
+Do not delete feature code merely because it uses them. Current code still cannot
+be run against the existing database; tests use only an empty disposable canonical DB.
+
+**Completed logical change: canonical time-control analytics (117 checks passed).** Move eleven global/player
+read operations from ask_db to `operations/time_control_views.py` and concrete SQL
+in `database/postgresql/time_control_reads.py`. Share moves/openings/length/activity
+queries where their meaning is identical; preserve distinct histogram and heatmap
+response conventions. Extract the unchanged weighted Jenks calculation for its two
+real consumers. Operations own one guarded read-only UTC snapshot; adapters require
+that transaction. Preserve filters, pagination, result filters, empty/invalid inputs,
+rating arithmetic and chart formulas. Set deterministic move/opening/chronology ties.
+Hours/saved-snapshot conversion follows with its publisher, not a compatibility shim.
+Update only actual callers; remove the old definitions rather than retaining aliases.
+
+Focused verification: actual canonical PostgreSQL fixtures and independent aggregate
+oracles for variants/zero games, self-play, rating filters, ties/pages, normalized
+openings, UTC boundaries, empty inputs, snapshot consistency, read-only/error and
+cancellation cleanup, and real routes. Retain relevant prior player-view and P1 tests.
+The old /tmp test dependencies disappeared on restart; reuse an installed image with
+verified dependencies, not application startup. Record exact test outcomes and new
+runner evidence before a local commit. No broad suite until the stage boundary.
 
 ## Active authorization — Complete Stage A (A2–A4)
 

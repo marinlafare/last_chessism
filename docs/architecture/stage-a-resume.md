@@ -1,5 +1,10 @@
 # Chessism Stage A — safe-stop handoff
 
+**Superseded by explicit fast-track resume authorization on 2026-11-18.**
+The checkpoint and historical evidence below remain intact. Current scope and
+progress are at the top of `refactor-plan.md` and in
+`refactor-manifest.json.stage_a_completion`. Stage A remains unaccepted.
+
 **PAUSED at the user's request on 2026-11-10, America/Mexico_City.**
 Do not resume implementation, tests, services or refactoring until the user explicitly
 authorizes it. Stage A is **incomplete and not accepted**. No A3/A4 completion claim.

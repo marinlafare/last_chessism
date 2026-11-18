@@ -1356,3 +1356,126 @@ canonical-persistence.md; the other 1,744 inputs match. No application or test
 code changed after the passing gate. This documentation exception is explicit in
 the manifest and handoff; original test inventories/evidence are not rewritten.
 No additional tests, services or implementation were started.
+
+## Fast-track Stage A resumed — 2026-11-18
+
+Explicit attached authorization supersedes the pause. Repository/branch/HEAD match
+b00885a and working tree was clean. Archived last-gate inventory confirms 1,744
+unchanged application/test inputs and exactly the recorded documentation exception.
+No earlier verification container remains. Original /tmp evidence/dependencies were
+lost after restart; durable evidence was read from the committed archive, not rerun.
+
+Bounded remaining-consumer inventory is recorded at the top of refactor-plan.md.
+Begin a coherent canonical time-control analytics conversion: shared queries,
+operation-owned snapshots, no old aliases or new schema compatibility layers.
+Preserve required feature calculations and public responses. No feature removal
+proposed. Focused checks follow; A3/A4 remain incomplete and unaccepted.
+
+Separate, previously authorized FEN backup completed: 6,974,790 new result versions,
+500,023,737 new bytes; all 1,510 chain parts (75,408,203 versions) passed checksum,
+decompression and record checks. No restore was run. One-off container removed.
+The full PostgreSQL recovery checkpoint was not accessed or changed.
+
+A3.1 time-control conversion prepared: eleven operations moved from ask_db into
+one application module and one concrete canonical read adapter. Moves, normalized
+opening counts/pages, length distributions and activity share SQL; global/player
+counting and public response differences remain explicit. UTC read-only snapshots
+use unchanged P1 cleanup. Weighted Jenks moved unchanged for its two consumers;
+three independent offline tests pass. Remaining ask_db function ASTs are unchanged
+apart from that moved helper reference. Only games/players router imports changed.
+Opening counts now exclude empty sequences just as visible rows do; no public
+feature removed. Stable self-play rating-chart ties use black-before-white.
+
+Seventeen new PostgreSQL checks cover independent fixture oracles, side/game counts,
+variants/custom/zero games, rating bounds and int32 extremes, ties/pagination,
+normalized openings/results, percentile/bucket boundaries, UTC dense/sparse activity,
+chart formulas/ranges, empty/invalid input, concurrent snapshot changes, failures,
+read-only enforcement, repeated cancellation and actual routes. Three pure checks
+passed; isolated gate has not yet run. Planned 116 checks: 42 foundation/player/time
+control, six existing transaction and 68 P1. Reuse unchanged schema/writer evidence.
+Old /tmp dependencies were gone; a brief network-isolated import probe succeeded on
+cached API image Python 3.10.22. Tests mount current source read-only, shadow .env,
+use private PG/Redis sockets, no network/ports and bounded CPU/memory. No services,
+production data or recovery checkpoint are modified.
+Evidence: /tmp/chessism-canonical-a3-time-controls-20261118-01.
+
+Time-control gate launched; supervisor PID 314240. Startup confirmed. Returning control
+without polling. Review exact results, source integrity and cleanup after completion;
+no local commit before passing evidence review.
+
+### Time-control gate attempt 1 — evidence reviewed, test oracles corrected
+
+The first isolated run completed 42 foundation checks: 40 passed, two failures,
+zero errors/skips. Transaction and P1 suites were not started. All three owned
+containers were removed, independently confirmed by exact run label. All 1,750
+frozen inputs still matched before correction. Original failure evidence retained
+at /tmp/chessism-canonical-a3-time-controls-20261118-01; no baseline debt relabeling.
+
+Failing identities:
+- CanonicalTimeControlTests.test_global_moves_use_selected_side_rating_and_player_moves_use_owned_color:
+  expected Nf3 instead of c4 on an equal-frequency tie. Python Unicode ordering
+  disagreed with the disposable database's PostgreSQL collation. Original and
+  converted SQL both order by count descending then move ascending. Tests now read
+  only collation ranks for literal fixture tokens; owner/frequency calculations
+  remain independent Python oracles and exact row equality is preserved.
+- CanonicalTimeControlTests.test_lengths_match_independent_percentiles_and_distinct_histogram_contracts:
+  expected 74.97 instead of 74.98 for mean 74.975. Existing and converted SQL both
+  use ROUND(AVG(time_elapsed)::numeric,2). Replace binary Python rounding with
+  Decimal ROUND_HALF_UP, and add explicit 1.005/1.015/2.675 regression cases for
+  global and player endpoints. Inspection of the later assertions also found a
+  fixed three-bucket expectation wrong for Bob's two-game subset. Assertions now
+  compare exact independent move/elapsed histogram labels AND counts per subset.
+
+No application code or public behavior changed to satisfy tests. No assertions
+were relaxed or tests skipped. Next gate: 43 foundation + 6 transaction + 68 P1 =
+117 checks, same isolation and limits, fresh disposable resources. PostgreSQL
+collation/rounding evidence will be recorded explicitly. Syntax and diff checks
+pass; the independent decimal examples were checked offline.
+Evidence: /tmp/chessism-canonical-a3-time-controls-20261118-02.
+
+Time-control gate attempt 2 launched; supervisor PID 416978; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-time-controls-20261118-02/monitor.py`. Returning control without polling.
+Review results and cleanup before any commit or subsequent implementation.
+
+### Time-control launcher attempt 2 — infrastructure failure before tests
+
+Exited after 1.68 seconds; zero tests ran and no test container was created.
+The added psql diagnostic exited 2 immediately after pg_isready reported accepting
+connections. Its exact stderr was not saved by the old subprocess wrapper, so
+this record does not assert an unobserved server error message. Readiness was
+insufficient: the pinned image starts a temporary socket server, creates the DB,
+stops that server, and only then execs the final postgres process. Startup-script
+inspection confirmed that sequence. Both owned containers were removed and an
+independent exact-label check returned none. All 1,750 frozen source inputs match.
+
+Repair only the disposable verification harness: require PID 1 to be postgres,
+then a successful SELECT current_database() using explicit private socket/55432
+before diagnostics/tests. Save subprocess stderr/stdout and owned server logs on
+failure. Reuse unchanged application/tests and exact inventory. This was not a
+second failed application test run; the first test-oracle correction has not yet
+been executed. No tests, assertions, skip policy or expected counts changed.
+Fresh launch evidence: /tmp/chessism-canonical-a3-time-controls-20261118-03.
+Planned gate remains 117 focused checks. No local commit or next implementation
+until this gate passes and evidence is reviewed.
+
+Time-control gate launch 3: supervisor PID 426627; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-time-controls-20261118-03/monitor.py`. Returning control without polling.
+
+### Canonical time-control analytics — verification passed
+
+Reviewed launch 3 raw and structured results: 43 foundation (including 18 new
+PostgreSQL cases and three pure calculation tests), six transaction and 68 P1 =
+117 passing checks, zero failures/errors/skips, 16.93 seconds, Python 3.10.22.
+All 1,750 frozen source hashes match. All five owned disposable containers removed;
+independent exact-label inspection returned none. The recorded en_US.utf8 collation
+orders c4 before Nf3 and SQL numeric rounding gives 74.98, confirming oracle repairs.
+No application changes followed the passing run. No full-suite rerun was necessary.
+
+Eleven reads moved to cohesive operations/adapters with shared canonical SQL;
+about 340 application lines removed net. Public fields and calculations preserved,
+including side/game counts, UTC, filters, histograms and failure/cancellation behavior.
+Empty opening entries are consistently excluded from both count and page.
+Full evidence from all three launches archived (text only, read back/hash checked)
+in docs/architecture/evidence/stage-a-time-controls-2026-11-18.tar.gz.
+Stage A remains incomplete/unaccepted. Remaining summary publishers, player/auxiliary
+consumers and A4 are still due. Original DB/checkpoint and deployed services unchanged.

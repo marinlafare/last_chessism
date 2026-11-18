@@ -1554,9 +1554,9 @@
   },
   "chunk_counter_scope": "Historical P1 #1 chunks; active work is stage_a_batch_1.",
   "stage_a_completion": {
-    "authorization_source": "/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt",
+    "authorization_source": "/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt",
     "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
-    "status": "paused",
+    "status": "in_progress",
     "current_chunk": "A3.1",
     "started_at": "2026-11-11T00:30:30.215098+00:00",
     "baseline_input_hashes_matched": 1699,
@@ -3913,7 +3913,7 @@
       {
         "id": "A3.1",
         "name": "Queries and summaries",
-        "status": "paused",
+        "status": "in_progress",
         "verification": {
           "status": "passed",
           "gate": "canonical dashboard counts and mode rankings",
@@ -6340,6 +6340,216 @@
         },
         "application_or_test_changes": []
       }
+    },
+    "resumed_at": "2026-11-18",
+    "fast_track": {
+      "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
+      "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
+      "current_gate": "canonical time-control analytics \u2014 verified; local commit pending",
+      "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
+      "accepted": false,
+      "current_verification": {
+        "status": "passed",
+        "evidence_directory": "/tmp/chessism-canonical-a3-time-controls-20261118-03",
+        "planned_tests": {
+          "foundation": 43,
+          "workflow": 6,
+          "p1": 68
+        },
+        "planned_total": 117,
+        "offline_passed": 3,
+        "source_input_count": 1750,
+        "protected_baseline_count": 1626,
+        "python": "3.10.22 installed API image; no network/dependency install",
+        "runtime_image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
+        "source_integrity": "All 1750 frozen inputs match",
+        "monitor_command": "python3 /tmp/chessism-canonical-a3-time-controls-20261118-03/monitor.py",
+        "attempt": 3,
+        "harness_change": "Final-server readiness with explicit successful database query; preserve diagnostic stderr. Identical 1750 source hashes to attempt 2.",
+        "launch": {
+          "pid": 426627,
+          "startup_confirmed": true
+        },
+        "results": {
+          "foundation": {
+            "suite": "foundation",
+            "tests": 43,
+            "failures": 0,
+            "errors": 0,
+            "skips": 0,
+            "elapsed_seconds": 8.814892053604126,
+            "failure_details": [],
+            "error_details": [],
+            "skip_details": [],
+            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+          },
+          "workflow": {
+            "suite": "workflow",
+            "tests": 6,
+            "failures": 0,
+            "errors": 0,
+            "skips": 0,
+            "elapsed_seconds": 0.05246090888977051,
+            "failure_details": [],
+            "error_details": [],
+            "skip_details": [],
+            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+          },
+          "p1": {
+            "suite": "p1",
+            "tests": 68,
+            "failures": 0,
+            "errors": 0,
+            "skips": 0,
+            "elapsed_seconds": 2.564302682876587,
+            "failure_details": [],
+            "error_details": [],
+            "skip_details": [],
+            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+          }
+        },
+        "total_passed": 117,
+        "elapsed_seconds": 16.92989444732666,
+        "cleanup": [
+          {
+            "container": "chessism-canonical-a3-time-controls-66c2d127b2-p1",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-time-controls-66c2d127b2-workflow",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-time-controls-66c2d127b2-foundation",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-time-controls-66c2d127b2-redis",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-time-controls-66c2d127b2-postgres",
+            "removed": true
+          }
+        ],
+        "cleanup_independently_confirmed": true,
+        "commit_pending": true,
+        "evidence_archive": "docs/architecture/evidence/stage-a-time-controls-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "314fc75a8bda36c769d265d77b0446574013e530c638b09592b039c77b79cbf6"
+      },
+      "verification_attempts": [
+        {
+          "status": "failed",
+          "evidence_directory": "/tmp/chessism-canonical-a3-time-controls-20261118-01",
+          "planned_tests": {
+            "foundation": 42,
+            "workflow": 6,
+            "p1": 68
+          },
+          "planned_total": 116,
+          "offline_passed": 3,
+          "source_input_count": 1750,
+          "protected_baseline_count": 1626,
+          "python": "3.10.22 installed API image; no network/dependency install",
+          "runtime_image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
+          "source_integrity": "All prior application/test inputs matched before edits; handoff documentation exception retained",
+          "monitor_command": "python3 /tmp/chessism-canonical-a3-time-controls-20261118-01/monitor.py",
+          "launch": {
+            "pid": 314240,
+            "startup_confirmed": true
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 42,
+              "failures": 2,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 8.068591356277466,
+              "failure_details": [
+                {
+                  "test": "tests.check_canonical_time_controls_postgres.CanonicalTimeControlTests.test_global_moves_use_selected_side_rating_and_player_moves_use_owned_color",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/check_canonical_time_controls_postgres.py\", line 113, in test_global_moves_use_selected_side_rating_and_player_moves_use_owned_color\n    self.assertEqual(value['rows'],expected)\nAssertionError: Lists differ: [{'mo[72 chars]e': 'c4', 'times_played': 1}, {'move_number': [84 chars]: 0}] != [{'mo[72 chars]e': 'Nf3', 'times_played': 1}, {'move_number':[85 chars]: 0}]\n\nFirst differing element 1:\n{'move_number': 2, 'move': 'c4', 'times_played': 1}\n{'move_number': 2, 'move': 'Nf3', 'times_played': 1}\n\n  [{'move': 'd4', 'move_number': 1, 'times_played': 1},\n-  {'move': 'c4', 'move_number': 2, 'times_played': 1},\n?            ^^\n\n+  {'move': 'Nf3', 'move_number': 2, 'times_played': 1},\n?            ^^^\n\n   {'move': 'Bb5', 'move_number': 3, 'times_played': 1},\n   {'move': '-', 'move_number': 4, 'times_played': 0}]\n"
+                },
+                {
+                  "test": "tests.check_canonical_time_controls_postgres.CanonicalTimeControlTests.test_lengths_match_independent_percentiles_and_distinct_histogram_contracts",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/check_canonical_time_controls_postgres.py\", line 190, in test_lengths_match_independent_percentiles_and_distinct_histogram_contracts\n    self.assertEqual(value['summary']['avg_time_elapsed_sec'],round(sum(r['seconds'] for r in rows)/len(rows),2))\nAssertionError: 74.98 != 74.97\n"
+                }
+              ],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "attempt": 1,
+          "elapsed_seconds": 10.971882343292236,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-time-controls-e7ffcb2431-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-e7ffcb2431-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-e7ffcb2431-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity_after_failure": "All 1750 frozen source inputs matched before correction",
+          "not_run": [
+            "workflow",
+            "p1"
+          ],
+          "diagnosis": "Test oracle used Python Unicode sorting instead of PostgreSQL default collation and binary/half-even rounding instead of the existing SQL numeric rounding. Also found the later histogram assertion incorrectly assumed every player had every elapsed bucket.",
+          "correction": "Tests obtain only fixture token collation from PostgreSQL; independent frequency/owner oracle and exact output equality retained. Decimal ROUND_HALF_UP mean oracle and explicit positive half-cent ties added. Histogram assertions strengthened to exact labels and counts for actual fixture subsets. Application code unchanged."
+        },
+        {
+          "status": "infrastructure_failed",
+          "evidence_directory": "/tmp/chessism-canonical-a3-time-controls-20261118-02",
+          "planned_tests": {
+            "foundation": 43,
+            "workflow": 6,
+            "p1": 68
+          },
+          "planned_total": 117,
+          "offline_passed": 3,
+          "source_input_count": 1750,
+          "protected_baseline_count": 1626,
+          "python": "3.10.22 installed API image; no network/dependency install",
+          "runtime_image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
+          "source_integrity": "All prior application/test inputs matched before edits; handoff documentation exception retained",
+          "monitor_command": "python3 /tmp/chessism-canonical-a3-time-controls-20261118-02/monitor.py",
+          "attempt": 2,
+          "launch": {
+            "pid": 416978,
+            "startup_confirmed": true
+          },
+          "tests_run": 0,
+          "elapsed_seconds": 1.6787328720092773,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-time-controls-f56a25daeb-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-f56a25daeb-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity_after_failure": "All 1750 frozen inputs match",
+          "diagnosis": "psql diagnostic exited 2 during initial readiness, before test-container creation. pg_isready can accept the temporary bootstrap server; exact connection stderr was not saved by the old command wrapper.",
+          "correction": "Wait for PID 1 to become postgres and successful SELECT current_database() at explicit isolated socket/port; save command stderr and owned service logs on failure. No application or test input changed.",
+          "not_run": [
+            "foundation",
+            "workflow",
+            "p1"
+          ]
+        }
+      ]
     }
   }
 }
