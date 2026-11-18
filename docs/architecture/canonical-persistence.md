@@ -602,3 +602,27 @@ the five disposable containers were removed, independently confirmed. Evidence:
 `/tmp/chessism-canonical-a3-dashboard-20261110-01`, also preserved in the safe-stop
 archive. No new test or implementation stage was started after the user's stop
 request. See `stage-a-resume.md`; Stage A remains incomplete and unaccepted.
+
+## A3 scored-rating projection (canonical version 7)
+
+`operations/scored_rating_summary.py` owns refresh/read transactions and chart
+calculation. The concrete adapter reads `game_analysis_coverage` joined to canonical
+standard, nonempty games, deriving average Elo from both integer ratings with
+numeric arithmetic. It streams one statement snapshot in rating/link order.
+
+Refresh acquires the initialized singleton row lock before reading source, computes
+the unchanged weighted Jenks partitions and occurrence counts, then publishes both
+JSON payloads/counts in that transaction. Concurrent default READ COMMITTED refreshes
+serialize and read fresh source after acquiring the lock. Stronger injected isolation
+may raise a serialization failure, which propagates. Rollback/session closure uses
+the shared P1 cleanup. Readers see the last committed projection; overview reads
+never select the chart column. Missing required rows fail, with no request-time DDL
+or rebuild. Empty initialization retains three empty public groups; repeated ranges
+for fewer than three distinct ratings retain their existing counting semantics.
+
+Version 7 adds only the required singleton and basic identity/count/JSON constraints;
+versions 1–6 are rejected, with no automatic mutation of existing databases. The
+source coverage bucket aggregate casts scores to bigint before ABS, supporting the
+full canonical integer range. Refresh timing remains unchanged at existing callers;
+a committed source change may precede projection refresh as before. Incremental
+legacy repair-delta conversion is still pending with the auxiliary consumers.

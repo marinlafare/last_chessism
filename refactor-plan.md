@@ -61,6 +61,29 @@ The old /tmp test dependencies disappeared on restart; reuse an installed image 
 verified dependencies, not application startup. Record exact test outcomes and new
 runner evidence before a local commit. No broad suite until the stage boundary.
 
+## Completed logical change — canonical scored-rating projection (148 checks passed)
+
+Entry: time-control gate passed (117 checks), committed locally as `d67ad3a`.
+Replace the scored-rating builder/reader/publisher in `ask_db.py` with one concrete
+canonical adapter and one application operation. Preserve weighted Jenks groups,
+position-occurrence buckets, duplicate-range behavior for small rating populations,
+chart ordering and overview omission of the large chart column. Initialize the
+required singleton in canonical DDL (version 7); reads must never rebuild it.
+Refreshes own one guarded transaction: lock the singleton, stream one consistent
+source query, calculate, publish, commit. Default READ COMMITTED makes a waiting
+refresher read fresh source after the lock; stronger injected isolation may reject
+conflicts and must propagate them. No compatibility alias or historical migration.
+Update the actual callers/imports and the five existing cache/route tests; replace
+only the obsolete request-time bootstrap assertion with missing-row failure and
+empty-initializer checks. Fix int32-minimum ABS overflow in the source coverage
+aggregate with an explicit bigint cast and regression for both refresh paths.
+
+Focused gate: schema initializer/version/constraints, canonical coverage and new
+rating projection PostgreSQL cases (empty/eligibility/rounding/buckets, single
+snapshot, serialized refreshes, rollback/failure/cancellation and readonly routes),
+existing rating tests, transaction cleanup and all 68 P1 checks. No full-suite run.
+Legacy repair-delta conversion remains in the subsequent auxiliary-consumer chunk.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.

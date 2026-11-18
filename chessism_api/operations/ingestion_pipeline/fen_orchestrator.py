@@ -7,7 +7,7 @@ from typing import Any
 from arq.connections import ArqRedis
 from arq.jobs import Job, JobStatus
 
-from chessism_api.database.postgresql.ask_db import refresh_scored_rating_summary
+from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
 from chessism_api.operations.ingestion_pipeline import TABLEBASE_MARKING
 from chessism_api.operations.ingestion_pipeline.fen_repository import (
     count_pending_games, release_fen_processing_claims,

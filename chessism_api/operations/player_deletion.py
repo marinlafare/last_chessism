@@ -14,11 +14,11 @@ from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
 from chessism_api.database.postgresql.ask_db import (
     refresh_database_summary_game_counts,
     refresh_fen_pipeline_summary,
     refresh_scored_position_summary,
-    refresh_scored_rating_summary,
 )
 from chessism_api.operations.mode_summary import refresh_main_character_mode_summary_for_players
 

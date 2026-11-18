@@ -21,7 +21,7 @@ from chessism_api.operations.fen_views import (
     get_scored_positions_overview,
     get_scored_positions_page,
 )
-from chessism_api.database.postgresql.ask_db import get_scored_advantage_by_rating
+from chessism_api.operations.scored_rating_summary import get_scored_advantage_by_rating
 from chessism_api.operations.dashboard_views import get_fen_pipeline_overview, get_remaining_extraction_count
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import ensure_fen_pipeline_enqueued
 from chessism_api.operations.ingestion_pipeline.timing import get_latest_ingestion_timing

@@ -82,6 +82,21 @@ CREATE TABLE fen_pipeline_summary (
 INSERT INTO database_summary DEFAULT VALUES;
 INSERT INTO fen_pipeline_summary DEFAULT VALUES;
 
+CREATE TABLE scored_rating_summary (
+    id integer PRIMARY KEY DEFAULT 1 CHECK (id=1),
+    rating_basis varchar(32) NOT NULL DEFAULT 'avg_elo' CHECK (rating_basis='avg_elo'),
+    source_full_games bigint NOT NULL DEFAULT 0 CHECK (source_full_games>=0),
+    source_distinct_ratings bigint NOT NULL DEFAULT 0
+        CHECK (source_distinct_ratings BETWEEN 0 AND source_full_games),
+    groups_payload jsonb NOT NULL DEFAULT '[]'::jsonb,
+    ratings_payload jsonb NOT NULL DEFAULT '[]'::jsonb,
+    refreshed_at timestamptz NOT NULL DEFAULT now(),
+    CHECK (jsonb_typeof(groups_payload)='array' AND jsonb_array_length(groups_payload) IN (0,3)),
+    CHECK (source_full_games=0 OR jsonb_array_length(groups_payload)=3),
+    CHECK (jsonb_typeof(ratings_payload)='array' AND jsonb_array_length(ratings_payload)=source_full_games)
+);
+INSERT INTO scored_rating_summary DEFAULT VALUES;
+
 CREATE TABLE scored_position_summary (
     id integer PRIMARY KEY DEFAULT 1 CHECK (id=1),
     total_positions bigint NOT NULL DEFAULT 0,

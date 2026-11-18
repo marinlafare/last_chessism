@@ -1479,3 +1479,57 @@ Full evidence from all three launches archived (text only, read back/hash checke
 in docs/architecture/evidence/stage-a-time-controls-2026-11-18.tar.gz.
 Stage A remains incomplete/unaccepted. Remaining summary publishers, player/auxiliary
 consumers and A4 are still due. Original DB/checkpoint and deployed services unchanged.
+
+### Canonical scored-rating projection — started 2026-11-18
+
+Time-control checkpoint committed locally as d67ad3a; repository/branch verified,
+clean tree on entry, no push. Next coherent A3.1 conversion follows the inventory:
+remove legacy avg_elo/game_analysis_summary SQL, add canonical singleton, separate
+calculation/transaction ownership from SQL, and eliminate page-request rebuilds.
+Preserve public Jenks/bucket/chart behavior. Required source coverage also has an
+ABS(int32 minimum) overflow; cast before ABS and cover both aggregation paths.
+Focused verification only; all P1 regressions retained. Stage A remains incomplete.
+
+### Scored-rating implementation ready for focused verification
+
+Removed five old definitions/327 lines from ask_db; retained definitions are AST-
+identical. Added the concrete SQL adapter and operation, and updated actual imports.
+Canonical version 7 initializes a constrained scored-rating singleton. One source
+statement, ordered stream, serialized refresh and guarded commit/rollback replace
+four source queries and a disconnected upsert. Read requests do not refresh data.
+Chart fields, rounding, self-play counting, weighted Jenks and repeated-range
+semantics retained. Coverage uses bigint ABS for the lowest canonical score.
+
+15 new PostgreSQL cases cover literal math oracles/exhaustive partitions, actual
+coverage thresholds, eligibility, empty/repeated initialization, constraint failures,
+publication/commit errors, source query failures, missing-row behavior, readonly
+requests, concurrent deletion, serialized refreshes, cancellation during lock wait,
+and repeated cancellation during rollback (including visibility before commit).
+Five existing cache/route tests map to the concrete operation. The obsolete missing
+cache rebuild assertion is replaced with fail-closed missing-singleton checks and
+an actual empty-initializer test; no tests skipped or weakened. Syntax/diff checks
+and eight offline checks passed. PostgreSQL verification has not run yet.
+
+Planned gate: 69 foundation/coverage/rating + 11 transaction/cache/routes + 68 P1 =
+148 checks, Python 3.10 cached image, private bounded PostgreSQL/Redis, no network,
+no ports, no named volumes, repository readonly, production environment shadowed.
+Evidence: /tmp/chessism-canonical-a3-scored-ratings-20261118-01.
+Remaining projection writers, other A3 consumers and A4 still due; no stage acceptance.
+
+Scored-rating gate launched: supervisor PID 481933; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-scored-ratings-20261118-01/monitor.py`. Returning control without polling.
+Review structured/raw results, source integrity and cleanup before committing.
+
+### Scored-rating verification passed — 2026-11-18
+
+Independent inspection of structured and raw evidence confirms 69 foundation,
+11 transaction/cache/route and 68 P1 checks passed: 148 total, zero failures/errors/
+skips, 33.80 seconds, Python 3.10.22. This includes 15 new PostgreSQL cases and
+28 schema checks on version 7. All 1,753 frozen source hashes still match. The
+supervisor has exited; all five owned containers were removed, and an independent
+exact-label Docker query returned none. No production resource was accessed.
+
+Durable text-only evidence archived/read back/byte-checked at
+docs/architecture/evidence/stage-a-scored-ratings-2026-11-18.tar.gz.
+No application changes followed verification. Local commit next; Stage A remains
+incomplete/unaccepted. Continue with the remaining FEN/database summary publishers.

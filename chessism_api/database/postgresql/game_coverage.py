@@ -21,11 +21,11 @@ def coverage_source_sql(*, scoped):
         count(f.score)::int AS analyzed_positions,
         (count(*)-count(f.score))::int AS unscored_positions,
         count(*)=count(f.score) AS is_fully_analyzed,
-        count(*) FILTER(WHERE abs(f.score)<50)::int AS equal_positions,
-        count(*) FILTER(WHERE abs(f.score)>=50 AND abs(f.score)<150)::int AS small_positions,
-        count(*) FILTER(WHERE abs(f.score)>=150 AND abs(f.score)<300)::int AS clear_positions,
-        count(*) FILTER(WHERE abs(f.score)>=300 AND abs(f.score)<9000)::int AS decisive_positions,
-        count(*) FILTER(WHERE abs(f.score)>=9000)::int AS mate_positions"""
+        count(*) FILTER(WHERE abs(f.score::bigint)<50)::int AS equal_positions,
+        count(*) FILTER(WHERE abs(f.score::bigint)>=50 AND abs(f.score::bigint)<150)::int AS small_positions,
+        count(*) FILTER(WHERE abs(f.score::bigint)>=150 AND abs(f.score::bigint)<300)::int AS clear_positions,
+        count(*) FILTER(WHERE abs(f.score::bigint)>=300 AND abs(f.score::bigint)<9000)::int AS decisive_positions,
+        count(*) FILTER(WHERE abs(f.score::bigint)>=9000)::int AS mate_positions"""
     if scoped:
         return f"""SELECT t.link,{','.join('s.'+field for field in FIELDS)},CURRENT_TIMESTAMP
             FROM pg_temp.canonical_coverage_links t

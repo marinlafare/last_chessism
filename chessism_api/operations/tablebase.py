@@ -13,12 +13,12 @@ from chessism_api.operations.game_analysis_summary import (
     increment_game_analysis_summary_for_scored_fens,
     refresh_game_analysis_summary,
 )
+from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
 from chessism_api.database.postgresql.ask_db import (
     increment_scored_position_summary_for_scored_fens,
     refresh_database_summary_fen_counts,
     refresh_fen_pipeline_summary,
     refresh_scored_position_summary,
-    refresh_scored_rating_summary,
 )
 from chessism_api.operations.player_salience import enqueue_stale_player_salience_jobs
 from chessism_api.operations.ingestion_pipeline.steps import StepReporter

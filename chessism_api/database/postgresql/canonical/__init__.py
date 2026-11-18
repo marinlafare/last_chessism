@@ -3,7 +3,7 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
-VERSION = 6
+VERSION = 7
 CONTRACT = 'chessism_canonical_foundation'
 SQL_FILES = ('core.sql', 'support.sql', 'projections.sql', 'recovery.sql')
 INIT_LOCK = 6975310201

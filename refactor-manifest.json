@@ -6345,39 +6345,60 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical time-control analytics \u2014 verified; local commit pending",
+      "current_gate": "canonical scored-rating projection \u2014 verified; local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
-        "status": "passed",
-        "evidence_directory": "/tmp/chessism-canonical-a3-time-controls-20261118-03",
+        "entry_commit": "d67ad3ac274cf32a3793a243c9b477b6e59b9a22",
         "planned_tests": {
-          "foundation": 43,
-          "workflow": 6,
+          "foundation": 69,
+          "workflow": 11,
           "p1": 68
         },
-        "planned_total": 117,
-        "offline_passed": 3,
-        "source_input_count": 1750,
-        "protected_baseline_count": 1626,
-        "python": "3.10.22 installed API image; no network/dependency install",
-        "runtime_image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
-        "source_integrity": "All 1750 frozen inputs match",
-        "monitor_command": "python3 /tmp/chessism-canonical-a3-time-controls-20261118-03/monitor.py",
-        "attempt": 3,
-        "harness_change": "Final-server readiness with explicit successful database query; preserve diagnostic stderr. Identical 1750 source hashes to attempt 2.",
+        "total": 148,
+        "source_input_count": 1753,
+        "protected_baseline_count": 1625,
+        "modified_parent_inputs": [
+          "chessism_api/database/postgresql/ask_db.py",
+          "chessism_api/database/postgresql/canonical/__init__.py",
+          "chessism_api/database/postgresql/canonical/projections.sql",
+          "chessism_api/database/postgresql/game_coverage.py",
+          "chessism_api/operations/analysis.py",
+          "chessism_api/operations/analysis_backups.py",
+          "chessism_api/operations/cloud_analysis/importer.py",
+          "chessism_api/operations/ingestion_pipeline/fen_orchestrator.py",
+          "chessism_api/operations/player_deletion.py",
+          "chessism_api/operations/tablebase.py",
+          "chessism_api/routers/fens.py",
+          "docs/architecture/canonical-persistence.md",
+          "scripts/db_refactor_corpus.py",
+          "tests/check_canonical_schema_postgres.py",
+          "tests/test_scored_rating_summary.py"
+        ],
+        "new_source_inputs": [
+          "chessism_api/database/postgresql/scored_rating_summary.py",
+          "chessism_api/operations/scored_rating_summary.py",
+          "tests/check_canonical_scored_ratings_postgres.py"
+        ],
+        "offline_passed": 8,
+        "production_access": false,
+        "status": "passed",
+        "evidence_directory": "/tmp/chessism-canonical-a3-scored-ratings-20261118-01",
+        "monitor_command": "python3 /tmp/chessism-canonical-a3-scored-ratings-20261118-01/monitor.py",
+        "attempt": 1,
         "launch": {
-          "pid": 426627,
-          "startup_confirmed": true
+          "pid": 481933,
+          "startup_confirmed": true,
+          "started_at": 1795040158.3564494
         },
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 43,
+            "tests": 69,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 8.814892053604126,
+            "elapsed_seconds": 20.95527720451355,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6385,11 +6406,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 6,
+            "tests": 11,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.05246090888977051,
+            "elapsed_seconds": 0.13791322708129883,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6401,41 +6422,42 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 2.564302682876587,
+            "elapsed_seconds": 4.267165660858154,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "total_passed": 117,
-        "elapsed_seconds": 16.92989444732666,
+        "total_passed": 148,
+        "elapsed_seconds": 33.79728603363037,
+        "source_integrity": "All 1753 frozen hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-time-controls-66c2d127b2-p1",
+            "container": "chessism-canonical-a3-scored-ratings-e4f2a437a1-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-time-controls-66c2d127b2-workflow",
+            "container": "chessism-canonical-a3-scored-ratings-e4f2a437a1-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-time-controls-66c2d127b2-foundation",
+            "container": "chessism-canonical-a3-scored-ratings-e4f2a437a1-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-time-controls-66c2d127b2-redis",
+            "container": "chessism-canonical-a3-scored-ratings-e4f2a437a1-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-time-controls-66c2d127b2-postgres",
+            "container": "chessism-canonical-a3-scored-ratings-e4f2a437a1-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
         "commit_pending": true,
-        "evidence_archive": "docs/architecture/evidence/stage-a-time-controls-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "314fc75a8bda36c769d265d77b0446574013e530c638b09592b039c77b79cbf6"
+        "evidence_archive": "docs/architecture/evidence/stage-a-scored-ratings-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "e4f4259bd14d0fa742cbeffec48e5f007f4828be927a37027c0a06ca582e1e52"
       },
       "verification_attempts": [
         {
@@ -6548,6 +6570,98 @@
             "workflow",
             "p1"
           ]
+        }
+      ],
+      "completed_verifications": [
+        {
+          "status": "passed",
+          "evidence_directory": "/tmp/chessism-canonical-a3-time-controls-20261118-03",
+          "planned_tests": {
+            "foundation": 43,
+            "workflow": 6,
+            "p1": 68
+          },
+          "planned_total": 117,
+          "offline_passed": 3,
+          "source_input_count": 1750,
+          "protected_baseline_count": 1626,
+          "python": "3.10.22 installed API image; no network/dependency install",
+          "runtime_image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
+          "source_integrity": "All 1750 frozen inputs match",
+          "monitor_command": "python3 /tmp/chessism-canonical-a3-time-controls-20261118-03/monitor.py",
+          "attempt": 3,
+          "harness_change": "Final-server readiness with explicit successful database query; preserve diagnostic stderr. Identical 1750 source hashes to attempt 2.",
+          "launch": {
+            "pid": 426627,
+            "startup_confirmed": true
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 43,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 8.814892053604126,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 6,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.05246090888977051,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 2.564302682876587,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 117,
+          "elapsed_seconds": 16.92989444732666,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-time-controls-66c2d127b2-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-66c2d127b2-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-66c2d127b2-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-66c2d127b2-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-time-controls-66c2d127b2-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "commit_pending": false,
+          "evidence_archive": "docs/architecture/evidence/stage-a-time-controls-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "314fc75a8bda36c769d265d77b0446574013e530c638b09592b039c77b79cbf6",
+          "commit_sha": "d67ad3ac274cf32a3793a243c9b477b6e59b9a22"
         }
       ]
     }
