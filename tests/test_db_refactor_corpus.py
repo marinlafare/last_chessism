@@ -10,7 +10,7 @@ from scripts.launch_db_refactor_http_backup import runner_command
 from scripts.watch_db_refactor import render
 from chessism_api.database.postgresql import summary_writes
 from chessism_api.operations import mode_summary, global_summaries
-from chessism_api.operations.home_summary import refresh_home_summary
+from chessism_api.database.postgresql import home_summary as home_storage
 
 
 class CorpusSafetyTests(unittest.TestCase):
@@ -69,7 +69,7 @@ class ExplicitSummaryFactoryTests(unittest.IsolatedAsyncioTestCase):
         mode_session.begin.assert_awaited_once()
         mode_session.close.assert_awaited_once()
 
-    async def test_unowned_summary_transactions_and_missing_home_factory_rejected(self):
+    async def test_unowned_summary_transactions_rejected(self):
         connection=MagicMock()
         connection.is_in_transaction.return_value=False
         connection.fetchval=AsyncMock()
@@ -77,5 +77,9 @@ class ExplicitSummaryFactoryTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaisesRegex(ValueError,'caller-owned'):
                 await operation(connection)
         connection.fetchval.assert_not_awaited()
-        with self.assertRaises(ValueError):
-            await refresh_home_summary(transaction_managed=True)
+        session=MagicMock()
+        session.in_transaction.return_value=False
+        session.execute=AsyncMock()
+        with self.assertRaisesRegex(ValueError,'caller-owned'):
+            await home_storage.begin_refresh(session,1)
+        session.execute.assert_not_awaited()

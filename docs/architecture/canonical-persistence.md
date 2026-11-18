@@ -656,3 +656,41 @@ and concurrent refresh. Tests of explicit injected factories now verify operatio
 transactions and reject unowned adapter calls, replacing the obsolete requirement
 to supply cached counts from a separate transaction. The profile-wide relational
 fixture still awaits A4 retirement/mapping; only its import targets changed here.
+
+## A3 homepage snapshot (canonical version 8)
+
+`canonical/home.sql` initializes the source revision and singleton cache. Eight
+statement triggers invalidate structural player/game/FEN/association changes in
+the writer's transaction; game eligibility changes are included. Scores, occurrence
+counts, processing flags, avatars and joined status do not change the cached union.
+Missing revision state fails structural writes rather than losing invalidations.
+
+The cache stores counts and its bounded player-contribution JSON array together.
+This replaces the separate homepage roster table: deleting a source profile cannot
+cascade away part of a retained snapshot or leave its contribution totals unequal.
+Numeric source IDs join live avatars, while names/titles/counts in the JSON belong
+to the saved revision. It is a derived snapshot, not authoritative ownership data.
+
+The concrete adapter computes official-title profiles, standard/nonempty games,
+distinct FENs and half-unit contributions in one SQL statement snapshot. The
+operation keeps the nonblocking transaction advisory lock and existing resource
+limits, validates the contribution invariant, and publishes once. Default READ
+COMMITTED permits harmless failure-metadata writes from an earlier attempt during
+a later build; timestamp-conditional failure recording cannot overwrite newer
+published metadata. Source changes after the statement leave a valid older cache
+with a visibly stale revision. All sessions use the accepted P1 cleanup mechanism.
+
+Page requests use a read-only UTC snapshot. Live all-mode counts use indexed
+canonical ownership plus game eligibility; canonical ownership is a view over game,
+so unlike the historical materialized ownership table it necessarily reads that
+relation. Requests do not scan moves/FENs/associations or rebuild the cache. Existing
+response fields, both self-play contributions, distinct unions, zero-game titled
+profiles, live avatars, mode-summary bars, queue identity and five-minute debounce
+remain. Legacy profile/startup installers and ORM cache models await A4 retirement.
+
+The old ad-hoc homepage test is replaced by 19 canonical isolated PostgreSQL checks
+covering its contracts and new concurrency/deletion/error/cleanup cases; it no longer
+uses constants.CONN_STRING. The private historical finalization script consumes the
+new JSON roster and no longer needs the migration-only transaction_managed option.
+Version validation rejects 1–7 without modifying an existing database. No historical
+import/backup restore or deployed resources were used to implement this change.

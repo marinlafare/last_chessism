@@ -1645,3 +1645,53 @@ with 137 lines of cohesive summary adapter/operations. Tablebase/Stockfish new-s
 counts commit with their results, and the forced refresh race regression passed.
 The repository's original DB, checkpoint and deployed services remain untouched.
 Stage A remains incomplete/unaccepted. Next: canonical home/player cached analytics.
+
+### Canonical homepage snapshot — started 2026-11-18
+
+Global-summary change committed as 71f231b; clean tree confirmed. Next scoped A3
+consumer is the homepage cache; player analytics snapshots follow separately.
+Canonical DDL currently lacks its cache/source tables. New version 8 will add a
+singleton JSON roster plus totals and source-revision invalidation. This reduces
+publication to one row and preserves a complete old snapshot across physical
+profile deletion. Numeric IDs still resolve live avatars; no account/user result
+data is moved. The public response and distinct-game/FEN/half-unit math stay.
+Legacy runtime schema installers are deferred to A4, not invoked in this work.
+
+Homepage implementation ready for focused verification. The operation owns shared
+read/write transactions; its adapter handles canonical SQL. One statement computes
+roster, distinct unions and source revision; one singleton publishes them atomically.
+Version 8 adds two initialized tables and eight structural invalidation triggers.
+Late failure metadata is conditional on attempt time; accepted P1 cleanup covers
+rollback, session closure and repeated cancellation. The public response is retained.
+
+The previous unsafe ad-hoc homepage script is mapped to 19 isolated PostgreSQL tests
+(including self-play, deleted/shell profiles, eligibility, rollback, concurrent builds,
+source revision races, late errors, repeated cancellation and real route output).
+The corpus factory test now checks adapter transaction ownership instead of the
+removed migration-only option. No assertions were weakened or skips added.
+
+Gate: 112 schema/home/ingestion/FEN/evaluation/summary checks, 10 transaction/factory
+checks and all 68 P1 checks = 190, zero skips permitted. Syntax/diff checks and five
+offline schema checks passed. Sources frozen; evidence directory:
+/tmp/chessism-canonical-a3-home-20261118-01.
+Only private networkless PostgreSQL/Redis containers with readonly repository
+mounts and synthetic configuration; no existing database/checkpoint/service access.
+Stage A remains incomplete/unaccepted. Review this gate before another conversion.
+
+Homepage gate launched: supervisor PID 753734; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-home-20261118-01/monitor.py`. Returning control without polling.
+Review raw/structured results, frozen source hashes and owned cleanup before commit.
+
+### Homepage verification passed — 2026-11-18
+
+112 foundation, 10 transaction/factory and all 68 P1 checks passed: 190 total,
+zero failures/errors/skips in 51.74 seconds on Python 3.10.22. Raw and structured
+results agree. All 1,758 frozen source hashes match. Supervisor exited; all five
+owned containers removed, independently confirmed by exact-label Docker inspection.
+No application changes followed this pass. No broad suite rerun needed.
+
+All text evidence archived, read back and byte-checked at:
+docs/architecture/evidence/stage-a-home-2026-11-18.tar.gz.
+Version 8 and homepage snapshot are ready for local checkpoint. Original database,
+recovery checkpoint and deployed services remain untouched. Stage A is incomplete
+and unaccepted; next is player analytics snapshots and hours.

@@ -110,6 +110,37 @@ rollback/missing rows/cancellation, exact source counts, empty operations, repla
 filters and all P1 regressions. Include prior canonical evaluation, tablebase, FEN
 and read fixtures; focused gate only. No live database or backup operations.
 
+## Completed logical change — canonical homepage snapshot (190 checks passed)
+
+Entry: global summaries passed 194 checks and committed locally as `71f231b`.
+Add version-8 canonical home cache/source tables and statement-level structural
+invalidation. Preserve official-title filtering, distinct FEN/game unions, two
+half-units per game, both self-play sides, stale-cache visibility, live avatars,
+all-mode game roster and five-minute queue debounce. Active games remain standard
+and nonempty as in the other canonical analytics; score/processing/appearance
+updates must not invalidate this structural cache.
+
+Use one JSON player-contribution array in the singleton snapshot rather than a
+separately deleted/reinserted roster table. This keeps old totals and contributions
+intact after physical profile deletion, without a dangling authoritative player FK
+or a cascading partial cache. Numeric IDs join live avatars; cached names/titles
+belong to the snapshot. This is a bounded derived cache, not a storage profile or
+compatibility layer. Only the homepage consumes the old roster table at runtime.
+
+Move SQL into database/postgresql/home_summary.py; operations/home_summary.py owns
+read/write transactions and presentation/queueing. Build the full cache in one SQL
+statement snapshot under the existing nonblocking transaction advisory lock.
+Publish once; record failure metadata in a separate guarded transaction, only if
+its attempt predates no newer completed attempt. No page-time DDL/heavy rebuilds.
+Drop the internal migration-only transaction_managed option; update its sole script
+caller and explicit-factory test. Leave legacy startup/profile retirement to A4.
+
+Verify old homepage contracts on a fresh canonical PostgreSQL corpus, plus trigger
+rollback/column exclusions, eligibility changes, physical deletion retention,
+snapshot publication races, failure metadata ordering, missing rows, read-only
+requests, concurrency, cancellation/lock cleanup, schema version rejection and P1.
+Run one focused gate. Player metadata snapshots/hours remain the next consumer group.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.

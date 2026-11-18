@@ -99,7 +99,7 @@ async def validate_summaries(connection):
     modes = await connection.scalar(text('SELECT coalesce(sum(n_games),0) FROM public.main_character_mode_summary'))
     rated = await connection.scalar(text('SELECT source_full_games FROM public.scored_rating_summary WHERE id=1'))
     revision = await connection.scalar(text('SELECT revision FROM public.home_summary_source WHERE id=1'))
-    half_units = await connection.scalar(text('SELECT coalesce(sum(game_half_units),0) FROM public.home_titled_player_summary'))
+    half_units = await connection.scalar(text("SELECT coalesce(sum((p->>'game_half_units')::bigint),0) FROM public.home_titled_summary h CROSS JOIN LATERAL jsonb_array_elements(h.players) p WHERE h.id=1"))
     fen = (await connection.execute(text("""SELECT count(*) AS total,
         count(score) AS scored,count(*) FILTER(WHERE score<>0) AS nonzero FROM public.fen"""))).mappings().one()
     salience_bad = await connection.scalar(text("""SELECT count(*) FROM public.player_salience_summary s
@@ -157,7 +157,7 @@ async def finalize(connection, pgdata, publish, *, inject=False):
         ('player_modes', lambda: mode_summary.refresh_main_character_mode_summary(session_factory=factory)),
         ('salience_totals', lambda: refresh_salience_totals(factory)),
         ('rating_groups', lambda: scored_rating_summary.refresh_scored_rating_summary(session_factory=factory)),
-        ('homepage_union', lambda: refresh_home_summary(session_factory=factory,transaction_managed=True)),
+        ('homepage_union', lambda: refresh_home_summary(session_factory=factory)),
     )
     for index,(name,action) in enumerate(actions,1):
         await publish('refreshing_'+name,steps_completed=index,steps_total=len(STAGES))

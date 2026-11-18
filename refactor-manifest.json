@@ -6345,66 +6345,30 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical global summary publication \u2014 verified; local commit pending",
+      "current_gate": "canonical homepage snapshot \u2014 passed, local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
-        "entry_commit": "8993f416df5ed4a1ad09d70934376d3e39cda501",
-        "planned_tests": {
-          "foundation": 98,
-          "workflow": 28,
+        "status": "passed",
+        "evidence_directory": "/tmp/chessism-canonical-a3-home-20261118-01",
+        "expected_checks": {
+          "foundation": 112,
+          "workflow": 10,
           "p1": 68
         },
-        "total": 194,
-        "source_input_count": 1756,
-        "protected_baseline_count": 1625,
-        "modified_parent_inputs": [
-          "chessism_api/database/postgresql/ask_db.py",
-          "chessism_api/database/postgresql/engine.py",
-          "chessism_api/database/postgresql/evaluation_results.py",
-          "chessism_api/database/postgresql/game_import_summaries.py",
-          "chessism_api/operations/analysis.py",
-          "chessism_api/operations/analysis_backups.py",
-          "chessism_api/operations/cloud_analysis/importer.py",
-          "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
-          "chessism_api/operations/player_deletion.py",
-          "chessism_api/operations/tablebase.py",
-          "docs/architecture/canonical-persistence.md",
-          "scripts/db_refactor_corpus.py",
-          "tests/check_canonical_evaluations_postgres.py",
-          "tests/check_canonical_fen_views_postgres.py",
-          "tests/check_canonical_tablebase_postgres.py",
-          "tests/check_relational_application_postgres.py",
-          "tests/test_db_refactor_corpus.py",
-          "tests/test_pipeline_helpers.py",
-          "tests/test_tablebase_lifecycle.py"
-        ],
-        "new_source_inputs": [
-          "chessism_api/database/postgresql/summary_writes.py",
-          "chessism_api/operations/global_summaries.py",
-          "tests/check_canonical_global_summaries_postgres.py"
-        ],
-        "production_access": false,
-        "syntax_check": "All 21 changed/new Python files parsed; git diff --check passed",
-        "status": "passed",
-        "attempt": 3,
-        "evidence_directory": "/tmp/chessism-canonical-a3-global-summaries-20261118-03",
-        "monitor_command": "python3 /tmp/chessism-canonical-a3-global-summaries-20261118-03/monitor.py",
-        "test_fixture_change": "Remove monthly child records before synthetic players; assert game/FEN/month/player tables empty.",
-        "source_integrity": "All 1756 frozen hashes match",
-        "launch": {
-          "pid": 664090,
-          "startup_confirmed": true,
-          "started_at": 1795042898.9572687
-        },
+        "total_checks": 190,
+        "frozen_source_files": 1758,
+        "protected_baseline_files": 1623,
+        "entry_commit": "71f231bbb9a10e3a2a2cbb421b11d733b095b7b6",
+        "supervisor_pid": 753734,
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 98,
+            "tests": 112,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 32.75774025917053,
+            "elapsed_seconds": 39.060572147369385,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6412,11 +6376,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 28,
+            "tests": 10,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.33808016777038574,
+            "elapsed_seconds": 0.130873441696167,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6428,41 +6392,42 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 3.966071605682373,
+            "elapsed_seconds": 3.747255563735962,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "total_passed": 194,
-        "elapsed_seconds": 45.72520160675049,
+        "total_passed": 190,
+        "elapsed_seconds": 51.73700189590454,
+        "source_integrity": "All 1758 frozen hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-p1",
+            "container": "chessism-canonical-a3-home-1b29982096-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-workflow",
+            "container": "chessism-canonical-a3-home-1b29982096-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-foundation",
+            "container": "chessism-canonical-a3-home-1b29982096-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-redis",
+            "container": "chessism-canonical-a3-home-1b29982096-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-postgres",
+            "container": "chessism-canonical-a3-home-1b29982096-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "commit_pending": true,
-        "evidence_archive": "docs/architecture/evidence/stage-a-global-summaries-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "75ea05dd83653815958a7406ed1ae3d8f786b7674356a1d57b827a55c36a554c"
+        "evidence_archive": "docs/architecture/evidence/stage-a-home-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "22f1c2883b5408c23c850b16378f170d149324da57cb115648ff0561f4e2255f",
+        "commit_pending": true
       },
       "verification_attempts": [
         {
@@ -6961,6 +6926,123 @@
           "evidence_archive": "docs/architecture/evidence/stage-a-scored-ratings-2026-11-18.tar.gz",
           "evidence_archive_sha256": "e4f4259bd14d0fa742cbeffec48e5f007f4828be927a37027c0a06ca582e1e52",
           "commit_sha": "8993f416df5ed4a1ad09d70934376d3e39cda501"
+        },
+        {
+          "entry_commit": "8993f416df5ed4a1ad09d70934376d3e39cda501",
+          "planned_tests": {
+            "foundation": 98,
+            "workflow": 28,
+            "p1": 68
+          },
+          "total": 194,
+          "source_input_count": 1756,
+          "protected_baseline_count": 1625,
+          "modified_parent_inputs": [
+            "chessism_api/database/postgresql/ask_db.py",
+            "chessism_api/database/postgresql/engine.py",
+            "chessism_api/database/postgresql/evaluation_results.py",
+            "chessism_api/database/postgresql/game_import_summaries.py",
+            "chessism_api/operations/analysis.py",
+            "chessism_api/operations/analysis_backups.py",
+            "chessism_api/operations/cloud_analysis/importer.py",
+            "chessism_api/operations/ingestion_pipeline/fen_bulk.py",
+            "chessism_api/operations/player_deletion.py",
+            "chessism_api/operations/tablebase.py",
+            "docs/architecture/canonical-persistence.md",
+            "scripts/db_refactor_corpus.py",
+            "tests/check_canonical_evaluations_postgres.py",
+            "tests/check_canonical_fen_views_postgres.py",
+            "tests/check_canonical_tablebase_postgres.py",
+            "tests/check_relational_application_postgres.py",
+            "tests/test_db_refactor_corpus.py",
+            "tests/test_pipeline_helpers.py",
+            "tests/test_tablebase_lifecycle.py"
+          ],
+          "new_source_inputs": [
+            "chessism_api/database/postgresql/summary_writes.py",
+            "chessism_api/operations/global_summaries.py",
+            "tests/check_canonical_global_summaries_postgres.py"
+          ],
+          "production_access": false,
+          "syntax_check": "All 21 changed/new Python files parsed; git diff --check passed",
+          "status": "passed",
+          "attempt": 3,
+          "evidence_directory": "/tmp/chessism-canonical-a3-global-summaries-20261118-03",
+          "monitor_command": "python3 /tmp/chessism-canonical-a3-global-summaries-20261118-03/monitor.py",
+          "test_fixture_change": "Remove monthly child records before synthetic players; assert game/FEN/month/player tables empty.",
+          "source_integrity": "All 1756 frozen hashes match",
+          "launch": {
+            "pid": 664090,
+            "startup_confirmed": true,
+            "started_at": 1795042898.9572687
+          },
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 98,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 32.75774025917053,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 28,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.33808016777038574,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.966071605682373,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 194,
+          "elapsed_seconds": 45.72520160675049,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-global-summaries-98f4c8ca2b-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "commit_pending": false,
+          "evidence_archive": "docs/architecture/evidence/stage-a-global-summaries-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "75ea05dd83653815958a7406ed1ae3d8f786b7674356a1d57b827a55c36a554c",
+          "commit_sha": "71f231bbb9a10e3a2a2cbb421b11d733b095b7b6"
         }
       ]
     }

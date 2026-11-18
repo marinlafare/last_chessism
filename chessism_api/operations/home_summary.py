@@ -1,17 +1,10 @@
-"""Cached titled-player/FEN union for the homepage; heavy work stays off HTTP.
-
-Reads enqueue a debounced rebuild when a committed structural change invalidates
-the snapshot. Score imports do not invalidate it. Existing data stays visible
-while rebuilding. The published counts and all pie slices share one snapshot.
-"""
+"""Homepage cache policy and presentation; structural snapshots rebuild off HTTP."""
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import text
-
+from chessism_api.database.postgresql import home_summary as storage
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.compact_storage import compact_for
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.player_titles import OFFICIAL_PLAYER_TITLES as TITLES
 
 LOG = logging.getLogger(__name__)
@@ -29,34 +22,16 @@ def needs_refresh(meta, now=None):
             or meta.get("source_revision") != meta.get("current_revision"))
 
 
-async def get_home_summary(redis):
-    # Position unions and legacy half-game credits share the cached snapshot.
-    # The bar-chart roster must not wait for that expensive rebuild: game-player
-    # ownership is committed with ingestion, before FEN extraction/scoring.
-    async with AsyncDBSession() as session:
-        rows = (await session.execute(text("""
-            SELECT m.*, s.revision AS current_revision,
-                   p.player_name, p.title, p.games, p.game_half_units, profile.avatar
-            FROM (SELECT 1 AS id) singleton
-            LEFT JOIN home_summary_source s ON s.id = singleton.id
-            LEFT JOIN home_titled_summary m ON m.id = singleton.id
-            LEFT JOIN home_titled_player_summary p ON TRUE
-            LEFT JOIN player profile ON profile.player_name = p.player_name AND profile.deleted_at IS NULL
-            ORDER BY p.game_half_units DESC, p.player_name
-        """))).mappings().all()
-        untitled = (await session.execute(text("""
-            SELECT p.player_name, p.avatar, SUM(s.n_games) AS games
-            FROM main_character_mode_summary s
-            JOIN player p ON p.player_name = s.player_name
-            WHERE p.deleted_at IS NULL
-              AND NOT (UPPER(TRIM(COALESCE(p.title, ''))) = ANY(CAST(:titles AS text[])))
-            GROUP BY p.player_name, p.avatar
-            HAVING SUM(s.n_games) > 0
-            ORDER BY games DESC, p.player_name
-        """), {"titles": list(TITLES)})).mappings().all()
-        game_players = await get_home_game_players(session)
-    meta = dict(rows[0])
-    error = meta.get("last_error")
+async def get_home_summary(redis, *, session_factory=None):
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        meta = await storage.read_snapshot(session)
+        untitled = await storage.untitled_players(session)
+        roster = await storage.game_players(session)
+    game_players = {"titled": [], "untitled": []}
+    for row in roster:
+        group = "titled" if row["title"] in TITLES else "untitled"
+        game_players[group].append(dict(row))
+    error = meta["last_error"]
     if needs_refresh(meta):
         try:
             await redis.enqueue_job("run_home_summary_refresh", _job_id=JOB_ID,
@@ -64,153 +39,45 @@ async def get_home_summary(redis):
         except Exception:
             LOG.exception("Could not enqueue homepage summary")
             error = "Summary refresh unavailable; try again later."
-    refreshed = meta.get("refreshed_at")
+    refreshed = meta["refreshed_at"]
     return {
-        "total_fens": int(meta.get("total_fens") or 0) if refreshed else None,
-        "titled_players": int(meta.get("titled_players") or 0) if refreshed else None,
-        "titled_fens": int(meta.get("titled_fens") or 0) if refreshed else None,
-        "titled_games": int(meta.get("titled_games") or 0) if refreshed else None,
+        **{key: int(meta[key]) if refreshed else None
+           for key in ("total_fens", "titled_players", "titled_fens", "titled_games")},
         "refreshed_at": refreshed.isoformat() if refreshed else None,
-        "stale": not refreshed or meta.get("source_revision") != meta.get("current_revision"),
+        "stale": not refreshed or meta["source_revision"] != meta["current_revision"],
         "refresh_error": error,
         "game_players": game_players,
-        "players": [{"player_name": row["player_name"], "title": row["title"],
-                     "games": int(row["games"]), "game_half_units": int(row["game_half_units"]),
-                     "avatar": row["avatar"]}
-                    for row in rows if row["player_name"] is not None],
+        "players": meta["players"],
         "untitled_players": [{"player_name": row["player_name"], "title": "",
                               "games": int(row["games"]), "avatar": row["avatar"]}
                              for row in untitled],
     }
 
 
-async def get_home_game_players(session):
-    """Exact, live game totals for downloaded profiles, across all game modes.
-
-    Count through the indexed ownership relation, never through moves or FENs.
-    Use physical numeric IDs with normalized storage to avoid expensive read
-    view joins. Opponent-only profile shells and deleted players stay hidden.
-    """
-    layout = storage_for(session)
-    profiles = layout.table('player') if layout else 'player'
-    ownership = layout.table('game_player') if layout else 'game_player'
-    owner = 'gp.player_id = p.id' if layout else 'gp.player_name = p.player_name'
-    rows = (await session.execute(text(f"""
-        SELECT p.player_name, UPPER(TRIM(COALESCE(p.title, ''))) AS title,
-               p.avatar, counts.games
-        FROM {profiles} p
-        CROSS JOIN LATERAL (
-            SELECT count(*) AS games FROM {ownership} gp WHERE {owner}
-        ) counts
-        WHERE p.deleted_at IS NULL AND COALESCE(p.joined, 0) > 0
-          AND counts.games > 0
-        ORDER BY counts.games DESC, p.player_name
-    """))).mappings().all()
-    groups = {"titled": [], "untitled": []}
-    for row in rows:
-        group = "titled" if row["title"] in TITLES else "untitled"
-        groups[group].append({"player_name": row["player_name"], "title": row["title"],
-                              "avatar": row["avatar"], "games": int(row["games"])})
-    return groups
-
-
 async def run_home_summary_refresh(ctx):
     return await refresh_home_summary()
 
 
-async def refresh_home_summary(*, session_factory=None, transaction_managed=False):
-    """Allow migration tooling to own the transaction without changing workers.
-
-    A managed caller must supply sessions bound to one REPEATABLE READ (or
-    SERIALIZABLE) transaction. Its sessions use savepoints, never commit the
-    caller's transaction. Ordinary queue workers retain their existing path.
-    """
-    if transaction_managed and session_factory is None:
-        raise ValueError('Managed summary refresh requires an explicit session factory')
+async def refresh_home_summary(*, session_factory=None):
     factory = session_factory or AsyncDBSession
-    if transaction_managed:
-        async with factory() as session:
-            isolation = await session.scalar(text('SHOW transaction_isolation'))
-            if isolation not in ('repeatable read', 'serializable'):
-                raise RuntimeError('Managed homepage refresh requires a stable snapshot')
-    async with factory.begin() as session:
-        await session.execute(text("""
-            INSERT INTO home_titled_summary (id, attempted_at) VALUES (1, clock_timestamp())
-            ON CONFLICT (id) DO UPDATE SET attempted_at = EXCLUDED.attempted_at
-        """))
+    attempted_at = None
     try:
-        async with factory() as session:
-            if not transaction_managed:
-                await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-            await session.execute(text("SET LOCAL statement_timeout = '900s'"))
-            await session.execute(text("SET LOCAL lock_timeout = '5s'"))
-            await session.execute(text("SET LOCAL work_mem = '64MB'"))
-            await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 2"))
-            if not await session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_ID}):
+        async with write_transaction(factory) as session:
+            attempted_at = await storage.begin_refresh(session, LOCK_ID)
+            if attempted_at is None:
                 return {"status": "already_refreshing"}
-            revision = await session.scalar(text("SELECT revision FROM home_summary_source WHERE id = 1"))
-            compact = compact_for(session)
-            owner_projection = 'id AS player_id,' if compact else ''
-            await session.execute(text(f"""
-                CREATE TEMP TABLE home_titles ON COMMIT DROP AS
-                SELECT {owner_projection} player_name, UPPER(TRIM(title)) AS title FROM player
-                WHERE deleted_at IS NULL AND UPPER(TRIM(title)) = ANY(CAST(:titles AS text[]))
-            """), {"titles": list(TITLES)})
-            await session.execute(text("CREATE UNIQUE INDEX ON home_titles (player_name)"))
-            await session.execute(text("ANALYZE home_titles"))
-            # A game row is unique by link; joining both participants cannot
-            # duplicate it. Read game directly, not potentially partial caches.
-            await session.execute(text("""
-                CREATE TEMP TABLE home_titled_games ON COMMIT DROP AS
-                SELECT g.link, w.player_name AS white, b.player_name AS black
-                FROM game g LEFT JOIN home_titles w ON w.player_name = g.white
-                LEFT JOIN home_titles b ON b.player_name = g.black
-                WHERE w.player_name IS NOT NULL OR b.player_name IS NOT NULL
-            """))
-            await session.execute(text("CREATE UNIQUE INDEX ON home_titled_games (link)"))
-            await session.execute(text("ANALYZE home_titled_games"))
-            counts = (await session.execute(text("""
-                SELECT (SELECT count(*) FROM fen) AS total_fens,
-                       (SELECT count(*) FROM home_titles) AS titled_players,
-                       (SELECT count(*) FROM home_titled_games) AS titled_games
-            """))).mappings().one()
-            titled_fens = await session.scalar(text("""
-                SELECT count(*) FROM (
-                    SELECT a.fen_id FROM game_fen_association a
-                    JOIN home_titled_games g ON g.link = a.game_link
-                    GROUP BY a.fen_id
-                ) distinct_titled_fens
-            """))
-            target = compact.table('home_titled_player_summary') if compact else 'home_titled_player_summary'
-            owner_key = 'player_id' if compact else 'player_name'
-            await session.execute(text(f"DELETE FROM {target}"))
-            await session.execute(text(f"""
-                INSERT INTO {target} ({owner_key}, title, games, game_half_units)
-                SELECT p.{owner_key}, p.title, count(c.player_name), coalesce(sum(c.units), 0)
-                FROM home_titles p LEFT JOIN (
-                    SELECT white AS player_name, CASE WHEN black IS NULL THEN 2 ELSE 1 END AS units
-                    FROM home_titled_games WHERE white IS NOT NULL
-                    UNION ALL
-                    SELECT black, CASE WHEN white IS NULL THEN 2 ELSE 1 END
-                    FROM home_titled_games WHERE black IS NOT NULL
-                ) c ON c.player_name = p.player_name
-                GROUP BY p.{owner_key}, p.title
-            """))
-            half_units = await session.scalar(text("SELECT coalesce(sum(game_half_units),0) FROM home_titled_player_summary"))
-            if half_units != 2 * counts["titled_games"]:
+            snapshot = await storage.build_snapshot(session)
+            if sum(row["game_half_units"] for row in snapshot["players"]) != 2*snapshot["titled_games"]:
                 raise ValueError("Titled game contributions do not match distinct games")
-            await session.execute(text("""
-                UPDATE home_titled_summary SET total_fens=:total_fens, titled_players=:titled_players,
-                    titled_games=:titled_games, titled_fens=:titled_fens, source_revision=:revision,
-                    refreshed_at=clock_timestamp(), last_error=NULL WHERE id=1
-            """), {**counts, "titled_fens": titled_fens, "revision": revision})
-            await session.commit()
+            await storage.publish(session, snapshot, attempted_at)
     except Exception:
         LOG.exception("Homepage summary rebuild failed; retaining previous snapshot")
-        async with factory.begin() as session:
-            await session.execute(text("""
-                UPDATE home_titled_summary SET last_error=
-                    'Summary refresh failed; the previous snapshot is retained.' WHERE id=1
-            """))
+        if attempted_at is not None:
+            try:
+                async with write_transaction(factory) as session:
+                    await storage.record_failure(session, attempted_at)
+            except Exception:
+                LOG.exception("Could not record homepage refresh failure; preserving original error")
         raise
-    return {"status": "complete", **dict(counts), "titled_fens": titled_fens}
+    return {"status": "complete", **{key: snapshot[key]
+        for key in ("total_fens", "titled_players", "titled_games", "titled_fens")}}
