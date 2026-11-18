@@ -1533,3 +1533,115 @@ Durable text-only evidence archived/read back/byte-checked at
 docs/architecture/evidence/stage-a-scored-ratings-2026-11-18.tar.gz.
 No application changes followed verification. Local commit next; Stage A remains
 incomplete/unaccepted. Continue with the remaining FEN/database summary publishers.
+
+### Canonical global summary publication — started 2026-11-18
+
+Scored-rating checkpoint committed locally as 8993f41; clean tree confirmed.
+Current conversion follows remaining A3.1 summary-writer inventory. Inspection
+found tablebase commits scores/database counts then separately increments scored
+counts: a concurrent full refresh between those steps can include and then double
+count the same evaluations. New-score deltas will join the existing score/receipt
+transaction, using shared canonical aggregates with the full refresh. Both global
+FEN projections will publish atomically under database->scored singleton locks.
+No changes to public worker results, recovery/claim/cleanup or backup formats.
+
+### Global summary conversion ready for verification
+
+Removed 16 obsolete ask_db definitions (834 lines); retained definitions remain
+AST-identical. The replacement adapter/operations are 137 lines, and ingestion
+reuses the game count writer. Shared aggregate SQL supports full integer scores,
+all bucket/WDL/appearance definitions, and both full/transactional delta paths.
+Both global FEN summaries now commit with new scores; tablebase's post-commit
+scored delta is removed. No public result/progress/lease/receipt contract changes.
+Backup restoration only changes refresh imports and removes a now-redundant scan;
+no backup file/storage/format/restore-publication mechanics changed.
+
+New 12-case PostgreSQL suite verifies source oracles, active-game/mode counts,
+empty/repeated/missing-row behavior, full/incremental parity, committed visibility,
+replay, rollback/source errors, both refresh/score lock orderings, ingestion
+occurrence retry/refresh, repeated cancellation and canonical pipeline counts.
+The actual tablebase application test now forces a full rebuild immediately after
+score commit, in the old race window; it asserts exactly three scored positions.
+Evaluation/tablebase snapshots now also check rollback of scored-position rows.
+
+Test mapping (no skip/relaxed assertions): the retired snapshot-subtraction helper's
+FenIngestionSummaryTests.test_ingestion_delta_counts_only_new_rows_and_changed_appearances
+is replaced by ScoredPositionPayloadTests.test_new_positions_and_changed_appearances_remain_distinct;
+actual new-row/appearance deltas are exercised in canonical FEN tests and the new
+concurrent ingestion/full-refresh case. The obsolete requirement to inject a
+separately read database_summary into a refresh is replaced by explicit factory/
+transaction checks in ExplicitSummaryFactoryTests. SQL-backed FEN overview tests
+retain their independent arithmetic assertions. The legacy relational profile-wide
+fixture remains A4 mapping debt (only imports changed); it is not this gate.
+
+Syntax/diff checks pass. Gate prepared: 98 canonical foundation/workflow/read checks,
+28 unit/lifecycle checks, and all 68 P1 = 194 checks, zero skips permitted. Same
+private networkless bounded PostgreSQL/Redis harness, readonly repository and no
+production environment. Evidence directory:
+/tmp/chessism-canonical-a3-global-summaries-20261118-01.
+Stage A remains incomplete/unaccepted; this conversion is not verified yet.
+
+Global summary gate launched: supervisor PID 557104; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-global-summaries-20261118-01/monitor.py`. Returning control without polling.
+Review raw/structured evidence, source hashes and cleanup before committing.
+
+### Global-summary launch 1 — test-launcher error, no application tests ran
+
+Supervisor exited after 2.99 seconds. suite.py passed the whole module dictionary
+to loadTestsFromNames instead of selecting its current suite. unittest attempted
+to import the literal labels foundation/workflow/p1, producing exactly three
+_FailedTest loader errors (ModuleNotFoundError). Zero application checks ran;
+workflow and P1 containers were never started. This is not an application test
+failure. Raw logs/structured errors retained in the original evidence directory.
+
+All three owned containers were removed; independent exact-label inspection
+returned none. The supervisor exited. All 1,756 source hashes still match.
+Only the ephemeral launcher changes: select the module list with [name] and assert
+its type. Offline AST execution confirms all three selections (7/4/6 modules)
+contain module paths rather than suite labels. No application code, test assertions,
+test counts, skips, resource limits or source inputs changed. Planned checks remain
+98+28+68=194. Retry evidence: /tmp/chessism-canonical-a3-global-summaries-20261118-02.
+
+Global-summary launch 2: supervisor PID 623803; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-global-summaries-20261118-02/monitor.py`. Returning control without polling.
+
+### Global-summary launch 2 — one fixture setup error
+
+All 98 foundation checks ran: 97 passed, zero assertion failures, one error, zero
+skips. Error identity:
+tests.check_canonical_global_summaries_postgres.CanonicalGlobalSummaryTests.test_empty_and_repeated_refresh_do_not_bootstrap_missing_rows.
+Its setup deleted players while two synthetic months rows still referenced player
+id=1. PostgreSQL raised ForeignKeyViolationError for months_player_id_fkey. The
+empty-state/missing-cache assertions in that method were not reached. Exact traceback
+and raw evidence remain in launch 2. Workflow/P1 suites were not started.
+
+All 1,756 tested hashes matched. Supervisor exited; all three owned containers
+removed and independent exact-label inspection returned none. Fixed only this
+fixture: delete months before players and explicitly assert all four core source
+tables are empty. Schema/FK policy, application source and existing assertions are
+unchanged. Reverse-patch hash check proves this is the sole source-file difference.
+
+Fresh gate remains 98+28+68=194 checks with no skips permitted. Same harness/limits,
+including corrected suite dispatch. Evidence:
+/tmp/chessism-canonical-a3-global-summaries-20261118-03.
+No commit or next implementation until the complete gate passes and is reviewed.
+
+Global-summary launch 3: supervisor PID 664090; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-global-summaries-20261118-03/monitor.py`. Returning control without polling.
+
+### Global-summary verification passed — 2026-11-18
+
+Raw and structured evidence agree: 98 foundation, 28 unit/lifecycle and 68 P1
+checks passed, 194 total, zero failures/errors/skips, 45.73 seconds, Python 3.10.22.
+All 1,756 frozen source hashes match. Supervisor exited; all five owned containers
+removed, independently confirmed by exact-label inspection. No application edits
+followed the passing run. No redundant full-suite run needed for this focused gate.
+
+Durable evidence for all three launches (including original errors) archived,
+read back and byte-checked at:
+docs/architecture/evidence/stage-a-global-summaries-2026-11-18.tar.gz.
+The final change removes 834 ask_db lines and replaces/reuses their active behavior
+with 137 lines of cohesive summary adapter/operations. Tablebase/Stockfish new-score
+counts commit with their results, and the forced refresh race regression passed.
+The repository's original DB, checkpoint and deployed services remain untouched.
+Stage A remains incomplete/unaccepted. Next: canonical home/player cached analytics.

@@ -33,7 +33,8 @@ class CanonicalTablebaseTests(CanonicalDatabaseTestCase):
         await self.db.executemany('INSERT INTO fen(fen,n_games) VALUES($1,$2)', [(ENDGAMES[2], 50), (ENDGAMES[3], 40)])
         self.ids = {r['fen']: r['fen_id'] for r in await self.db.fetch('SELECT fen,fen_id FROM fen')}
         await self.db.execute('''DELETE FROM game_fen_association;
-            UPDATE database_summary SET n_positions=7,unscored_fens=7''')
+            UPDATE database_summary SET n_positions=7,unscored_fens=7;
+            UPDATE scored_position_summary SET total_positions=7,unscored_fens=7''')
         for game, fen, move, white in [(101, ENDGAMES[1], 0, True), (101, ENDGAMES[1], 1, False),
                                      (101, ENDGAMES[0], 2, True), (105, ENDGAMES[0], 0, True)]:
             await self.db.execute('INSERT INTO game_fen_association VALUES($1,$2,$3,$4)', game, self.ids[fen], move, white)
@@ -81,7 +82,8 @@ class CanonicalTablebaseTests(CanonicalDatabaseTestCase):
     async def snapshot(self):
         return (await self.db.fetch('SELECT * FROM fen ORDER BY fen'),
                 await self.db.fetch('SELECT * FROM database_summary'),
-                await self.db.fetch('SELECT * FROM cloud_fen_claim ORDER BY fen'))
+                await self.db.fetch('SELECT * FROM cloud_fen_claim ORDER BY fen'),
+                await self.db.fetch('SELECT * FROM scored_position_summary'))
 
     async def publish(self, rows, unavailable=()):
         async with write_transaction(self.factory) as session:
@@ -255,6 +257,13 @@ class CanonicalTablebaseTests(CanonicalDatabaseTestCase):
         await self.publish([solved()], [{'fen': ENDGAMES[1], 'piece_count': 2}])
 
     async def test_application_probes_without_database_connections_and_preserves_result_contract(self):
+        from chessism_api.operations.global_summaries import refresh_scored_position_summary
+        cleanup=tablebase.finish_analysis_cleanup
+        async def refresh_after_commit(awaitable):
+            await cleanup(awaitable)
+            # Force the old race: rebuild immediately after the score commit,
+            # before the former separate scored-position increment would run.
+            await refresh_scored_position_summary(session_factory=self.factory)
         async def probe(rows):
             self.assertEqual(self.engine.pool.checkedout(), 0)
             return ([solved(r['fen'], piece_count=r['piece_count']) for r in rows if r['fen'] != ENDGAMES[1]],
@@ -262,12 +271,15 @@ class CanonicalTablebaseTests(CanonicalDatabaseTestCase):
         prober = SimpleNamespace(workers=2, probe=AsyncMock(side_effect=probe), close=AsyncMock())
         with patch.object(tablebase.os.path, 'isdir', return_value=True), \
              patch.object(tablebase, 'TablebaseProber', return_value=prober), \
-             patch.object(tablebase, 'increment_scored_position_summary_for_scored_fens', AsyncMock()), \
+             patch.object(tablebase, 'finish_analysis_cleanup', refresh_after_commit), \
              patch.object(tablebase, 'increment_game_analysis_summary_for_scored_fens', AsyncMock()):
             result = await tablebase.analyze_tablebase_positions({}, batch_size=2, refresh_projections=False)
         self.assertEqual(result, {'processed': 4, 'solved': 3, 'unavailable': 1, 'target': 4, 'skipped': 0})
         prober.close.assert_awaited_once_with(abort=False)
         self.assertEqual(await self.db.fetchval('SELECT analyzed_fens FROM database_summary'), 3)
+        self.assertEqual(await self.db.fetchval('SELECT analyzed_fens FROM scored_position_summary'), 3)
+        self.assertEqual(await self.db.fetchval('''SELECT equal_positions+small_positions+clear_positions+
+            decisive_positions+mate_positions FROM scored_position_summary'''),3)
         self.assertEqual(self.engine.pool.checkedout(), 0)
 
     async def test_reporting_failure_after_lease_releases_actual_database_locks(self):
@@ -341,6 +353,7 @@ class CanonicalTablebaseTests(CanonicalDatabaseTestCase):
         rows = [solved(f'synthetic-{index} w - -', piece_count=2) for index in range(1001)]
         await self.db.executemany('INSERT INTO fen(fen,piece_count) VALUES($1,2)', [(r['fen'],) for r in rows])
         await self.db.execute('''UPDATE database_summary SET unscored_fens=1008;
+            UPDATE scored_position_summary SET unscored_fens=1008;
             CREATE TABLE evaluation_statements(n integer);
             CREATE FUNCTION count_tablebase_statement() RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN INSERT INTO evaluation_statements SELECT count(*) FROM changed; RETURN NULL; END $$;

@@ -6,6 +6,7 @@ neither commits nor closes its session, and never chooses a storage profile.
 from chessism_api.evaluations import integer, validate_batch
 
 from .transactions import driver_connection
+from .summary_writes import increment_scored_fens
 
 BATCH_SIZE = 1000
 
@@ -13,19 +14,7 @@ BATCH_SIZE = 1000
 async def increment_new_fen_counts(session, rows):
     """Only for locked, verified unscored -> scored transitions; caller commits."""
     if rows:
-        await _increment_counts(await driver_connection(session), rows)
-
-
-async def _increment_counts(connection, rows):
-    status = await connection.execute('''UPDATE public.database_summary SET
-        analyzed_fens=analyzed_fens+$1,
-        unscored_fens=GREATEST(unscored_fens-$1,0),
-        scored_fens=scored_fens+$2,
-        nonzero_scored_fens=nonzero_scored_fens+$2,
-        refreshed_at=CURRENT_TIMESTAMP WHERE id=1''',
-        len(rows), sum(row['score'] != 0 for row in rows))
-    if status != 'UPDATE 1':
-        raise ValueError('Database totals are missing; evaluation transaction must be retried after initialization')
+        await increment_scored_fens(await driver_connection(session), rows)
 
 
 async def stage_fen_results(session, formatted, continuations, *, count_new=False):
@@ -85,4 +74,4 @@ async def stage_fen_results(session, formatted, continuations, *, count_new=Fals
             records=[(identifiers[row['fen_fen']], int(row['rank']), row['move'], int(row['score']))
                      for row in continuations[start:start + BATCH_SIZE]])
     if count_new:
-        await _increment_counts(connection, formatted)
+        await increment_scored_fens(connection, formatted)

@@ -143,17 +143,17 @@ async def finalize(connection, pgdata, publish, *, inject=False):
     await connection.execute(text(f'SET LOCAL search_path={LAYOUT.search_path}'))
     factory = sessionmaker(bind=connection, class_=AsyncSession, expire_on_commit=False,
         join_transaction_mode='create_savepoint', info={SESSION_KEY: LAYOUT})
-    from chessism_api.database.postgresql import ask_db
+    from chessism_api.operations import global_summaries
     from chessism_api.operations import mode_summary, scored_rating_summary
     from chessism_api.operations.home_summary import refresh_home_summary
 
     await publish('refreshing_database_counts', steps_completed=0, steps_total=len(STAGES))
-    database = await ask_db.refresh_database_summary(session_factory=factory)
+    database = await global_summaries.refresh_database_summary(session_factory=factory)
     if inject:
         raise InjectedFinalizationFailure('Injected failure after first refreshed summary')
     actions = (
-        ('pipeline_counts', lambda: ask_db.refresh_fen_pipeline_summary(session_factory=factory)),
-        ('scored_counts', lambda: ask_db.refresh_scored_position_summary(session_factory=factory,database_summary=database)),
+        ('pipeline_counts', lambda: global_summaries.refresh_fen_pipeline_summary(session_factory=factory)),
+        ('scored_counts', lambda: global_summaries.refresh_scored_position_summary(session_factory=factory)),
         ('player_modes', lambda: mode_summary.refresh_main_character_mode_summary(session_factory=factory)),
         ('salience_totals', lambda: refresh_salience_totals(factory)),
         ('rating_groups', lambda: scored_rating_summary.refresh_scored_rating_summary(session_factory=factory)),

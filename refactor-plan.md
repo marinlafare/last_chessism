@@ -84,6 +84,32 @@ snapshot, serialized refreshes, rollback/failure/cancellation and readonly route
 existing rating tests, transaction cleanup and all 68 P1 checks. No full-suite run.
 Legacy repair-delta conversion remains in the subsequent auxiliary-consumer chunk.
 
+## Completed logical change — canonical global summary publication (194 checks passed)
+
+Entry: scored-rating conversion passed 148 checks and committed as `8993f41`.
+Replace remaining database/FEN/pipeline/scored-position refresh SQL in `ask_db.py`
+with a concrete `summary_writes.py` adapter and `operations/global_summaries.py`.
+Reuse canonical game counts in ingestion and existing canonical pipeline refresh.
+Use initialized singletons, explicit operation-owned transactions, ordered database
+then scored-summary locks, and common FEN aggregates for full refresh and new-score
+deltas. Full FEN refresh publishes both projections from one statement snapshot;
+no caller-supplied counts from a separate transaction and no cache-bootstrap fallback.
+
+Move tablebase's post-commit scored-position delta into the score transaction via
+its existing evaluation-count boundary, also used by local/cloud Stockfish writes.
+This closes a demonstrated code-level refresh/delta double-count race without
+changing results, leases, receipts, worker limits or progress. Remove the redundant
+post-commit delta and unused legacy snapshot/delta functions. Preserve public count
+meanings (database scored_fens is nonzero; scored_positions includes zero), bucket
+thresholds, WDL/appearance arithmetic and pipeline stage semantics. Cast before ABS
+in FEN ingestion as well, so canonical integer extremes remain usable.
+
+Update actual imports/callers and obsolete internal tests with an explicit mapping
+record. Cover real full/delta parity, concurrent refresh/publication/ingestion,
+rollback/missing rows/cancellation, exact source counts, empty operations, replay,
+filters and all P1 regressions. Include prior canonical evaluation, tablebase, FEN
+and read fixtures; focused gate only. No live database or backup operations.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.

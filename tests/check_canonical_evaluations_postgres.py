@@ -42,7 +42,8 @@ class EvaluationCase(CanonicalDatabaseTestCase):
         await super().asyncSetUp()
         await canonical.initialize(self.db)
         self.ids = await seed(self.db)
-        await self.db.execute('UPDATE database_summary SET n_positions=5,unscored_fens=5 WHERE id=1')
+        await self.db.execute('''UPDATE database_summary SET n_positions=5,unscored_fens=5 WHERE id=1;
+            UPDATE scored_position_summary SET total_positions=5,unscored_fens=5 WHERE id=1''')
         self.engine = create_async_engine(URL.create('postgresql+asyncpg', username='test',
             database=self.name, port=55432, query={'host': self.socket}),
             connect_args={'server_settings': {'statement_timeout': '5000'}})
@@ -66,7 +67,8 @@ class EvaluationCase(CanonicalDatabaseTestCase):
     async def snapshot(self):
         return (await self.db.fetch('SELECT * FROM fen ORDER BY fen'),
                 await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank'),
-                await self.db.fetch('SELECT * FROM database_summary'))
+                await self.db.fetch('SELECT * FROM database_summary'),
+                await self.db.fetch('SELECT * FROM scored_position_summary'))
 
     async def publish(self, rows, moves=(), *, count_new=True):
         async with write_transaction(self.factory) as session:
@@ -183,6 +185,7 @@ class CanonicalEvaluationTests(EvaluationCase):
         rows = [result(f'synthetic-{index} w - -', score=index) for index in range(1001)]
         await self.db.executemany('INSERT INTO fen(fen) VALUES($1)', [(r['fen'],) for r in rows])
         await self.db.execute('''UPDATE database_summary SET unscored_fens=1006;
+            UPDATE scored_position_summary SET unscored_fens=1006;
             CREATE TABLE evaluation_statements(n integer);
             CREATE FUNCTION count_evaluation_statement() RETURNS trigger LANGUAGE plpgsql AS $$
             BEGIN INSERT INTO evaluation_statements SELECT count(*) FROM changed; RETURN NULL; END $$;

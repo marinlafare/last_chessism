@@ -626,3 +626,33 @@ source coverage bucket aggregate casts scores to bigint before ABS, supporting t
 full canonical integer range. Refresh timing remains unchanged at existing callers;
 a committed source change may precede projection refresh as before. Incremental
 legacy repair-delta conversion is still pending with the auxiliary consumers.
+
+## A3 global summary publication
+
+`operations/global_summaries.py` owns full/game-count/pipeline/scored-position
+refresh transactions; `database/postgresql/summary_writes.py` owns concrete SQL.
+Canonical game counts are shared with ingestion, and pipeline refresh reuses the
+A2 coverage adapter. Operations require initialized rows and never invent zero
+success for missing caches. Database score counts retain the existing nonzero
+meaning; scored-position counts include zero evaluations. Bucket, appearance,
+side-balance (inclusive 50-cp balance) and WDL formulas are unchanged.
+
+Full FEN refresh locks database_summary then scored_position_summary, reads one
+aggregate snapshot, and publishes both caches before committing. New-score
+publication uses the same lock order/aggregate definitions inside the existing
+Stockfish/tablebase evaluation transaction. Source FEN locks precede the summary
+locks; refresh uses MVCC reads and never waits for FEN row locks. A refresher sees
+either the committed transition or its later atomic delta, so tablebase no longer
+has a separate post-commit scored-position increment that can double count a
+concurrent rebuild. Incremental source queries remain bounded to the evaluated
+FEN keys. Ingestion keeps its exact new-row/occurrence deltas under the same locks.
+Read requests still use the existing read-only adapters. No new DDL/version bump.
+
+The unused legacy snapshot/delta/bootstrap methods were removed with the old SQL.
+The pure legacy `fen_ingestion_summary_delta` test is mapped to public position/
+appearance arithmetic; actual retry-safe insertion and occurrence deltas remain
+covered by canonical FEN PostgreSQL tests, now including integer-minimum scores
+and concurrent refresh. Tests of explicit injected factories now verify operation
+transactions and reject unowned adapter calls, replacing the obsolete requirement
+to supply cached counts from a separate transaction. The profile-wide relational
+fixture still awaits A4 retirement/mapping; only its import targets changed here.

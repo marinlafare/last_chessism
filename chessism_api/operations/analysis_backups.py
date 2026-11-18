@@ -8,8 +8,7 @@ from pathlib import Path
 
 from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
 from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
-from chessism_api.database.postgresql.ask_db import (
-    refresh_database_summary_fen_counts,
+from chessism_api.operations.global_summaries import (
     refresh_scored_position_summary,
 )
 from .backup_coordination import ensure_backup_reservation, release_backup
@@ -75,7 +74,6 @@ async def create_fen_analysis_backup(ctx):
 
 
 async def _refresh_summaries():
-    await refresh_database_summary_fen_counts()
     await refresh_game_analysis_summary()
     await refresh_scored_position_summary()
     await refresh_scored_rating_summary()

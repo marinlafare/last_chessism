@@ -86,7 +86,6 @@ class TablebaseLifecycleTests(unittest.IsolatedAsyncioTestCase):
               patch.object(tablebase,'lease_tablebase_batch',AsyncMock(return_value=(session,rows[1:]))),
               patch.object(tablebase,'stage_tablebase_results',AsyncMock()) as save,
               patch('chessism_api.database.postgresql.evaluation_results.increment_new_fen_counts',AsyncMock()) as increment,
-              patch.object(tablebase,'increment_scored_position_summary_for_scored_fens',AsyncMock()),
               patch.object(tablebase,'increment_game_analysis_summary_for_scored_fens',AsyncMock()),
               patch.object(tablebase,'count_tablebase_candidates',AsyncMock()) as count):
             result=await tablebase.analyze_tablebase_positions({},game_links=[1],refresh_projections=False)

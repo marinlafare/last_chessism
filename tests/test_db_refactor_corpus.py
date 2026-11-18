@@ -1,4 +1,5 @@
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -7,8 +8,8 @@ from unittest.mock import AsyncMock,MagicMock,patch
 from scripts.run_db_refactor_corpus import verify_acceptance
 from scripts.launch_db_refactor_http_backup import runner_command
 from scripts.watch_db_refactor import render
-from chessism_api.database.postgresql import ask_db
-from chessism_api.operations import mode_summary
+from chessism_api.database.postgresql import summary_writes
+from chessism_api.operations import mode_summary, global_summaries
 from chessism_api.operations.home_summary import refresh_home_summary
 
 
@@ -42,16 +43,22 @@ class CorpusSafetyTests(unittest.TestCase):
 
 class ExplicitSummaryFactoryTests(unittest.IsolatedAsyncioTestCase):
     async def test_summary_refresh_never_falls_back_to_global_database(self):
-        result=MagicMock()
-        result.mappings.return_value.first.return_value={}
         session=AsyncMock()
-        session.execute.return_value=result
-        context=MagicMock(__aenter__=AsyncMock(return_value=session),__aexit__=AsyncMock(return_value=False))
-        factory=MagicMock(return_value=context)
-        with patch.object(ask_db,'AsyncDBSession',side_effect=AssertionError('Global DB used')):
-            await ask_db.refresh_database_summary(session_factory=factory)
-            await ask_db.refresh_fen_pipeline_summary(session_factory=factory)
-            await ask_db.refresh_scored_position_summary(session_factory=factory,database_summary={})
+        factory=MagicMock(return_value=session)
+        connection=object()
+        with patch.object(global_summaries,'AsyncDBSession',side_effect=AssertionError('Global DB used')), \
+             patch.object(global_summaries,'driver_connection',AsyncMock(return_value=connection)) as driver, \
+             patch.object(summary_writes,'refresh_game_counts',AsyncMock(return_value={})), \
+             patch.object(summary_writes,'refresh_fen_summaries',AsyncMock(return_value=({},{}))) as counts, \
+             patch.object(global_summaries,'refresh_pipeline_summary',AsyncMock(return_value={
+                 'refreshed_at':datetime(2026,1,1,tzinfo=timezone.utc)})):
+            await global_summaries.refresh_database_summary(session_factory=factory)
+            await global_summaries.refresh_fen_pipeline_summary(session_factory=factory)
+            await global_summaries.refresh_scored_position_summary(session_factory=factory)
+        self.assertEqual([call.args for call in driver.await_args_list],[(session,)]*3)
+        self.assertEqual([call.args for call in counts.await_args_list],[(connection,)]*2)
+        self.assertEqual(session.begin.await_count,3)
+        self.assertEqual(session.close.await_count,3)
         mode_session=AsyncMock()
         mode_factory=MagicMock(return_value=mode_session)
         with patch.object(mode_summary,'AsyncDBSession',side_effect=AssertionError('Global DB used')), \
@@ -62,8 +69,13 @@ class ExplicitSummaryFactoryTests(unittest.IsolatedAsyncioTestCase):
         mode_session.begin.assert_awaited_once()
         mode_session.close.assert_awaited_once()
 
-    async def test_incomplete_factory_arguments_rejected(self):
-        with self.assertRaises(ValueError):
-            await ask_db.refresh_scored_position_summary(session_factory=MagicMock())
+    async def test_unowned_summary_transactions_and_missing_home_factory_rejected(self):
+        connection=MagicMock()
+        connection.is_in_transaction.return_value=False
+        connection.fetchval=AsyncMock()
+        for operation in (summary_writes.refresh_game_counts,summary_writes.refresh_fen_summaries):
+            with self.assertRaisesRegex(ValueError,'caller-owned'):
+                await operation(connection)
+        connection.fetchval.assert_not_awaited()
         with self.assertRaises(ValueError):
             await refresh_home_summary(transaction_managed=True)

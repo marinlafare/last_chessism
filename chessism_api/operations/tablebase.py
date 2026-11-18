@@ -14,9 +14,7 @@ from chessism_api.operations.game_analysis_summary import (
     refresh_game_analysis_summary,
 )
 from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
-from chessism_api.database.postgresql.ask_db import (
-    increment_scored_position_summary_for_scored_fens,
-    refresh_database_summary_fen_counts,
+from chessism_api.operations.global_summaries import (
     refresh_fen_pipeline_summary,
     refresh_scored_position_summary,
 )
@@ -190,13 +188,11 @@ async def _analyze_tablebase_positions(
             if solved:
                 try:
                     async with reporter.step("endgame_summaries", len(solved), "positions"):
-                        await increment_scored_position_summary_for_scored_fens(solved)
                         await increment_game_analysis_summary_for_scored_fens(solved)
                 except Exception:
                     # FEN scores were committed immediately before these cached
                     # summaries. Reconcile them before surfacing the failure so a
                     # retry cannot leave counters or per-game coverage incomplete.
-                    await refresh_database_summary_fen_counts()
                     await refresh_scored_position_summary()
                     await refresh_game_analysis_summary(
                         clean_game_links(game_links) if game_links is not None else None

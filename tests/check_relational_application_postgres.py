@@ -72,6 +72,7 @@ async def setup(conn, pgdata):
 
 async def check_application(engine, conn):
     from chessism_api.database.postgresql import ask_db, db_interface
+    from chessism_api.operations import global_summaries
     from chessism_api.operations import mode_summary
     from chessism_api.database.postgresql.models import Fen, GameFenAssociation
     from chessism_api.database.postgresql.db_interface import DBInterface
@@ -215,10 +216,10 @@ async def check_application(engine, conn):
             await install_relational_home_triggers(connection,layout)
         home=await home_summary.run_home_summary_refresh({})
         assert home['titled_games']==2,home # Neither archived Alice game belongs in the active count.
-        await ask_db.refresh_database_summary_game_counts()
-        await ask_db.refresh_fen_pipeline_summary()
+        await global_summaries.refresh_database_summary_game_counts()
+        await global_summaries.refresh_fen_pipeline_summary()
         await mode_summary.refresh_main_character_mode_summary_for_players({PLAYER,OTHER})
-        await ask_db.refresh_scored_position_summary()
+        await global_summaries.refresh_scored_position_summary()
         await ask_db.sync_game_analytics_projection(tuple(LINKS[:3]))
         await ask_db.sync_game_analytics_projection(tuple(LINKS[:3]))
         assert await conn.fetchval(f'SELECT count(*) FROM {C}.game_player WHERE game_link=ANY($1::bigint[])',LINKS)==6

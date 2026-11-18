@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "stockfish-service"
 
 import chess
 import operations.engine as stockfish_engine
-from chessism_api.database.postgresql import ask_db, models
+from chessism_api.database.postgresql import models
 from chessism_api.operations import (
     analysis,
     analysis_backups,
@@ -1415,36 +1415,25 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
         )
 
 
-class FenIngestionSummaryTests(unittest.TestCase):
-    def test_ingestion_delta_counts_only_new_rows_and_changed_appearances(self):
-        before = {
-            "positions": 100,
-            "equal_appearances": 20,
-            "small_appearances": 30,
-            "clear_appearances": 40,
-            "decisive_appearances": 50,
-            "mate_appearances": 60,
-        }
-        after = {
-            "positions": 112,
-            "equal_appearances": 22,
-            "small_appearances": 35,
-            "clear_appearances": 40,
-            "decisive_appearances": 51,
-            "mate_appearances": 63,
-        }
-
-        self.assertEqual(
-            ask_db.fen_ingestion_summary_delta(before, after),
-            {
-                "new_positions": 12,
-                "equal_appearances": 2,
-                "small_appearances": 5,
-                "clear_appearances": 0,
-                "decisive_appearances": 1,
-                "mate_appearances": 3,
-            },
-        )
+class ScoredPositionPayloadTests(unittest.TestCase):
+    def test_new_positions_and_changed_appearances_remain_distinct(self):
+        from chessism_api.scored_positions import summary_payload
+        names = ('equal', 'small', 'clear', 'decisive', 'mate')
+        before = dict(total_positions=100, analyzed_fens=5, scored_positions=5,
+                      nonzero_scored_fens=4, unscored_fens=95)
+        for name, appearances in zip(names, (20, 30, 40, 50, 60)):
+            before[name+'_positions'] = 1
+            before[name+'_appearances'] = appearances
+        after = dict(before, total_positions=112, unscored_fens=107)
+        for name, appearances in zip(names, (22, 35, 40, 51, 63)):
+            after[name+'_appearances'] = appearances
+        old, new = summary_payload(before), summary_payload(after)
+        self.assertEqual(new['total_positions']-old['total_positions'], 12)
+        self.assertEqual(new['unscored_fens']-old['unscored_fens'], 12)
+        self.assertEqual(new['scored_positions'], old['scored_positions'])
+        self.assertEqual([b['positions'] for b in new['buckets']], [1]*5)
+        self.assertEqual([b['appearances']-a['appearances'] for a,b in zip(old['buckets'],new['buckets'])],
+                         [2, 5, 0, 1, 3])
 
 
 class AnalysisFormattingTests(unittest.IsolatedAsyncioTestCase):

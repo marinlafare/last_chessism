@@ -144,12 +144,12 @@ class CanonicalFenViewTests(CanonicalDatabaseTestCase):
         self.assertEqual(self.engine.pool.checkedout(),0)
 
     async def test_scored_overview_preserves_bucket_and_wdl_arithmetic(self):
-        from chessism_api.database.postgresql.ask_db import refresh_scored_position_summary
+        from chessism_api.operations.global_summaries import refresh_scored_position_summary
         scored=[r for r in self.rows if r['score'] is not None]
         wdl=[r for r in scored if r['wdl_win'] is not None]
         summary={'n_positions':len(self.rows),'analyzed_fens':len(scored),
                  'nonzero_scored_fens':sum(r['score']!=0 for r in scored),'unscored_fens':len(self.rows)-len(scored)}
-        await refresh_scored_position_summary(session_factory=self.factory,database_summary=summary)
+        await refresh_scored_position_summary(session_factory=self.factory)
         data=await self.call('get_scored_positions_overview')
         self.assertEqual({k:data[k] for k in ('total_positions','analyzed_fens','scored_positions','nonzero_scored_fens','unscored_fens')},
             {'total_positions':len(self.rows),'analyzed_fens':len(scored),'scored_positions':len(scored),

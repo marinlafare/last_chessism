@@ -1,6 +1,7 @@
 """Game-import projections, written within the same caller-owned transaction."""
 from .game_coverage import refresh_pipeline_summary
 from .mode_summary import refresh_modes
+from .summary_writes import refresh_game_counts
 
 
 async def refresh_import_summaries(connection, player_names, new_analyzable_links):
@@ -12,22 +13,7 @@ async def refresh_import_summaries(connection, player_names, new_analyzable_link
     names = sorted(set(player_names))
     await _mark_pending(connection, new_analyzable_links)
     await refresh_modes(connection, names)
-    await connection.execute('''
-        UPDATE public.database_summary SET
-            n_games_in_db=counts.games, bullet_games=counts.bullet,
-            blitz_games=counts.blitz, rapid_games=counts.rapid,
-            main_characters=players.main, secondary_characters=players.secondary,
-            refreshed_at=now()
-        FROM (SELECT count(*)::bigint AS games,
-            count(*) FILTER(WHERE m.name='bullet')::bigint AS bullet,
-            count(*) FILTER(WHERE m.name='blitz')::bigint AS blitz,
-            count(*) FILTER(WHERE m.name='rapid')::bigint AS rapid
-            FROM public.game g LEFT JOIN public.game_mode m ON m.id=g.mode_id
-            WHERE g.is_standard AND g.n_moves>0) counts
-        CROSS JOIN (SELECT count(*) FILTER(WHERE joined IS NOT NULL AND joined<>0)::bigint AS main,
-            count(*) FILTER(WHERE joined IS NULL OR joined=0)::bigint AS secondary FROM public.player) players
-        WHERE id=1;
-    ''')
+    await refresh_game_counts(connection)
     await refresh_pipeline_summary(connection)
 
 

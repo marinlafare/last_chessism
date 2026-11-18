@@ -691,7 +691,7 @@ async def init_db(connection_string: str, *, relational_storage=None):
     if migrated_no_move_games:
         # Refresh only projections whose game counts changed. FEN rows and
         # scored-position summaries are deliberately untouched.
-        from chessism_api.database.postgresql.ask_db import refresh_database_summary_game_counts
+        from chessism_api.operations.global_summaries import refresh_database_summary_game_counts
         from chessism_api.operations.mode_summary import refresh_main_character_mode_summary
         await refresh_database_summary_game_counts()
         await refresh_main_character_mode_summary()

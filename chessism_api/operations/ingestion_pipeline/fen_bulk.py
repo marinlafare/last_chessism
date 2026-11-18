@@ -122,11 +122,11 @@ async def persist_positions(session, fens, associations, reporter=None, *, timin
             FROM ingestion_link_delta d WHERE d.fen_id=f.fen_id""")
         delta = await conn.fetchrow(f"""SELECT
             COALESCE(SUM(d.occurrences),0)::bigint AS added_links,
-            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score)<50),0)::bigint AS equal,
-            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score)>=50 AND ABS(f.score)<150),0)::bigint AS small,
-            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score)>=150 AND ABS(f.score)<300),0)::bigint AS clear,
-            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score)>=300 AND ABS(f.score)<9000),0)::bigint AS decisive,
-            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score)>=9000),0)::bigint AS mate
+            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score::bigint)<50),0)::bigint AS equal,
+            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score::bigint)>=50 AND ABS(f.score::bigint)<150),0)::bigint AS small,
+            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score::bigint)>=150 AND ABS(f.score::bigint)<300),0)::bigint AS clear,
+            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score::bigint)>=300 AND ABS(f.score::bigint)<9000),0)::bigint AS decisive,
+            COALESCE(SUM(d.occurrences) FILTER(WHERE ABS(f.score::bigint)>=9000),0)::bigint AS mate
             FROM ingestion_link_delta d JOIN ingestion_fen_resolved f USING(fen_id)""")
         # Fail closed if the required singleton caches are missing, rather than
         # committing links with silently absent counter deltas.

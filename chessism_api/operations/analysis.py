@@ -25,7 +25,7 @@ from chessism_api.operations.game_analysis_summary import (
     refresh_game_analysis_summary,
 )
 from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
-from chessism_api.database.postgresql.ask_db import (
+from chessism_api.operations.global_summaries import (
     refresh_scored_position_summary,
 )
 from chessism_api.operations.analysis_times import record_analysis_times

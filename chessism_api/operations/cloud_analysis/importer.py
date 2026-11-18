@@ -144,7 +144,7 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
 async def refresh_global_projections():
     # Full-catalog scans run once per UI request, not once per uploaded file/chunk.
     from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
-    from chessism_api.database.postgresql.ask_db import (
+    from chessism_api.operations.global_summaries import (
         refresh_scored_position_summary,
     )
     await refresh_scored_position_summary()
