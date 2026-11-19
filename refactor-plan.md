@@ -1435,3 +1435,30 @@ regressions also tested against immutable reviewed code: 12/13 fail on both
 runtimes, including a real post-cancellation database commit. No green failures,
 errors or skips. Local implementation commit `7783e54`; all owned resources removed.
 Stop here for the focused independent re-review.
+
+
+## Authorized Stage C — frontend state architecture (2026-11-19)
+Entry: clean 5c037d8, expected repository/branch; A and B formally accepted.
+C1: share authoritative ARQ outcome interpretation across game/Positions consumers;
+reuse statusPolling transport and bounded retry, replace Player Workspace loops
+and download recovery loop. Preserve job IDs on transport failure, retain terminal
+outcomes against stale reads, and clean up requests on replacement/unmount.
+C2: own Positions selection/preview revision and abort lifecycle in a focused hook;
+reject obsolete Alice/Bob/Alice responses and confirmation; extract completion
+presentation effects without changing authority. Preserve frozen server plans.
+C3: return committed counts/run identity/FEN follow-up from ingestion (no change
+to persistence or HTTP 202); Main Characters tracks actual jobs, refreshes only
+on authoritative success, restores tracking and separates ingestion from FEN work.
+Gate: deterministic transport and outcome tests, mounted React races and consumers,
+focused backend result-contract tests; final frontend suites/build/architecture
+against unchanged baseline. No unrelated appearance/navigation repairs; no PG or
+engine reruns without a dependency. Record evidence and local coherent commits.
+No push, deployment, existing data/backup/queues/GCP changes or Stage D. Operations
+under five minutes run directly; longer gates get the 120-second monitor. Stop
+for one independent Stage C acceptance review when implementation is verified.
+
+Stage C C1–C3 implemented and verified in local commit d4e8076. Final relevant
+comparison: 351 frontend checks, same four baseline failures with identical
+details; 22 mounted React checks pass; 60 focused backend checks pass. Build,
+architecture, syntax and source integrity pass. See stage-c-completion.md and
+archived evidence. Stage C is not accepted until independent review; stop here.

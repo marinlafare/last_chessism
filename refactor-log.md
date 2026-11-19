@@ -2619,3 +2619,50 @@ Evidence: docs/architecture/evidence/stage-b-cancellation-correction-2026-11-19.
 SHA256 32f4d72f5e00815edb24cb0f02d4f74bc8edf8fcb4d59002332334d4a1c42599.
 Stop after the evidence checkpoint for the short independent cancellation
 re-review. Stage B has not been declared accepted; no Stage C/D work begins.
+
+2026-11-19 — Stage B formally accepted with documented limitations by focused
+independent review; user authorizes coordinated C1–C3. Clean expected 5c037d8,
+A/B ancestry verified. Current statusPolling already has abort, stale-response
+suppression and bounded backoff. Player Workspace bypasses it; gameJobService
+uses telemetry as terminal authority; Main Characters treats 202 as completion.
+Ingestion returns prose only; extend result without altering canonical writes.
+Native dependency setup failed on existing lock/cache state; cached Chessism web
+dependencies used in an isolated /tmp source copy, preserving repository lockfile.
+
+2026-11-19 — Coordinated Stage C completed in local d4e80765e1a1072491813916ac81408a43d80e4f.
+Reused statusPolling; consolidated authoritative ARQ outcomes; replaced two Player
+Workspace loops and download recovery loop; preserved job tracking on transport
+failures. Automatic pipeline now requires matching missing-job payloads. Positions
+preview and player-count requests own revisions/abort controllers; presentation
+owns completion timers/audio. Discovery snapshots reject replacement and terminal
+races, while fresh explicit requeue after failure retains accepted recovery.
+Main Characters tracks create/update IDs across navigation, consumes structured
+counts/FEN follow-up, and refreshes only after execution success. Ingestion returns
+counts after commit without changing any writes, locks, transactions or 202 APIs.
+
+Unchanged baseline: 346 Node22 tests, four existing appearance/navigation failures,
+zero skips; 52 focused backend tests pass. Final: 351 Node22 tests with precisely
+the same four failure details and no missing identities/new failures/skips; 22
+mounted React lifecycle checks pass without browser errors; 60 backend tests pass.
+35 new regression checks total. Three new cases fail against verified baseline
+source overlays and pass after correction. Initial broader verification exposed
+an omitted canceled telemetry spelling and failed-job requeue regression; corrected
+both without changing their existing tests. Added mounted read-order regression.
+Initial browser fixture used native Response stream scheduling; replaced only the
+synthetic response body with a controlled async json() adapter for deterministic
+promise ordering. All assertions retained. Initial npm/cache/assets setup attempts
+are retained separately; no repository lockfile/package changes.
+
+Production build, page boundaries, source size, four Python syntax checks and
+whitespace pass. 555 baseline hashes match accepted HEAD, 564 final frontend hashes
+match current files. Import transaction AST unchanged; accepted canonical database,
+analysis orchestration, engine lifecycle/deadlines, cloud transitions and routers
+unchanged. No PG/Stockfish/full API suites repeated without a dependency. All gates
+under five minutes, all private browser/Vite processes and ephemeral containers
+finished/removed. No database, backup, queues, Neo4j, production or GCP access; no
+push/merge/deploy or Stage D. Independent Stage C acceptance is pending.
+
+Handoff: docs/architecture/stage-c-completion.md.
+Evidence: docs/architecture/evidence/stage-c-frontend-2026-11-19.tar.gz
+SHA256 47f9d46f9fb525143ed26105135347aef03a62b2fd534604b7795ed6f5737d15.
+Next action: independent Stage C acceptance review. Stop implementation.

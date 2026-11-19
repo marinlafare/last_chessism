@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_b_verified_pending_focused_rereview",
+  "status": "stage_c_verified_pending_independent_review",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -8385,7 +8385,7 @@
     "commit_sha": "c13f07d3edaa228dd864f721d6622f88b71280aa"
   },
   "stage_b": {
-    "status": "verified_pending_focused_rereview",
+    "status": "accepted_with_documented_limitations",
     "baseline": "7d9fe8e97372603cccd2ec8d95de8a378203544c",
     "authorization": "da40c3b8-f712-44b7-bcd7-f885c7b44b66/Pasted text.txt",
     "current_batch": null,
@@ -8394,7 +8394,7 @@
       "B2": "completed",
       "B3": "completed"
     },
-    "independent_acceptance": false,
+    "independent_acceptance": true,
     "completed_at": "2026-11-19T20:58:31.152524+00:00",
     "commits": {
       "B1": "b8c59733c0c0c48ddb64ac9ff808a85df492251e",
@@ -8460,14 +8460,14 @@
       "Unchanged frontend and cloud-worker algorithms reuse accepted Stage A evidence.",
       "Previously documented Redis-reset visibility limitation and unrelated baseline testing debt remain."
     ],
-    "next_action": "One short independent re-review of the cancellation correction; Stage B remains unaccepted. No Stage C/D."
+    "next_action": "Stage C authorized; preserve accepted B guarantees."
   },
   "stage_b_cancellation_correction": {
-    "status": "verified_pending_independent_rereview",
+    "status": "accepted",
     "baseline": "62563a6a0e5091e5b7aa44afc03fafcdf5a7c367",
     "authorization": "81f85ee1-b698-4f51-926d-6afe2536930a/Pasted text.txt",
     "phase": "completed",
-    "independent_acceptance": false,
+    "independent_acceptance": true,
     "red": {
       "python310": {
         "tests": 12,
@@ -8552,6 +8552,83 @@
       "Production/GCP and large-load behavior not exercised.",
       "Cleanup remains cooperative; the new helper drains before propagating cancellation."
     ],
-    "next_action": "Short independent cancellation re-review; do not declare Stage B accepted or begin Stage C."
+    "next_action": "Accepted by focused independent review; preserve guarantees during authorized later stages."
+  },
+  "stage_c": {
+    "status": "verified_pending_independent_review",
+    "baseline": "5c037d8ede820da423f9004941a90b874dfb7510",
+    "authorization": "270262d3-33bd-4c1e-9857-de1eed4f0d1b/Pasted text.txt",
+    "batches": {
+      "C1": "completed",
+      "C2": "completed",
+      "C3": "completed"
+    },
+    "independent_acceptance": false,
+    "verification_workspace": "/tmp/chessism-stage-c-20261119",
+    "implementation_commit": "d4e80765e1a1072491813916ac81408a43d80e4f",
+    "documentation": "docs/architecture/stage-c-completion.md",
+    "evidence": "docs/architecture/evidence/stage-c-frontend-2026-11-19.tar.gz",
+    "evidence_sha256": "47f9d46f9fb525143ed26105135347aef03a62b2fd534604b7795ed6f5737d15",
+    "completed_at": "2026-11-19T22:38:54.575260+00:00",
+    "next_action": "Independent Stage C acceptance review. Stop implementation; no Stage D.",
+    "verification": {
+      "frontend_baseline": {
+        "tests": 346,
+        "passed": 342,
+        "failures": 4,
+        "skips": 0
+      },
+      "frontend_final": {
+        "tests": 351,
+        "passed": 347,
+        "failures": 4,
+        "skips": 0,
+        "identical_failure_details": true,
+        "new_failures": 0
+      },
+      "mounted_react": {
+        "tests": 22,
+        "passed": 22,
+        "errors": 0
+      },
+      "backend_baseline": {
+        "tests": 52,
+        "passed": 52
+      },
+      "backend_final": {
+        "tests": 60,
+        "passed": 60,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "new_regressions": 35,
+      "red_baseline_cases": {
+        "tests": 3,
+        "failures": 3,
+        "skips": 0
+      },
+      "build": "passed",
+      "architecture": "passed",
+      "source_size": "passed",
+      "python_compiles": 4,
+      "baseline_source_hashes": 555,
+      "final_frontend_source_hashes": 564,
+      "source_drift": 0,
+      "import_transaction_ast_unchanged": true,
+      "accepted_persistence_engine_cloud_paths_unchanged": true,
+      "active_owned_processes": 0
+    },
+    "baseline_debt": [
+      "registered target annotations stay in their owning page scopes",
+      "individual home controls seed saved shared styles once, without relinking drafts",
+      "game review owns its targets and preserves old styles without remaining linked",
+      "Hegel page, document, navigation, asset alias and Markdown-only dependencies are removed"
+    ],
+    "limitations": [
+      "Synthetic mounted-browser HTTP; no production/GCP or live-stack test.",
+      "Failed ARQ ingestion jobs retain failure propagation; absent committed counts are unknown, not zero.",
+      "Existing unrelated four frontend failures remain."
+    ]
   }
 }
