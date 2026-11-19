@@ -1114,3 +1114,17 @@ numeric identities, archive corruption, exact metadata and repeated cancellation
 at PostgreSQL COPY. All data and archive inputs were synthetic; existing application
 data and the recovery checkpoint were untouched. Whole-database format9/old-backup
 validation remain intact. The compatibility-only fen_results helper is removed.
+
+### Native matrix recipes
+Generic, score-pivot, occurrence, transition and accuracy matrix queries now use
+canonical game/side/player/FEN keys. They preserve published columns, row-key
+strings, precision declarations, versioned eligibility and scientific formulas.
+Queries bound occurrences before enrichment and inspect completeness before
+limiting selected games. Cast saved integers before ABS/sign inversion; never
+infer missing provenance. Estimates, previews, construction streams, artifact
+metadata and catalog locks own guarded transactions. Schema16 is unchanged.
+92 focused checks pass, including all ten row types on private PostgreSQL.
+
+The earlier remaining-consumer inventory was incomplete: old queries remain in
+engine/hero analytics, coefficient research and salience report construction.
+Those require conversion before the Stage A boundary. A4 cleanup is in progress.

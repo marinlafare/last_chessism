@@ -6,6 +6,7 @@ from typing import Any
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
 from .catalog import ROW_TYPES, MatrixColumn
 from .config import normalize_matrix_config
 from .queries import matrix_sql
@@ -61,7 +62,7 @@ async def estimate_matrix(config: dict[str, Any], *, session: Any | None = None)
         return int(result.scalar_one() or 0)
 
     if session is None:
-        async with AsyncDBSession() as owned_session:
+        async with read_transaction(AsyncDBSession) as owned_session:
             total_rows = await _count(owned_session)
     else:
         total_rows = await _count(session)

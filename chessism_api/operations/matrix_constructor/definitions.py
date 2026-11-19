@@ -5,6 +5,7 @@ import json
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
 from .catalog import ROW_TYPES
 from .config import normalize_matrix_config
 from .queries import matrix_sql
@@ -88,8 +89,7 @@ async def estimate_definition(config: dict) -> dict:
     else:
         count_sql, _, params = matrix_sql(normalized)
     params["count_limit"] = scan_limit + 1
-    async with AsyncDBSession() as session:
-        await session.execute(text("SET TRANSACTION READ ONLY"))
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text(f"SET LOCAL statement_timeout = {QUERY_TIMEOUT_MS}"))
         count = int((await session.execute(text(count_sql), params)).scalar_one())
     lower_bound = count > scan_limit

@@ -8,6 +8,7 @@ import uuid
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import write_transaction
 
 
 ARTIFACT_ROOT = Path(os.getenv(
@@ -40,14 +41,13 @@ async def matrix_catalog_lock(*, wait: bool = True, repeatable_read: bool = Fals
     locks chess/game/FEN tables. Legacy construction may continue, but publication
     waits until the PostgreSQL recovery point and its matrix copies are consistent.
     """
-    async with AsyncDBSession() as session:
-        async with session.begin():
-            if repeatable_read:
-                # Must precede the first SELECT. A logical backup exports this
-                # snapshot so its manifest and pg_dump see exactly the same DB.
-                await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-            if wait:
-                await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK})
-            elif not await session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK}):
-                raise MatrixCatalogBusy("Matrix storage is being backed up or updated. Please try again shortly.")
-            yield session
+    async with write_transaction(AsyncDBSession) as session:
+        if repeatable_read:
+            # Must precede the first SELECT. A logical backup exports this
+            # snapshot so its manifest and pg_dump see exactly the same DB.
+            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
+        if wait:
+            await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK})
+        elif not await session.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": MATRIX_CATALOG_LOCK}):
+            raise MatrixCatalogBusy("Matrix storage is being backed up or updated. Please try again shortly.")
+        yield session

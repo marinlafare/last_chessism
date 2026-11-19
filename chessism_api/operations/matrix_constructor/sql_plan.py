@@ -17,33 +17,32 @@ JOINS = {
     # Preserve saved recipes after removing the stored score aggregates. Only
     # selecting this column pays for it, after the bounded matrix scope.
     "score_stats": """LEFT JOIN LATERAL (
-        SELECT AVG(ABS(position.score))::double precision AS avg_abs_score
-        FROM game_fen_association score_association
-        JOIN fen position ON position.fen_id=score_association.fen_id
+        SELECT AVG(ABS(position.score::bigint))::double precision AS avg_abs_score
+        FROM public.game_fen_association score_association
+        JOIN public.fen position ON position.fen_id=score_association.fen_id
         WHERE score_association.game_link=g.link
     ) score_stats ON TRUE""",
-    "gas": "LEFT JOIN game_analysis_summary gas ON gas.link = g.link",
-    "gps": """LEFT JOIN game_player_engine_summary gps
-        ON gps.game_link = gp.link AND gps.player_color = gp.color""",
-    "gfa": """LEFT JOIN game_fen_association gfa
+    "gas": "LEFT JOIN public.game_analysis_coverage gas ON gas.link = g.link",
+    "gps": """LEFT JOIN public.canonical_blunder_engine gps
+        ON gps.game_link = gp.game_link AND gps.is_white = gp.is_white""",
+    "gfa": """LEFT JOIN public.game_fen_association gfa
         ON gfa.game_link = m.link AND gfa.n_move = m.n_move
-        AND gfa.move_color = side.move_color""",
-    "f": "LEFT JOIN fen f ON f.fen_id = gfa.fen_id",
-    "pss": "LEFT JOIN player_salience_summary pss ON pss.player_name = gp.player_name",
-    "gsl": """LEFT JOIN game_player_salience gsl
-        ON gsl.game_link = gp.link AND gsl.player_color = gp.color
-        AND gsl.player_name = gp.player_name AND pss.status = 'ready'""",
-    "ppf": """LEFT JOIN player_position_frequency ppf
-        ON ppf.player_name = gp.player_name AND ppf.player_color = gp.color
+        AND gfa.is_white = (side.move_color='white')""",
+    "f": "LEFT JOIN public.fen f ON f.fen_id = gfa.fen_id",
+    "pss": "LEFT JOIN public.player_salience_summary pss ON pss.player_id = gp.player_id",
+    "gsl": """LEFT JOIN public.game_player_salience gsl
+        ON gsl.game_link = gp.game_link AND gsl.is_white = gp.is_white AND pss.status = 'ready'""",
+    "ppf": """LEFT JOIN public.player_position_frequency ppf
+        ON ppf.player_id = gp.player_id AND ppf.is_white = gp.is_white
         AND ppf.fen_id = gfa.fen_id AND pss.status = 'ready'""",
     "salience_occurrence": """LEFT JOIN LATERAL (
         SELECT COUNT(*)::integer AS occurrence_index
-        FROM game_fen_association earlier
+        FROM public.game_fen_association earlier
         WHERE earlier.game_link = gfa.game_link AND earlier.fen_id = gfa.fen_id
           AND (earlier.n_move < gfa.n_move OR (
               earlier.n_move = gfa.n_move
-              AND CASE WHEN earlier.move_color = 'white' THEN 1 ELSE 2 END
-                  <= CASE WHEN gfa.move_color = 'white' THEN 1 ELSE 2 END
+              AND CASE WHEN earlier.is_white THEN 1 ELSE 2 END
+                  <= CASE WHEN gfa.is_white THEN 1 ELSE 2 END
           ))
     ) salience_occurrence ON gfa.fen_id IS NOT NULL""",
 }
@@ -53,8 +52,11 @@ DEPENDENCIES = {
     "gsl": ("pss",), "ppf": ("gfa", "pss"), "salience_occurrence": ("gfa",),
 }
 BASE_ALIASES = {
-    "game": {"g"}, "game_player": {"gp"}, "player_period": {"gp"},
-    "move": {"gp", "m", "side"}, "game_position": {"gp", "gfa"},
+    "game": {"g", "wp", "bp", "gm"},
+    "game_player": {"gp", "g", "p", "opponent", "gm"},
+    "player_period": {"gp", "g", "p", "opponent", "gm"},
+    "move": {"gp", "g", "p", "opponent", "gm", "m", "side"},
+    "game_position": {"gp", "g", "p", "opponent", "gm", "gfa"},
     "position": {"f"},
 }
 

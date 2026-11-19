@@ -32,7 +32,8 @@ assert not any(root + name in sys.modules for name in ('jobs', 'arrays', 'legacy
             config = normalize_matrix_config({"row_type": key, "feature_columns": [row_type.columns[0].key]})
             config["feature_columns"] = []
             _, query, _ = matrix_sql(config)
-            self.assertNotIn('row_key,', query, key)
+            projection = query.rsplit('SELECT ',1)[1].split(' FROM ',1)[0]
+            self.assertNotIn('row_key,', projection, key)
             self.assertIn('AS row_key', query)
 
 
@@ -43,16 +44,16 @@ class MatrixCleanupQueryTests(unittest.IsolatedAsyncioTestCase):
         result.mappings.return_value = [{"row_key": "1:white", "moves": 20, "game_salience": 0.25}]
         session.execute.return_value = result
         factory = MagicMock()
-        factory.return_value.__aenter__.return_value = session
+        factory.return_value = session
         config = {"row_type": "game_player", "feature_columns": ["moves"], "label_columns": ["game_salience"]}
         with patch.object(live_preview, "AsyncDBSession", factory):
             features = await live_preview.preview_definition(config, role="features")
             query = str(session.execute.call_args.args[0])
-            self.assertNotIn('JOIN game_player_salience', query)
+            self.assertNotIn('JOIN public.game_player_salience', query)
             self.assertEqual(features["rows"], [[20]])
             labels = await live_preview.preview_definition(config, role="labels")
             query = str(session.execute.call_args.args[0])
-            self.assertIn('JOIN game_player_salience', query)
+            self.assertIn('JOIN public.game_player_salience', query)
             self.assertNotIn('AS "moves"', query)
             self.assertEqual(labels["rows"], [[0.25]])
 
@@ -62,7 +63,7 @@ class MatrixCleanupQueryTests(unittest.IsolatedAsyncioTestCase):
         result.mappings.return_value = [{"row_key": "1:white"}]
         session.execute.return_value = result
         factory = MagicMock()
-        factory.return_value.__aenter__.return_value = session
+        factory.return_value = session
         with patch.object(live_preview, "AsyncDBSession", factory):
             preview = await live_preview.preview_definition({"row_type": "game_player", "feature_columns": ["game_salience"]}, role="labels")
         self.assertEqual(preview["rows"], [[]])

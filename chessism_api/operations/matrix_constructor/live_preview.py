@@ -6,6 +6,7 @@ import math
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
 from .catalog import ROW_TYPES
 from .definitions import QUERY_TIMEOUT_MS, resolve_definition
 from .queries import matrix_sql
@@ -46,9 +47,7 @@ async def preview_definition(config: dict, *, limit: int = 50, role: str = "all"
         _, select_sql, params = matrix_sql(selected_config, preview_rows=sample_limit + 1 if whole_games else None)
     if not whole_games:
         params["max_rows"] = min(sample_limit + 1, cap) if cap is not None else sample_limit + 1
-    async with AsyncDBSession() as session:
-        await session.execute(text("SET TRANSACTION READ ONLY"))
-        await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text(f"SET LOCAL statement_timeout = {QUERY_TIMEOUT_MS}"))
         # Tiny samples should execute directly, not pay JIT compilation costs
         # based on the estimated size of the unbounded underlying recipe.

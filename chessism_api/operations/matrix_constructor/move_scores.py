@@ -1,5 +1,8 @@
 """Bounded player/game score pivots for saved matrix recipes, not exports."""
 
+from datetime import date
+from .query_sources import PARTICIPANTS, RESULT
+
 MAX_MOVE = 500
 MAX_COLUMNS = MAX_MOVE + 3
 DEFAULT_LAST_MOVE = 40
@@ -23,8 +26,7 @@ def normalize_options(raw):
 def score_matrix_sql(config, *, count_only=False, sample_all_moves=False):
     """Limit qualifying player/game rows BEFORE pivoting their played moves.
 
-    Uses the application's normalized read views. Moves and associations have
-    unique game/move/side keys in the required compact storage contract.
+    Uses native canonical participants and unique game/move/side keys.
     All caller values bind; identifiers come only from validated column names.
     """
     options = normalize_options(config.get('move_scores'))
@@ -37,49 +39,50 @@ def score_matrix_sql(config, *, count_only=False, sample_all_moves=False):
               'count_limit': filters['max_rows']+1 if filters['max_rows'] is not None else 10_001}
     if not options['all_moves']:
         params['expected_moves'] = last-first+1
-    conditions = []
+    conditions = ['g.is_standard']
     score_eligibility = None
     for key, expression in (
-        ('players', 'gp.player_name = ANY(CAST(:players AS text[]))'),
-        ('modes', 'gp.mode = ANY(CAST(:modes AS text[]))'),
-        ('date_from', 'gp.played_at >= CAST(:date_from AS date)'),
-        ('date_to', "gp.played_at < CAST(:date_to AS date) + INTERVAL '1 day'"),
-        ('min_moves', 'gp.n_moves >= :min_moves'),
+        ('players', 'p.player_name = ANY(CAST(:players AS text[]))'),
+        ('modes', 'gm.name = ANY(CAST(:modes AS text[]))'),
+        ('date_from', 'g.played_at >= CAST(:date_from AS date)'),
+        ('date_to', "g.played_at < CAST(:date_to AS date) + INTERVAL '1 day'"),
+        ('min_moves', 'g.n_moves >= :min_moves'),
     ):
         if filters[key]:
             conditions.append(expression)
-            params[key] = filters[key]
+            params[key] = date.fromisoformat(filters[key]) if key in ('date_from','date_to') else filters[key]
     if filters['analyzed_only']:
         # Coverage is a cheap prefilter; inspect actual played moves too. This
         # avoids selecting a row with stale coverage or a hole in the range.
         required_range = '' if options['all_moves'] else '''AND COUNT(*) FILTER (
-            WHERE side.color=gp.color AND m.n_move BETWEEN :first_move AND :last_move
+            WHERE side.is_white=gp.is_white AND m.n_move BETWEEN :first_move AND :last_move
         ) = :expected_moves'''
         conditions.append(
-            '''EXISTS (SELECT 1 FROM game_analysis_summary coverage
-                WHERE coverage.link=gp.link AND coverage.is_fully_analyzed
+            '''EXISTS (SELECT 1 FROM public.game_analysis_coverage coverage
+                WHERE coverage.link=gp.game_link AND coverage.is_fully_analyzed
                   AND coverage.total_positions>0)'''
         )
         score_eligibility = f'''(SELECT BOOL_AND(f.score IS NOT NULL) {required_range}
-                FROM moves m CROSS JOIN LATERAL (VALUES
-                    ('white',m.white_move),('black',m.black_move)
-                ) side(color,san)
-                LEFT JOIN game_fen_association a ON a.game_link=m.link
-                    AND a.n_move=m.n_move AND a.move_color=side.color
-                LEFT JOIN fen f ON f.fen_id=a.fen_id
-                WHERE m.link=gp.link AND NULLIF(BTRIM(side.san),'') IS NOT NULL
+                FROM public.moves m CROSS JOIN LATERAL (VALUES
+                    (true,m.white_move),(false,m.black_move)
+                ) side(is_white,san)
+                LEFT JOIN public.game_fen_association a ON a.game_link=m.link
+                    AND a.n_move=m.n_move AND a.is_white=side.is_white
+                LEFT JOIN public.fen f ON f.fen_id=a.fen_id
+                WHERE m.link=gp.game_link AND NULLIF(BTRIM(side.san),'') IS NOT NULL
                   AND side.san<>'--')'''
     where = 'WHERE ' + ' AND '.join(conditions) if conditions else ''
-    order = 'gp.played_at NULLS LAST, gp.link, gp.color'
+    order = 'gp.played_at NULLS LAST, gp.game_link, gp.is_white'
+    source_order = 'g.played_at NULLS LAST, gp.game_link, gp.is_white'
     count_where = where + (f' AND {score_eligibility}' if score_eligibility else '')
-    count = f'SELECT COUNT(*)::bigint FROM (SELECT 1 FROM game_player gp {count_where} LIMIT :count_limit) counted'
+    count = f'SELECT COUNT(*)::bigint FROM (SELECT 1 FROM {PARTICIPANTS} {count_where} LIMIT :count_limit) counted'
     if count_only:
         return count, '', params
     selected = [*config['feature_columns'], *config['label_columns']]
     score_keys = [key for key in selected if key.startswith('move_score_')]
     # Explicit projection rather than gp.* prevents unrelated summary joins.
-    candidates = f'''SELECT gp.link,gp.player_name,gp.color,gp.result,gp.played_at
-        FROM game_player gp {where}'''
+    candidates = f'''SELECT gp.game_link,p.player_name,gp.is_white,({RESULT}) AS result,g.played_at,
+            g.white_result,g.black_result FROM {PARTICIPANTS} {where}'''
     if score_eligibility:
         # Keep cheap filtering/sorting below the expensive move-score check.
         # OFFSET 0 is a pull-up barrier, NOT a candidate limit: keep scanning
@@ -87,23 +90,24 @@ def score_matrix_sql(config, *, count_only=False, sample_all_moves=False):
         # Without it PostgreSQL can check every game's moves before sorting,
         # even for a 50-row preview. Do not MATERIALIZE this unbounded stream.
         candidates = f'''SELECT gp.* FROM (
-            {candidates} ORDER BY {order} OFFSET 0
+            {candidates} ORDER BY {source_order} OFFSET 0
         ) gp WHERE {score_eligibility}'''
+    ordering = order if score_eligibility else source_order
     scope = f'''WITH selected AS MATERIALIZED (
-        {candidates} ORDER BY {order} LIMIT :max_rows
+        {candidates} ORDER BY {ordering} LIMIT :max_rows
     )'''
     identity = {
-        'player': 'gp.player_name', 'game': 'gp.link',
-        'result': """CASE WHEN g.white_result+g.black_result=1 THEN
+        'player': 'gp.player_name', 'game': 'gp.game_link',
+        'result': """CASE WHEN gp.white_result+gp.black_result=1 THEN
             CASE gp.result WHEN 1 THEN 'w' WHEN 0.5 THEN 'd' WHEN 0 THEN 'l' END END""",
     }
-    columns = ["CONCAT(gp.link,':',gp.color) AS row_key"]
+    columns = ["CONCAT(gp.game_link,':',CASE WHEN gp.is_white THEN 'white' ELSE 'black' END) AS row_key"]
     for key in selected:
         expression = identity.get(key, f'scores."{key}"')
         columns.append(f'{expression} AS "{key}"')
-    joins = 'JOIN game g ON g.link=gp.link' if 'result' in selected else ''
+    joins = ''
     if score_keys or sample_all_moves:
-        score = 'f.score' if options['score_perspective'] == 'white' else "CASE WHEN gp.color='white' THEN f.score ELSE -f.score END"
+        score = 'f.score::bigint' if options['score_perspective'] == 'white' else "CASE WHEN gp.is_white THEN f.score::bigint ELSE -f.score::bigint END"
         if sample_all_moves:
             # This runs only AFTER selecting <=101 preview rows. Discover the
             # width in that sample, never by scanning the complete game scope.
@@ -115,13 +119,13 @@ def score_matrix_sql(config, *, count_only=False, sample_all_moves=False):
                                for key in score_keys)
             move_range = 'AND m.n_move BETWEEN :first_move AND :last_move'
         joins += f''' LEFT JOIN LATERAL (
-            SELECT {pivots} FROM moves m
-            LEFT JOIN game_fen_association a ON a.game_link=m.link
-                AND a.n_move=m.n_move AND a.move_color=gp.color
-            LEFT JOIN fen f ON f.fen_id=a.fen_id
-            WHERE m.link=gp.link {move_range}
-              AND NULLIF(BTRIM(CASE WHEN gp.color='white' THEN m.white_move ELSE m.black_move END),'') IS NOT NULL
-              AND (CASE WHEN gp.color='white' THEN m.white_move ELSE m.black_move END)<>'--'
+            SELECT {pivots} FROM public.moves m
+            LEFT JOIN public.game_fen_association a ON a.game_link=m.link
+                AND a.n_move=m.n_move AND a.is_white=gp.is_white
+            LEFT JOIN public.fen f ON f.fen_id=a.fen_id
+            WHERE m.link=gp.game_link {move_range}
+              AND NULLIF(BTRIM(CASE WHEN gp.is_white THEN m.white_move ELSE m.black_move END),'') IS NOT NULL
+              AND (CASE WHEN gp.is_white THEN m.white_move ELSE m.black_move END)<>'--'
         ) scores ON TRUE'''
     query = f'{scope} SELECT {", ".join(columns)} FROM selected gp {joins} ORDER BY {order}'
     return count, query, params

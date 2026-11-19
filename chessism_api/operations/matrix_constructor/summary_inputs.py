@@ -10,6 +10,7 @@ from dataclasses import replace
 
 from ..mate_distance import mate_distance_sql
 from chessism_api.evaluations import kind_sql
+from .query_sources import PARTICIPANTS, COLOR, RATING, OPPONENT_RATING, RESULT
 
 
 def row_types(Column, RowType):
@@ -42,18 +43,18 @@ def row_types(Column, RowType):
     return {key: RowType(
         key=key, label=label, description=description,
         sources=('game_player', 'game_fen_association', 'fen', 'game_analysis_summary'),
-        row_key_expression="CONCAT(gp.link, ':', gp.color, ':', gfa.n_move, ':', gfa.move_color)",
-        from_sql='game_player gp',
-        order_sql="gp.played_at DESC NULLS LAST, gp.link, gp.color, gfa.n_move, gfa.move_color DESC",
+        row_key_expression=f"CONCAT(gp.game_link, ':', {COLOR}, ':', gfa.n_move, ':', CASE WHEN gfa.is_white THEN 'white' ELSE 'black' END)",
+        from_sql=PARTICIPANTS,
+        order_sql="g.played_at DESC NULLS LAST, gp.game_link, gp.is_white, gfa.n_move, gfa.is_white DESC",
         columns=tuple(replace(item, default=item.key in (
             {'player', 'mode', 'player_score', 'score_kind', 'mate_moves'} if key == 'score_distribution' else
             {'player', 'game', 'mode', 'player_score', 'score_kind',
              'previous_player_score', 'previous_score_kind', 'player_rating', 'opponent_rating', 'initial_prior'}
         )) for item in common + (extra if key == 'blunder_moves' else ())),
-        player_filter_sql='gp.player_name = ANY(CAST(:players AS text[]))',
-        mode_filter_sql='gp.mode = ANY(CAST(:modes AS text[]))', date_filter_sql='gp.played_at',
-        min_moves_filter_sql='gp.n_moves >= :min_moves',
-        analyzed_filter_sql='EXISTS (SELECT 1 FROM fen scored WHERE scored.fen_id=gfa.fen_id AND scored.score IS NOT NULL)',
+        player_filter_sql='p.player_name = ANY(CAST(:players AS text[]))',
+        mode_filter_sql='gm.name = ANY(CAST(:modes AS text[]))', date_filter_sql='g.played_at',
+        min_moves_filter_sql='g.n_moves >= :min_moves',
+        analyzed_filter_sql='EXISTS (SELECT 1 FROM public.fen scored WHERE scored.fen_id=gfa.fen_id AND scored.score IS NOT NULL)',
     ) for key, label, description in (
         ('score_distribution', 'Score distribution occurrences',
          'Scored position occurrences for each player, after either color moves. No unscored rows; repeated positions remain repeated.'),
@@ -63,7 +64,7 @@ def row_types(Column, RowType):
 
 
 def summary_input_sql(config, row_type, where_parts, params):
-    params = {key: date.fromisoformat(value) if key in ('date_from', 'date_to') else value
+    params = {key: date.fromisoformat(value) if key in ('date_from', 'date_to') and isinstance(value,str) else value
               for key, value in params.items()}
     blunders = row_type.key == 'blunder_moves'
     conditions = list(where_parts)
@@ -75,22 +76,22 @@ def summary_input_sql(config, row_type, where_parts, params):
             conditions.append(eligibility)
     if blunders:
         conditions.extend([
-            'gfa.move_color=gp.color',
-            'EXISTS (SELECT 1 FROM game_analysis_summary coverage WHERE coverage.link=gp.link AND coverage.is_fully_analyzed AND coverage.total_positions>0)',
+            'gfa.is_white=gp.is_white',
+            'EXISTS (SELECT 1 FROM public.game_analysis_coverage coverage WHERE coverage.link=gp.game_link AND coverage.is_fully_analyzed AND coverage.total_positions>0)',
         ])
     where = 'WHERE ' + ' AND '.join(conditions) if conditions else ''
-    base = 'FROM game_player gp JOIN game_fen_association gfa ON gfa.game_link=gp.link'
+    base = f'FROM {PARTICIPANTS} JOIN public.game_fen_association gfa ON gfa.game_link=gp.game_link'
     count = f'SELECT COUNT(*)::bigint FROM (SELECT 1 {base} {where} LIMIT :count_limit) counted'
     sign = "CASE WHEN s.color='white' THEN 1 ELSE -1 END"
     verified = config.get('summary_input_version', 1) >= 3
-    score_kind = kind_sql('f.score', 'f.analysis_source', verified=verified)
-    previous_kind = kind_sql('previous.score', 'previous.analysis_source', verified=verified)
+    score_kind = kind_sql('f.score::bigint', 'f.analysis_source', verified=verified)
+    previous_kind = kind_sql('previous.score::bigint', 'previous.analysis_source', verified=verified)
     selected_keys = [*config['feature_columns'], *config['label_columns']]
     include_result = blunders and 'result' in selected_keys
-    extra_projection = (',gp.rating,gp.opponent_rating' + (',gp.result' if include_result else '')) if blunders else ''
+    extra_projection = (f',({RATING}) AS rating,({OPPONENT_RATING}) AS opponent_rating' + (f',({RESULT}) AS result' if include_result else '')) if blunders else ''
     extra = f""",
         CASE WHEN s.n_move=1 AND s.move_color='white' THEN 15.0
-             ELSE ({sign}) * previous.score END AS previous_player_score,
+             ELSE ({sign}) * previous.score::bigint END AS previous_player_score,
         CASE WHEN s.n_move=1 AND s.move_color='white' THEN 'cp'
              ELSE {previous_kind} END AS previous_score_kind,
         NULLIF(s.rating,0)::float8 AS player_rating,
@@ -98,26 +99,26 @@ def summary_input_sql(config, row_type, where_parts, params):
         CASE WHEN s.n_move=1 AND s.move_color='white' THEN 1.0 ELSE 0.0 END AS initial_prior""" if blunders else ''
     if include_result:
         extra += ', s.result::float8 AS result'
-    predecessor = """LEFT JOIN game_fen_association before_move
+    predecessor = """LEFT JOIN public.game_fen_association before_move
         ON before_move.game_link=s.link
         AND before_move.n_move=CASE WHEN s.move_color='white' THEN s.n_move-1 ELSE s.n_move END
-        AND before_move.move_color=CASE WHEN s.move_color='white' THEN 'black' ELSE 'white' END
-        LEFT JOIN fen previous ON previous.fen_id=before_move.fen_id""" if blunders else ''
+        AND before_move.is_white=(s.move_color<>'white')
+        LEFT JOIN public.fen previous ON previous.fen_id=before_move.fen_id""" if blunders else ''
     selected = ', '.join(f'input."{key}"' for key in selected_keys)
     query = f"""WITH scope AS MATERIALIZED (
-        SELECT gp.link,gp.player_name,gp.color,gp.mode,gp.played_at,
-            gfa.n_move,gfa.move_color,gfa.fen_id {extra_projection}
+        SELECT gp.game_link AS link,p.player_name,({COLOR}) AS color,gm.name AS mode,g.played_at,
+            gfa.n_move,CASE WHEN gfa.is_white THEN 'white' ELSE 'black' END AS move_color,gfa.fen_id {extra_projection}
         {base} {where} ORDER BY {row_type.order_sql} LIMIT :max_rows
     ), input AS (
         SELECT CONCAT(s.link,':',s.color,':',s.n_move,':',s.move_color) AS row_key,
             s.player_name AS player,s.link::text AS game,s.color AS player_color,s.mode,
             EXTRACT(EPOCH FROM s.played_at)::float8 AS started_at,
             ((s.n_move-1)*2+CASE WHEN s.move_color='white' THEN 1 ELSE 2 END)::float8 AS ply,
-            ({sign}) * f.score AS player_score, {score_kind} AS score_kind,
+            ({sign}) * f.score::bigint AS player_score, {score_kind} AS score_kind,
             f.analysis_source,
-            CASE WHEN {score_kind}='mate' THEN {mate_distance_sql('f.score', 'f.analysis_source')} END AS mate_moves
+            CASE WHEN {score_kind}='mate' THEN {mate_distance_sql('f.score::bigint', 'f.analysis_source')} END AS mate_moves
             {extra}
-        FROM scope s LEFT JOIN fen f ON f.fen_id=s.fen_id {predecessor}
+        FROM scope s LEFT JOIN public.fen f ON f.fen_id=s.fen_id {predecessor}
     ) SELECT input.row_key{', ' + selected if selected else ''} FROM input
       ORDER BY input.started_at DESC NULLS LAST,input.game::bigint,input.player_color,input.ply"""
     return count, query, params

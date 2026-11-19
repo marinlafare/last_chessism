@@ -70,7 +70,7 @@ class MatrixConstructorTests(unittest.TestCase):
             },
         })
         count_sql, select_sql, params = matrix_sql(config)
-        self.assertIn("gp.player_name = ANY", select_sql)
+        self.assertIn("p.player_name = ANY", select_sql)
         self.assertIn("gps.analyzed_player_moves > 0", select_sql)
         self.assertIn('AS "rating"', select_sql)
         self.assertIn("SELECT COUNT(*)", count_sql)
@@ -85,7 +85,7 @@ class MatrixConstructorTests(unittest.TestCase):
             "filters": {"players": ["hikaru"], "max_rows": 100},
         })
         _, select_sql, _ = matrix_sql(config)
-        self.assertIn("LEFT JOIN game_player_salience gsl", select_sql)
+        self.assertIn("LEFT JOIN public.game_player_salience gsl", select_sql)
         self.assertIn('gsl.salience AS "game_salience"', select_sql)
         self.assertIn('gsl.unique_position_count AS "unique_positions"', select_sql)
 
@@ -96,7 +96,7 @@ class MatrixConstructorTests(unittest.TestCase):
             "filters": {"players": ["lafareto"], "max_rows": 100},
         })
         _, select_sql, _ = matrix_sql(config)
-        self.assertIn("LEFT JOIN player_position_frequency ppf", select_sql)
+        self.assertIn("LEFT JOIN public.player_position_frequency ppf", select_sql)
         self.assertIn("LEFT JOIN LATERAL", select_sql)
         self.assertIn("salience_occurrence.occurrence_index", select_sql)
         self.assertIn('AS "weighted_move_salience"', select_sql)
@@ -199,7 +199,7 @@ class MatrixConstructorTests(unittest.TestCase):
         config = normalize_matrix_config({"row_type": "move",
             "feature_columns": ["position_salience", "game_salience"]})
         count, select, _ = matrix_sql(config)
-        self.assertLess(select.index("LIMIT :max_rows"), select.index("LEFT JOIN player_position_frequency"))
+        self.assertLess(select.index("LIMIT :max_rows"), select.index("LEFT JOIN public.player_position_frequency"))
         self.assertIn("NULLIF(BTRIM(side.san), '') IS NOT NULL", select)
         self.assertNotIn("player_position_frequency", count)
         self.assertIn("pss.status = 'ready'", select)

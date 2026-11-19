@@ -2347,3 +2347,32 @@ metadata constraints remain. Missing timestamps reexport conservatively each del
 Real PostgreSQL cancellation at continuation COPY rolls back values/alternatives
 and preserves earlier commits. Invalid later records fail preflight before writes.
 Evidence: docs/architecture/evidence/stage-a-fen-backup-2026-11-18.tar.gz SHA256 d00b8753121fdd62bd13839bb1b2f431bdeeacc33bc3163bf0667e263e3ab9fd.
+
+A4 retirement started from clean a2ef5a6. Actual import inventory confirms old
+three-child ingestion jobs have no enqueue producers and adapters have no active
+application callers. Preserve compact archive validation by moving its unchanged
+function into recovery-only validation. Remove historical installers/migrations
+and retain admin model adoption/rollback. Retired test identities are recorded;
+active fixture conversion and verification are in progress.
+
+A4 first focused gate: 142 checks, 129 passed; one stale schema-version oracle
+and 12 fixture errors (missing game calendar fields, removed profile fixture,
+async transaction mocks, frequency snapshot branch, Python 3.11-only enterContext
+on Python 3.10). Preserve failed evidence; correct fixture wiring only. Current
+CUDA/import/FEN database checks otherwise pass. Final removal inventory also found
+generic matrix catalog queries still using retired view columns and one CUDA
+comparison admin query using player_game IDs. These are essential A3 omissions,
+not optional cleanup; convert them before final Stage A comparison.
+
+Native matrix conversion passed 92 focused checks on Python3.10, including six
+private PostgreSQL scenarios exercising every row type/column, composite keys,
+standard/empty/self-play scope, date filters, signed integer extremes and unknown
+provenance, complete move selection, dynamic previews and cancellation closure.
+Gate31 had stale SQL assertions/transaction mocks and new fixture mistakes; all
+92 pass in gate32. Source hashes unchanged during verification; all disposable
+containers removed. Matrix numeric storage formats, formulas and saved version
+semantics unchanged. Runtime reads now use guarded snapshots and native joins.
+The SQL inventory revealed additional essential A3 consumers still unconverted:
+remaining hero/engine analytics, coefficient research and salience report build.
+A4 removals remain unfinished in the working tree; do not claim Stage A complete.
+Evidence: docs/architecture/evidence/stage-a-native-matrices-2026-11-18.tar.gz SHA256 2783cfe9fdc73e97b98cb1ae9fd18d5c4415c5c2a3399652f5a4f48368c5792e.

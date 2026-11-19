@@ -3,8 +3,8 @@ from datetime import date
 
 from chessism_api.evaluations import kind_sql
 
-OWNER = '''EXISTS (SELECT 1 FROM game_player gp JOIN player p ON p.player_name=gp.player_name
-    WHERE gp.link=g.link AND p.joined>0 AND p.deleted_at IS NULL {selection})'''
+OWNER = """EXISTS (SELECT 1 FROM public.game_player gp JOIN public.player p ON p.id=gp.player_id
+    WHERE gp.game_link=g.link AND p.joined>0 AND p.deleted_at IS NULL {selection})"""
 
 
 def row_type(Column, RowType):
@@ -14,7 +14,7 @@ def row_type(Column, RowType):
                      'game appears once. Whole-game selection; repeated positions retained. No accuracy is calculated.'),
         sources=('game', 'game_player', 'player', 'game_analysis_summary', 'game_fen_association', 'fen'),
         row_key_expression="CONCAT(g.link, ':', ply)",
-        from_sql='game g JOIN game_analysis_summary coverage ON coverage.link=g.link',
+        from_sql='public.game g LEFT JOIN public.game_mode gm ON gm.id=g.mode_id JOIN public.game_analysis_coverage coverage ON coverage.link=g.link',
         order_sql='g.played_at DESC NULLS LAST, g.link, ply',
         columns=(
             Column('game', 'Game', 'input.game', 'game.link', data_type='category', default=True,
@@ -26,21 +26,21 @@ def row_type(Column, RowType):
             Column('score_kind', 'Evaluation type', 'input.score_kind', 'fen', data_type='category', default=True,
                    description='cp, mate, tablebase or unknown. Unknown provenance is retained, not invented.'),
         ),
-        player_filter_sql=OWNER.format(selection='AND gp.player_name=ANY(CAST(:players AS text[]))'),
-        mode_filter_sql='g.mode=ANY(CAST(:modes AS text[]))', date_filter_sql='g.played_at',
+        player_filter_sql=OWNER.format(selection='AND p.player_name=ANY(CAST(:players AS text[]))'),
+        mode_filter_sql='gm.name=ANY(CAST(:modes AS text[]))', date_filter_sql='g.played_at',
         min_moves_filter_sql='g.n_moves>=:min_moves', analyzed_filter_sql='coverage.is_fully_analyzed',
     )
 
 
 def accuracy_sql(config, row_type, where_parts, params, *, preview_rows=None):
-    params = {key: date.fromisoformat(value) if key in ('date_from', 'date_to') else value
+    params = {key: date.fromisoformat(value) if key in ('date_from', 'date_to') and isinstance(value,str) else value
               for key, value in params.items()}
     cap = config['filters']['max_rows']
     # Preview bounds candidates separately from the whole-game output budget.
     params['candidate_games'] = min(preview_rows, cap) if preview_rows and cap else preview_rows or cap
     params['preview_rows'] = preview_rows
     conditions = [*where_parts, 'coverage.is_fully_analyzed', 'coverage.total_positions>0',
-                  "g.mode IN ('bullet','blitz','rapid')", OWNER.format(selection='')]
+                  "gm.name IN ('bullet','blitz','rapid')", OWNER.format(selection='')]
     common = f'''WITH candidates AS MATERIALIZED (
         SELECT g.link,g.played_at,coverage.total_positions
         FROM {row_type.from_sql} WHERE {' AND '.join(conditions)}
@@ -52,10 +52,10 @@ def accuracy_sql(config, row_type, where_parts, params, *, preview_rows=None):
         SELECT * FROM budgeted WHERE CAST(:max_rows AS bigint) IS NULL OR end_row<=:max_rows
     ), positions AS MATERIALIZED (
         SELECT g.link,g.played_at,g.total_positions,
-            ((a.n_move-1)*2+CASE WHEN a.move_color='white' THEN 1 ELSE 2 END)::int AS ply,
-            a.move_color,f.score::float8 AS score,{kind_sql('f.score', 'f.analysis_source')} AS score_kind
-        FROM selected_games g JOIN game_fen_association a ON a.game_link=g.link
-        LEFT JOIN fen f ON f.fen_id=a.fen_id
+            ((a.n_move-1)*2+CASE WHEN a.is_white THEN 1 ELSE 2 END)::int AS ply,
+            CASE WHEN a.is_white THEN 'white' ELSE 'black' END AS move_color,f.score::float8 AS score,{kind_sql('f.score::bigint', 'f.analysis_source')} AS score_kind
+        FROM selected_games g JOIN public.game_fen_association a ON a.game_link=g.link
+        LEFT JOIN public.fen f ON f.fen_id=a.fen_id
     ), valid_games AS (
         SELECT link FROM positions GROUP BY link HAVING count(*)=max(total_positions)
           AND count(score)=count(*) AND count(DISTINCT ply)=count(*)

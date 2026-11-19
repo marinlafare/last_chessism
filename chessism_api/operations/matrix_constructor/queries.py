@@ -1,6 +1,7 @@
 """Compose bounded, parameterized queries from validated matrix instructions."""
 
 from typing import Any
+from datetime import date
 
 from .catalog import ROW_TYPES, MatrixRowType
 from .sql_plan import select_statements
@@ -9,17 +10,17 @@ from .sql_plan import select_statements
 def _position_scope_clause(filters: dict[str, Any], params: dict[str, Any]) -> str | None:
     scope_parts: list[str] = []
     if filters["players"]:
-        scope_parts.append("gp.player_name = ANY(CAST(:players AS text[]))")
+        scope_parts.append("p.player_name = ANY(CAST(:players AS text[]))")
         params["players"] = filters["players"]
     if filters["modes"]:
-        scope_parts.append("g.mode = ANY(CAST(:modes AS text[]))")
+        scope_parts.append("gm.name = ANY(CAST(:modes AS text[]))")
         params["modes"] = filters["modes"]
     if filters["date_from"]:
         scope_parts.append("g.played_at >= CAST(:date_from AS date)")
-        params["date_from"] = filters["date_from"]
+        params["date_from"] = date.fromisoformat(filters["date_from"])
     if filters["date_to"]:
         scope_parts.append("g.played_at < CAST(:date_to AS date) + INTERVAL '1 day'")
-        params["date_to"] = filters["date_to"]
+        params["date_to"] = date.fromisoformat(filters["date_to"])
     if filters["min_moves"]:
         scope_parts.append("g.n_moves >= :min_moves")
         params["min_moves"] = filters["min_moves"]
@@ -27,17 +28,19 @@ def _position_scope_clause(filters: dict[str, Any], params: dict[str, Any]) -> s
         return None
     return """EXISTS (
         SELECT 1
-        FROM game_fen_association scope_gfa
-        JOIN game g ON g.link = scope_gfa.game_link
-        JOIN game_player gp ON gp.link = g.link
-        WHERE scope_gfa.fen_id = f.fen_id
+        FROM public.game_fen_association scope_gfa
+        JOIN public.game g ON g.link = scope_gfa.game_link
+        JOIN public.game_player gp ON gp.game_link = g.link
+        JOIN public.player p ON p.id=gp.player_id
+        LEFT JOIN public.game_mode gm ON gm.id=g.mode_id
+        WHERE scope_gfa.fen_id = f.fen_id AND g.is_standard
           AND %s
     )""" % " AND ".join(scope_parts)
 
 
 def _where_parts(row_type: MatrixRowType, config: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
     filters = config["filters"]
-    parts: list[str] = []
+    parts: list[str] = [] if row_type.key == "position" else ["g.is_standard"]
     params: dict[str, Any] = {
         "max_rows": filters["max_rows"],
         # Estimation only needs to know whether the requested output cap is
@@ -58,17 +61,17 @@ def _where_parts(row_type: MatrixRowType, config: dict[str, Any]) -> tuple[list[
             params["modes"] = filters["modes"]
         if filters["date_from"] and row_type.date_filter_sql:
             parts.append(f"{row_type.date_filter_sql} >= CAST(:date_from AS date)")
-            params["date_from"] = filters["date_from"]
+            params["date_from"] = date.fromisoformat(filters["date_from"])
         if filters["date_to"] and row_type.date_filter_sql:
             parts.append(f"{row_type.date_filter_sql} < CAST(:date_to AS date) + INTERVAL '1 day'")
-            params["date_to"] = filters["date_to"]
+            params["date_to"] = date.fromisoformat(filters["date_to"])
         if filters["min_moves"] and row_type.min_moves_filter_sql:
             parts.append(row_type.min_moves_filter_sql)
             params["min_moves"] = filters["min_moves"]
     if filters["analyzed_only"] and row_type.analyzed_filter_sql:
         parts.append(row_type.analyzed_filter_sql)
     if row_type.key == "move":
-        parts.extend(("gp.color = side.move_color", "NULLIF(BTRIM(side.san), '') IS NOT NULL"))
+        parts.extend(("gp.is_white = (side.move_color='white')", "NULLIF(BTRIM(side.san), '') IS NOT NULL"))
     return parts, params
 
 

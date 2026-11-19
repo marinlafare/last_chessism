@@ -56,7 +56,7 @@ class DefinitionQueryTests(unittest.IsolatedAsyncioTestCase):
         result = MagicMock()
         result.mappings.return_value = [{"row_key": str(i), "moves": i, "elapsed_seconds": None, "result": 0.5} for i in range(51)]
         session.execute.return_value = result
-        factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+        factory = MagicMock(); factory.return_value = session
         with patch.object(live_preview, "AsyncDBSession", factory):
             preview = await live_preview.preview_definition(CONFIG)
         sql, params = session.execute.call_args.args
@@ -68,14 +68,16 @@ class DefinitionQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(preview["has_more"])
         self.assertFalse(preview["materialized"])
         self.assertTrue(any('statement_timeout' in str(call.args[0]) for call in session.execute.call_args_list))
-        session.commit.assert_not_awaited()
+        session.begin.assert_awaited_once()
+        session.commit.assert_awaited_once()
+        session.close.assert_awaited_once()
 
     async def test_preview_respects_recipe_cap_empty_results_and_category_labels(self):
         config = {**CONFIG, "feature_columns": ["mode"], "filters": {"max_rows": 1}}
         session = AsyncMock(); result = MagicMock()
         result.mappings.return_value = [{"row_key": "1:white", "mode": "bullet", "result": 1}]
         session.execute.return_value = result
-        factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+        factory = MagicMock(); factory.return_value = session
         with patch.object(live_preview, "AsyncDBSession", factory):
             preview = await live_preview.preview_definition(config, limit=100)
             self.assertEqual(preview["rows"], [["bullet", 1]])
@@ -89,7 +91,7 @@ class DefinitionQueryTests(unittest.IsolatedAsyncioTestCase):
     async def test_large_estimate_is_a_lower_bound_and_never_checks_filesystem(self):
         session = AsyncMock(); result = MagicMock(); result.scalar_one.return_value = 10001
         session.execute.return_value = result
-        factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+        factory = MagicMock(); factory.return_value = session
         with patch.object(definitions, "AsyncDBSession", factory):
             estimate = await definitions.estimate_definition({**CONFIG, "filters": {"max_rows": 5000000}})
         self.assertEqual(session.execute.call_args.args[1]["count_limit"], 10001)

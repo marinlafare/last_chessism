@@ -46,7 +46,7 @@ class AccuracyMatrixTests(unittest.TestCase):
         self.assertEqual(params['max_rows'], 100)
         self.assertIsNone(params['preview_rows'])
         self.assertIn('end_row<=:max_rows', query)
-        self.assertIn('EXISTS (SELECT 1 FROM game_player', query)
+        self.assertIn('EXISTS (SELECT 1 FROM public.game_player', query)
         self.assertIn('count(DISTINCT ply)=count(*)', query)
         self.assertIn('LIMIT :count_limit', count)
 
@@ -66,7 +66,7 @@ class AccuracyPreviewTests(unittest.IsolatedAsyncioTestCase):
         result.mappings.return_value = records
         session.execute.return_value = result
         factory = MagicMock()
-        factory.return_value.__aenter__.return_value = session
+        factory.return_value = session
         with patch.object(live_preview, 'AsyncDBSession', factory):
             preview = await live_preview.preview_definition(default_formula('accuracy')['config'], limit=2,
                                                            parameters={'filters': {'max_rows': None}})
@@ -75,7 +75,7 @@ class AccuracyPreviewTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview['selection_unit'], 'whole_games')
         self.assertFalse(preview['materialized'])
         calls = session.execute.call_args_list
-        self.assertEqual(str(calls[0].args[0]), 'SET TRANSACTION READ ONLY')
+        self.assertEqual(str(calls[0].args[0]), 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
         self.assertEqual(len(calls), 5)  # Four safety settings, one bounded SELECT; no COUNT.
         self.assertIsNone(calls[-1].args[1]['max_rows'])
         self.assertEqual(calls[-1].args[1]['preview_rows'], 3)

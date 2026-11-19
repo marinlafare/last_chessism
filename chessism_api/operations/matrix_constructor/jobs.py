@@ -18,6 +18,8 @@ from typing import Any
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.database.postgresql.models import MatrixArtifact
 
 from .arrays import TypedArrayWriter, validate_typed_arrays
@@ -51,13 +53,12 @@ async def _write_progress(redis, job_id, *, artifact_id, phase, total, processed
 
 
 async def _update_artifact(artifact_id: str, **values: Any) -> None:
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         artifact = await session.get(MatrixArtifact, artifact_id)
         if artifact is None:
             return
         for key, value in values.items():
             setattr(artifact, key, value)
-        await session.commit()
 
 
 def _sha256(path: Path) -> str:
@@ -109,9 +110,7 @@ async def _construct_artifact(*, artifact_id: str, config: dict, redis, job_id: 
     temporary.mkdir(parents=True, exist_ok=False)
     writer = None
     try:
-        async with AsyncDBSession() as session:
-            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
-            await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+        async with read_transaction(AsyncDBSession) as session:
             estimate = await estimate_matrix(config, session=session)
             total = int(estimate["selected_rows"])
             if total < 1:
@@ -139,7 +138,7 @@ async def _construct_artifact(*, artifact_id: str, config: dict, redis, job_id: 
                             detail=f"Encoded {writer.processed:,} / {total:,} rows.",
                         )
             finally:
-                await stream.close()
+                await finish_analysis_cleanup(stream.close())
             profiles = writer.finish()
             writer.close()
         await _write_progress(
@@ -187,7 +186,7 @@ async def run_matrix_construction_job(ctx: dict, *, artifact_id: str) -> dict:
     """ARQ entrypoint; research workers serialize construction jobs."""
     redis = ctx["redis"]
     job_id = str(ctx.get("job_id") or f"matrix-{artifact_id}")
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         artifact = await session.get(MatrixArtifact, artifact_id)
         if artifact is None:
             raise ValueError("Matrix artifact request no longer exists.")

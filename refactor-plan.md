@@ -1322,3 +1322,12 @@ record wins. Export NULL-timestamp scores conservatively on every delta. Port
 existing archive/restore regressions to canonical fixtures and verify old archive
 bytes, unknown metadata, rollback/cancellation, snapshot/late commits and malformed
 inputs. This resolves the final known live compact-storage backup consumer.
+
+
+## In progress — A4 obsolete storage retirement
+Remove unused DBInterface/ask_db/profile adapters and historical migration/repair
+commands after dependency inventory. Keep old archive validators read-only and
+AST-identical. Keep model adoption/rollback and active bounded ingestion. Port
+current query/transaction tests; map retired migration-specific identities in
+storage-retirement-tests.json. Verify import closure, native persistence and P1
+checks; reserve one broader comparison for the Stage A boundary.
