@@ -10,7 +10,9 @@ Stage A remains incomplete and unaccepted.
 Authorization: `/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt`.
 This supersedes the pause and the earlier compatibility/procedural requirements.
 No historical migration framework or importer. Focused gates after coherent changes;
-one broad comparison and independent review at the Stage A boundary. No further
+one broad comparison and independent review at the Stage A boundary.
+Process policy updated 2026-11-18: run checks expected under five minutes directly;
+only hand off monitor.py for processes expected to exceed five minutes. No further
 approval is needed for in-scope implementation/local commits. Public feature removal
 or material API changes still require approval. Protect the original DB/checkpoint,
 Redis, Neo4j and deployed resources. No Stage B/C, push, merge or deployment.
@@ -1186,3 +1188,24 @@ Retain existing model/packing/sampling checks and accepted P1 regressions. Map t
 old miniature legacy/profile training fixtures to these canonical cases; broader
 research saved-CPU-reference and CUDA publication conversions remain separate.
 No GPU/device execution, source database access or runtime DDL. No feature removal.
+
+## Completed logical change — canonical player profiles and statistics (144 passed)
+
+Entry: research source gate passed 167 checks, committed as a55f25e; clean tree.
+Replace operations/players.py DBInterface/ask_db calls with one concrete adapter,
+explicit guarded transactions and atomic profile/statistics upserts. Add the existing
+useful v3 numeric-owned player_stats columns to canonical DDL (version 10), retaining
+response fields and FK cascade. No JSON schema or historical migration framework.
+Fetch remote profile/statistics outside database transactions. A failed profile fetch
+preserves an existing full/deleted profile or creates a shell. A successful explicit
+refresh clears deleted_at and preserves a concurrently curated timezone when remote
+input supplies none. Concurrent creates keep one stable numeric player identity.
+Stats remain a whole fetched snapshot, with last_updated advanced at publication;
+missing remote stats preserve previous data. Database errors propagate to caller.
+
+Keep parsing/public batch results and route contracts. Test real PostgreSQL upserts,
+FK/uniqueness, schema version rejection, shell/full/deleted state, timezone races,
+concurrent requests, rollback/cancellation cleanup, readonly reads and remote calls
+without an open DB transaction. Retain ingestion/account and existing P1 regressions.
+No actual external API call, live DB, push or deploy. Other DBInterface callers and
+old runtime initialization remain for A4 after conversion; do not remove them early.

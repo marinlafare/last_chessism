@@ -7,6 +7,36 @@ CREATE TABLE player (
     joined bigint, status text, is_streamer boolean, twitch_url text,
     verified boolean, league text, deleted_at timestamptz
 );
+-- One remote statistics snapshot per stable player identity.
+CREATE TABLE player_stats (
+    player_id bigint PRIMARY KEY REFERENCES player(id) ON DELETE CASCADE,
+    last_updated timestamptz NOT NULL DEFAULT now(),
+    chess_rapid_last_rating integer,
+    chess_rapid_best_rating integer,
+    chess_rapid_games integer,
+    chess_rapid_wins integer,
+    chess_rapid_losses integer,
+    chess_rapid_draws integer,
+    chess_rapid_last_percentile double precision,
+    chess_blitz_last_rating integer,
+    chess_blitz_best_rating integer,
+    chess_blitz_games integer,
+    chess_blitz_wins integer,
+    chess_blitz_losses integer,
+    chess_blitz_draws integer,
+    chess_blitz_last_percentile double precision,
+    chess_bullet_last_rating integer,
+    chess_bullet_best_rating integer,
+    chess_bullet_games integer,
+    chess_bullet_wins integer,
+    chess_bullet_losses integer,
+    chess_bullet_draws integer,
+    chess_bullet_last_percentile double precision,
+    fide integer,
+    puzzle_rush_best_score integer,
+    tactics_highest_rating integer,
+    tactics_lowest_rating integer
+);
 CREATE TABLE game_mode (
     id smallint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     name varchar(16) NOT NULL UNIQUE

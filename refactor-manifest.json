@@ -6345,32 +6345,32 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical research source \u2014 passed, local commit pending",
+      "current_gate": "canonical player profiles and statistics \u2014 passed, local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "entry_commit": "e4a298ae74e3e819272365f66823d30095dc8212",
-        "scope": "canonical research training snapshots and binary FEN reads",
+        "entry_commit": "a55f25e888e94e4d33a4e675486cac607c1fb27e",
+        "scope": "canonical player profile and statistics persistence",
         "attempt": 1,
-        "evidence_directory": "/tmp/chessism-canonical-a3-research-source-20261118-01",
+        "evidence_directory": "/tmp/chessism-canonical-a3-profiles-20261118-01",
         "expected_checks": {
-          "foundation": 20,
-          "workflow": 79,
+          "foundation": 61,
+          "workflow": 15,
           "p1": 68
         },
-        "total_checks": 167,
-        "frozen_source_files": 1769,
+        "total_checks": 144,
+        "frozen_source_files": 1771,
         "protected_baseline_files": 1601,
-        "supervisor_pid": 1117137,
+        "supervisor_pid": 1169222,
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 20,
+            "tests": 61,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 6.421082258224487,
+            "elapsed_seconds": 14.880936622619629,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6378,11 +6378,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 79,
+            "tests": 15,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 2.347659111022949,
+            "elapsed_seconds": 0.25969815254211426,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6394,41 +6394,41 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 4.087199449539185,
+            "elapsed_seconds": 3.002164125442505,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "total_passed": 167,
-        "elapsed_seconds": 21.37585759162903,
-        "source_integrity": "All 1769 frozen hashes match",
+        "total_passed": 144,
+        "elapsed_seconds": 25.247782468795776,
+        "source_integrity": "All 1771 frozen hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-research-source-c34ad1e47c-p1",
+            "container": "chessism-canonical-a3-profiles-bed64ac578-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-research-source-c34ad1e47c-workflow",
+            "container": "chessism-canonical-a3-profiles-bed64ac578-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-research-source-c34ad1e47c-foundation",
+            "container": "chessism-canonical-a3-profiles-bed64ac578-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-research-source-c34ad1e47c-redis",
+            "container": "chessism-canonical-a3-profiles-bed64ac578-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-research-source-c34ad1e47c-postgres",
+            "container": "chessism-canonical-a3-profiles-bed64ac578-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "evidence_archive": "docs/architecture/evidence/stage-a-research-source-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "ec69f6d1c95a0d44de3ec99b984e692952e885f3823620de1ba119d7c464edd3",
+        "evidence_archive": "docs/architecture/evidence/stage-a-profiles-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "8dcc121dfa3d512b7934a8b01fb48ac719079e08ddb484f57cca5171bffdbc0b",
         "commit_pending": true
       },
       "verification_attempts": [
@@ -7687,8 +7687,93 @@
           "evidence_archive_sha256": "01027fd01d01a9459c91ad806117a79860e0a1173eaa72c11ccfd1e44253d13c",
           "commit_pending": false,
           "commit": "e4a298ae74e3e819272365f66823d30095dc8212"
+        },
+        {
+          "status": "passed",
+          "entry_commit": "e4a298ae74e3e819272365f66823d30095dc8212",
+          "scope": "canonical research training snapshots and binary FEN reads",
+          "attempt": 1,
+          "evidence_directory": "/tmp/chessism-canonical-a3-research-source-20261118-01",
+          "expected_checks": {
+            "foundation": 20,
+            "workflow": 79,
+            "p1": 68
+          },
+          "total_checks": 167,
+          "frozen_source_files": 1769,
+          "protected_baseline_files": 1601,
+          "supervisor_pid": 1117137,
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 20,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 6.421082258224487,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 79,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 2.347659111022949,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 4.087199449539185,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 167,
+          "elapsed_seconds": 21.37585759162903,
+          "source_integrity": "All 1769 frozen hashes match",
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-research-source-c34ad1e47c-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-research-source-c34ad1e47c-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-research-source-c34ad1e47c-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-research-source-c34ad1e47c-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-research-source-c34ad1e47c-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "evidence_archive": "docs/architecture/evidence/stage-a-research-source-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "ec69f6d1c95a0d44de3ec99b984e692952e885f3823620de1ba119d7c464edd3",
+          "commit_pending": false,
+          "commit": "a55f25e888e94e4d33a4e675486cac607c1fb27e"
         }
-      ]
+      ],
+      "process_handoff_policy": "Run operations expected to take under five minutes directly; provide monitor.py and return control only for operations expected to exceed five minutes (user update 2026-11-18)."
     }
   }
 }

@@ -1,10 +1,10 @@
 import asyncio
 from typing import Optional, Dict, Any, List
-from sqlalchemy.exc import IntegrityError
+import logging
 
-from chessism_api.database.postgresql.db_interface import DBInterface
-from chessism_api.database.postgresql.models import Player, PlayerStats
-from chessism_api.database.postgresql.ask_db import open_async_request
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql import player_profiles as persistence
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.operations.dashboard_views import (
     get_main_character_time_control_counts,
     get_top_main_characters_by_time_control,
@@ -12,128 +12,36 @@ from chessism_api.operations.dashboard_views import (
 from chessism_api.operations.models import PlayerCreateData, PlayerStatsCreateData
 from chessism_api.operations.ingestion_pipeline.chesscom import get_profile, get_player_stats
 
-async def read_player(player_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Reads a player's profile from the database by player_name.
-    """
-    player_db_interface = DBInterface(Player)
-    player_name_lower = player_name.lower()
-    
-    # --- FIX: .read() returns a list ---
-    player_list = await player_db_interface.read(player_name=player_name_lower)
-
-    if player_list:
-        return player_list[0] # Return the first (and only) player dict
-    else:
-        print(f"Player {player_name_lower} not found in DB.")
-        return None
-
-async def insert_player(data: dict) -> Optional[PlayerCreateData]:
-    """
-    Inserts a new player into the database or updates an existing one.
-    Fetches the full profile from Chess.com.
-    """
-    player_name_lower = data['player_name'].lower()
-    player_interface = DBInterface(Player)
-    existing_player = await read_player(player_name_lower)
-    fetched_profile: Optional[PlayerCreateData] = await get_profile(player_name_lower)
-
-    if fetched_profile is None:
-        # This can happen if Chess.com API fails (e.g., timeout, 404)
-        # We might still want to create a shell player if one doesn't exist
-        # For now, we'll follow the logic of returning None if fetch fails
-        print(f"Profile for {player_name_lower} came back as None from Chess.com.")
-
-        # If the player already exists (full or shell), do not create again.
-        if existing_player:
-            return PlayerCreateData(**existing_player)
-
-        # Create a shell player if fetch fails AND player doesn't exist
-        print(f"Creating 'shell' player for {player_name_lower} as profile fetch failed.")
-        shell_data = {"player_name": player_name_lower, "joined": 0}
-        try:
-            created_shell_dict = await player_interface.create(shell_data)
-            return PlayerCreateData(**created_shell_dict)
-        except IntegrityError:
-             # Race condition: another process created it. Just read it.
-             existing_player = await read_player(player_name_lower)
-             return PlayerCreateData(**existing_player) if existing_player else None
-        except Exception as e:
-            print(f"Error creating shell player {player_name_lower}: {e}")
-            return None
+LOG = logging.getLogger(__name__)
 
 
-    fetched_profile_dict = fetched_profile.model_dump()
-    # An explicit games download is the restore path for a previously deleted
-    # main player. Merely opening the deleted shell in the UI does not call this.
-    fetched_profile_dict["deleted_at"] = None
-
-    # Chess.com does not provide an IANA timezone. Never erase a manually
-    # curated timezone when the rest of the public profile is refreshed.
-    if existing_player and not fetched_profile_dict.get("timezone"):
-        fetched_profile_dict.pop("timezone", None)
-        fetched_profile_dict.pop("timezone_source", None)
-
-    # Existing row: update directly and avoid intentional duplicate insert attempts.
-    if existing_player:
-        try:
-            updated_player_dict = await player_interface.update(player_name_lower, fetched_profile_dict)
-            if updated_player_dict:
-                return PlayerCreateData(**updated_player_dict)
-            return PlayerCreateData(**existing_player)
-        except Exception as update_e:
-            print(f"Error updating existing player {player_name_lower}: {update_e}")
-            return None
-
-    try:
-        print(f"Attempting to insert new player profile for: {player_name_lower}")
-        created_player_dict = await player_interface.create(fetched_profile_dict)
-        print(f'NEW player {player_name_lower} inserted')
-        return PlayerCreateData(**created_player_dict)
-    except IntegrityError:
-        # Race-safe fallback if another request created it between read and create.
-        try:
-            updated_player_dict = await player_interface.update(player_name_lower, fetched_profile_dict)
-            if updated_player_dict:
-                return PlayerCreateData(**updated_player_dict)
-            refreshed_existing = await read_player(player_name_lower)
-            return PlayerCreateData(**refreshed_existing) if refreshed_existing else None
-        except Exception as update_e:
-            print(f"Error updating player {player_name_lower} after failed insert: {update_e}")
-            return None
-    except Exception as e:
-        print(f"An unexpected error occurred during player creation for {player_name_lower}: {e}")
-        return None
+async def read_player(player_name: str, *, session_factory=None) -> Optional[Dict[str, Any]]:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        return await persistence.read_profile(session, player_name.strip().lower())
 
 
-async def get_current_players_with_games_in_db() -> List[Dict[str, Any]]:
-    """
-    Fetches all players that have a full profile (joined != 0).
-    """
-    query = """
-    SELECT * FROM player
-    WHERE joined > 0 AND deleted_at IS NULL;
-    """
-    players = await open_async_request(query, fetch_as_dict=True)
-    return players
+async def insert_player(data: dict, *, session_factory=None) -> PlayerCreateData:
+    """Fetch outside a transaction, then atomically save or preserve a local shell."""
+    player = data['player_name'].strip().lower()
+    fetched = await get_profile(player)
+    async with write_transaction(session_factory or AsyncDBSession) as session:
+        if fetched is None:
+            saved = await persistence.ensure_shell(session, player)
+        else:
+            saved = await persistence.save_profile(session, {**fetched.model_dump(), 'player_name': player})
+    return PlayerCreateData(**saved)
 
 
-# --- Functions for PlayerStats ---
+async def get_current_players_with_games_in_db(*, session_factory=None) -> List[Dict[str, Any]]:
+    """Return full, nondeleted profiles, including profiles with no games yet."""
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        return await persistence.primary_profiles(session)
 
-async def read_player_stats(player_name: str) -> Optional[Dict[str, Any]]:
-    """
-    Reads a player's stats from the database by player_name.
-    """
-    stats_db_interface = DBInterface(PlayerStats)
-    player_name_lower = player_name.lower()
-    
-    stats_list = await stats_db_interface.read(player_name=player_name_lower)
-    
-    if stats_list:
-        return stats_list[0] # Return the first (and only) stats dict
-    else:
-        print(f"Stats for {player_name_lower} not found in DB.")
-        return None
+
+async def read_player_stats(player_name: str, *, session_factory=None) -> Optional[Dict[str, Any]]:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        return await persistence.read_stats(session, player_name.strip().lower())
+
 
 def _parse_stats_category(raw_stats: Dict[str, Any], category: str) -> Dict[str, Any]:
     """Helper to safely parse one stats category (e.g., 'chess_rapid')."""
@@ -158,69 +66,29 @@ def _parse_stats_category(raw_stats: Dict[str, Any], category: str) -> Dict[str,
         f"{category}_last_percentile": last.get('percentile') or last.get('percentage_rank')
     }
 
-async def create_and_store_player_stats(player_name: str) -> Optional[PlayerStatsCreateData]:
-    """
-    Fetches fresh stats from Chess.com and performs an "upsert" (insert or update)
-    into the database.
-    """
-    player_name_lower = player_name.lower()
-    
-    # 1. Ensure the player exists in the Player table first.
-    # We must have a Player record to satisfy the foreign key constraint.
-    player = await read_player(player_name_lower)
-    if not player:
-        # If player doesn't exist, create a shell record (or full profile)
-        print(f"Player {player_name_lower} not found. Creating shell record before adding stats.")
-        player_profile = await insert_player({"player_name": player_name_lower})
-        if not player_profile:
-            print(f"Failed to create player {player_name_lower}. Cannot add stats.")
-            return None
-
-    raw_stats = await get_player_stats(player_name_lower)
-    if not raw_stats:
-        print(f"Failed to fetch stats from Chess.com for {player_name_lower}.")
+async def create_and_store_player_stats(player_name: str, *, session_factory=None) -> Optional[PlayerStatsCreateData]:
+    """Publish a fetched statistics snapshot; absence/errors never erase old stats."""
+    player = player_name.strip().lower()
+    if await read_player(player, session_factory=session_factory) is None:
+        await insert_player({'player_name': player}, session_factory=session_factory)
+    raw = await get_player_stats(player)
+    if not raw:
         return None
-    
-    parsed_data = {"player_name": player_name_lower}
-    
-    parsed_data.update(_parse_stats_category(raw_stats, 'chess_rapid'))
-    parsed_data.update(_parse_stats_category(raw_stats, 'chess_blitz'))
-    parsed_data.update(_parse_stats_category(raw_stats, 'chess_bullet'))
-
-    parsed_data['fide'] = raw_stats.get('fide')
-    parsed_data['puzzle_rush_best_score'] = raw_stats.get('puzzle_rush', {}).get('best', {}).get('score')
-    parsed_data['tactics_highest_rating'] = raw_stats.get('tactics', {}).get('highest', {}).get('rating')
-    parsed_data['tactics_lowest_rating'] = raw_stats.get('tactics', {}).get('lowest', {}).get('rating')
-
+    parsed = {'player_name': player}
+    for category in ('chess_rapid', 'chess_blitz', 'chess_bullet'):
+        parsed.update(_parse_stats_category(raw, category))
+    parsed.update(fide=raw.get('fide'),
+        puzzle_rush_best_score=raw.get('puzzle_rush', {}).get('best', {}).get('score'),
+        tactics_highest_rating=raw.get('tactics', {}).get('highest', {}).get('rating'),
+        tactics_lowest_rating=raw.get('tactics', {}).get('lowest', {}).get('rating'))
     try:
-        # Validate the parsed data
-        stats_data = PlayerStatsCreateData(**parsed_data)
-    except Exception as e:
-        print(f"Error validating parsed stats for {player_name_lower}: {e}")
+        stats = PlayerStatsCreateData(**parsed)
+    except ValueError:
+        LOG.warning('Invalid remote statistics for %s; previous snapshot retained', player)
         return None
-
-    stats_interface = DBInterface(PlayerStats)
-    stats_data_dict = stats_data.model_dump()
-
-    try:
-        # Try to create a new record
-        created_stats = await stats_interface.create(stats_data_dict)
-        print(f"Successfully inserted new stats for {player_name_lower}.")
-        return PlayerStatsCreateData(**created_stats)
-    except IntegrityError:
-        # It already exists, so update it
-        print(f"Stats for {player_name_lower} already exist. Updating.")
-        try:
-            updated_stats = await stats_interface.update(player_name_lower, stats_data_dict)
-            if updated_stats:
-                return PlayerStatsCreateData(**updated_stats)
-            return None
-        except Exception as e:
-            print(f"Error updating stats for {player_name_lower}: {e}")
-            return None
-    except Exception as e:
-        print(f"An unexpected error occurred during stats upsert: {e}")
-        return None
+    async with write_transaction(session_factory or AsyncDBSession) as session:
+        saved = await persistence.save_stats(session, stats.model_dump())
+    return PlayerStatsCreateData(**saved)
 
 # --- NEW FUNCTION ---
 async def update_stats_for_all_primary_players(api_delay: float = 1.0) -> Dict[str, List[str]]:

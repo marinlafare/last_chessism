@@ -2030,3 +2030,53 @@ Evidence archived, read back and byte-checked at
 Application/test inputs are unchanged after verification; local checkpoint follows.
 Original DB/checkpoint/services untouched. No GPU execution. Stage A remains
 incomplete/unaccepted; CUDA publication and remaining persistence consumers follow.
+
+### Canonical player profiles and statistics — started 2026-11-18
+
+Research source gate committed locally as a55f25e. Confirmed player profile/stats
+operations are an independent required persistence consumer; canonical foundation
+lacks the existing v3 player_id-owned stats table. Add it without redesigning the
+public columns. Replace duplicate-insert/update catch chains with atomic upserts.
+Transactions surround only database work; remote fetches stay outside. This also
+preserves timezone values from the actual current row during concurrent refresh.
+No real network call or data mutation is authorized by these synthetic tests.
+
+Profile/statistics conversion prepared: canonical version 10 adds the existing
+numeric-owned statistics columns, FK cascade and publication timestamp. Operations
+own guarded transactions; profile/timezone and stats publication use atomic upserts.
+Remote requests run without checked-out DB sessions. Public payload/parser and batch
+result logic preserved; persistence failures now reach the route's existing HTTP 500
+path instead of masquerading as missing remote stats. No account changes.
+
+18 new real PostgreSQL cases cover shell/full/deleted behavior, current timezone
+preservation, concurrency, numeric ownership/rename/delete/FK uniqueness, snapshot
+publication, failed fetch/validation/commit preservation, repeated cancellation with
+all sessions closed, adapter boundaries, account-row preservation and actual routes.
+Existing schema tests now expect version 10, reject version 9, and still test wrong
+artifact hashes at the current version. No test weakened, deleted or skipped.
+
+Prepared 61 foundation + 15 ingestion/transaction + 68 P1 = 144 focused checks,
+requiring zero failures/errors/skips. Changed Python parses and git diff --check pass;
+all unrelated frozen inputs match. No broad suite, remote API, GPU or live DB access.
+Evidence/monitor: /tmp/chessism-canonical-a3-profiles-20261118-01.
+
+Profile/statistics gate launched: supervisor PID 1169222; startup confirmed.
+144 focused checks; all 1,771 frozen inputs checked before launch. Tracking writes
+completed before launch-ready release.
+Monitor: `python3 /tmp/chessism-canonical-a3-profiles-20261118-01/monitor.py`. Returning control without polling.
+Review results, source integrity and exact-owned cleanup before local commit.
+
+### Profile/statistics verification passed — 2026-11-18
+
+61 foundation + 15 workflow + 68 P1 = 144 passed, zero failures/errors/skips,
+in 25.25 seconds on Python 3.10.22. All 18 new PostgreSQL cases pass. Raw and
+structured results agree; all 1,771 frozen inputs match. Supervisor exited; all
+five owned containers removed and independently confirmed absent by exact label.
+Evidence archived, read back and byte-checked:
+ docs/architecture/evidence/stage-a-profiles-2026-11-18.tar.gz.
+No application/test edits after verification. Local checkpoint follows.
+
+User process policy supersedes earlier handoff rule: run checks expected under five
+minutes directly. Only supply monitor.py and return control for longer processes.
+This focused gate took 25 seconds; future comparable gates will run directly.
+Original DB/checkpoint/services unchanged. Stage A remains incomplete/unaccepted.

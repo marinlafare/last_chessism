@@ -872,3 +872,24 @@ an error; readers do not repair sources, publish models or invoke CUDA. Sampling
 packing, fitting and inference formulas are unchanged. Research tables/publication,
 saved-CPU-reference comparisons and the remaining CUDA consumers are not converted
 by this source-only step.
+
+### Player profiles and statistics (canonical version 10)
+
+`player_stats` retains the useful v3 columns and numeric player primary/foreign key,
+with cascading physical deletion and a publication timestamp. No duplicate player
+name or new JSON abstraction. The initializer owns this table; profile/statistics
+requests never create or repair schema. Versions 1–9 fail validation without changes.
+
+`operations/players.py` now owns guarded read/write transactions and uses the concrete
+`player_profiles.py` adapter. Remote fetches run outside database transactions.
+Profile upsert preserves its numeric ID and the current curated timezone when the
+remote payload supplies none; successful explicit refresh restores a deleted profile.
+Failed fetches preserve full/deleted rows or create a shell. Stats upsert publishes
+one whole snapshot and advances last_updated. Missing/invalid remote stats preserve
+previous data. FK/unique constraints enforce one snapshot per owner through renames.
+
+Public fields and batch success/failed lists remain. Database exceptions propagate
+instead of becoming a misleading remote-not-found response; the existing stats route
+therefore returns 500 for persistence failure. Authentication/account tables are not
+modified. This removes this consumer's DBInterface/ask_db dependency; their remaining
+callers and old runtime initialization still await A4. No historical migration.
