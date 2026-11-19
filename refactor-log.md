@@ -2509,3 +2509,58 @@ Independent numeric re-review pending; Stage A not accepted. No Stage B begun.
 Local numeric correction/evidence commit: c13f07d3edaa228dd864f721d6622f88b71280aa.
 Independent Docker inventory confirms no numeric verification containers remain.
 Stopping after the focused correction; next action is independent numeric re-review.
+
+
+2026-11-19 — Stage A formally accepted by focused independent review; user now
+authorizes B1–B3. Verified clean accepted 7d9fe8e on the expected repository/branch.
+P1 selection/cleanup/attempt-identity code intact and saved evidence reviewed.
+Root causes: timeout=None in queued and immediate HTTP; generic batch failure
+releases/reselects unboundedly; service retries each failed position independently.
+Cloud reverse imports use coordinator save_run/save_job from backend, sequence and
+cancellation helpers. Start one bounded transport policy and direct shared durable
+transitions, preserving schema/scoring/transactions. No Stage A reopening.
+
+2026-11-19 — Completed authorized Stage B B1–B3; independent acceptance pending.
+B1 `b8c59733c0c0c48ddb64ac9ff808a85df492251e`: one bounded HTTP policy for queued
+and immediate requests; identified transient failures only, max three attempts;
+no generic re-selection or nested service retries. Locks stay held through HTTP
+retries; fatal stop is published before rollback, preventing sibling re-selection.
+Earlier commits survive. Service queue/search/start/quit bounds and guarded process
+cleanup/disconnect handling are verified. Four analysis registrations now specify
+24h/one ARQ attempt; old `_job_timeout` enqueue kwargs were not recognized by ARQ.
+Raw full-range INTEGER scores and existing serialization remain unchanged.
+
+B2 `f07391418ba6b671573a55fa0a417f08ddb0f5d5`: extracted save_run/save_job to
+cloud_analysis/transitions.py; both AST bodies exactly match the accepted baseline.
+Backends/helpers no longer import the coordinator. Cloud tests patch the new owner;
+transaction/cancellation/receipt/recovery assertions are retained.
+
+B3 evidence: unchanged baseline 174 checks with 1 failure/1 error/0 skips; all 769
+baseline source/test hashes match accepted 7d9fe8e. Final relevant broader comparison
+209 checks with identical failure/error identities and exception messages, 0 skips,
+no lost existing tests after two explicitly changed execution-contract test names.
+Remaining debt: cloud_auto_sequences split-total test expects ValueError not raised;
+cloud_analysis cleanup fixture lacks run.job_id. Full traces preserved separately.
+No unrelated test repair, weakening or silent skip.
+
+Integrated gate passed 255 distinct tests (145 PostgreSQL, including 112 cloud
+checks and five new real Redis/ARQ/HTTP persistence tests), no failures/errors/skips.
+Final focused gate passed 29 checks after the last transport validation guard and
+two additional tests; real Stockfish 16.1 smoke passed search/mate/invalid/cancellation
+and process replacement. There are 30 new test methods across overlapping gates.
+All 40 changed Python files compile; whitespace clean; final 777 Python/SQL hashes
+have zero drift. Canonical persistence source is unchanged. Reuse valid unchanged
+frontend/cloud-worker Stage A evidence; no redundant full-suite run.
+
+Preserved earlier red attempts: initial missing test-support path, obsolete generic
+retry assertion, one missed cloud mock target, and integration launcher preparation
+error before tests. Corrected runner/test ownership/contracts, then verified affected
+paths. Every disposable container removed; Docker label inventory is empty. No
+background verification remains; original data, queues, backups and GCP untouched.
+No push, merge or deployment. All operations were shorter than five minutes.
+
+Handoff: docs/architecture/stage-b-completion.md.
+Archive: docs/architecture/evidence/stage-b-execution-2026-11-19.tar.gz,
+SHA256 a1362793c103c1fdb70daf549b127c10d1faba05f447187e25c8d2fc7a5e0c9e.
+Stop after local evidence checkpoint. Next: one independent Stage B acceptance
+review. Stage A remains accepted; Stage B is not yet independently accepted.

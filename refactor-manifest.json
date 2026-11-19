@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_a_numeric_corrected_pending_independent_review",
+  "status": "stage_b_verified_pending_independent_review",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -1418,7 +1418,7 @@
     "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened.",
     "acceptance_source": "User consolidated roadmap and explicit Stage A Batch 1 authorization; historical implementation log retained."
   },
-  "active_work": "stage_a_completion",
+  "active_work": "stage_b",
   "stage_a_batch_1": {
     "name": "Canonical schema and persistence contracts",
     "status": "accepted_with_documented_limitations",
@@ -1556,7 +1556,7 @@
   "stage_a_completion": {
     "authorization_source": "/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt",
     "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
-    "status": "implemented_pending_independent_acceptance",
+    "status": "accepted",
     "current_chunk": "A4",
     "started_at": "2026-11-11T00:30:30.215098+00:00",
     "baseline_input_hashes_matched": 1699,
@@ -6315,7 +6315,7 @@
       }
     ],
     "pending_process": null,
-    "accepted": false,
+    "accepted": true,
     "safe_stop": {
       "date": "2026-11-10",
       "timezone": "America/Mexico_City",
@@ -8359,11 +8359,11 @@
     "implementation_completed_at": "2026-11-19T04:37:29.146330+00:00"
   },
   "stage_a_numeric_correction": {
-    "status": "completed_pending_independent_review",
+    "status": "accepted",
     "baseline": "e02d47a623dbda63bcb76c11b12473891f37eb2b",
     "authorization": "78722f67-28ca-4cbf-bbc6-ff00540c9ab3/Pasted text.txt",
     "scope": "Widen arithmetic in analysis pages and engine summary; preserve raw scores and formulas",
-    "independent_acceptance": false,
+    "independent_acceptance": true,
     "tests_run": 64,
     "postgres_checks": 49,
     "new_regression_tests": 5,
@@ -8383,5 +8383,83 @@
     "disposable_containers_removed": true,
     "source_hash_drift": 0,
     "commit_sha": "c13f07d3edaa228dd864f721d6622f88b71280aa"
+  },
+  "stage_b": {
+    "status": "verified_pending_independent_review",
+    "baseline": "7d9fe8e97372603cccd2ec8d95de8a378203544c",
+    "authorization": "da40c3b8-f712-44b7-bcd7-f885c7b44b66/Pasted text.txt",
+    "current_batch": null,
+    "batches": {
+      "B1": "completed",
+      "B2": "completed",
+      "B3": "completed"
+    },
+    "independent_acceptance": false,
+    "completed_at": "2026-11-19T20:58:31.152524+00:00",
+    "commits": {
+      "B1": "b8c59733c0c0c48ddb64ac9ff808a85df492251e",
+      "B2": "f07391418ba6b671573a55fa0a417f08ddb0f5d5"
+    },
+    "documentation": "docs/architecture/stage-b-completion.md",
+    "evidence": "docs/architecture/evidence/stage-b-execution-2026-11-19.tar.gz",
+    "evidence_sha256": "a1362793c103c1fdb70daf549b127c10d1faba05f447187e25c8d2fc7a5e0c9e",
+    "verification": {
+      "baseline": {
+        "checks": 174,
+        "failures": 1,
+        "errors": 1,
+        "skips": 0,
+        "hashes_matching_accepted_head": 769
+      },
+      "integrated": {
+        "checks": 255,
+        "postgres_checks": 145,
+        "cloud_postgres_checks": 112,
+        "existing_p1_checks": 55,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "final_focused": {
+        "checks": 29,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "comparison": {
+        "checks": 209,
+        "failures": 1,
+        "errors": 1,
+        "skips": 0,
+        "new_failures": 0,
+        "new_errors": 0,
+        "missing_existing_identities": 0
+      },
+      "real_stockfish": {
+        "checks": 1,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "engine": "16.1"
+      },
+      "new_test_methods": 30,
+      "final_hashed_sources": 777,
+      "source_hash_drift": 0,
+      "changed_python_compile_checks": 40,
+      "unchanged_durable_transition_ast": true,
+      "canonical_database_sources_unchanged": true,
+      "owned_containers_removed": true,
+      "production_access": false
+    },
+    "baseline_debt": [
+      "tests.test_cloud_auto_sequences.AutoSequenceTests.test_split_total_instead_of_multiplying_or_balancing",
+      "tests.test_cloud_analysis.ControllerGateTests.test_real_cleanup_writes_tmp_plan_and_can_recreate_it_after_restart"
+    ],
+    "limitations": [
+      "No production/GCP verification; isolated real Stockfish smoke only, not load tuning.",
+      "Unchanged frontend and cloud-worker algorithms reuse accepted Stage A evidence.",
+      "Previously documented Redis-reset visibility limitation and unrelated baseline testing debt remain."
+    ],
+    "next_action": "One independent Stage B acceptance review; no Stage C/D implementation."
   }
 }

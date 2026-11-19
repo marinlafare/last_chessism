@@ -1,5 +1,11 @@
 # Chessism V1 architectural refactoring
 
+**Current checkpoint — 2026-11-19:** Stage A is formally ACCEPTED. Stage B B1–B3
+is implemented and verified, pending one independent acceptance review. See
+`docs/architecture/stage-b-completion.md`. Do not begin Stage C or D.
+
+## Historical Stage A execution plan
+
 **RESUMED — 2026-11-18, fast-track Stage A authorization.** Resume from
 `b00885a`; preserve the existing A1/A2 and five A3.1 checkpoints. Source inventory
 matches all 1,744 application/test inputs plus the documented handoff-only change.
@@ -1357,3 +1363,44 @@ Numeric correction gate completed: red reproduced both overflow paths; green
 64/64 (49 PostgreSQL), no failures/errors/skips. Only SQL operand widths changed.
 See docs/architecture/stage-a-numeric-correction.md and archived evidence.
 Next: local checkpoint and brief independent numeric re-review; stop implementation.
+
+
+## Authorized Stage B — bounded execution and cloud dependencies (2026-11-19)
+
+Stage A formally ACCEPTED in the final focused review at 7d9fe8e. Current
+authorization: da40c3b8-f712-44b7-bcd7-f885c7b44b66/Pasted text.txt. Prior Stage A
+stop instructions are historical. Implement B1–B3 together; no C/D or live data.
+
+B1: replace indefinite HTTP calls and batch reselection retries with one finite
+transport policy shared by queued and immediate callers. At most three HTTP
+attempts, identified transient errors only, cancellation-aware bounded backoff
+and overall deadline derived from the existing 300s engine stall allowance and
+2.1s/FEN scheduling estimate. Keep row locks across attempts; fail the job after
+exhaustion/permanent/malformed/database errors, drain siblings, preserve commits.
+Remove the service's nested search retry, bound pool waiting/engine startup and
+execution, and dispose interrupted engines before re-leasing. Preserve immediate
+response shape, score serialization and attempt-scoped progress. Inspect relevant
+cloud worker bounds without expanding into a new scheduling framework.
+
+B2: move save_run/save_job, unchanged in behavior, from coordinator into a small
+shared durable transition module. Update backend/recovery imports and their tests;
+preserve row locks, claims/receipts, cancellation guards and verification stamps.
+Check dependency direction including deferred imports, not just module importability.
+
+B3: focused deterministic engine/service/cancellation regressions; isolated real
+PostgreSQL selection/commit/cleanup and Redis/ARQ attempts; cloud transition tests.
+Capture relevant accepted-baseline identities first, compare near completion.
+Reuse unchanged Stage A evidence. One relevant broader gate near completion, no
+frontend work. Short isolated real-engine check if cached environment supports it.
+
+Each meaningful verified change gets a local commit; no push/merge/deploy. Tests
+expected under five minutes run directly; longer separate gates get the established
+120-second single-screen monitor and return control. Stop after complete Stage B
+evidence and request one independent acceptance review.
+
+Stage B completed and verified 2026-11-19. B1 local commit `b8c5973`; B2 local
+commit `f073914`. Integrated gate: 255 passed (145 PostgreSQL); final focused:
+29 passed; real Stockfish: 1 passed. Relevant broader comparison: 209 checks,
+same baseline 1 failure/1 error, zero skips or new failures/errors. All verification
+resources removed. See the Stage B handoff and archived evidence. Next action:
+one independent B1–B3 acceptance review; stop implementation until authorized.
