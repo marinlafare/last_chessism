@@ -11,10 +11,9 @@ import sys
 import time
 
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import create_async_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.runtime import configured_storage
-from chessism_api.database.postgresql.relational_storage import SESSION_KEY
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
+from chessism_api.database.postgresql.transactions import read_transaction
 
 
 async def main():
@@ -30,17 +29,15 @@ async def main():
     from chessism_api.operations.player_score_position_page import read_position_page
     from chessism_api.operations.player_score_distribution import bins
     from chessism_api.operations.player_accuracy_distribution import explore_summary_games
-    layout = configured_storage()
-    engine = create_async_engine(os.environ['DATABASE_URL'], connect_args={'server_settings': {
+    engine = await bind_runtime_engine(os.environ['DATABASE_URL'], connect_args={'server_settings': {
         'default_transaction_read_only':'on','statement_timeout':'3000',
         'max_parallel_workers_per_gather':'0','jit':'off',
-        'search_path':layout.search_path}})
-    AsyncDBSession.configure(bind=engine,info={SESSION_KEY:layout})
+        'search_path':'public'}})
     try:
         for player in sys.argv[1:] or ['lafareto']:
             for bin_id in (0,6,12):
                 start = time.monotonic()
-                async with AsyncDBSession() as s:
+                async with read_transaction(AsyncDBSession) as s:
                     page = await read_position_page(s,player,('bullet','blitz','rapid'),bins()[bin_id])
                 print(f'{player} positions bin={bin_id}: {time.monotonic()-start:.3f}s, '
                       f'{len(page["rows"])} rows, scanned={page["scanned_positions"]}, more={bool(page["next_cursor"])}',flush=True)

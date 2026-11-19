@@ -18,10 +18,9 @@ import tempfile
 import time
 
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from chessism_api.operations.player_score_distribution import MODES, games_sql, positions_sql, prepare
 from chessism_api.operations.player_score_histogram import BATCH_GAMES, BATCH_SELECTION
 from chessism_api.operations.player_stockfish_summary import read_saved
@@ -108,17 +107,16 @@ def checked_inventory(rows):
 
 
 async def inventory(session_factory=AsyncDBSession):
-    async with session_factory() as session:
+    async with read_transaction(session_factory) as session:
         await prepare(session)
         await guard(session)
-        table = lambda name: summary_table(storage_for(session), name)
         rows = (await session.execute(text(f'''SELECT p.player_name,st.revision,st.published_revision,
             sn.revision AS snapshot_revision,sn.generated_at,
             COALESCE((SELECT SUM((m.value->>'cp_positions')::bigint+
                 (m.value->>'mate_positions')::bigint+(m.value->>'tablebase_positions')::bigint)
                 FROM jsonb_each(sn.payload) m),0) AS scored
-            FROM player p LEFT JOIN {table('state')} st ON st.player_name=p.player_name
-            LEFT JOIN {table('snapshot')} sn ON sn.player_name=p.player_name
+            FROM player p LEFT JOIN public.player_stockfish_state st ON st.player_name=p.player_name
+            LEFT JOIN public.player_stockfish_snapshot sn ON sn.player_name=p.player_name
             WHERE p.joined>0 AND p.deleted_at IS NULL'''))).mappings().all()
         return checked_inventory(rows)
 
@@ -139,7 +137,7 @@ async def freeze_player(expected, stream, emit, *, session_factory=AsyncDBSessio
     timings = {'game_selection_seconds': 0.0, 'extraction_seconds': 0.0, 'sql_seconds': 0.0}
     sql = empty_groups(player)
     count = batches = 0
-    async with session_factory() as session:
+    async with read_transaction(session_factory) as session:
         await prepare(session)
         await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
         await session.execute(text("SET LOCAL idle_in_transaction_session_timeout='60s'"))

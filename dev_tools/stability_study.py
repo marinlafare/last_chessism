@@ -8,7 +8,8 @@ from typing import List, Dict, Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import constants
-from chessism_api.database.postgresql.engine import init_db, AsyncDBSession
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import init_runtime_db
 from sqlalchemy import text
 
 from stockfish_test import analyze_fens
@@ -52,7 +53,7 @@ async def run_stability_study(
     Runs a quick stability study comparing nodes_base vs nodes_base*4.
     Returns summary stats for eval stability and PV1 move agreement.
     """
-    await init_db(constants.CONN_STRING)
+    await init_runtime_db(constants.CONN_STRING)
     fens = await _fetch_random_fens(sample_size)
 
     def batched(items: List[str], size: int) -> List[List[str]]:

@@ -8,7 +8,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from sqlalchemy import func, select, update
 
-from chessism_api.database.postgresql.engine import AsyncDBSession, init_db
+from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.runtime import init_runtime_db
 from chessism_api.database.postgresql.models import Player, Game, Fen, GameFenAssociation
 import constants
 
@@ -110,7 +111,7 @@ async def _demo(player_name: Optional[str] = None) -> None:
     """
     Optional helper for quick manual checks.
     """
-    await init_db(constants.CONN_STRING)
+    await init_runtime_db(constants.CONN_STRING)
     print("players_with_joined =", await count_players_with_joined())
     if player_name:
         print("games_for_player =", await count_games_for_player(player_name))

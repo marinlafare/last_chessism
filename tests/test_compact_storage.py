@@ -7,19 +7,11 @@ from sqlalchemy.dialects.postgresql import dialect
 
 from chessism_api.database.postgresql.compact_storage import exact_integer, integer_result, compact_for, compact_table
 from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
-from chessism_api.database.postgresql.runtime import configured_storage, PROFILE_ENV
 from chessism_api.database.postgresql.models import Fen, FenContinuation, GameFenAssociation, Move, PlayerStats
 from scripts.compact_db_preflight import require_private
 
 
 class CompactTypesTests(unittest.TestCase):
-    def test_explicit_profile_only(self):
-        self.assertFalse(configured_storage({PROFILE_ENV:'relational_v2'}).compact)
-        self.assertTrue(configured_storage({PROFILE_ENV:'relational_v3'}).compact)
-        self.assertIsNone(compact_for(AsyncMock()))
-        self.assertIsNone(compact_for(SimpleNamespace(info={})))
-        layout = RelationalStorage('public','chessism_archive','chessism_reads','relational_v3')
-        self.assertIs(compact_for(SimpleNamespace(info={SESSION_KEY:layout})), layout)
 
     def test_lossless_integers_and_nulls(self):
         for value in (None,0,1,1.0,-19997,20000,-2147483648,2147483647):

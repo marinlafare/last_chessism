@@ -8,7 +8,6 @@ services:
       - "8003:8000"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_NEO4J_URI=bolt://neo4j:7687
       - CHESSISM_NEO4J_DATABASE=neo4j
       - CHESSISM_NEO4J_AUTH_FILE=/run/secrets/chessism_neo4j_auth
@@ -67,7 +66,6 @@ services:
     profiles: [player-summaries]
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_PLAYER_SUMMARIES=1
     networks:
       - chessism_net
@@ -86,7 +84,6 @@ services:
     profiles: [stockfish-summaries]
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_STOCKFISH_SUMMARIES=1
     networks:
       - chessism_net
@@ -105,7 +102,6 @@ services:
     mem_limit: 1g
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - CHESSISM_EXPORT_ROOT=/research-data/exports
       - CHESSISM_EXPORT_READER_FILE=/run/secrets/chessism_export_reader
@@ -181,7 +177,6 @@ services:
       - /tmp:rw,noexec,nosuid,size=128m,mode=1777
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      CHESSISM_DATABASE_PROFILE: ${CHESSISM_DATABASE_PROFILE:-legacy}
       CLOUD_WORKER_IMAGE: chessism-stockfish-batch:fen-compat-v1
       CLOUD_CLEANUP_DIRECTORY: /tmp/chessism-cloud-cleanup
     volumes:
@@ -323,7 +318,6 @@ services:
     stop_grace_period: 120s
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - CHESSISM_NEO4J_URI=bolt://neo4j:7687
       - CHESSISM_NEO4J_DATABASE=neo4j
       - CHESSISM_NEO4J_AUTH_FILE=/run/secrets/chessism_neo4j_auth
@@ -405,7 +399,6 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=analysis_queue
       - ANALYSIS_CONCURRENCY=${ANALYSIS_CONCURRENCY:-4}
@@ -460,7 +453,6 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=games_queue
       - BACKUP_VOLUME_ROOT=/backup-volume
@@ -485,7 +477,6 @@ services:
     cpus: "1.00"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=research_queue
       - BACKUP_VOLUME_ROOT=/backup-volume
@@ -527,7 +518,6 @@ services:
               capabilities: [gpu]
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - ALGORITHM_WORK_DIR=/research-data/algorithms/tmp
       - CHESSISM_NEO4J_URI=bolt://neo4j:7687
@@ -558,7 +548,6 @@ services:
     cpus: "0.50"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=salience_queue
     networks:
@@ -582,7 +571,6 @@ services:
     cpus: "1.00"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=backup_queue
       - MATRIX_ARTIFACT_DIR=/research-data/matrices
@@ -661,7 +649,6 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -682,7 +669,6 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -699,7 +685,6 @@ services:
     command: arq worker.WorkerSettings
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=fen_queue
     networks:
@@ -720,7 +705,6 @@ services:
     mem_limit: 1g
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - BACKUP_VOLUME_ROOT=/backup-volume
       - BACKUP_VOLUME_UUID=1ebffac6-4b7a-4906-9e07-9586060d3825
@@ -746,7 +730,6 @@ services:
     cpus: "${INGESTION_CPU_LIMIT:-4.0}"
     environment:
       - DATABASE_URL=${DATABASE_URL}
-      - CHESSISM_DATABASE_PROFILE=${CHESSISM_DATABASE_PROFILE:-legacy}
       - REDIS_HOST=${REDIS_HOST}
       - QUEUE_NAME=pipeline_queue # <-- Listens to its own queue
       - TABLEBASE_PROBE_WORKERS=${TABLEBASE_PROBE_WORKERS:-4}

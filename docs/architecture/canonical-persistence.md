@@ -1079,3 +1079,22 @@ Full-development player/revision reads use native canonical tables; research API
 queue state and publication boundaries own guarded transactions. 119 focused checks
 and the saved-report browser fixture pass. No new real-GPU training was performed.
 The 39 retired workflow tests are listed in research-retirement-tests.json.
+
+### Canonical runtime admission
+
+API, ARQ and admin entry points now share read-only canonical version/catalog/FK
+validation before binding sessions. Startup neither initializes nor migrates a
+database; create an empty isolated database with scripts.init_canonical_db first.
+The retired CHESSISM_DATABASE_PROFILE switch is removed from local Compose.
+SSL and server timeouts remain caller-configurable; runtime search_path is public.
+Failed startup drains session cleanup and engine disposal even under repeated
+cancellation. Existing databases and recovery archives were not accessed or altered.
+Eighteen focused checks cover admission, cleanup, native admin launchers and claims.
+The remaining profile adapters/historical tools are still awaiting A4 removal.
+
+A separate user decision is pending: historical FEN-only archives can lack source
+and timestamp, but schema15 requires both for saved scores. The existing restore
+contract preserves these missing values. No schema or restore-policy relaxation
+has been made; preserving unattributed results versus rejecting incompatible
+archives before writes requires explicit approval. Whole-database format9 validation
+and old-backup validation are unaffected by this pending FEN-only decision.

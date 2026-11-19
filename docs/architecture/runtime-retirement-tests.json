@@ -1,0 +1,12 @@
+{
+  "removed_test_identities": [
+    "tests.test_salience_migration.SalienceMigrationTests.test_current_schema_needs_no_writes_or_alter_locks",
+    "tests.test_salience_migration.SalienceMigrationTests.test_nullable_components_are_backfilled_once",
+    "tests.test_database_runtime.ProfileTests.test_explicit_profile_defaults_legacy_and_rejects_typos",
+    "tests.test_database_runtime.ProfileTests.test_all_compose_database_consumers_share_one_default_legacy_switch",
+    "tests.test_database_runtime.RuntimeStartupTests.test_runtime_initialization_passes_same_explicit_layout",
+    "tests.test_database_runtime.RuntimeStartupTests.test_ssl_settings_preserved_and_conflicting_search_path_refused",
+    "tests.test_compact_storage.CompactTypesTests.test_explicit_profile_only"
+  ],
+  "replacement": "Canonical runtime PostgreSQL rejection, no-DDL and resource cleanup checks; existing source wiring and cloud-before-client rejection preserved; original salience calculations covered by canonical full/incremental parity tests."
+}

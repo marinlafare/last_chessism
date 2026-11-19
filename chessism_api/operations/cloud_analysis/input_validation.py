@@ -43,7 +43,7 @@ async def prepare(fens):
 async def claim(session, run_id, fens):
     # COPY retains all PK/FK constraints. Eligibility was rechecked after taking
     # FEN locks in this same transaction; a conflict rolls back the whole page.
-    from chessism_api.database.postgresql.relational_storage import driver_connection
+    from chessism_api.database.postgresql.transactions import driver_connection
     driver = await driver_connection(session)
     await driver.copy_records_to_table('cloud_fen_claim', columns=['fen', 'run_id'],
                                       records=((fen, run_id) for fen in fens))

@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Historical comparison retirement verified; remaining FEN backup adapter and A4 follow",
+      "current_gate": "Canonical startup verified; FEN-only restore ownership/provenance decision pending; remaining adapter removal and broad comparison due",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -8219,7 +8219,19 @@
         ],
         "browser_evidence": "/tmp/chessism-research-retirement-ui-20261118",
         "failed_attempts": "First backend gate: 118 pass, one test-fixture JSON cast error; corrected five checks pass. Browser startup user permissions corrected in disposable fixture; subsequent fixture passed."
-      }
+      },
+      "research_retirement_local_commit": "c794350",
+      "runtime_verification": {
+        "distinct_passed": 18,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "evidence_archive": "docs/architecture/evidence/stage-a-canonical-runtime-2026-11-18.tar.gz",
+        "evidence_sha256": "429741497c651534ec53a76f7916b0a47fd800bfb5bf9e851abfa8837aa9bfff",
+        "scope": "No-DDL canonical startup, schema/FK rejection, SSL/settings, repeated cancellation/disposal; native CUDA baseline launcher, cloud claim COPY, numeric contracts.",
+        "failed_attempts": "25: disposal fixture attempted patch on slotted instance; corrected class patch. 26: new tool fixture super() alias invalid; corrected subclass; two new checks pass in 27. No production failures or tests bypassed."
+      },
+      "pending_user_decision": "Allow explicitly unattributed historical FEN scores in canonical storage, or reject incompatible FEN-only archives before any restore writes. Existing restore test requires exact NULL-source/timestamp preservation; accepted canonical constraint forbids it."
     }
   }
 }

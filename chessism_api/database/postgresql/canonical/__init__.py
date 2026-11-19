@@ -1,4 +1,4 @@
-"""Canonical PostgreSQL foundation, deliberately disconnected from runtime startup."""
+"""Canonical PostgreSQL initialization and read-only runtime validation."""
 from hashlib import sha256
 import json
 from pathlib import Path

@@ -4,17 +4,16 @@ import asyncio
 import logging
 
 from sqlalchemy import text
-from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
-from chessism_api.database.postgresql.stockfish_summary_schema import install_stockfish_summaries
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
 from .player_stockfish_summary import refresh_pending
 
 
 async def cloud_busy():
     # Do not compete with the active import/verification pipeline. Status reads
     # are tiny and never load job documents, results or credentials.
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION READ ONLY'))
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET LOCAL statement_timeout='2s'"))
         return bool(await session.scalar(text("""SELECT EXISTS(SELECT 1 FROM cloud_analysis_job
             WHERE status NOT IN ('complete','cancelled','limit_reached','failed'))""")))
@@ -24,11 +23,6 @@ async def run(args):
     from constants import CONN_STRING
     engine = await bind_runtime_engine(CONN_STRING)
     try:
-        if args.install:
-            async with engine.begin() as connection:
-                await install_stockfish_summaries(connection, configured_storage())
-            print('Stockfish summary queue installed; no backfill performed.', flush=True)
-            return
         waiting = False
         while True:
             try:
@@ -54,7 +48,6 @@ async def run(args):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--install', action='store_true')
     parser.add_argument('--once', action='store_true')
     logging.basicConfig(level=logging.INFO)
     asyncio.run(run(parser.parse_args()))

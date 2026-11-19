@@ -2307,3 +2307,23 @@ Saved-report browser fixture passes, including current training and all historic
 report renderers. Initial fixture startup lacked write permissions; corrected only
 the disposable container user/cache. Test container removed. No live resources
 contacted. Evidence: docs/architecture/evidence/stage-a-research-retirement-2026-11-18.tar.gz SHA256 12833075bf53a37b7f814de4c7ea509d2d4c54cf1324fc6a629769f4847a9434.
+
+Research retirement checkpoint: c794350. A4 runtime startup now validates only the
+canonical schema in a guarded read-only transaction, then binds the shared session
+factory. Remove legacy default/profile environment switch and automatic schema DDL.
+Preserve caller SSL/timeouts, force public search_path, dispose failed engines before
+propagating. Canonical initializer remains explicit. Current metadata workers lose
+historical install flags; diagnostic/benchmark launchers use native tables/keys.
+FEN-only backup provenance decision is pending explicit user approval; no dependent
+schema/restore changes have been made and no application service was started.
+
+Canonical startup gate: 18 distinct focused checks passed with zero final failures,
+errors or skips. Runtime validation rejects empty/old/FK-disabled schemas without
+DDL or factory binding. Repeated cancellation drains rollback/close/disposal. SSL
+and timeout options preserved. Native full-cohort launcher preserves FEN bytes,
+all four engine-summary sides including self-play, and saved score snapshots;
+rejects duplicate jobs. Cloud claim COPY requires a transaction and rolls back.
+Earlier test fixture errors (slotted disposal patch and super()-bound fixture alias)
+are retained in evidence and corrected, without changing assertions. Source
+calculation kernels unchanged; no real GPU work required for these boundaries.
+Evidence: docs/architecture/evidence/stage-a-canonical-runtime-2026-11-18.tar.gz SHA256 429741497c651534ec53a76f7916b0a47fd800bfb5bf9e851abfa8837aa9bfff.
