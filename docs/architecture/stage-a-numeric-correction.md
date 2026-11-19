@@ -116,3 +116,5 @@ databases, recovery checkpoint, Redis and Neo4j were neither read nor changed.
 
 Stop here. The correction is verified locally; Stage A is **not yet accepted**.
 Next action: independent re-review of this numeric finding and its evidence.
+
+Local correction/evidence commit: `c13f07d3edaa228dd864f721d6622f88b71280aa`.

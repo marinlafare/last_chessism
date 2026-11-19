@@ -8359,7 +8359,7 @@
     "implementation_completed_at": "2026-11-19T04:37:29.146330+00:00"
   },
   "stage_a_numeric_correction": {
-    "status": "verified_pending_local_commit",
+    "status": "completed_pending_independent_review",
     "baseline": "e02d47a623dbda63bcb76c11b12473891f37eb2b",
     "authorization": "78722f67-28ca-4cbf-bbc6-ff00540c9ab3/Pasted text.txt",
     "scope": "Widen arithmetic in analysis pages and engine summary; preserve raw scores and formulas",
@@ -8381,6 +8381,7 @@
     "documentation": "docs/architecture/stage-a-numeric-correction.md",
     "environment_attempt": "Initial green import stopped before tests: dummy AUTH settings missing; fixed in runner only; evidence preserved.",
     "disposable_containers_removed": true,
-    "source_hash_drift": 0
+    "source_hash_drift": 0,
+    "commit_sha": "c13f07d3edaa228dd864f721d6622f88b71280aa"
   }
 }
