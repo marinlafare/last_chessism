@@ -8,6 +8,8 @@ from typing import Any
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.database.postgresql import player_quality_reads as quality_reads
 from chessism_api.operations.player_game_scores import (
     refresh_game_player_engine_summaries,
 )
@@ -56,16 +58,15 @@ async def get_player_daily_efficiency(
     """Return mean game efficiency for every active local calendar day."""
     selected_modes = normalize_efficiency_modes(mode)
     local_timestamp = player_local_timestamp_sql("gp")
-    daily_sql = text(f"""
+    daily_sql = text(quality_reads.SIDES + f"""
         SELECT
             ({local_timestamp})::date AS date_game_init,
             AVG(engine.game_efficiency)::double precision AS game_efficiency
-        FROM game_player_engine_summary engine
-        JOIN game_player gp
+        FROM public.canonical_blunder_engine engine
+        JOIN quality_games gp
           ON gp.link = engine.game_link
-         AND gp.color = engine.player_color
-         AND gp.player_name = engine.player_name
-        WHERE engine.player_name = :player
+         AND gp.is_white = engine.is_white
+        WHERE gp.player_name = :player
           AND gp.mode = ANY(CAST(:selected_modes AS text[]))
           AND gp.n_moves > :minimum_game_moves
           AND engine.game_efficiency IS NOT NULL
@@ -74,7 +75,7 @@ async def get_player_daily_efficiency(
         GROUP BY date_game_init
         ORDER BY date_game_init
     """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(
             session, player_name, "all", date_from, date_to, timezone_name
         )
@@ -94,7 +95,7 @@ async def get_player_daily_efficiency(
     if missing_links:
         await refresh_game_player_engine_summaries(missing_links)
 
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(daily_sql, params)
         rows = result.mappings().all()
 

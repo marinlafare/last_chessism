@@ -1128,3 +1128,10 @@ metadata and catalog locks own guarded transactions. Schema16 is unchanged.
 The earlier remaining-consumer inventory was incomplete: old queries remain in
 engine/hero analytics, coefficient research and salience report construction.
 Those require conversion before the Stage A boundary. A4 cleanup is in progress.
+
+### Native quality readers
+Engine insights and hero quality/range/day/hour/position queries use native
+player/game/side keys and guarded read snapshots. Missing engine refresh starts
+after read closure. Self-play windows partition by both game and side. Four
+private-PG scenarios and 40 existing checks pass; scoring formulas and response
+shapes remain unchanged. Coefficient and salience snapshot construction remain.

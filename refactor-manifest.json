@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Native matrices verified; A4 retirement in progress; remaining analytics/coefficient/salience report reads require canonical conversion",
+      "current_gate": "Native quality and matrix readers verified; remaining coefficient/salience research consumers and A4 retirement in progress",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -8257,13 +8257,20 @@
         "scope": "All ten matrix row types, every catalog column, native sides and scores, dynamic completeness, filters, estimates/previews and guarded transactions; affected fixtures on Python3.10."
       },
       "remaining_runtime_consumers": [
-        "player_analytics.py",
-        "player_hero_analytics.py remaining quality/range/measure endpoints",
-        "player_hero_efficiency.py",
         "coefficient_research.py",
         "salience_comparison/build.py",
         "scripts/compare_cuda_summaries.py (edited, verification pending)"
-      ]
+      ],
+      "native_quality": {
+        "status": "passed",
+        "checks": 44,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "archive": "docs/architecture/evidence/stage-a-native-quality-2026-11-18.tar.gz",
+        "sha256": "5cb7c5a9d9d435e999fa8c5380a79fdcff3b18a162e7edf92e2e195ba5ce9080",
+        "source_gate": "/tmp/chessism-canonical-a3-cuda-20261118-34"
+      }
     }
   }
 }

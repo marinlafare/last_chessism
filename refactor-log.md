@@ -2376,3 +2376,14 @@ The SQL inventory revealed additional essential A3 consumers still unconverted:
 remaining hero/engine analytics, coefficient research and salience report build.
 A4 removals remain unfinished in the working tree; do not claim Stage A complete.
 Evidence: docs/architecture/evidence/stage-a-native-matrices-2026-11-18.tar.gz SHA256 2783cfe9fdc73e97b98cb1ae9fd18d5c4415c5c2a3399652f5a4f48368c5792e.
+
+Native quality readers passed 44 focused Python3.10 checks: four new real-PG
+scenarios, 19 canonical activity, and 21 existing hero/analytics unit checks.
+Native game/side engine and coverage joins, guarded snapshots, daily/range/calendar/
+hour/position outputs and missing-summary refresh after session closure verified.
+Insight windows partition both self-play sides independently (31 eligible own
+transitions in the fixture), preserving the existing formulas and payloads.
+Gate33 failures were fixture setup: manual CUDA prevented intended CPU refresh,
+new initializer already supplies metadata columns, and score cast SQL assertion.
+Gate34 passes without assertion removal. Inputs unchanged and owned resources removed.
+Evidence: docs/architecture/evidence/stage-a-native-quality-2026-11-18.tar.gz SHA256 5cb7c5a9d9d435e999fa8c5380a79fdcff3b18a162e7edf92e2e195ba5ce9080.

@@ -218,14 +218,14 @@ class CanonicalActivityTests(CanonicalDatabaseTestCase):
             self.assert_buckets(await self.activity(),self.rows(zone='UTC'))
             ratings=await self.ratings(date_from=date(2025,3,9),date_to=date(2025,3,9))
             self.assertEqual(ratings['series'][1]['points'][0]['last_rating'],1019)
-            await self.db.execute('ALTER TABLE cuda_summary_control ADD COLUMN metadata boolean NOT NULL DEFAULT true; UPDATE cuda_summary_control SET manual=true')
+            await self.db.execute('UPDATE cuda_summary_control SET manual=true,metadata=true')
             for output in (await self.activity(),await self.ratings()):
                 self.assertTrue(output['manual']);self.assertTrue(output['summary_pending']);self.assertTrue(output['summary_stale'])
                 if 'series' in output:self.assertTrue(all(not s['points'] for s in output['series']))
                 else:self.assertEqual(output['total_games'],0)
 
     async def test_manual_missing_snapshots_never_run_live_queries(self):
-        await self.db.execute('ALTER TABLE cuda_summary_control ADD COLUMN metadata boolean NOT NULL DEFAULT true; UPDATE cuda_summary_control SET manual=true')
+        await self.db.execute('UPDATE cuda_summary_control SET manual=true,metadata=true')
         with patch.dict(os.environ,{'CHESSISM_PLAYER_SUMMARIES':'1'}), patch.object(reads,'activity',AsyncMock()) as a, patch.object(reads,'ratings',AsyncMock()) as r:
             output=await self.activity();self.assertEqual(output['total_games'],0);self.assertTrue(output['summary_pending'])
             output=await self.ratings();self.assertTrue(all(not s['points'] for s in output['series']));self.assertTrue(output['summary_pending'])

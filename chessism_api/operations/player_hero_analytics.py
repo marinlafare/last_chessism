@@ -12,6 +12,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql import player_quality_reads as quality_reads
 from chessism_api.database.postgresql import player_activity_reads as activity_reads
 from chessism_api.database.postgresql.transactions import read_transaction
 from chessism_api.accuracy import lichess_winning_chances
@@ -379,12 +380,12 @@ async def _missing_player_engine_summary_links(
         "AND gp.n_moves > :minimum_game_moves"
         if minimum_game_moves is not None else ""
     )
-    result = await session.execute(text(f"""
+    result = await session.execute(text(quality_reads.SIDES + f"""
         SELECT gp.link
-        FROM game_player gp
-        JOIN game_analysis_summary coverage ON coverage.link = gp.link
-        LEFT JOIN game_player_engine_summary engine
-          ON engine.game_link = gp.link AND engine.player_color = gp.color
+        FROM quality_games gp
+        JOIN public.game_analysis_coverage coverage ON coverage.link = gp.link
+        LEFT JOIN public.canonical_blunder_engine engine
+          ON engine.game_link = gp.link AND engine.is_white = gp.is_white
         WHERE gp.player_name = :player
           AND {mode_filter}
           {minimum_moves_filter}
@@ -429,7 +430,7 @@ async def get_player_range_game_scores(
     if page < 1 or not 1 <= page_size <= 500:
         raise ValueError("Page must be positive and page_size must be between 1 and 500.")
 
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(
             session,
             player_name,
@@ -451,24 +452,24 @@ async def get_player_range_game_scores(
                 AND gp.played_at < CAST(:date_to_utc AS timestamptz)
             """
         )
-        count_result = await session.execute(text(f"""
+        count_result = await session.execute(text(quality_reads.SIDES + f"""
             SELECT
                 COUNT(*)::bigint AS selected_games,
                 COUNT(*) FILTER (
                     WHERE coverage.is_fully_analyzed
                       AND coverage.total_positions > 0
                 )::bigint AS eligible_games
-            FROM game_player gp
-            LEFT JOIN game_analysis_summary coverage ON coverage.link = gp.link
+            FROM quality_games gp
+            LEFT JOIN public.game_analysis_coverage coverage ON coverage.link = gp.link
             WHERE gp.player_name = :player
               AND (:mode = 'all' OR gp.mode = :mode)
               AND {selection_sql}
         """), params)
         coverage = dict(count_result.mappings().first() or {})
-        page_result = await session.execute(text(f"""
+        page_result = await session.execute(text(quality_reads.SIDES + f"""
             SELECT gp.link
-            FROM game_player gp
-            JOIN game_analysis_summary coverage ON coverage.link = gp.link
+            FROM quality_games gp
+            JOIN public.game_analysis_coverage coverage ON coverage.link = gp.link
             WHERE gp.player_name = :player
               AND (:mode = 'all' OR gp.mode = :mode)
               AND coverage.is_fully_analyzed
@@ -479,12 +480,13 @@ async def get_player_range_game_scores(
         """), params)
         page_game_ids = tuple(int(link) for link in page_result.scalars().all())
         if page_game_ids:
-            existing_result = await session.execute(text("""
-                SELECT game_link
-                FROM game_player_engine_summary
-                WHERE player_name = :player
-                  AND game_link = ANY(CAST(:page_game_ids AS bigint[]))
-                  AND game_efficiency IS NOT NULL
+            existing_result = await session.execute(text(quality_reads.SIDES + """
+                SELECT engine.game_link
+                FROM public.game_player_engine_summary engine JOIN quality_games gp
+                  ON gp.link=engine.game_link AND gp.is_white=engine.is_white
+                WHERE gp.player_name = :player
+                  AND engine.game_link = ANY(CAST(:page_game_ids AS bigint[]))
+                  AND engine.game_efficiency IS NOT NULL
             """), {"player": scope.player, "page_game_ids": list(page_game_ids)})
             existing_ids = {int(link) for link in existing_result.scalars().all()}
         else:
@@ -496,12 +498,12 @@ async def get_player_range_game_scores(
 
     rows: list[Any] = []
     if page_game_ids:
-        async with AsyncDBSession() as session:
-            score_result = await session.execute(text("""
+        async with read_transaction(AsyncDBSession) as session:
+            score_result = await session.execute(text(quality_reads.SIDES + """
                 SELECT
                     summary.game_link,
-                    summary.player_name,
-                    summary.player_color,
+                    gp.player_name,
+                    gp.color AS player_color,
                     gp.opponent_name,
                     gp.played_at,
                     gp.mode,
@@ -517,11 +519,11 @@ async def get_player_range_game_scores(
                     summary.final_player_cp,
                     summary.result,
                     summary.end_by
-                FROM game_player_engine_summary summary
-                JOIN game_player gp
+                FROM public.canonical_blunder_engine summary
+                JOIN quality_games gp
                   ON gp.link = summary.game_link
-                 AND gp.color = summary.player_color
-                WHERE summary.player_name = :player
+                 AND gp.is_white = summary.is_white
+                WHERE gp.player_name = :player
                   AND summary.game_link = ANY(CAST(:page_game_ids AS bigint[]))
                 ORDER BY gp.played_at DESC NULLS LAST, summary.game_link DESC
             """), {"player": scope.player, "page_game_ids": list(page_game_ids)})
@@ -601,25 +603,24 @@ async def get_player_daily_game_cp(
 ) -> dict[str, Any]:
     """Return one player-oriented total CP point per active local day."""
     local_timestamp = player_local_timestamp_sql("gp")
-    daily_sql = text(f"""
+    daily_sql = text(quality_reads.SIDES + f"""
         SELECT
             ({local_timestamp})::date AS date_game_init,
             SUM(
                 engine.own_move_cp_gain - engine.own_move_cp_loss
             )::double precision AS game_cp
-        FROM game_player_engine_summary engine
-        JOIN game_player gp
+        FROM public.canonical_blunder_engine engine
+        JOIN quality_games gp
           ON gp.link = engine.game_link
-         AND gp.color = engine.player_color
-         AND gp.player_name = engine.player_name
-        WHERE engine.player_name = :player
+         AND gp.is_white = engine.is_white
+        WHERE gp.player_name = :player
           AND (:mode = 'all' OR gp.mode = :mode)
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
         GROUP BY date_game_init
         ORDER BY date_game_init
     """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to, timezone_name
         )
@@ -629,7 +630,7 @@ async def get_player_daily_game_cp(
     if missing_links:
         await refresh_game_player_engine_summaries(missing_links)
 
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(daily_sql, params)
         rows = result.mappings().all()
 
@@ -648,7 +649,7 @@ async def get_player_quality_calendar(
     timezone_name: str | None = None,
 ) -> dict[str, Any]:
     local_timestamp = player_local_timestamp_sql("gp")
-    metrics_sql = text(f"""
+    metrics_sql = text(quality_reads.SIDES + f"""
         SELECT
             gp.mode,
             EXTRACT(ISODOW FROM {local_timestamp})::int AS weekday,
@@ -672,9 +673,9 @@ async def get_player_quality_calendar(
             0::bigint AS tablebase_winning,
             0::bigint AS tablebase_drawing,
             0::bigint AS tablebase_losing
-        FROM game_player gp
-        JOIN game_player_engine_summary engine
-          ON engine.game_link = gp.link AND engine.player_color = gp.color
+        FROM quality_games gp
+        JOIN public.canonical_blunder_engine engine
+          ON engine.game_link = gp.link AND engine.is_white = gp.is_white
         WHERE gp.player_name = :player
           AND (:mode = 'all' OR gp.mode = :mode)
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
@@ -682,21 +683,21 @@ async def get_player_quality_calendar(
         GROUP BY gp.mode, weekday, hour
         ORDER BY gp.mode, weekday, hour
     """)
-    coverage_sql = text("""
+    coverage_sql = text(quality_reads.SIDES + """
         SELECT
             gp.mode,
             COUNT(*)::bigint AS total_games,
             COUNT(*) FILTER (WHERE summary.is_fully_analyzed AND summary.total_positions > 0)::bigint AS eligible_games,
             COALESCE(SUM(summary.total_positions) FILTER (WHERE summary.is_fully_analyzed), 0)::bigint AS scored_positions
-        FROM game_player gp
-        LEFT JOIN game_analysis_summary summary ON summary.link = gp.link
+        FROM quality_games gp
+        LEFT JOIN public.game_analysis_coverage summary ON summary.link = gp.link
         WHERE gp.player_name = :player
           AND (:mode = 'all' OR gp.mode = :mode)
           AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
           AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
         GROUP BY gp.mode
     """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to, timezone_name
         )
@@ -706,7 +707,7 @@ async def get_player_quality_calendar(
     if missing_links:
         await refresh_game_player_engine_summaries(missing_links)
 
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(metrics_sql, params)
         rows = result.mappings().all()
         coverage_result = await session.execute(coverage_sql, params)
@@ -785,24 +786,24 @@ GAME_POSITIONS_SQL = text("""
     SELECT
         association.game_link,
         association.n_move,
-        association.move_color,
-        association.n_move * 2 - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END AS ply,
+        CASE WHEN association.is_white THEN 'white' ELSE 'black' END AS move_color,
+        association.n_move * 2 - CASE WHEN association.is_white THEN 1 ELSE 0 END AS ply,
         fen.fen,
         fen.score,
         fen.wdl_win,
         fen.wdl_draw,
         fen.wdl_loss,
         fen.analysis_source,
-        CASE WHEN association.move_color = 'white' THEN moves.white_move ELSE moves.black_move END AS move,
-        CASE WHEN association.move_color = 'white' THEN moves.white_reaction_time ELSE moves.black_reaction_time END AS reaction_time,
-        CASE WHEN association.move_color = 'white' THEN moves.white_time_left ELSE moves.black_time_left END AS time_left
-    FROM game_fen_association association
-    JOIN fen ON fen.fen_id = association.fen_id
-    LEFT JOIN moves ON moves.link = association.game_link AND moves.n_move = association.n_move
+        CASE WHEN association.is_white THEN moves.white_move ELSE moves.black_move END AS move,
+        CASE WHEN association.is_white THEN moves.white_reaction_time ELSE moves.black_reaction_time END AS reaction_time,
+        CASE WHEN association.is_white THEN moves.white_time_left ELSE moves.black_time_left END AS time_left
+    FROM public.game_fen_association association
+    JOIN public.fen ON fen.fen_id = association.fen_id
+    LEFT JOIN public.moves ON moves.link = association.game_link AND moves.n_move = association.n_move
     WHERE association.game_link = ANY(CAST(:game_ids AS bigint[]))
       AND fen.score IS NOT NULL
     ORDER BY association.game_link, association.n_move,
-             CASE WHEN association.move_color = 'white' THEN 0 ELSE 1 END
+             CASE WHEN association.is_white THEN 0 ELSE 1 END
 """)
 
 
@@ -811,15 +812,15 @@ async def get_player_game_measures(
     game_id: int,
     timezone_name: str | None = None,
 ) -> dict[str, Any]:
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
-        game_result = await session.execute(text("""
+        game_result = await session.execute(text(quality_reads.SIDES + """
             SELECT gp.link, gp.color, gp.mode, gp.result, gp.rating,
                    gp.opponent_name, gp.opponent_rating, gp.played_at,
                    summary.total_positions, summary.analyzed_positions,
                    summary.is_fully_analyzed
-            FROM game_player gp
-            LEFT JOIN game_analysis_summary summary ON summary.link = gp.link
+            FROM quality_games gp
+            LEFT JOIN public.game_analysis_coverage summary ON summary.link = gp.link
             WHERE gp.player_name = :player AND gp.link = :game_id
         """), {"player": scope.player, "game_id": game_id})
         game = game_result.mappings().first()
@@ -878,7 +879,7 @@ async def get_player_hour_measures(
     if hour < 0 or hour > 23:
         raise ValueError("hour must be between 0 and 23")
     cursor_time, cursor_game_id = _decode_cursor(cursor)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         scope = await _analytics_scope(session, player_name, mode, timezone_name=timezone_name)
         local_start = datetime.combine(target_date, time(hour=hour))
         local_end = local_start + timedelta(hours=1)
@@ -891,13 +892,13 @@ async def get_player_hour_measures(
             "cursor_game_id": cursor_game_id,
             "limit": limit_games + 1,
         }
-        game_result = await session.execute(text("""
+        game_result = await session.execute(text(quality_reads.SIDES + """
             SELECT gp.link, gp.color, gp.mode, gp.result, gp.rating,
                    gp.opponent_name, gp.opponent_rating, gp.played_at,
                    summary.total_positions, summary.analyzed_positions,
                    summary.is_fully_analyzed
-            FROM game_player gp
-            LEFT JOIN game_analysis_summary summary ON summary.link = gp.link
+            FROM quality_games gp
+            LEFT JOIN public.game_analysis_coverage summary ON summary.link = gp.link
             WHERE gp.player_name = :player
               AND (:mode = 'all' OR gp.mode = :mode)
               AND gp.played_at >= CAST(:hour_start AS timestamptz)

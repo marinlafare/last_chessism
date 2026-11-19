@@ -2266,7 +2266,7 @@ class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             player_analytics,
             "AsyncDBSession",
-            return_value=session_context,
+            return_value=session,
         ):
             payload = await player_analytics.get_player_engine_insights(filters)
 
@@ -2274,11 +2274,14 @@ class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload["filters"]["mode"], "all")
         self.assertEqual(payload["phase_quality"][0]["phase"], "Opening")
         self.assertIn("generated_at", payload)
-        session.execute.assert_awaited_once()
+        self.assertEqual(session.execute.await_count,3)
+        session.begin.assert_awaited_once()
+        session.commit.assert_awaited_once()
+        session.close.assert_awaited_once()
 
     def test_queries_are_aggregated_and_outputs_are_bounded(self):
         self.assertIn("summary.is_fully_analyzed", player_analytics.ENGINE_INSIGHTS_SQL)
-        self.assertIn("LAG(f.score)", player_analytics.ENGINE_INSIGHTS_SQL)
+        self.assertIn("LAG(f.score::bigint)", player_analytics.ENGINE_INSIGHTS_SQL)
         self.assertIn("LIMIT 2000", player_analytics.ENGINE_INSIGHTS_SQL)
         self.assertNotIn("'fen'", player_analytics.ENGINE_INSIGHTS_SQL)
         self.assertIn("LIMIT 240", player_analytics.PLAYING_PATTERNS_SQL)
