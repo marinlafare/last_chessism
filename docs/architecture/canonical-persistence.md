@@ -1092,9 +1092,25 @@ cancellation. Existing databases and recovery archives were not accessed or alte
 Eighteen focused checks cover admission, cleanup, native admin launchers and claims.
 The remaining profile adapters/historical tools are still awaiting A4 removal.
 
-A separate user decision is pending: historical FEN-only archives can lack source
-and timestamp, but schema15 requires both for saved scores. The existing restore
-contract preserves these missing values. No schema or restore-policy relaxation
-has been made; preserving unattributed results versus rejecting incompatible
-archives before writes requires explicit approval. Whole-database format9 validation
-and old-backup validation are unaffected by this pending FEN-only decision.
+### Approved unattributed FEN-only restoration (schema16)
+
+The user approved preserving historical scores with NULL analysis_source and a
+known or missing analyzed_at value. No engine or timestamp is invented. Other
+constraints remain: source-known results require their timestamp and matching
+metadata; tablebase fields require tablebase attribution; integer, WDL, FEN and
+continuation constraints remain strict. Verified evaluation readers still classify
+NULL-source scores as unknown, not as fresh Stockfish evidence.
+
+FEN-only backup now uses canonical typed SQL, ordered FEN locks and guarded
+transactions. Scores and replacement continuations commit together. Duplicate
+versions preserve newest-record wins; missing FENs are counted without manufacturing
+positions. Preflight rejects nonrepresentable records before any restore writes.
+Known metadata is preserved exactly. Missing timestamps are conservatively included
+in every incremental export; restoring historical timestamps still invalidates the
+next incremental base. Archive format, paths and old bytes remain unchanged.
+
+65 focused checks passed, including late commits, coherent snapshots, different
+numeric identities, archive corruption, exact metadata and repeated cancellation
+at PostgreSQL COPY. All data and archive inputs were synthetic; existing application
+data and the recovery checkpoint were untouched. Whole-database format9/old-backup
+validation remain intact. The compatibility-only fen_results helper is removed.

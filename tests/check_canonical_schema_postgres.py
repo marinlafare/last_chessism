@@ -167,13 +167,25 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
         await self.db.execute("UPDATE fen SET score=9999,analysis_source='stockfish',analyzed_at=now() WHERE fen_id=$1",ids['fens'][3])
         await self.db.execute("UPDATE fen SET score=0,analysis_source='tablebase',tablebase_wdl=0,tablebase_dtz=0,analyzed_at=now() WHERE fen_id=$1",ids['fens'][4])
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM fen WHERE score IS NOT NULL'),3)
-        for change in ["score=5", "score=5,analyzed_at=now()", "wdl_win=1", "wdl_win=1,wdl_draw=1,wdl_loss=1",
+        for change in ["score=5,analysis_source='stockfish'", "score=5,analysis_source='unrecognized',analyzed_at=now()", "wdl_win=1", "wdl_win=1,wdl_draw=1,wdl_loss=1",
                        "score=5,analysis_source='stockfish',analyzed_at=now(),tablebase_wdl=2",
                        "score=5,analysis_source='tablebase',analyzed_at=now()"]:
             with self.subTest(change=change),self.assertRaises(asyncpg.CheckViolationError):
                 await self.db.execute('UPDATE fen SET '+change+' WHERE fen_id=$1',ids['fens'][1])
         await self.db.execute("UPDATE fen SET analysis_source='tablebase_unavailable' WHERE fen_id=$1",ids['fens'][1])
         self.assertIn(FENS[1],[r['fen'] for r in await self.db.fetch(SELECT_PENDING,10)])
+
+    async def test_unattributed_scores_preserve_missing_or_known_timestamp_without_source(self):
+        ids = await self.populated()
+        await self.db.execute('UPDATE fen SET score=24 WHERE fen_id=$1',ids['fens'][0])
+        row=await self.db.fetchrow('SELECT score,analysis_source,analyzed_at FROM fen WHERE fen_id=$1',ids['fens'][0])
+        self.assertEqual(tuple(row),(24,None,None))
+        await self.db.execute("UPDATE fen SET score=25,analyzed_at='2020-01-01T00:00:00Z' WHERE fen_id=$1",ids['fens'][0])
+        row=await self.db.fetchrow('SELECT analysis_source,extract(year FROM analyzed_at) AS year FROM fen WHERE fen_id=$1',ids['fens'][0])
+        self.assertIsNone(row['analysis_source']);self.assertEqual(row['year'],2020)
+        for change in ('tablebase_wdl=1','tablebase_dtz=1','wdl_win=1,wdl_draw=2,wdl_loss=3'):
+            with self.subTest(change=change),self.assertRaises(asyncpg.CheckViolationError):
+                await self.db.execute('UPDATE fen SET '+change+' WHERE fen_id=$1',ids['fens'][0])
 
     async def test_continuation_keys_and_parent_deletion(self):
         ids = await self.populated()

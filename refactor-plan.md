@@ -1312,3 +1312,13 @@ oracles, current training/evaluation and CUDA publication. Retained full-develop
 metadata uses canonical player/revision tables and explicit read/write transactions.
 Reject stale queued jobs and saved-definition replay before numerical or file work.
 Verify current calculations, API rejection, saved reports and history preservation.
+
+## Approved FEN-only restore compatibility
+Schema16 supports saved scores with NULL analysis_source, preserving a known or
+missing timestamp, without fabricating attribution. Keep existing WDL/integer/FK
+constraints and known-source rules. Native typed restore locks existing FEN keys,
+updates values/continuations atomically, retains absent-FEN accounting and newest
+record wins. Export NULL-timestamp scores conservatively on every delta. Port
+existing archive/restore regressions to canonical fixtures and verify old archive
+bytes, unknown metadata, rollback/cancellation, snapshot/late commits and malformed
+inputs. This resolves the final known live compact-storage backup consumer.

@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 from ..backup_contract import normalize_definition
 
-VERSION = 15
+VERSION = 16
 CONTRACT = 'chessism_canonical_foundation'
 SQL_FILES = ('core.sql', 'support.sql', 'projections.sql', 'recovery.sql', 'home.sql', 'player_analytics.sql', 'fen_appearances.sql', 'exports.sql', 'research.sql', 'cuda.sql', 'graph.sql')
 INIT_LOCK = 6975310201

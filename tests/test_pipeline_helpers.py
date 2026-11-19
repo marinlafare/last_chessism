@@ -2136,19 +2136,14 @@ class FenAnalysisIncrementalBackupTests(unittest.IsolatedAsyncioTestCase):
             },
         }
         from chessism_api.operations.fen_backup import jobs, database, archive, catalog
-        session_context = MagicMock()
-        session = MagicMock()
-        session.execute = AsyncMock()
-        session.scalar = AsyncMock(return_value=datetime.fromisoformat('2024-07-05T12:00:00+00:00'))
-        session_context.__aenter__ = AsyncMock(return_value=session)
-        session_context.__aexit__ = AsyncMock(return_value=False)
-        session.begin.return_value = session_context
+        session = AsyncMock()
+        session.scalar.return_value = datetime.fromisoformat('2024-07-05T12:00:00+00:00')
         async def batches(*_):
             yield list(changed_records.values())
         original_checksum = analysis_backups._sha256(backup_path)
 
         with (
-            patch.object(jobs, 'AsyncDBSession', return_value=session_context),
+            patch.object(jobs, 'AsyncDBSession', return_value=session),
             patch.object(database, 'export_fence', AsyncMock(return_value=datetime.fromisoformat('2024-07-05T12:00:00+00:00'))),
             patch.object(database, 'export_batches', batches),
         ):

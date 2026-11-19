@@ -126,6 +126,9 @@ CREATE TABLE fen (
             AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL AND wdl_win IS NULL)
         OR (score IS NULL AND analysis_source IS NOT NULL AND analysis_source = 'tablebase_unavailable'
             AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL AND wdl_win IS NULL)
+        -- Preserved backup values without evidence of their producing engine.
+        OR (score IS NOT NULL AND analysis_source IS NULL
+            AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL)
         OR (score IS NOT NULL AND analysis_source IS NOT NULL AND analyzed_at IS NOT NULL AND
             ((analysis_source = 'stockfish' AND tablebase_wdl IS NULL AND tablebase_dtz IS NULL)
              OR (analysis_source = 'tablebase' AND tablebase_wdl IS NOT NULL))))

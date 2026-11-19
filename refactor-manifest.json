@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Canonical startup verified; FEN-only restore ownership/provenance decision pending; remaining adapter removal and broad comparison due",
+      "current_gate": "FEN-only backup policy implemented and verified; A4 adapter/tool removal continues",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -8231,7 +8231,20 @@
         "scope": "No-DDL canonical startup, schema/FK rejection, SSL/settings, repeated cancellation/disposal; native CUDA baseline launcher, cloud claim COPY, numeric contracts.",
         "failed_attempts": "25: disposal fixture attempted patch on slotted instance; corrected class patch. 26: new tool fixture super() alias invalid; corrected subclass; two new checks pass in 27. No production failures or tests bypassed."
       },
-      "pending_user_decision": "Allow explicitly unattributed historical FEN scores in canonical storage, or reject incompatible FEN-only archives before any restore writes. Existing restore test requires exact NULL-source/timestamp preservation; accepted canonical constraint forbids it."
+      "pending_user_decision": null,
+      "canonical_runtime_local_commit": "44e367a",
+      "unattributed_restore_approval": "Preserve existing FEN-only backup scores with NULL source and/or timestamp without inventing either. Other constraints remain. Explicitly approved 2026-11-18.",
+      "fen_backup_verification": {
+        "distinct_passed": 65,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0,
+        "schema_version": 16,
+        "evidence_archive": "docs/architecture/evidence/stage-a-fen-backup-2026-11-18.tar.gz",
+        "evidence_sha256": "d00b8753121fdd62bd13839bb1b2f431bdeeacc33bc3163bf0667e263e3ab9fd",
+        "failed_attempts": "Gate28 59 pass and one generated-identity fixture error; native delete/regenerate fixture corrects it; gate29 all26 pass including five public API checks.",
+        "scope": "Legacy bytes; NULL metadata; source-kind unknown; conservative NULL-timestamp deltas; late commit/snapshot isolation; native FEN identities; exact integers and WDL; preflight invalid archives; rollback and repeated cancellation."
+      }
     }
   }
 }

@@ -2327,3 +2327,23 @@ Earlier test fixture errors (slotted disposal patch and super()-bound fixture al
 are retained in evidence and corrected, without changing assertions. Source
 calculation kernels unchanged; no real GPU work required for these boundaries.
 Evidence: docs/architecture/evidence/stage-a-canonical-runtime-2026-11-18.tar.gz SHA256 429741497c651534ec53a76f7916b0a47fd800bfb5bf9e851abfa8837aa9bfff.
+
+User explicitly approved restoring unattributed FEN-only results without inventing
+source/timestamp, retaining other constraints. Schema16 adds only the NULL-source
+scored state (no tablebase-specific fields); source-known results still require
+timestamp and matching metadata. Incremental exports include NULL timestamps every
+time, so restored/unattributed results cannot be silently skipped. Convert backup
+reads/writes to native canonical keys and typed batch SQL, with operation-owned
+transactions, ordered FEN locking, exact integer values and atomic continuation
+replacement. Existing archive formats/locations/whole-DB recovery remain unchanged.
+
+FEN-only backup gate passed: 65 distinct checks, no final failures/errors/skips.
+Schema foundation29, backup21, whole-DB metadata4, evaluation contracts6 and public
+backup API5. First gate failed only the fixture attempting UPDATE of a GENERATED
+ALWAYS identity; regeneration now deletes/recreates only synthetic private FENs,
+confirming portable restore under new IDs. Old archive bytes remain unchanged;
+NULL provenance/time preserved, verified evaluation kind stays unknown; all known
+metadata constraints remain. Missing timestamps reexport conservatively each delta.
+Real PostgreSQL cancellation at continuation COPY rolls back values/alternatives
+and preserves earlier commits. Invalid later records fail preflight before writes.
+Evidence: docs/architecture/evidence/stage-a-fen-backup-2026-11-18.tar.gz SHA256 d00b8753121fdd62bd13839bb1b2f431bdeeacc33bc3163bf0667e263e3ab9fd.

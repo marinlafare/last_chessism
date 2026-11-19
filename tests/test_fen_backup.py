@@ -12,7 +12,11 @@ from uuid import uuid4
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 from sqlalchemy import select, text, update
-from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+from sqlalchemy.engine import URL
+from chessism_api.database.postgresql import canonical
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
+from tests.canonical_schema_fixture import FENS
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import Fen, FenContinuation
 from chessism_api.operations.fen_backup import archive, catalog, database, jobs
@@ -105,40 +109,30 @@ class ProgressTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payloads[-1]['processed'], 0)
 
 
-TEST_URL = os.getenv('CHESSISM_FEN_BACKUP_TEST_URL', '')
+TEST_SOCKET = os.getenv('CHESSISM_CANONICAL_TEST_SOCKET', '')
 
 
-@unittest.skipUnless(TEST_URL, 'requires isolated chessism_fen_backup_test database')
-class DatabaseTests(unittest.IsolatedAsyncioTestCase):
+@unittest.skipUnless(TEST_SOCKET, 'requires explicitly isolated canonical PostgreSQL')
+class DatabaseTests(CanonicalDatabaseTestCase):
     async def asyncSetUp(self):
-        if not TEST_URL.endswith('/chessism_fen_backup_test'):
-            raise RuntimeError('Refusing non-test database')
-        self.schema = 'fen_backup_test_' + uuid4().hex
-        self.admin = create_async_engine(TEST_URL)
-        async with self.admin.begin() as conn:
-            await conn.execute(text(f'CREATE SCHEMA "{self.schema}"'))
-        self.engine = create_async_engine(TEST_URL, connect_args={'server_settings': {'search_path': self.schema}})
-        AsyncDBSession.configure(bind=self.engine)
-        async with self.engine.begin() as conn:
-            await conn.run_sync(lambda c: Fen.__table__.create(c))
-            await conn.run_sync(lambda c: FenContinuation.__table__.create(c))
+        await super().asyncSetUp()
+        await canonical.initialize(self.db)
+        self.engine = create_async_engine(URL.create('postgresql+asyncpg', username='test',
+            database=self.name, port=55432, query={'host':self.socket}))
+        self.addAsyncCleanup(self.engine.dispose)
+        self.factory = async_sessionmaker(self.engine, expire_on_commit=False)
+        old = dict(AsyncDBSession.kw)
+        AsyncDBSession.configure(bind=self.engine, info={})
+        self.addCleanup(lambda: AsyncDBSession.configure(**old))
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
         self.root = Path(temporary.name)
-        self.a, self.b = 'fen-a', 'fen-b'
-        async with AsyncDBSession() as session, session.begin():
-            session.add_all([Fen(fen=fen, n_games=1, moves_counter='{}', score=i,
-                                 analyzed_at=datetime.now(timezone.utc) - timedelta(days=1))
-                             for i, fen in enumerate((self.a, self.b))])
-            await session.flush()
-            identifier = await session.scalar(select(Fen.fen_id).where(Fen.fen == self.a))
-            session.add(FenContinuation(fen_id=identifier, rank=1, move='a1a2', score=0))
+        self.a, self.b = FENS[:2]
+        for i, fen in enumerate((self.a, self.b)):
+            await self.db.execute("INSERT INTO fen(fen,n_games,moves_counter,score,analyzed_at) VALUES($1,1,'{}',$2,now()-interval '1 day')", fen, i)
+        await self.db.execute("INSERT INTO fen_continuation SELECT fen_id,1,'a1a2',0 FROM fen WHERE fen=$1", self.a)
 
-    async def asyncTearDown(self):
-        await self.engine.dispose()
-        async with self.admin.begin() as conn:
-            await conn.execute(text(f'DROP SCHEMA "{self.schema}" CASCADE'))
-        await self.admin.dispose()
+
 
     async def create(self):
         return await jobs.create({'job_id': uuid4().hex}, self.root)
@@ -159,7 +153,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         original = {p['file']: archive.sha256(self.root / p['file']) for p in catalog.load(self.root, first['filename'])['files']}
         await self.change(self.a, 55)
         async with AsyncDBSession() as session, session.begin():
-            session.add(Fen(fen='fen-new', n_games=1, moves_counter='{}', score=3, analyzed_at=text('now()')))
+            await session.execute(text("INSERT INTO fen(fen,n_games,score,analyzed_at) VALUES(:fen,1,3,now())"), {'fen':FENS[2]})
         second = await self.create()
         self.assertEqual(second['exported_records'], 2)
         self.assertEqual({name: archive.sha256(self.root / name) for name in original}, original)
@@ -175,8 +169,8 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result['missing'], 0)
         refresh.assert_awaited_once()
         async with AsyncDBSession() as session:
-            self.assertEqual((await session.get(Fen, self.a)).score, 55)
-            continuation = (await session.scalars(select(FenContinuation))).one()
+            self.assertEqual(await session.scalar(text('SELECT score FROM fen WHERE fen=:fen'),{'fen':self.a}),55)
+            continuation = (await session.execute(text('SELECT * FROM fen_continuation'))).one()
             self.assertEqual((continuation.move, continuation.rank, continuation.score), ('a1a2', 1, 0))
         # Historical analyzed_at values restored above force a fresh base.
         fourth = await self.create()
@@ -189,7 +183,10 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as session, session.begin():
             old_id = await session.scalar(select(Fen.fen_id).where(Fen.fen == self.a))
             await session.execute(text('DELETE FROM fen_continuation'))
-            await session.execute(text('UPDATE fen SET fen_id=fen_id+1000,score=NULL'))
+            await session.execute(text('DELETE FROM fen'))
+            await session.execute(text("SELECT setval(pg_get_serial_sequence('public.fen','fen_id'),:next_id,false)"), {'next_id':old_id+1000})
+            for fen in (self.a,self.b):
+                await session.execute(text('INSERT INTO fen(fen,n_games) VALUES(:fen,1)'),{'fen':fen})
         records = self.effective(first['filename'])
         self.assertNotIn('fen_id', records[self.a])
         self.assertNotIn('_fen_id', records[self.a])
@@ -197,7 +194,7 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
         result = await jobs.restore({}, self.root, first['filename'], AsyncMock())
         self.assertEqual(result['missing'], 0)
         async with AsyncDBSession() as session:
-            continuation = (await session.scalars(select(FenContinuation))).one()
+            continuation = (await session.execute(text('SELECT * FROM fen_continuation'))).one()
             self.assertEqual(continuation.fen_id, old_id + 1000)
             self.assertEqual((continuation.move, continuation.score), ('a1a2', 0))
 
@@ -258,8 +255,117 @@ class DatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_batched_export_does_not_accumulate_all_results(self):
         with patch.object(database, 'PAGE_SIZE', 1):
             async with AsyncDBSession() as session:
+                await session.begin()
                 sizes = [len(batch) async for batch in database.export_batches(session)]
         self.assertEqual(sizes, [1, 1])
+
+
+    async def test_unattributed_restore_preserves_original_metadata_and_archive_bytes(self):
+        stamp = '2020-01-01T00:00:00+00:00'
+        rows = [record(self.a, 24, continuations=[{'rank':2,'move':'e2e4','score':-9998}]),
+                record(self.b, -9998, analysis_source='stockfish', analyzed_at=stamp)]
+        path, _ = legacy(self.root, rows); original = path.read_bytes()
+        result = await jobs.restore({}, self.root, path.name, AsyncMock())
+        self.assertEqual((result['restored'],result['missing']), (2,0))
+        self.assertEqual(path.read_bytes(),original)
+        a = await self.db.fetchrow('SELECT score,analysis_source,analyzed_at FROM fen WHERE fen=$1',self.a)
+        b = await self.db.fetchrow('SELECT score,analysis_source,analyzed_at FROM fen WHERE fen=$1',self.b)
+        self.assertEqual(tuple(a),(24,None,None))
+        self.assertEqual(tuple(b),(-9998,'stockfish',datetime.fromisoformat(stamp)))
+        self.assertEqual(await self.db.fetchval('SELECT score FROM fen_continuation'),-9998)
+        from chessism_api.evaluations import score_kind
+        self.assertEqual(score_kind(a['score'],a['analysis_source']),'unknown')
+        self.assertEqual(score_kind(b['score'],b['analysis_source']),'mate')
+        saved = await self.create()
+        self.assertIsNone(self.effective(saved['filename'])[self.a]['analysis_source'])
+        self.assertIsNone(self.effective(saved['filename'])[self.a]['analyzed_at'])
+
+    async def test_missing_timestamp_is_always_included_in_incremental_export(self):
+        await database.restore_batch([record(self.a, 24)])
+        first = await self.create()
+        original = {p['file']: (self.root/p['file']).read_bytes() for p in catalog.load(self.root,first['filename'])['files']}
+        await database.restore_batch([record(self.a, 25)])
+        second = await self.create()
+        self.assertEqual(second['mode'],'incremental')
+        self.assertEqual(second['exported_records'],1)
+        self.assertEqual(self.effective(second['filename'])[self.a]['score'],25)
+        self.assertIsNone(self.effective(second['filename'])[self.a]['analyzed_at'])
+        third = await self.create()
+        self.assertEqual(third['exported_records'],1)
+        self.assertEqual({name:(self.root/name).read_bytes() for name in original},original)
+
+    async def test_newest_duplicate_wins_and_missing_positions_are_not_created(self):
+        missing = FENS[2]
+        self.assertEqual(await database.restore_batch([record(self.a,4),record(missing,9),record(self.a,8)]),(2,1))
+        self.assertEqual(await self.db.fetchval('SELECT score FROM fen WHERE fen=$1',self.a),8)
+        self.assertIsNone(await self.db.fetchval('SELECT fen FROM fen WHERE fen=$1',missing))
+        self.assertEqual(await self.db.fetchval('SELECT count(*) FROM fen_continuation'),0)
+
+    async def test_invalid_values_never_round_or_partially_replace_existing_results(self):
+        before = await self.db.fetch('SELECT * FROM fen ORDER BY fen_id')
+        alternatives = await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank')
+        for bad in ({'score':1.5},{'score':True},{'score':2147483648},
+                    {'analysis_source':'stockfish'}, {'analysis_source':'invented'},
+                    {'tablebase_wdl':1}, {'wdl_win':1000},
+                    {'wdl_win':500,'wdl_draw':500,'wdl_loss':1},
+                    {'continuations':[{'rank':1,'move':'e2e4','score':.5}]},
+                    {'continuations':[{'rank':1,'move':'','score':0}]},
+                    {'analyzed_at':'2020-01-01T00:00:00'}):
+            with self.subTest(bad=bad),self.assertRaises(ValueError):
+                await database.restore_batch([record(self.a,900),record(self.b,4,**bad)] if 'score' not in bad
+                    else [record(self.a,900),record(self.b,**bad)])
+            self.assertEqual(await self.db.fetch('SELECT * FROM fen ORDER BY fen_id'),before)
+            self.assertEqual(await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank'),alternatives)
+        self.assertEqual(self.engine.pool.checkedout(),0)
+
+    async def test_continuation_failure_rolls_back_score_and_previous_alternatives(self):
+        before = await self.db.fetch('SELECT * FROM fen ORDER BY fen_id')
+        alternatives = await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank')
+        await self.db.execute("""CREATE FUNCTION reject_test_alternative() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN RAISE EXCEPTION 'synthetic alternative failure'; END $$;
+            CREATE TRIGGER reject_test_alternative BEFORE INSERT ON fen_continuation
+            FOR EACH ROW EXECUTE FUNCTION reject_test_alternative()""")
+        with self.assertRaisesRegex(Exception,'synthetic alternative failure'):
+            await database.restore_batch([record(self.a,999,continuations=[{'rank':1,'move':'e2e4','score':1}])])
+        self.assertEqual(await self.db.fetch('SELECT * FROM fen ORDER BY fen_id'),before)
+        self.assertEqual(await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank'),alternatives)
+        self.assertEqual(self.engine.pool.checkedout(),0)
+
+    async def test_late_incompatible_record_refuses_restore_before_any_batch(self):
+        path,_ = legacy(self.root,[record(self.a,25)]*1001+[record(self.b,.5)])
+        original = path.read_bytes()
+        with patch.object(database,'restore_batch',AsyncMock()) as restore:
+            with self.assertRaisesRegex(ValueError,'integer'):
+                await jobs.restore({},self.root,path.name,AsyncMock())
+            restore.assert_not_awaited()
+        self.assertEqual(path.read_bytes(),original)
+
+    async def test_repeated_cancellation_rolls_back_waiting_restore_and_keeps_prior_commit(self):
+        await database.restore_batch([record(self.b,17)])
+        before = await self.db.fetch('SELECT * FROM fen ORDER BY fen_id')
+        alternatives = await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank')
+        await self.db.execute("""CREATE FUNCTION wait_test_alternative() RETURNS trigger LANGUAGE plpgsql AS
+            $$ BEGIN PERFORM pg_advisory_xact_lock(837294); RETURN NEW; END $$;
+            CREATE TRIGGER wait_test_alternative BEFORE INSERT ON fen_continuation
+            FOR EACH ROW EXECUTE FUNCTION wait_test_alternative()""")
+        blocker = await self.connect()
+        async with blocker.transaction():
+            await blocker.execute('SELECT pg_advisory_xact_lock(837294)')
+            task = asyncio.create_task(database.restore_batch([record(self.a,999,continuations=[{'rank':1,'move':'e2e4','score':1}])]))
+            try:
+                for _ in range(100):
+                    waiting = await self.db.fetchval("SELECT EXISTS(SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event='advisory')")
+                    if waiting: break
+                    await asyncio.sleep(.01)
+                self.assertTrue(waiting,'restore must reach the continuation write before cancellation')
+                task.cancel(); await asyncio.sleep(0); task.cancel()
+                with self.assertRaises(asyncio.CancelledError):await asyncio.wait_for(task,5)
+            finally:
+                if not task.done():task.cancel()
+                await asyncio.gather(task,return_exceptions=True)
+        self.assertEqual(await self.db.fetch('SELECT * FROM fen ORDER BY fen_id'),before)
+        self.assertEqual(await self.db.fetch('SELECT * FROM fen_continuation ORDER BY fen_id,rank'),alternatives)
+        self.assertEqual(self.engine.pool.checkedout(),0)
 
 
 if __name__ == '__main__':
