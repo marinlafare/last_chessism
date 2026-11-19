@@ -1,4 +1,5 @@
 """Offline Cloud Run backend tests: no credentials, cloud writes or database."""
+from chessism_api.operations.cloud_analysis import transitions
 from copy import deepcopy
 from dataclasses import asdict
 import os
@@ -185,7 +186,7 @@ class RestartTests(unittest.IsolatedAsyncioTestCase):
                 raise CleanupError("lost response")
             return remote
         cloud.request.side_effect = request
-        with patch.object(controller, "save_run", side_effect=save):
+        with patch.object(transitions, "save_run", side_effect=save):
             instance = controller.Controller(cloud, "unused")
             with self.assertRaises(CleanupError): await instance.advance(job, run)
             self.assertEqual(len(writes), 1)
@@ -203,7 +204,7 @@ class RestartTests(unittest.IsolatedAsyncioTestCase):
         cloud = Mock()
         cloud.request.return_value = remote
         cloud.pages.return_value = [{"executions": [execution]}]
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as save:
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as save:
             with self.assertRaisesRegex(ValueError, "Unexpected/running"):
                 await run_controller.advance(controller.Controller(cloud, "unused"), SimpleNamespace(selection={}), run)
             save.assert_not_called()

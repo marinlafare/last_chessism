@@ -1,4 +1,5 @@
 """One logical request, concurrent independent Spot VMs, one final cleanup gate."""
+from . import transitions
 import asyncio
 from copy import deepcopy
 from dataclasses import asdict
@@ -27,7 +28,7 @@ async def require_stopped(cloud, launch):
 
 
 async def advance(controller, job, run):
-    from .controller import save_run, save_job
+
     cloud = controller.cloud
     launch = deepcopy(run.launch)
     if run.status == "preparing":
@@ -49,13 +50,13 @@ async def advance(controller, job, run):
                           "contract": expected_contract(b"".join(map(encode, subset)), subset, config, metadata)})
         launch.update(backend="batch_spot", multi_vm=True, profile=PROFILE_ID, tasks=tasks,
                       image_id=image_id, quota=quota, jobs=[], n_vms=job.selection["n_vms"], recovery_session=1)
-        await save_run(run.id, contract=contract, launch=launch, status="publishing", error=None)
+        await transitions.save_run(run.id, contract=contract, launch=launch, status="publishing", error=None)
     elif run.status == "publishing":
         await asyncio.to_thread(check_bucket, cloud)
         launch["image"] = await asyncio.to_thread(cloud.publish, run.id, launch["image_id"])
         for task in launch["tasks"]:
             task["spec"] = api.spec_for(Config(**task["config"]), launch["image"])
-        await save_run(run.id, launch=launch, status="uploading", error=None)
+        await transitions.save_run(run.id, launch=launch, status="uploading", error=None)
     elif run.status == "uploading":
         storage = await asyncio.to_thread(cloud.storage)
         for task in launch["tasks"]:
@@ -63,7 +64,7 @@ async def advance(controller, job, run):
             created = await asyncio.to_thread(storage.create, task["config"]["input"], raw)
             if not created and await asyncio.to_thread(storage.read, task["config"]["input"]) != raw:
                 raise ValueError("Batch shard input already exists with different contents")
-        await save_run(run.id, status="submitting", error=None)
+        await transitions.save_run(run.id, status="submitting", error=None)
     elif run.status == "submitting":
         # Check the entire fleet once before starting its first supervisor. A
         # resumed partial submission must not count its own running VMs twice.
@@ -79,43 +80,43 @@ async def advance(controller, job, run):
                 task["recovery_execution"] = await asyncio.to_thread(cloud.start_recovery, task["run_id"], task)
                 # Persist each owner before continuing; lost replies are fenced
                 # by the existing workflow's create-only ownership document.
-                await save_run(run.id, launch=deepcopy(launch), error=None)
-        await save_run(run.id, launch=launch, status="running", error=None)
+                await transitions.save_run(run.id, launch=deepcopy(launch), error=None)
+        await transitions.save_run(run.id, launch=launch, status="running", error=None)
     elif run.status == "running":
         await poll(controller, job, run, launch)
     elif run.status == "finalizing":
         results.validate_saved(run, launch)
-        await save_run(run.id, status="cleanup_planning", error=None)
+        await transitions.save_run(run.id, status="cleanup_planning", error=None)
     elif run.status == "cleanup_planning":
         results.validate_saved(run, launch)
         await require_stopped(cloud, launch)
         plan = await asyncio.to_thread(prepare, cloud, launch["jobs"], include_failed=True)
-        await save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
+        await transitions.save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
     elif run.status == "cleaning":
         results.validate_saved(run, launch)
         await require_stopped(cloud, launch)
         report = await batch_cleanup.apply(cloud, run.cleanup_plan, job_id=run.job_id, run_id=run.id)
         launch["cleanup_report"] = report
-        await save_run(run.id, launch=launch, status="log_planning" if report["complete"] else "cleaning", error=None)
+        await transitions.save_run(run.id, launch=launch, status="log_planning" if report["complete"] else "cleaning", error=None)
     elif run.status == "log_planning":
         results.validate_saved(run, launch)
         plans = await history.cleanup_plans(run.id)
         uids = {j["uid"] for plan in plans if plan for j in plan.get("jobs", [])}
         launch["log_cleanup_plan"] = await asyncio.to_thread(plan_logs, cloud, uids)
-        await save_run(run.id, launch=launch, status="log_cleaning", error=None)
+        await transitions.save_run(run.id, launch=launch, status="log_cleaning", error=None)
     elif run.status == "log_cleaning":
         results.validate_saved(run, launch)
         report = await asyncio.to_thread(remove_logs, cloud, launch["log_cleanup_plan"])
         launch["log_cleanup_report"] = report
-        await save_run(run.id, launch=launch, status="refreshing" if report["complete"] else "log_cleaning", error=None)
+        await transitions.save_run(run.id, launch=launch, status="refreshing" if report["complete"] else "log_cleaning", error=None)
     elif run.status == "failed":
-        await save_job(job.id, status="failed", error=run.error)
+        await transitions.save_job(job.id, status="failed", error=run.error)
     else:
         raise ValueError(f"Unknown Batch fleet phase: {run.status}")
 
 
 async def poll(controller, job, run, launch):
-    from .controller import save_run, save_job
+
     cloud = controller.cloud
     storage = await asyncio.to_thread(cloud.storage)
     terminal = {"SUCCEEDED", "FAILED", "CANCELLED"}
@@ -149,11 +150,11 @@ async def poll(controller, job, run, launch):
     state = ("SUCCEEDED" if all(s == "SUCCEEDED" for s in states) else
              "CANCELLED" if finished and job.selection.get("cancel_requested") else
              "FAILED" if finished else "RUNNING")
-    await save_run(run.id, launch=launch, cloud_state=state, error=None)
+    await transitions.save_run(run.id, launch=launch, cloud_state=state, error=None)
     if finished and state != "SUCCEEDED":
         message = "Batch fleet stopped. Successful VM results are safe; retry restarts only unfinished VMs from checkpoints."
-        await save_run(run.id, status="failed", error=message)
-        await save_job(run.job_id, status="failed", error=message)
+        await transitions.save_run(run.id, status="failed", error=message)
+        await transitions.save_job(run.job_id, status="failed", error=message)
     elif state == "SUCCEEDED":
         async with AsyncDBSession() as session:
             current = await session.get(CloudAnalysisRun, run.id)
@@ -163,4 +164,4 @@ async def poll(controller, job, run, launch):
                 launch = await results.collect(storage, current, launch, storage_factory=cloud.storage)
         finally:
             await timings.save(run.job_id, run.id)
-        await save_run(run.id, launch=launch, status="finalizing", error=None)
+        await transitions.save_run(run.id, launch=launch, status="finalizing", error=None)

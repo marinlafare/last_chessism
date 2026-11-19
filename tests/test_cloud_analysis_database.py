@@ -3,6 +3,7 @@
 Set CHESSISM_CANONICAL_TEST_SOCKET to an isolated disposable server. Each test
 creates and drops a fresh canonical database; no application database is used.
 """
+from chessism_api.operations.cloud_analysis import transitions
 import asyncio
 import chess
 import random
@@ -95,7 +96,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
             record = checkpoint.prepare(row, {"fen": row["fen"], "is_valid": True, "analysis": lines}, 1)
             tasks.append({"index": index, "start": index, "count": 1, "contract": contract})
             payloads.append(encode({"fingerprint": contract["fingerprint"], "records": [record]}))
-        await controller.save_run(run.id, launch={"backend": backend, "tasks": tasks})
+        await transitions.save_run(run.id, launch={"backend": backend, "tasks": tasks})
         self.assertEqual(await importer.import_batch(run.id, payloads[1], 0, task_index=1), 1)
         self.assertEqual(await importer.import_batch(run.id, payloads[1], 0, task_index=1), 0)
         async with AsyncDBSession() as session:
@@ -124,7 +125,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
             else:
                 analysis = {"score": 0, "pv": []}
             records.append(checkpoint.prepare(row, {"fen": row["fen"], "is_valid": True, "analysis": analysis}, 10))
-        await controller.save_run(run.id, contract=contract)
+        await transitions.save_run(run.id, contract=contract)
         return contract, encode({"fingerprint": contract["fingerprint"], "records": records})
 
     async def test_cloud_claims_are_visible_before_first_result_and_local_locks_are_skipped(self):
@@ -160,7 +161,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
             self.assertEqual(await unclaimed_locked_fens(session, self.fens), self.fens[1:])
 
     async def test_paused_job_blocks_following_cloud_launches(self):
-        await controller.save_job(self.job.id, status="paused")
+        await transitions.save_job(self.job.id, status="paused")
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudAnalysisJob(id=uuid4().hex, selection=CloudJobRequest().model_dump(),
                                         target=1000, status="queued", imported=0))
@@ -172,7 +173,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
 
     async def test_daemon_heartbeat_and_shutdown_release_singleton_without_launching(self):
         from chessism_api.operations.cloud_analysis import __main__ as daemon
-        await controller.save_job(self.job.id, status="paused")
+        await transitions.save_job(self.job.id, status="paused")
         cloud = Mock()
         async def test_engine(*args, **kwargs):
             engine = create_async_engine(self.url)
@@ -208,7 +209,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
     async def test_game_jobs_accept_two_hundred_thousand_and_reject_larger_previews(self):
         from fastapi import HTTPException
         from chessism_api.routers.cloud_analysis import create_cloud_job
-        await controller.save_job(self.job.id, status="complete")
+        await transitions.save_job(self.job.id, status="complete")
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
         redis = AsyncMock()
@@ -221,7 +222,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
                 saved = await session.get(CloudAnalysisJob, created["id"])
                 self.assertEqual(saved.target, count)
                 self.assertEqual(saved.selection["total_fens"], count)
-            await controller.save_job(created["id"], status="complete")
+            await transitions.save_job(created["id"], status="complete")
         redis.get.return_value = json.dumps({"game_links": [21, 22], "fens_to_analyze": 10000001})
         with self.assertRaises(HTTPException) as raised:
             await create_cloud_job(request, redis)
@@ -302,7 +303,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
         performance = {"schema_version": 1, "fingerprint": contract["fingerprint"],
             "position_count": 2, "resumed": 2, "analyzed_this_attempt": 0, "workers": [],
             "metrics": {"worker_seconds": 1, "fen_per_second": 0}}
-        await controller.save_run(run.id, status="running", launch={
+        await transitions.save_run(run.id, status="running", launch={
             "jobs": ["test-job"], "uid": "uid", "workflow_version": 2})
         cloud = Mock()
         cloud.job.return_value = {"uid": "uid", "status": {"state": "SUCCEEDED"}}
@@ -334,7 +335,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
     async def test_ui_create_requires_online_controller_and_freezes_preview(self):
         from fastapi import HTTPException
         from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs
-        await controller.save_job(self.job.id, status="complete")
+        await transitions.save_job(self.job.id, status="complete")
         redis = AsyncMock()
         with self.assertRaises(HTTPException) as raised:
             await create_cloud_job(CloudJobRequest(), redis)
@@ -378,15 +379,15 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
         # durable launch configuration exists (including a paused publication).
         with self.assertRaises(HTTPException):
             await revise_batch_vms(self.job.id, CloudVmCountRequest(n_vms=2))
-        await controller.save_job(self.job.id, status="paused")
-        await controller.save_run(run.id, launch={"image_id": "pinned"}, status="publishing")
+        await transitions.save_job(self.job.id, status="paused")
+        await transitions.save_run(run.id, launch={"image_id": "pinned"}, status="publishing")
         with self.assertRaises(HTTPException):
             await revise_batch_vms(self.job.id, CloudVmCountRequest(n_vms=2))
 
     async def test_two_tabs_cannot_create_concurrent_cloud_jobs(self):
         from fastapi import HTTPException
         from chessism_api.routers.cloud_analysis import create_cloud_job
-        await controller.save_job(self.job.id, status="complete")
+        await transitions.save_job(self.job.id, status="complete")
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
         outcomes = await asyncio.gather(
@@ -408,7 +409,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
             session.add(CloudAnalysisJob(id=other_id, selection=CloudJobRequest().model_dump(),
                 target=1000, imported=0, status="paused"))
         for state in ("queued", "running", "paused", "waiting", "failed"):
-            await controller.save_job(self.job.id, status=state)
+            await transitions.save_job(self.job.id, status=state)
             for action in (lambda: create_cloud_job(CloudJobRequest(), AsyncMock()),
                            lambda: resume_cloud_job(other_id), lambda: retry_cloud_job(other_id)):
                 with self.subTest(state=state), self.assertRaises(HTTPException) as raised:
@@ -419,10 +420,10 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
     async def test_explicit_cloud_retry_keeps_claims_and_same_checkpoints(self):
         from chessism_api.routers.cloud_analysis import retry_cloud_job
         run = await self.reserved_run()
-        await controller.save_run(run.id, status="failed", cloud_state="FAILED", launch={
+        await transitions.save_run(run.id, status="failed", cloud_state="FAILED", launch={
             "jobs": [f"chessism-ui-{run.id}-1"], "image": "pinned-image",
         })
-        await controller.save_job(self.job.id, status="failed")
+        await transitions.save_job(self.job.id, status="failed")
         await retry_cloud_job(self.job.id)
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisRun, run.id)
@@ -475,7 +476,7 @@ class CloudDatabaseTests(CanonicalDatabaseTestCase):
     async def test_incremental_import_then_restart_finishes_before_cleanup(self):
         run = await self.reserved_run()
         contract, raw = await self.results(run)
-        await controller.save_run(run.id, status="running", launch={"jobs": ["test-job"], "uid": "uid"})
+        await transitions.save_run(run.id, status="running", launch={"jobs": ["test-job"], "uid": "uid"})
         name, receipt, _ = importer.validate_batch(raw, 0, run.positions, contract)
         manifest = {"status": "complete", "fingerprint": contract["fingerprint"],
                     "position_count": 2, "records": receipt["records"]}

@@ -1,4 +1,5 @@
 """Offline fleet tests. All cloud calls and DB state changes are fakes."""
+from chessism_api.operations.cloud_analysis import transitions
 from copy import deepcopy
 from dataclasses import asdict
 import json
@@ -134,7 +135,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
         async def save(_, **fields):
             for key, value in fields.items(): setattr(run, key, deepcopy(value))
         cloud.start_recovery.side_effect = ["owner0", CleanupError("lost reply")]
-        with patch.object(controller, "save_run", side_effect=save), patch.object(api, "check_quota"):
+        with patch.object(transitions, "save_run", side_effect=save), patch.object(api, "check_quota"):
             with self.assertRaises(CleanupError):
                 await fleet.advance(controller.Controller(cloud, "local"), SimpleNamespace(selection={}), run)
             self.assertEqual(run.launch["tasks"][0]["recovery_execution"], "owner0")
@@ -147,7 +148,7 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_cancel_before_partial_submission_fences_every_unfinished_vm(self):
         run, cloud = fixture(), Mock()
-        with patch.object(controller, "save_run", new_callable=AsyncMock), patch.object(api, "check_quota") as quota:
+        with patch.object(transitions, "save_run", new_callable=AsyncMock), patch.object(api, "check_quota") as quota:
             await fleet.advance(controller.Controller(cloud, "local"), SimpleNamespace(selection={"cancel_requested": True}), run)
             self.assertEqual(cloud.cancel_recovery.call_count, 2)
             self.assertEqual(cloud.start_recovery.call_count, 2)
@@ -168,8 +169,8 @@ class LifecycleTests(unittest.IsolatedAsyncioTestCase):
             return {**deepcopy(t["spec"]), "uid": "uid", "status": {"state": "FAILED" if name == "job0" else "RUNNING"}}
         cloud.job.side_effect = remote
         with patch.object(results, "import_ready", new_callable=AsyncMock) as imports, \
-             patch.object(controller, "save_run", new_callable=AsyncMock) as save, \
-             patch.object(controller, "save_job", new_callable=AsyncMock) as save_job:
+             patch.object(transitions, "save_run", new_callable=AsyncMock) as save, \
+             patch.object(transitions, "save_job", new_callable=AsyncMock) as save_job:
             await fleet.poll(controller.Controller(cloud, "local"), SimpleNamespace(selection={}), run, deepcopy(run.launch))
             self.assertEqual(imports.await_count, 1)
             self.assertEqual(len(imports.call_args.args[2]), 2)

@@ -1,4 +1,5 @@
 """Opt-in disposable PostgreSQL regression tests for finalization memory fixes."""
+from chessism_api.operations.cloud_analysis import transitions
 import unittest
 from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from types import SimpleNamespace
@@ -30,8 +31,8 @@ class FinalizationDatabaseTests(CanonicalDatabaseTestCase):
             saved = await session.get(CloudAnalysisRun, run.id)
         manifest = completion_manifest(contract, len(saved.positions), saved.receipts)
         with patch.object(codec, 'read_documents', side_effect=AssertionError('Full document read')):
-            await controller.save_run(run.id, cloud_state='SUCCEEDED', status='running')
-            await controller.save_run(run.id, status='finalizing', launch={'manifest': manifest})
+            await transitions.save_run(run.id, cloud_state='SUCCEEDED', status='running')
+            await transitions.save_run(run.id, status='finalizing', launch={'manifest': manifest})
         async with AsyncDBSession() as session:
             state = (await session.execute(select(CloudAnalysisRun.results_verified_at,
                 CloudAnalysisRun.completion_manifest_sha256, CloudAnalysisRun.imported_count)
@@ -47,8 +48,8 @@ class FinalizationDatabaseTests(CanonicalDatabaseTestCase):
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisRun, run.id)
         manifest = completion_manifest(contract, len(saved.positions), saved.receipts)
-        await controller.save_run(run.id, status='finalizing', launch={'manifest': manifest})
-        await controller.save_run(run.id, status='refreshing')
+        await transitions.save_run(run.id, status='finalizing', launch={'manifest': manifest})
+        await transitions.save_run(run.id, status='refreshing')
         original = codec.read_document
         def guarded(connection, ref):
             if ref.endswith((':positions', ':receipts')) or ':batch:' in ref:
@@ -97,7 +98,7 @@ class FinalizationDatabaseTests(CanonicalDatabaseTestCase):
         launch['tasks'] = [{'index': 0, 'start': 0, 'count': 2, 'contract': contract}]
         launch['run_execution'] = {'name': execution['name'], 'uid': execution['uid']}
         execution['completionTime'] = '2026-10-28T03:00:00Z'
-        await controller.save_run(run.id, status='running', launch=launch)
+        await transitions.save_run(run.id, status='running', launch=launch)
         async with AsyncDBSession() as session:
             current = await session.get(CloudAnalysisRun, run.id)
         self.assertFalse(current.receipts)

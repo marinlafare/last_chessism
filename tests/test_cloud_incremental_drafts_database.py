@@ -144,7 +144,7 @@ class IncrementalDraftTests(CanonicalDatabaseTestCase):
     async def test_launch_rechecks_live_union_and_retains_cache_until_queue_capture(self):
         await self.available()
         from chessism_api.routers.cloud_game_drafts import create_draft
-        from chessism_api.operations.cloud_analysis.controller import save_job
+        from chessism_api.operations.cloud_analysis.transitions import save_job
         for backend in ('batch_spot', 'cloud_run'):
             self.draft = await create_draft()
             await self.add((101, 102))

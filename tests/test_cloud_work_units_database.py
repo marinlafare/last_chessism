@@ -1,4 +1,5 @@
 """Opt-in real PostgreSQL tests, fake cloud only; never the application DB."""
+from chessism_api.operations.cloud_analysis import transitions
 from copy import deepcopy
 from datetime import datetime, timezone
 import json
@@ -29,7 +30,7 @@ class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
 
     async def root(self):
         selection = {**self.job.selection, 'execution_mode': 'batch_work_units_v1'}
-        await controller.save_job(self.job.id, target=3, selection=selection)
+        await transitions.save_job(self.job.id, target=3, selection=selection)
         self.job.selection, self.job.target = selection, 3
         await controller.reserve(self.job, 3)
         async with AsyncDBSession() as session:
@@ -43,7 +44,7 @@ class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
         root = await self.root()
         launch = {'backend': 'batch_spot', 'workflow_version': 3, 'multi_vm': True,
                   'units': [], 'tasks': [], 'jobs': [], 'n_vms': 1}
-        await controller.save_run(root.id, launch=launch)
+        await transitions.save_run(root.id, launch=launch)
         for count in (2, 1):
             root = await self.reload(root.id)
             self.assertEqual(await fleet.reserve_unit(self.job, root, root.launch, 0, count), count)
@@ -243,7 +244,7 @@ class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
         async with AsyncDBSession() as session, session.begin():
             await session.execute(update(CloudAnalysisRun).where(CloudAnalysisRun.id == root.id).values(imported_count=3))
         launch = results.performance(launch)
-        await controller.save_run(root.id, status='finalizing', launch=launch)
+        await transitions.save_run(root.id, status='finalizing', launch=launch)
         # Parent proof is immutable, even if altered metadata still looks complete.
         root = await self.reload(root.id)
         await results.verify_saved(root, root.launch)
@@ -278,7 +279,7 @@ class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
             self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).status, 'complete')
 
     async def test_all_new_batch_requests_use_same_bounded_preparation(self):
-        await controller.save_job(self.job.id, status='complete')
+        await transitions.save_job(self.job.id, status='complete')
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
         for count, mode in ((10000, 'batch_sequence_v2'), (200000, 'batch_sequence_v2'),
@@ -288,4 +289,4 @@ class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
                 job = await session.get(CloudAnalysisJob, created['id'])
                 self.assertEqual(job.target, count)
                 self.assertEqual(job.selection['execution_mode'], mode)
-            await controller.save_job(created['id'], status='complete')
+            await transitions.save_job(created['id'], status='complete')

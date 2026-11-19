@@ -1,4 +1,5 @@
 """Cloud Run backend. PostgreSQL is authoritative; no host needed during execution."""
+from . import transitions
 import asyncio
 from .result_receipts import completion_manifest
 from dataclasses import asdict
@@ -20,7 +21,7 @@ from .ingestion import ingest_ready
 
 
 async def advance(controller, job, run):
-    from .controller import save_run, save_job
+
     cloud = controller.cloud
     launch = dict(run.launch)
     name = api.job_name(run.id)
@@ -44,7 +45,7 @@ async def advance(controller, job, run):
         launch.update(backend="cloud_run", profile=PROFILE_ID, config=asdict(config),
                       image_id=image_id, tasks=tasks, jobs=[], run_job=name, run_executions=[],
                       n_cpus=job.selection["n_cpus"])
-        await save_run(run.id, contract=contract, launch=launch, status="publishing", error=None)
+        await transitions.save_run(run.id, contract=contract, launch=launch, status="publishing", error=None)
         return
     config = Config(**launch["config"]).validate()
     if run.status == "publishing":
@@ -52,7 +53,7 @@ async def advance(controller, job, run):
         await asyncio.to_thread(check_bucket, cloud)
         launch["image"] = await asyncio.to_thread(cloud.publish, run.id, launch["image_id"])
         launch["spec"] = api.spec_for(run.id, config, launch["image"], len(launch["tasks"]), launch["n_cpus"])
-        await save_run(run.id, launch=launch, status="uploading", error=None)
+        await transitions.save_run(run.id, launch=launch, status="uploading", error=None)
     elif run.status == "uploading":
         storage = await asyncio.to_thread(cloud.storage)
         for task in launch["tasks"]:
@@ -61,12 +62,12 @@ async def advance(controller, job, run):
             created = await asyncio.to_thread(storage.create, cfg.input, raw)
             if not created and await asyncio.to_thread(storage.read, cfg.input) != raw:
                 raise ValueError("Cloud Run input changed; refusing reuse")
-        await save_run(run.id, status="run_creating", error=None)
+        await transitions.save_run(run.id, status="run_creating", error=None)
     elif run.status == "run_creating":
         remote = await asyncio.to_thread(api.ensure_job, cloud, name, launch["spec"])
         if remote:
             launch["run_uid"] = remote["uid"]
-            await save_run(run.id, launch=launch, status="run_start", error=None)
+            await transitions.save_run(run.id, launch=launch, status="run_start", error=None)
     elif run.status == "run_start":
         remote = await asyncio.to_thread(require_job, cloud, launch)
         current = await asyncio.to_thread(api.executions, cloud, name)
@@ -75,11 +76,11 @@ async def advance(controller, job, run):
             raise ValueError("Unexpected/running execution; refusing duplicate launch")
         # Persist BEFORE POST. jobs:run has no idempotency key. On any uncertain
         # response/restart, discover the execution; NEVER blindly replay POST.
-        await save_run(run.id, status="run_discover", error=None)
+        await transitions.save_run(run.id, status="run_discover", error=None)
         operation = await asyncio.to_thread(cloud.request, "run", name + ":run", method="POST", body={"etag": remote["etag"]})
         cloud.operation(operation)
         launch["run_operation"] = operation["name"]
-        await save_run(run.id, launch=launch, error=None)
+        await transitions.save_run(run.id, launch=launch, error=None)
     elif run.status == "run_discover":
         await asyncio.to_thread(require_job, cloud, launch)
         current = await asyncio.to_thread(api.executions, cloud, name)
@@ -93,7 +94,7 @@ async def advance(controller, job, run):
         verify_execution(execution, launch)
         launch["run_execution"] = {"name": execution["name"], "uid": execution["uid"]}
         launch["run_executions"] = [*launch["run_executions"], launch["run_execution"]]
-        await save_run(run.id, launch=launch, status="running", error=None)
+        await transitions.save_run(run.id, launch=launch, status="running", error=None)
     elif run.status == "running":
         await asyncio.to_thread(require_job, cloud, launch)
         ident = launch["run_execution"]
@@ -104,15 +105,15 @@ async def advance(controller, job, run):
         state = api.terminal(execution)
         if job.selection.get("cancel_requested") and state == "RUNNING":
             await asyncio.to_thread(cloud.request, "run", ident["name"] + ":cancel", method="POST", body={"etag": execution["etag"]})
-        await save_run(run.id, cloud_state=state)
+        await transitions.save_run(run.id, cloud_state=state)
         storage = await asyncio.to_thread(cloud.storage)
         imported = await ingest_ready(storage, run, [{**task, 'output': api.task_config(
             config, task['index'], len(launch['tasks'])).output} for task in launch['tasks']],
             storage_factory=cloud.storage)
         if state in {"FAILED", "CANCELLED"}:
             message = "Cloud Run stopped; committed results and checkpoints retained. Retry is a new billable execution."
-            await save_run(run.id, status="failed", error=message)
-            await save_job(run.job_id, status="failed", error=message)
+            await transitions.save_run(run.id, status="failed", error=message)
+            await transitions.save_job(run.job_id, status="failed", error=message)
         elif state == "SUCCEEDED":
             if imported:
                 # The input snapshot is immutable. Only receipts changed during
@@ -137,10 +138,10 @@ async def advance(controller, job, run):
                                      "task_count": len(performance), "parallelism": launch["spec"]["template"]["parallelism"],
                                      "worker_seconds_sum": sum(p["metrics"]["worker_seconds"] for p in performance),
                                      "note": "Sum of task processing times, not wall time or billed duration; task reports saved locally."}
-            await save_run(run.id, launch=launch, status="finalizing", error=None)
+            await transitions.save_run(run.id, launch=launch, status="finalizing", error=None)
     elif run.status == "finalizing":
         validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
-        await save_run(run.id, status="cleanup_planning", error=None)
+        await transitions.save_run(run.id, status="cleanup_planning", error=None)
     elif run.status in {"cleanup_planning", "cleaning"}:
         from cloud_job.cloud_run_cleanup import prepare, apply
         validate_manifest(launch["manifest"], run.positions, run.contract, run.receipts)
@@ -148,7 +149,7 @@ async def advance(controller, job, run):
             validate_performance(report, task["contract"], 1)
         if run.status == "cleanup_planning":
             plan = await asyncio.to_thread(prepare, cloud, launch, run.id)
-            await save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
+            await transitions.save_run(run.id, cleanup_plan=plan, status="cleaning", error=None)
         else:
             from .cleanup_progress import bind
             timings = bind(StageTimings(), run.job_id)
@@ -157,9 +158,9 @@ async def advance(controller, job, run):
             finally:
                 await timings.save(run.job_id, run.id)
             launch["cleanup_report"] = result
-            await save_run(run.id, launch=launch, status="refreshing" if result["complete"] else "cleaning", error=None)
+            await transitions.save_run(run.id, launch=launch, status="refreshing" if result["complete"] else "cleaning", error=None)
     elif run.status == "failed":
-        await save_job(run.job_id, status="failed", error=run.error)
+        await transitions.save_job(run.job_id, status="failed", error=run.error)
     else:
         raise ValueError("Unknown Cloud Run phase: " + run.status)
 

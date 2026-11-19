@@ -1,4 +1,5 @@
 """Opt-in EMPTY isolated PostgreSQL, fake cloud; never the application database."""
+from chessism_api.operations.cloud_analysis import transitions
 from contextlib import ExitStack
 import asyncio
 import unittest
@@ -32,7 +33,7 @@ class CancellationDatabaseTests(CanonicalDatabaseTestCase):
     async def test_priority_stop_dispatches_while_normal_processing_is_blocked(self):
         run = await self.reserved_run(2)
         launch = {'spec': {'taskGroups': []}, 'recovery_session': 1, 'jobs': []}
-        await controller.save_run(run.id, launch=launch, status='running')
+        await transitions.save_run(run.id, launch=launch, status='running')
         cloud = self.fake_cloud()
         remote = {'name': f'projects/{PROJECT}/locations/{REGION}/jobs/chessism-ui-{run.id}-1',
                   'uid': 'priority-test-uid', 'status': {'state': 'RUNNING'}}
@@ -131,7 +132,7 @@ class CancellationDatabaseTests(CanonicalDatabaseTestCase):
         launch['tasks'] = lanes(launch)
         for task in launch['tasks']:
             task['spec'] = spec_for([u for u in launch['units'] if u['vm_index'] == task['index']], launch['image'])
-        await controller.save_run(root.id, launch=launch, status='running')
+        await transitions.save_run(root.id, launch=launch, status='running')
         task = launch['tasks'][0]
         name = f"chessism-ui-{task['run_id']}-1"
         remote = {**task['spec'], 'name': f'projects/{PROJECT}/locations/{REGION}/jobs/{name}',
@@ -180,6 +181,6 @@ class CancellationDatabaseTests(CanonicalDatabaseTestCase):
     async def test_stop_intent_cannot_be_overwritten_by_a_finishing_tick(self):
         await stop_and_cleanup(self.job.id)
         for state in ('complete', 'failed', 'waiting', 'limit_reached'):
-            await controller.save_job(self.job.id, status=state)
+            await transitions.save_job(self.job.id, status=state)
             async with AsyncDBSession() as session:
                 self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).status, 'running')

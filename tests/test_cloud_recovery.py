@@ -1,4 +1,5 @@
 """Controller tests for the server-side supervisor, with all cloud calls mocked."""
+from chessism_api.operations.cloud_analysis import transitions
 from copy import deepcopy
 import os
 from types import SimpleNamespace
@@ -30,8 +31,8 @@ class SupervisedControllerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_failed_attempt_is_not_failed_logical_job_while_google_recovery_continues(self):
         cloud, run, config = self.setup_run()
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as saved, \
-             patch.object(controller, "save_job", new_callable=AsyncMock) as parent, \
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as saved, \
+             patch.object(transitions, "save_job", new_callable=AsyncMock) as parent, \
              patch.object(controller, "import_batch", new_callable=AsyncMock) as imported:
             await controller.Controller(cloud, "image").poll(run, config)
         imported.assert_awaited_once()
@@ -44,8 +45,8 @@ class SupervisedControllerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_application_budget_exhaustion_is_reported_separately_from_preemptions(self):
         cloud, run, config = self.setup_run("FAILED", "SUCCEEDED")
-        with patch.object(controller, "save_run", new_callable=AsyncMock), \
-             patch.object(controller, "save_job", new_callable=AsyncMock) as parent, \
+        with patch.object(transitions, "save_run", new_callable=AsyncMock), \
+             patch.object(transitions, "save_job", new_callable=AsyncMock) as parent, \
              patch.object(controller, "import_batch", new_callable=AsyncMock):
             await controller.Controller(cloud, "image").poll(run, config)
         self.assertEqual(parent.await_args.kwargs["status"], "failed")
@@ -54,7 +55,7 @@ class SupervisedControllerTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_batch_success_waits_for_supervisor_to_stop_before_finalization(self):
         cloud, run, config = self.setup_run("SUCCEEDED", "ACTIVE", "SUCCEEDED")
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as saved, \
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as saved, \
              patch.object(controller, "import_batch", new_callable=AsyncMock):
             await controller.Controller(cloud, "image").poll(run, config)
         self.assertFalse(any(call.kwargs.get("status") == "finalizing" for call in saved.await_args_list))
@@ -63,7 +64,7 @@ class SupervisedControllerTests(unittest.IsolatedAsyncioTestCase):
     async def test_replaced_batch_uid_stops_before_import(self):
         cloud, run, config = self.setup_run()
         cloud.job.return_value["uid"] = "wrong"
-        with patch.object(controller, "save_run", new_callable=AsyncMock), self.assertRaisesRegex(ValueError, "replaced"):
+        with patch.object(transitions, "save_run", new_callable=AsyncMock), self.assertRaisesRegex(ValueError, "replaced"):
             await controller.Controller(cloud, "image").poll(run, config)
         cloud.storage.assert_not_called()
 
@@ -71,7 +72,7 @@ class SupervisedControllerTests(unittest.IsolatedAsyncioTestCase):
         cloud, run, _ = self.setup_run()
         run.status = "submitting"
         cloud.start_recovery.return_value = "execution"
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as saved:
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as saved:
             await controller.Controller(cloud, "image").advance(SimpleNamespace(selection={}), run)
         cloud.submit.assert_not_called()
         cloud.start_recovery.assert_called_once()

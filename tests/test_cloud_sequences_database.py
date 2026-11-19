@@ -1,4 +1,5 @@
 """Real isolated PostgreSQL, mocked Google. Never launch billable test jobs."""
+from chessism_api.operations.cloud_analysis import transitions
 from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -35,7 +36,7 @@ class SequenceDatabaseTests(CanonicalDatabaseTestCase):
     objects = units_test.WorkUnitDatabaseTests.objects
 
     async def start(self, *, per_loop=2, times=2, add_fourth=True):
-        await controller.save_job(self.job.id, status='complete')
+        await transitions.save_job(self.job.id, status='complete')
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
             if add_fourth:
@@ -75,7 +76,7 @@ class SequenceDatabaseTests(CanonicalDatabaseTestCase):
         self.assertEqual(row['runs'], [])
 
     async def test_game_preview_is_divided_not_multiplied_by_times(self):
-        await controller.save_job(self.job.id, status='complete')
+        await transitions.save_job(self.job.id, status='complete')
         async with AsyncDBSession() as session, session.begin():
             session.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
         redis = AsyncMock()
@@ -198,7 +199,7 @@ class SequenceDatabaseTests(CanonicalDatabaseTestCase):
         await self.freeze()
         rows=await sequence.cycles(self.job.id)
         first=rows[0][1]
-        await controller.save_run(first.id,status='failed',error='simulated failure')
+        await transitions.save_run(first.id,status='failed',error='simulated failure')
         await self.tick()
         self.assertEqual((await self.job_state()).status,'failed')
         await self.tick()

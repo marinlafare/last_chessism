@@ -1,4 +1,5 @@
 """One cleanup plan for the whole sequence and its shared image."""
+from . import transitions
 import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import select
@@ -11,7 +12,7 @@ from .log_cleanup import plan_logs, remove_logs
 
 
 async def finish(controller, job, control, roots, sequence):
-    from .controller import save_run, save_job
+
     from .auto_sequence import save_control, refresh_recovery
     from .work_units_controller import advance
     from .importer import refresh_global_projections
@@ -36,16 +37,16 @@ async def finish(controller, job, control, roots, sequence):
             refreshed = await refresh_recovery(cloud, root.launch, control, require_succeeded=True)
             for task in refreshed['tasks']:
                 await asyncio.to_thread(cloud.require_recovery_stopped, task['run_id'], task)
-            await save_run(root.id, launch=refreshed)
+            await transitions.save_run(root.id, launch=refreshed)
             jobs.extend(refreshed['jobs'])
         plan = await asyncio.to_thread(prepare, cloud, jobs, include_failed=True)
-        await save_run(first.id, cleanup_plan=plan, status='cleaning')
+        await transitions.save_run(first.id, cleanup_plan=plan, status='cleaning')
         await save_control(job.id, phase='cleaning')
     elif control.phase == 'cleaning':
         report = await batch_cleanup.apply(cloud, first.cleanup_plan, job_id=job.id, run_id=first.id)
         launch['cleanup_report'] = report
         phase = 'log_planning' if report['complete'] else 'cleaning'
-        await save_run(first.id, launch=launch, status=phase)
+        await transitions.save_run(first.id, launch=launch, status=phase)
         await save_control(job.id, phase=phase)
         if not report['complete']:
             return
@@ -53,16 +54,16 @@ async def finish(controller, job, control, roots, sequence):
         plans = await history.cleanup_plans(first.id)
         launch['log_cleanup_plan'] = await asyncio.to_thread(plan_logs, cloud,
             {j['uid'] for plan in plans if plan for j in plan.get('jobs', [])})
-        await save_run(first.id, launch=launch, status='log_cleaning')
+        await transitions.save_run(first.id, launch=launch, status='log_cleaning')
         await save_control(job.id, phase='log_cleaning')
     elif control.phase == 'log_cleaning':
         report = await asyncio.to_thread(remove_logs, cloud, launch['log_cleanup_plan'])
         launch['log_cleanup_report'] = report
-        await save_run(first.id, launch=launch)
+        await transitions.save_run(first.id, launch=launch)
         if not report['complete']:
             return
         for root in roots:
-            await save_run(root.id, status='refreshing')
+            await transitions.save_run(root.id, status='refreshing')
         await save_control(job.id, phase='refreshing')
     else:
         for root in roots:
@@ -82,6 +83,6 @@ async def finish(controller, job, control, roots, sequence):
             raise ValueError('Frozen sequence count differs from committed local imports')
         await save_control(job.id, phase='complete')
         limited = sequence.reserved_count < sequence.requested_count
-        await save_job(job.id, status='limit_reached' if limited else 'complete',
+        await transitions.save_job(job.id, status='limit_reached' if limited else 'complete',
                        error='Only available unscored FENs were selected.' if limited else None)
     controller.continue_immediately = True

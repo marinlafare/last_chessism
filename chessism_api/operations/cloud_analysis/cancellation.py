@@ -3,6 +3,7 @@
 Never marks incomplete analysis successful and never re-enters a launch path.
 All cloud deletion uses saved, identity-checked plans after quiescence.
 """
+from . import transitions
 import asyncio
 from datetime import datetime, timezone
 from sqlalchemy import delete, func, select, update
@@ -29,7 +30,7 @@ async def save(job_id, **changes):
 
 
 async def resources(controller, roots, control, *, signal):
-    from .controller import save_run
+
     quiet, launches, jobs = await asyncio.to_thread(stop_batch, controller.cloud, roots, control, signal=signal)
     for root in roots:
         if root.launch.get('backend') == 'cloud_run' and root.status != 'complete':
@@ -38,7 +39,7 @@ async def resources(controller, roots, control, *, signal):
             launches[root.id] = launch
     if signal:
         for ident, launch in launches.items():
-            await save_run(ident, launch=launch)
+            await transitions.save_run(ident, launch=launch)
     return quiet, jobs
 
 
@@ -169,7 +170,7 @@ async def tick(controller, job, cancellation):
 
 
 async def advance(controller, job, cancellation, timings):
-    from .controller import save_run
+
     async with AsyncDBSession() as session:
         roots = (await session.scalars(select(CloudAnalysisRun).where(CloudAnalysisRun.job_id == job.id,
             ~CloudAnalysisRun.id.in_(select(CloudBatchUnit.run_id))).order_by(CloudAnalysisRun.created_at, CloudAnalysisRun.id)
@@ -233,7 +234,7 @@ async def advance(controller, job, cancellation, timings):
         for root in roots:
             if root.launch.get('backend') == 'cloud_run' and root.launch.get('run_uid'):
                 plan = await asyncio.to_thread(cancellation_drain.replan_run, cloud, root, drain)
-                await save_run(root.id, cleanup_plan=plan)
+                await transitions.save_run(root.id, cleanup_plan=plan)
         artifact_plan = cancellation.artifact_plan if drain else None
         if artifact_plan:
             cancelled_artifacts.validate(artifact_plan, all_ids)
@@ -285,11 +286,11 @@ async def advance(controller, job, cancellation, timings):
             if not launch.get('log_cleanup_plan'):
                 launch['log_cleanup_plan'] = await asyncio.to_thread(plan_logs, cloud,
                     {item['uid'] for item in cancellation.batch_plan['jobs']})
-                await save_run(roots[0].id, launch=launch)
+                await transitions.save_run(roots[0].id, launch=launch)
                 controller.continue_immediately = True
                 return
             launch['log_cleanup_report'] = await asyncio.to_thread(remove_logs, cloud, launch['log_cleanup_plan'])
-            await save_run(roots[0].id, launch=launch)
+            await transitions.save_run(roots[0].id, launch=launch)
             if not launch['log_cleanup_report']['complete']:
                 return
         await save(job.id, phase='refreshing', cursor=0)

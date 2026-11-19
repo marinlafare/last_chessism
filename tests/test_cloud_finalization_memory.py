@@ -1,4 +1,5 @@
 """Memory regression checks; synthetic data only, no cloud or database access."""
+from chessism_api.operations.cloud_analysis import transitions
 import hashlib
 import json
 import os
@@ -69,7 +70,7 @@ class FinalizationTests(unittest.IsolatedAsyncioTestCase):
              patch.object(run_controller, 'verify_tasks', return_value=[]), \
              patch.object(run_controller.StageTimings, 'save', new=AsyncMock()), \
              patch.object(run_controller, 'AsyncDBSession', side_effect=AssertionError('Duplicate run load')), \
-             patch.object(controller, 'save_run', new=AsyncMock()) as save:
+             patch.object(transitions, 'save_run', new=AsyncMock()) as save:
             await run_controller.advance(controller.Controller(cloud, 'unused'),
                 SimpleNamespace(selection={}), run)
         self.assertEqual(save.call_args.kwargs['status'], 'finalizing')

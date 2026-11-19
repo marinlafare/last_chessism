@@ -1,4 +1,5 @@
 """Cloud-owned cycles, host-owned import; no launch depends on local finalization."""
+from . import transitions
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -32,7 +33,7 @@ def create_exact(storage, uri, raw, limit=MAX_INPUT_BYTES):
 
 
 async def prepare(controller, job, control, roots):
-    from .controller import save_run
+
     cloud = controller.cloud
     if control.phase == 'preparing':
         await asyncio.to_thread(verify_clean_workspace, cloud)
@@ -41,7 +42,7 @@ async def prepare(controller, job, control, roots):
             cloud.require_sequence, lambda: check_bucket(cloud))
         image_id, _ = await asyncio.to_thread(inspect_worker, controller.local_image)
         for root in roots:
-            await save_run(root.id, status='publishing', launch={**root.launch,
+            await transitions.save_run(root.id, status='publishing', launch={**root.launch,
                 'image_id': image_id, 'profile': PROFILE_ID, 'quota': quota})
         await save_control(job.id, image_id=image_id, phase='publishing')
     elif control.phase == 'publishing':
@@ -51,7 +52,7 @@ async def prepare(controller, job, control, roots):
             launch.update(image=image, image_id=control.image_id, tasks=lanes(launch))
             for task in launch['tasks']:
                 task['spec'] = work_units.spec_for([u for u in launch['units'] if u['vm_index'] == task['index']], image)
-            await save_run(root.id, launch=launch, status='uploading')
+            await transitions.save_run(root.id, launch=launch, status='uploading')
         await save_control(job.id, image=image, phase='uploading')
     elif control.phase == 'uploading':
         storage = await asyncio.to_thread(cloud.storage)
@@ -66,7 +67,7 @@ async def prepare(controller, job, control, roots):
                 del child
                 await asyncio.to_thread(create_exact, storage, unit['config']['input'], raw)
                 launch['units'][index]['uploaded'] = True
-                await save_run(root.id, launch=launch)
+                await transitions.save_run(root.id, launch=launch)
                 return  # Bounded memory and an interruption-safe upload checkpoint.
         await upload_plan(cloud, job, control, roots)
     elif control.phase == 'submitting':
@@ -77,7 +78,7 @@ async def prepare(controller, job, control, roots):
         await save_control(job.id, phase='running')
         for root in roots:
             if root.status != 'finalizing':
-                await save_run(root.id, status='cloud_queued', error=None)
+                await transitions.save_run(root.id, status='cloud_queued', error=None)
     elif control.phase == 'replanning':
         await upload_plan(cloud, job, control, roots)
     controller.continue_immediately = True
@@ -145,7 +146,7 @@ async def refresh_recovery(cloud, saved_launch, control, *, require_succeeded=Fa
 
 async def poll_root(cloud, root, control, *, ingest):
     """Child recovery may finish while the encompassing workflow stays active."""
-    from .controller import save_run
+
     if root.status in {'complete', 'finalizing'}:
         return
     launch = await refresh_recovery(cloud, root.launch, control)
@@ -161,14 +162,14 @@ async def poll_root(cloud, root, control, *, ingest):
         async with AsyncDBSession() as session:
             current = await session.get(CloudAnalysisRun, root.id)
         await results.verify_saved(current, launch)
-        await save_run(root.id, launch=results.performance(launch), cloud_state=cloud_state, status='finalizing', error=None)
+        await transitions.save_run(root.id, launch=results.performance(launch), cloud_state=cloud_state, status='finalizing', error=None)
     else:
-        await save_run(root.id, launch=launch, cloud_state=cloud_state,
+        await transitions.save_run(root.id, launch=launch, cloud_state=cloud_state,
                        status='cloud_queued' if cloud_state == 'PENDING' else 'running', error=None)
 
 
 async def tick(controller, job):
-    from .controller import save_job
+
     async with AsyncDBSession() as session:
         saved = await session.get(CloudBatchSequence, job.id)
         control = await session.get(CloudSequenceControl, job.id)
@@ -187,7 +188,7 @@ async def tick(controller, job):
         return
     roots = [run for _, run in rows if run.position_count]
     if not roots:
-        await save_job(job.id, status='limit_reached', error='No available unscored FENs in the frozen selection.')
+        await transitions.save_job(job.id, status='limit_reached', error='No available unscored FENs in the frozen selection.')
         return
     if control is None:
         if saved.stop_requested or job.selection.get('cancel_requested'):
@@ -238,5 +239,5 @@ async def tick(controller, job):
     elif failed:
         # One catch-up pass across all cycles before exposing a recoverable failure.
         if control.import_cursor - control.failure_import_cursor + 1 >= len(roots):
-            await save_job(job.id, status='failed', error=f"Cloud sequence {state['status'].lower()}; "
+            await transitions.save_job(job.id, status='failed', error=f"Cloud sequence {state['status'].lower()}; "
                 'future tasks stopped. Results/checkpoints retained. Explicit retry is required to resume.')

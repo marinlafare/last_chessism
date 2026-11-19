@@ -1,4 +1,5 @@
 """Draft API + real isolated PostgreSQL; cloud execution is always mocked."""
+from chessism_api.operations.cloud_analysis import transitions
 import asyncio
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -64,7 +65,7 @@ class DraftDatabaseTests(CanonicalDatabaseTestCase):
         return self.draft['preview']
 
     async def available(self):
-        await controller.save_job(self.job.id, status='complete')
+        await transitions.save_job(self.job.id, status='complete')
 
     async def submit(self, n_vms=1):
         return await submit_draft(self.draft['id'], SubmitDraft(revision=self.draft['revision'], n_vms=n_vms))

@@ -13,7 +13,7 @@ from cleaning_job.cloud import BUCKET, CleanupError
 from cleaning_job.cleanup import digest, InventoryChanged
 from cloud_job import cloud_run_cleanup
 from cloud_job import cloud_run
-from chessism_api.operations.cloud_analysis import controller as controller_module
+from chessism_api.operations.cloud_analysis import transitions
 from test_cloud_run_cleanup import RunCloud, RUN
 from test_cleaning_job import obj
 from stockfish_batch.checkpoints import digest as content_digest
@@ -178,7 +178,7 @@ class DrainRoutingTests(unittest.IsolatedAsyncioTestCase):
             verified.append(RUN)
         with patch.object(cancellation, 'AsyncDBSession', return_value=manager), \
              patch.object(cancellation, 'save', side_effect=save), \
-             patch.object(controller_module, 'save_run', side_effect=save_run), \
+             patch.object(transitions, 'save_run', side_effect=save_run), \
              patch.object(cancellation, 'resources', AsyncMock(return_value=(True, []))), \
              patch.object(cancellation, 'import_available', side_effect=import_results), \
              patch.object(drain, 'verify_artifacts', side_effect=verify), \

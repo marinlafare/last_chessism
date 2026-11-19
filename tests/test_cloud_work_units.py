@@ -1,4 +1,5 @@
 """Large logical jobs, bounded workers, no real Google calls."""
+from chessism_api.operations.cloud_analysis import transitions
 from copy import deepcopy
 from dataclasses import asdict
 import os
@@ -122,7 +123,7 @@ class WorkUnitLifecycleTests(unittest.IsolatedAsyncioTestCase):
         async def save(_, **changes):
             for key, value in changes.items(): setattr(run, key, deepcopy(value))
         cloud.start_recovery.side_effect = ['owner0', ValueError('lost reply')]
-        with patch.object(controller, 'save_run', side_effect=save), patch.object(batch_spot, 'check_quota'):
+        with patch.object(transitions, 'save_run', side_effect=save), patch.object(batch_spot, 'check_quota'):
             with self.assertRaisesRegex(ValueError, 'lost reply'):
                 await fleet.advance(controller.Controller(cloud, 'unused'), SimpleNamespace(selection={}), run)
             self.assertEqual(run.launch['tasks'][0]['recovery_execution'], 'owner0')
@@ -144,8 +145,8 @@ class WorkUnitLifecycleTests(unittest.IsolatedAsyncioTestCase):
                                               'uid': 'uid', 'status': {'state': 'FAILED'}}
         async def imported(cloud, unit): return unit
         with patch.object(results, 'import_unit', side_effect=imported) as imports, \
-             patch.object(controller, 'save_run', new_callable=AsyncMock) as save, \
-             patch.object(controller, 'save_job', new_callable=AsyncMock) as save_job:
+             patch.object(transitions, 'save_run', new_callable=AsyncMock) as save, \
+             patch.object(transitions, 'save_job', new_callable=AsyncMock) as save_job:
             await fleet.poll(controller.Controller(cloud, 'unused'), SimpleNamespace(selection={}), run, deepcopy(run.launch))
             self.assertEqual(imports.await_count, 10)
             self.assertEqual(save.call_args.kwargs['cloud_state'], 'RUNNING')

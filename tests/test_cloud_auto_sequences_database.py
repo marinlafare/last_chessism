@@ -1,4 +1,5 @@
 """Isolated PostgreSQL and fake Google: restart/import/cleanup of autonomous cycles."""
+from chessism_api.operations.cloud_analysis import transitions
 from contextlib import ExitStack
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -30,7 +31,7 @@ class AutoSequenceDatabaseTests(CanonicalDatabaseTestCase):
     objects=units_test.WorkUnitDatabaseTests.objects
 
     async def start(self,total=4):
-        await controller.save_job(self.job.id,status='complete')
+        await transitions.save_job(self.job.id,status='complete')
         async with AsyncDBSession() as s,s.begin():
             s.add(CloudControllerHeartbeat(id=1,seen_at=datetime.now(timezone.utc)))
             s.add(Fen(fen='8/8/8/8/8/8/3k4/6K1 w - -',n_games=1,moves_counter='{}'))
@@ -232,8 +233,8 @@ class AutoSequenceDatabaseTests(CanonicalDatabaseTestCase):
             for root in roots:
                 launch=deepcopy(root.launch)
                 launch['tasks'][0]['recovery_summary']['status']='RUNNING'
-                await controller.save_run(root.id,launch=launch)
-            await controller.save_job(self.job.id,status='paused',error='Recovery has not completed; refusing cleanup')
+                await transitions.save_run(root.id,launch=launch)
+            await transitions.save_job(self.job.id,status='paused',error='Recovery has not completed; refusing cleanup')
             await resume_cloud_job(self.job.id)
             with patch.object(auto.results,'import_unit',side_effect=AssertionError('Results already committed')):
                 await self.tick()

@@ -3,6 +3,7 @@
 Only bounded 50k-unit reservations read FEN payloads. Future loops remain local
 and claimed until their turn; no browser timers or live reselection between loops.
 """
+from . import transitions
 from datetime import datetime, timezone
 from uuid import uuid4
 from sqlalchemy import select, delete, func
@@ -79,7 +80,7 @@ async def freeze(job_id):
 
 
 async def select_next(controller, job, rows):
-    from .controller import save_run
+
     from .work_units_controller import reserve_unit
     from cloud_job.work_units import ranges
     current = next(((cycle, run) for cycle, run in rows if run.position_count < cycle.target_count), None)
@@ -91,7 +92,7 @@ async def select_next(controller, job, rows):
         if not launch:
             launch = {'backend': 'batch_spot', 'multi_vm': True, 'workflow_version': 3,
                       'units': [], 'tasks': [], 'jobs': [], 'n_vms': job.selection['n_vms'], 'recovery_session': 1}
-            await save_run(run.id, status='selecting', launch=launch)
+            await transitions.save_run(run.id, status='selecting', launch=launch)
         schedule = ranges(cycle.target_count, job.selection['n_vms'])
         vm, count = schedule[len(launch['units'])]
         reserved = await reserve_unit(job, run, launch, vm, count)
@@ -144,7 +145,7 @@ async def stop_unstarted(job_id):
 
 
 async def tick(controller, job):
-    from .controller import save_job, save_run
+
     from .work_units_controller import advance
     from .importer import refresh_global_projections
     async with AsyncDBSession() as session:
@@ -180,21 +181,21 @@ async def tick(controller, job):
         if job.imported != sequence.reserved_count:
             raise ValueError('Sequence import count does not match its frozen set')
         limited = sequence.reserved_count < sequence.requested_count
-        await save_job(job.id, status='limit_reached' if limited else 'complete',
+        await transitions.save_job(job.id, status='limit_reached' if limited else 'complete',
                        error='Only the available unscored FENs were reserved; no replacements were selected.' if limited else None)
         return
     if sequence.stop_requested and run.status in UNSTARTED_STATES:
         await stop_unstarted(job.id)
         return
     if run.status == 'reserved':
-        await save_run(run.id, status='preparing')
+        await transitions.save_run(run.id, status='preparing')
         controller.continue_immediately = True
         return
     before = run.status
     try:
         await advance(controller, job, run)
     except Exception as exc:
-        await save_run(run.id, error=f'{type(exc).__name__}: {exc}'[:1000])
+        await transitions.save_run(run.id, error=f'{type(exc).__name__}: {exc}'[:1000])
         raise
     async with AsyncDBSession() as session:
         after = await session.scalar(select(CloudAnalysisRun.status).where(CloudAnalysisRun.id == run.id))

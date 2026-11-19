@@ -1,4 +1,5 @@
 """Offline validation and controller boundary tests; no Google credentials needed."""
+from chessism_api.operations.cloud_analysis import transitions
 import copy
 from dataclasses import asdict
 import json
@@ -207,7 +208,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         cloud.storage.return_value = storage
         storage.create.return_value = False
         storage.read.return_value = b"".join(encode(row) for row in rows)
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as save:
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as save:
             await controller.Controller(cloud, "test-image").advance(job, run)
         self.assertEqual(save.await_args.kwargs["status"], "submitting")
         storage.read.return_value = b"foreign input"
@@ -223,7 +224,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         job = SimpleNamespace(selection={"max_task_seconds": 3600, "nodes": 1000000})
         cloud = Mock()
         cloud.submit.return_value = {"uid": "immutable-uid"}
-        with patch.object(controller, "save_run", new_callable=AsyncMock) as save:
+        with patch.object(transitions, "save_run", new_callable=AsyncMock) as save:
             await controller.Controller(cloud, "test-image").advance(job, run)
         cloud.submit.assert_called_once_with("job", {"saved": "exact-spec"})
         self.assertEqual(save.await_args.kwargs["launch"]["uid"], "immutable-uid")
@@ -260,7 +261,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
             getattr(cloud, method).return_value = []
         with patch.object(controller, "inspect_worker", return_value=("sha256:" + "b" * 64,
                   {"engine_sha": "a" * 64, "worker_version": "1.1.0", "chess_version": "1.11.2"})), \
-             patch.object(controller, "save_run", new_callable=AsyncMock) as save:
+             patch.object(transitions, "save_run", new_callable=AsyncMock) as save:
             await controller.Controller(cloud, "test-image").advance(job, run)
         self.assertEqual(save.await_args.kwargs["status"], "publishing")
         saved_config = save.await_args.kwargs["launch"]["config"]
@@ -304,7 +305,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         for attempt in range(2):
             with tempfile.TemporaryDirectory() as directory, \
                  patch.object(controller.runtime, "CLEANUP_ROOT", Path(directory)), \
-                 patch.object(controller, "save_run", new_callable=AsyncMock) as save:
+                 patch.object(transitions, "save_run", new_callable=AsyncMock) as save:
                 await controller.Controller(cloud, "unused-image").advance(None, run)
                 self.assertTrue((Path(directory) / (plan["sha256"] + ".json")).is_file())
                 self.assertEqual(save.await_args.kwargs["status"], "refreshing")
@@ -332,7 +333,7 @@ class ControllerGateTests(unittest.IsolatedAsyncioTestCase):
         cloud = Mock()
         cloud.job.return_value = {"uid": "uid", "status": {"state": "RUNNING"}}
         cloud.storage.return_value = storage
-        with patch.object(controller, "save_run", new_callable=AsyncMock), \
+        with patch.object(transitions, "save_run", new_callable=AsyncMock), \
              patch.object(controller, "import_batch", new_callable=AsyncMock) as import_result, \
              patch.object(controller, "cleaning_job") as cleanup:
             await controller.Controller(cloud, "test-image").poll(run, config)

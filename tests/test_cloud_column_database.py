@@ -1,4 +1,5 @@
 """Opt-in isolated PostgreSQL tests for the relational control-state migration."""
+from chessism_api.operations.cloud_analysis import transitions
 import asyncio
 import json
 import unittest
@@ -22,7 +23,7 @@ class ColumnDatabaseTests(CanonicalDatabaseTestCase):
     async def test_pending_compute_cleanup_survives_database_restart_and_can_continue(self):
         from chessism_api.operations.cloud_analysis import batch_spot_controller as fleet
         run = await self.reserved_run()
-        await controller.save_run(run.id, status='cleaning', cleanup_plan={},
+        await transitions.save_run(run.id, status='cleaning', cleanup_plan={},
                                   launch={'multi_vm': True, 'tasks': []})
         pending = {'complete': False, 'remaining_jobs': [], 'data_deletion_deferred': True,
                    'remaining_compute': [{'kind': 'instanceTemplates', 'scope': None, 'name': 'owned-template'}]}
@@ -73,8 +74,8 @@ class ColumnDatabaseTests(CanonicalDatabaseTestCase):
             saved = await session.get(CloudAnalysisRun, run.id)
             manifest = {'status': 'complete', 'fingerprint': contract['fingerprint'],
                         'position_count': 2, 'records': next(iter(saved.receipts.values()))['records']}
-        await controller.save_run(run.id, status='finalizing', launch={'manifest': manifest})
-        await controller.save_run(run.id, status='refreshing', cleanup_plan={})
+        await transitions.save_run(run.id, status='finalizing', launch={'manifest': manifest})
+        await transitions.save_run(run.id, status='refreshing', cleanup_plan={})
         await history.compact_run(run.id)
         async with AsyncDBSession() as session:
             saved = await session.get(CloudAnalysisRun, run.id)
@@ -116,7 +117,7 @@ class ColumnDatabaseTests(CanonicalDatabaseTestCase):
         contract = expected_contract(b''.join(encode(p) for p in positions), positions, config,
             {'engine_sha': 'a' * 64, 'worker_version': '1.4.0', 'chess_version': '1.11.2'})
         task = {'index': 0, 'start': 499, 'count': 502, 'contract': contract}
-        await controller.save_run(run.id, launch={'backend': 'batch_spot', 'tasks': [task]})
+        await transitions.save_run(run.id, launch={'backend': 'batch_spot', 'tasks': [task]})
         checkpoints = BatchCheckpoints(None, '', contract, positions, 500)
         records = [checkpoints.prepare(p, {'fen': p['fen'], 'is_valid': True,
                    'analysis': {'score': 0, 'pv': []}}, 1) for p in positions]

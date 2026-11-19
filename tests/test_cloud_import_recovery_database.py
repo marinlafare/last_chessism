@@ -1,4 +1,5 @@
 """Runs only through the isolated PostgreSQL harness or an explicit test DB."""
+from chessism_api.operations.cloud_analysis import transitions
 import asyncio
 import unittest
 from tests.canonical_postgres_case import CanonicalDatabaseTestCase
@@ -42,13 +43,13 @@ class ImportRecoveryTests(CanonicalDatabaseTestCase):
         run = await self.reserved_run(2)
         contract, raw = await self.results(run)
         prepared = prepare_batch(raw, run.positions, contract)
-        await controller.save_run(run.id, contract={**contract, 'fingerprint': 'changed'})
+        await transitions.save_run(run.id, contract={**contract, 'fingerprint': 'changed'})
         with self.assertRaisesRegex(ValueError, 'no longer matches'):
             await importer.import_batch(run.id, raw, 0, _prepared=prepared)
         async with AsyncDBSession() as session:
             self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).imported, 0)
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 2)
-        await controller.save_run(run.id, contract=contract)
+        await transitions.save_run(run.id, contract=contract)
         with patch.object(importer, 'stage_fen_results', new_callable=AsyncMock, side_effect=RuntimeError('injected rollback')):
             with self.assertRaises(RuntimeError):
                 await importer.import_batch(run.id, raw, 0, _prepared=prepared)
@@ -66,8 +67,8 @@ class ImportRecoveryTests(CanonicalDatabaseTestCase):
     async def test_pause_resume_retains_error_counts_and_timing_after_status_is_cleared(self):
         await recovery_history.record(self.job.id, episode_id='a'*32, kind='retry',
             operation='storage read', error_type='TimeoutError', attempt=1, delay_seconds=5)
-        await controller.save_job(self.job.id, status='paused', error='TimeoutError: test failure')
-        await controller.save_job(self.job.id, status='paused', error='TimeoutError: test failure')
+        await transitions.save_job(self.job.id, status='paused', error='TimeoutError: test failure')
+        await transitions.save_job(self.job.id, status='paused', error='TimeoutError: test failure')
         result = await resume_cloud_job(self.job.id)
         self.assertEqual(result['status'], 'queued')
         async with AsyncDBSession() as session:
@@ -78,7 +79,7 @@ class ImportRecoveryTests(CanonicalDatabaseTestCase):
         self.assertGreaterEqual(summary['paused_seconds'], 0)
         self.assertEqual(summary['events'][1]['message'], 'TimeoutError: test failure')
         self.assertEqual(summary['events'][1]['episode_id'], summary['events'][2]['episode_id'])
-        await controller.save_job(self.job.id, status='complete')
+        await transitions.save_job(self.job.id, status='complete')
         async with AsyncDBSession() as session:
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudRecoveryEvent)), 3)
 

@@ -1,4 +1,5 @@
 """Large logical job, bounded database runs, sequential Google-owned VM units."""
+from . import transitions
 import asyncio
 from copy import deepcopy
 from dataclasses import asdict
@@ -91,7 +92,7 @@ async def stopped(cloud, launch):
 
 
 async def advance(controller, job, run):
-    from .controller import save_run, save_job
+
     cloud, launch = controller.cloud, deepcopy(run.launch)
     if run.status == 'preparing':
         frozen_cycle = job.selection.get('execution_mode') == 'batch_sequence_v1'
@@ -114,7 +115,7 @@ async def advance(controller, job, run):
                 'n_vms': job.selection['n_vms'], 'recovery_session': 1, 'quota': quota}
             if frozen_cycle:
                 launch['units'] = deepcopy(run.launch['units'])
-            await save_run(run.id, launch=launch, error=None)
+            await transitions.save_run(run.id, launch=launch, error=None)
         if frozen_cycle:
             if not launch['units'] or sum(u['count'] for u in launch['units']) != run.position_count:
                 raise ValueError('Frozen cycle membership is incomplete')
@@ -131,10 +132,10 @@ async def advance(controller, job, run):
                 owner = await session.get(CloudAnalysisRun, run.id)
                 launch = owner.launch
             if not launch['units']:
-                await save_job(job.id, status='waiting', error='No unclaimed, unscored FENs available. Resume to check again.')
+                await transitions.save_job(job.id, status='waiting', error='No unclaimed, unscored FENs available. Resume to check again.')
                 return
         launch['tasks'] = lanes(launch)
-        await save_run(run.id, launch=launch, status='publishing', error=None)
+        await transitions.save_run(run.id, launch=launch, status='publishing', error=None)
         if job.selection['mode'] == 'games':
             from .game_fen_queue import discard_queue
             async with AsyncDBSession() as session, session.begin():
@@ -144,7 +145,7 @@ async def advance(controller, job, run):
         launch['image'] = await asyncio.to_thread(cloud.publish, run.id, launch['image_id'])
         for task in launch['tasks']:
             task['spec'] = work_units.spec_for([u for u in launch['units'] if u['vm_index'] == task['index']], launch['image'])
-        await save_run(run.id, launch=launch, status='uploading', error=None)
+        await transitions.save_run(run.id, launch=launch, status='uploading', error=None)
     elif run.status == 'uploading':
         storage = await asyncio.to_thread(cloud.storage)
         # One input in memory, never concatenate the logical job's FEN set.
@@ -157,7 +158,7 @@ async def advance(controller, job, run):
             if not created and await asyncio.to_thread(storage.read, unit['config']['input'], MAX_INPUT_BYTES) != raw:
                 raise ValueError('Work-unit input already exists with different contents')
             del raw
-        await save_run(run.id, status='submitting', error=None)
+        await transitions.save_run(run.id, status='submitting', error=None)
     elif run.status == 'submitting':
         pending = [t for t in launch['tasks'] if t['status'] != 'SUCCEEDED']
         if pending and not any(t.get('recovery_execution') for t in pending) and not job.selection.get('cancel_requested'):
@@ -167,32 +168,32 @@ async def advance(controller, job, run):
                 await asyncio.to_thread(cloud.cancel_recovery, task['run_id'], task['recovery_session'])
             if not task.get('recovery_execution'):
                 task['recovery_execution'] = await asyncio.to_thread(cloud.start_recovery, task['run_id'], task)
-                await save_run(run.id, launch=deepcopy(launch), error=None)
-        await save_run(run.id, launch=launch, status='running', error=None)
+                await transitions.save_run(run.id, launch=deepcopy(launch), error=None)
+        await transitions.save_run(run.id, launch=launch, status='running', error=None)
     elif run.status == 'running':
         await poll(controller, job, run, launch)
     elif run.status in {'finalizing', 'cleanup_planning', 'cleaning', 'log_planning', 'log_cleaning'}:
         await results.verify_saved(run, launch)
         if run.status == 'finalizing':
-            await save_run(run.id, status='cleanup_planning', error=None)
+            await transitions.save_run(run.id, status='cleanup_planning', error=None)
         elif run.status == 'cleanup_planning':
             await stopped(cloud, launch)
             plan = await asyncio.to_thread(prepare, cloud, launch['jobs'], include_failed=True)
-            await save_run(run.id, cleanup_plan=plan, status='cleaning', error=None)
+            await transitions.save_run(run.id, cleanup_plan=plan, status='cleaning', error=None)
         elif run.status == 'cleaning':
             await stopped(cloud, launch)
             report = await batch_cleanup.apply(cloud, run.cleanup_plan, job_id=run.job_id, run_id=run.id)
             launch['cleanup_report'] = report
-            await save_run(run.id, launch=launch, status='log_planning' if report['complete'] else 'cleaning', error=None)
+            await transitions.save_run(run.id, launch=launch, status='log_planning' if report['complete'] else 'cleaning', error=None)
         elif run.status == 'log_planning':
             plans = await history.cleanup_plans(run.id)
             launch['log_cleanup_plan'] = await asyncio.to_thread(plan_logs, cloud,
                 {j['uid'] for plan in plans if plan for j in plan.get('jobs', [])})
-            await save_run(run.id, launch=launch, status='log_cleaning', error=None)
+            await transitions.save_run(run.id, launch=launch, status='log_cleaning', error=None)
         else:
             report = await asyncio.to_thread(remove_logs, cloud, launch['log_cleanup_plan'])
             launch['log_cleanup_report'] = report
-            await save_run(run.id, launch=launch, status='refreshing' if report['complete'] else 'log_cleaning', error=None)
+            await transitions.save_run(run.id, launch=launch, status='refreshing' if report['complete'] else 'log_cleaning', error=None)
     elif run.status == 'refreshing':
         if not all(unit.get('refreshed') for unit in launch['units']):
             timings = StageTimings()
@@ -201,7 +202,7 @@ async def advance(controller, job, run):
             finally:
                 await timings.save(run.job_id, run.id)
             launch['units'] = [{**unit, 'refreshed': True} for unit in launch['units']]
-            await save_run(run.id, launch=launch, error=None)
+            await transitions.save_run(run.id, launch=launch, error=None)
             controller.continue_immediately = True
             return
         for unit in launch['units']:
@@ -217,13 +218,13 @@ async def advance(controller, job, run):
             return
         await history.compact_run(run.id)
     elif run.status == 'failed':
-        await save_job(job.id, status='failed', error=run.error)
+        await transitions.save_job(job.id, status='failed', error=run.error)
     else:
         raise ValueError('Unknown work-unit phase: ' + run.status)
 
 
 async def poll(controller, job, run, launch):
-    from .controller import save_run, save_job
+
     cloud, terminal = controller.cloud, {'SUCCEEDED', 'FAILED', 'CANCELLED'}
     for task in launch['tasks']:
         if job.selection.get('cancel_requested') and task['status'] not in terminal:
@@ -258,10 +259,10 @@ async def poll(controller, job, run, launch):
             current = await session.get(CloudAnalysisRun, run.id)
         await results.verify_saved(current, launch)
         launch = results.performance(launch)
-        await save_run(run.id, launch=launch, cloud_state=state, status='finalizing', error=None)
+        await transitions.save_run(run.id, launch=launch, cloud_state=state, status='finalizing', error=None)
     else:
-        await save_run(run.id, launch=launch, cloud_state=state, error=None)
+        await transitions.save_run(run.id, launch=launch, cloud_state=state, error=None)
         if finished:
             message = 'Batch work units stopped; committed results and completed units are retained for recovery.'
-            await save_run(run.id, status='failed', error=message)
-            await save_job(job.id, status='failed', error=message)
+            await transitions.save_run(run.id, status='failed', error=message)
+            await transitions.save_job(job.id, status='failed', error=message)
