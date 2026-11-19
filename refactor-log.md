@@ -2286,3 +2286,24 @@ checks pass; 44 distinct including the two dump phases. Old validation definitio
 remain AST-identical after class rename and are isolated from runtime profile use.
 Failed evidence retained; no tests bypassed or weakened. Archive commands/locations
 unchanged. No application DB, recovery checkpoint, Neo4j or real Redis accessed.
+
+Canonical backup checkpoint: 7346484. Next coordinated unit implements the approved
+historical comparison retirement: fixed validation, shadow pilot, threshold, cohort
+and strength comparisons. Remove launches/dispatch and reject saved-definition
+replay; keep all saved-report readers and research identity reservations. Move three
+unchanged numerical helpers into current full-development diagnostics. Its verified
+historical parent-report requirement remains; no new fitting or relaxation of
+scientific gates. Convert retained cohort metadata/full-development reads to native
+canonical tables and guarded transactions. Record retired test identities explicitly;
+retain pure fixed-rule oracles and current training/evaluation checks.
+
+Historical research retirement verified: 119 distinct focused backend checks pass,
+including five real canonical PostgreSQL boundary/history/inventory tests. First
+gate had one test-fixture JSON-vs-JSONB cast error; all five affected checks rerun
+pass. Current model and mathematical tests pass; three relocated numerical helpers
+are AST-identical. 39 obsolete workflow tests and four helper scripts are explicitly
+mapped in docs/architecture/research-retirement-tests.json, not silently skipped.
+Saved-report browser fixture passes, including current training and all historical
+report renderers. Initial fixture startup lacked write permissions; corrected only
+the disposable container user/cache. Test container removed. No live resources
+contacted. Evidence: docs/architecture/evidence/stage-a-research-retirement-2026-11-18.tar.gz SHA256 12833075bf53a37b7f814de4c7ea509d2d4c54cf1324fc6a629769f4847a9434.

@@ -172,8 +172,8 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
         for exception in (ValueError('broken source'), RunCancelled('cancelled')):
             with self.subTest(exception=exception), TemporaryDirectory() as temporary, patch.object(storage, 'WORK_ROOT', Path(temporary)):
                 row = SimpleNamespace(status='queued', config=config.normalize_algorithm(REQUEST, MATRIX), started_at=None)
-                session = AsyncMock(); session.begin = MagicMock(); session.get.return_value = row
-                factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+                session = AsyncMock(); session.begin = AsyncMock(); session.get.return_value = row
+                factory = MagicMock(); factory.return_value = session
                 async def fail(_config, folder, reporter):
                     self.assertTrue(folder.is_dir())
                     raise exception
@@ -187,8 +187,8 @@ class JobTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(list(Path(temporary).iterdir()), [])
 
     async def test_cancelled_queued_run_is_never_materialized(self):
-        session = AsyncMock(); session.begin = MagicMock(); session.get.return_value = SimpleNamespace(status='cancelled')
-        factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+        session = AsyncMock(); session.begin = AsyncMock(); session.get.return_value = SimpleNamespace(status='cancelled')
+        factory = MagicMock(); factory.return_value = session
         with patch.object(jobs, 'AsyncDBSession', factory), patch.object(jobs, 'materialize', AsyncMock()) as materialize:
             self.assertEqual((await jobs.run_algorithm_job({}, run_id='skip'))['status'], 'not_queued')
             materialize.assert_not_awaited()

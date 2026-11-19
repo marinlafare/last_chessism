@@ -213,12 +213,6 @@ export default function useAlgorithms() {
     setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
     setNotice('Smooth rating-aware v2 queued. Validation gates will be reported; nothing is automatically promoted.')
   })
-  const validateBlunders = player => act('queueing fixed-coefficient validation', async () => {
-    const payload = await api.validateFixedBlunders(player)
-    if (!mounted.current) return
-    setRunOffset(0); setRevision(current => current + 1); setWatchedRun(payload.id)
-    setNotice('Fixed-coefficient GPU validation queued. Live blunder counts and coefficients stay unchanged.')
-  })
   const remove = (definition) => {
     if (!window.confirm(`Delete “${definition.name}” instructions? Existing runs and results will remain.`)) return
     act('deleting', async () => {
@@ -268,7 +262,7 @@ export default function useAlgorithms() {
   return { catalog, algorithmCatalog, inputs: availableInputs, inputMore, definitions, definitionMore, runs,
     activeRuns: latestRuns.filter(run => ['queued', 'running'].includes(run.status)), runOffset, runMore, form, estimate, preview, result,
     matrix, sourceMatrix, formulaInputs: inputs, inputRevision, schemas, validation, validate, sample, reset, template, openDefinition,
-    applyInput, dirtyInput, previewInput, removeInput, runCuda, trainBlunders, trainBlundersV2, validateBlunders, benchmarkCanonical,
+    applyInput, dirtyInput, previewInput, removeInput, runCuda, trainBlunders, trainBlundersV2, benchmarkCanonical,
     error, notice, working, update, selectInput, save, preflight, run, cancel, remove, inspect, moreInputs, moreDefinitions,
     setPreview, setResult, setRunOffset, refresh: () => setRevision((current) => current + 1) }
 }

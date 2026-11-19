@@ -101,6 +101,25 @@ def split_ids(frozen):
     return groups
 
 
+async def exploration_ids(session):
+    """Explored outcomes cannot later become supposedly fresh test observations."""
+    rows = (await session.execute(text('''SELECT result FROM algorithm_run
+        WHERE config->>'operation'=:operation AND result IS NOT NULL
+        ORDER BY created_at,id LIMIT 101'''), {'operation': 'rating_blunder_strength_comparison_v1'})).scalars().all()
+    if len(rows) > 100:
+        raise ValueError('Strength-exploration history exceeds its bounded scan.')
+    known = set()
+    for r in rows:
+        if r.get('format') not in ('chessism_blunder_strength_reservation_v1', 'chessism_blunder_strength_comparison_v1'):
+            raise ValueError('Unrecognized strength-exploration identity reservation.')
+        source = r['source']; values = source['inspected_game_ids']
+        if digest(values) != source['inspected_game_ids_sha256']:
+            raise ValueError('Exploration identity checksum changed.')
+        known.update(ids(values))
+    if len(known) > 100_000:
+        raise ValueError('Exploration identity budget exceeded.')
+    return known
+
 async def history(session, policy, reporter):
     training, validation, protected, seen = set(), set(), set(), set()
     verified, replayed = [], 0
@@ -158,7 +177,6 @@ async def history(session, policy, reporter):
         if len(seen) > balanced.MAX_SEEN_GAMES:
             raise ValueError('Historical identity budget exceeded.')
         verified.append({**ref, 'method': method, 'games': len(known)})
-    from .blunder_strength_source import exploration_ids
     explored = await exploration_ids(session)
     protected.update(explored); seen.update(explored)
     from .blunder_full_source import additional_roles

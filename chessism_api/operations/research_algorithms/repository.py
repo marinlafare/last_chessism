@@ -7,6 +7,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import defer
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.models import AlgorithmDefinition, AlgorithmRun
 from .config import ACTIVE
 
@@ -34,14 +35,14 @@ def run_payload(row, *, result=False):
 
 
 async def list_runs(limit=30, offset=0):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         rows = list((await session.scalars(select(AlgorithmRun).options(defer(AlgorithmRun.result), defer(AlgorithmRun.config))
                     .order_by(AlgorithmRun.created_at.desc(), AlgorithmRun.id).offset(offset).limit(limit + 1))))
         return {"runs": [run_payload(row) for row in rows[:limit]], "has_more": len(rows) > limit}
 
 
 async def terminal(run_id, status, error=None):
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         await session.execute(update(AlgorithmRun).where(AlgorithmRun.id == run_id, AlgorithmRun.status.in_(ACTIVE))
             .values(status=status, error=error, finished_at=now(), progress={"phase": status, "detail": error or status}))
 
@@ -54,7 +55,7 @@ class Reporter:
         self.phase_started = time.monotonic()
 
     async def check(self):
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             row = (await session.execute(select(AlgorithmRun.status, AlgorithmRun.cancel_requested)
                                          .where(AlgorithmRun.id == self.run_id))).first()
         if not row or row.cancel_requested or row.status != "running":
@@ -73,5 +74,5 @@ class Reporter:
         eta = (total - processed) * elapsed / processed if total and processed and processed < total and elapsed >= 3 else None
         progress = {"phase": phase, "processed": processed, "total": total, "detail": detail,
                     "eta_seconds": eta, "updated_at": now().isoformat()}
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             await session.execute(update(AlgorithmRun).where(AlgorithmRun.id == self.run_id, AlgorithmRun.status == "running").values(progress=progress))

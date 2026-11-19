@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Canonical backup contract verified; approved historical research retirement and A4 remain",
+      "current_gate": "Historical comparison retirement verified; remaining FEN backup adapter and A4 follow",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -8195,6 +8195,30 @@
         "sha256": "336c157699e1eed2af63dd84033f047f9bee2755eb8fce8d7228dbd9db86269a",
         "legacy_validator_definitions_preserved": 5,
         "production_access": false
+      },
+      "canonical_backup_local_commit": "7346484",
+      "research_retirement_verification": {
+        "retained_helpers_ast_identical": [
+          "host",
+          "describe",
+          "scalar15"
+        ],
+        "post_gate_changes": {
+          "jobs.py": "Remove unused read_transaction import",
+          "blunder_full_job.py": "Remove unused write_transaction import"
+        },
+        "distinct_backend_checks_passed": 119,
+        "browser_fixture_passed": true,
+        "obsolete_test_cases_explicitly_retired": 39,
+        "production_access": false,
+        "evidence_archive": "docs/architecture/evidence/stage-a-research-retirement-2026-11-18.tar.gz",
+        "evidence_sha256": "12833075bf53a37b7f814de4c7ea509d2d4c54cf1324fc6a629769f4847a9434",
+        "backend_runs": [
+          "/tmp/chessism-canonical-a3-cuda-20261118-23",
+          "/tmp/chessism-canonical-a3-cuda-20261118-24"
+        ],
+        "browser_evidence": "/tmp/chessism-research-retirement-ui-20261118",
+        "failed_attempts": "First backend gate: 118 pass, one test-fixture JSON cast error; corrected five checks pass. Browser startup user permissions corrected in disposable fixture; subsequent fixture passed."
       }
     }
   }

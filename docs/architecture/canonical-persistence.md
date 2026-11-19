@@ -1065,3 +1065,17 @@ checks, malformed metadata/catalog/sequence rejection and old-validator read-onl
 behavior. No existing database, archive, recovery checkpoint or external service
 was accessed. This establishes the canonical backup contract; it does not perform
 a new backup of application data.
+
+### Historical research comparisons
+
+The five saved-CPU comparison workflows are retired with explicit user approval.
+Their endpoints and UI launch controls are removed. Saved-definition replay and
+stale queue tickets fail before source extraction or GPU work; saved reports remain
+readable. Exploration identity reservations still exclude previously inspected games
+from fresh evaluation. Full-development training retains its verified historical
+parent-report requirement; it does not fabricate that evidence on an empty database.
+Current training/evaluation, scalar oracles and CUDA publication remain supported.
+Full-development player/revision reads use native canonical tables; research API,
+queue state and publication boundaries own guarded transactions. 119 focused checks
+and the saved-report browser fixture pass. No new real-GPU training was performed.
+The 39 retired workflow tests are listed in research-retirement-tests.json.

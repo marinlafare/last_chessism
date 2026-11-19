@@ -12,13 +12,14 @@ from sqlalchemy import func, select, text
 
 from chessism_api.auth import get_current_account
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.models import Account, AlgorithmDefinition, AlgorithmRun, MatrixDefinition
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.matrix_constructor.storage import matrix_catalog_lock, MatrixCatalogBusy
 from chessism_api.operations.matrix_constructor.definitions import estimate_definition, resolve_definition
 from chessism_api.operations.matrix_constructor.defaults import default_formula
 from chessism_api.routers.matrices.schemas import MatrixParameters
-from chessism_api.operations.research_algorithms.config import ACTIVE, MAX_COLUMNS, MAX_ROWS, QUEUE, algorithm_catalog, normalize_algorithm, source_config
+from chessism_api.operations.research_algorithms.config import RETIRED_OPERATIONS, RETIRED_MESSAGE, ACTIVE, MAX_COLUMNS, MAX_ROWS, QUEUE, algorithm_catalog, normalize_algorithm, source_config
 from chessism_api.operations.research_algorithms.repository import definition_payload, list_runs, now, run_payload, terminal
 from chessism_api.operations.research_algorithms.storage import capacity
 
@@ -29,8 +30,7 @@ QUEUE_LOCK = 731_946_225
 @router.get('/canonical-blunders')
 async def canonical_blunders_status():
     from chessism_api.operations.canonical_blunders.registry import status
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION READ ONLY'))
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
         return await status(session)
 
@@ -92,11 +92,6 @@ class BlunderTrainingRequest(BaseModel):
     games_per_group: int = Field(1000, ge=100, le=3000, strict=True)
 
 
-class FixedBlunderRequest(BaseModel):
-    model_config = {'extra': 'forbid'}
-    player: str = Field(min_length=1, max_length=128)
-
-
 class SmoothBlunderRequest(BaseModel):
     model_config = {'extra': 'forbid'}
     games_per_group: int = Field(1000, ge=100, le=3000, strict=True)
@@ -108,32 +103,6 @@ class FinalBlunderRequest(BaseModel):
     model_config = {'extra': 'forbid'}
     parent_run_id: uuid.UUID
     acknowledgement: Literal['rapid_provisional_evaluation_v1']
-
-
-class ShadowBlunderRequest(BaseModel):
-    model_config = {'extra': 'forbid'}
-    parent_run_id: uuid.UUID
-    players: list[str] = Field(min_length=6, max_length=6)
-    acknowledgement: Literal['sampled_shadow_only_no_live_changes']
-
-
-class ThresholdBlunderRequest(BaseModel):
-    model_config = {'extra': 'forbid'}
-    parent_run_id: uuid.UUID
-    acknowledgement: Literal['compare_thresholds_only_no_live_changes']
-
-
-class CohortBlunderRequest(BaseModel):
-    model_config = {'extra': 'forbid'}
-    parent_run_id: uuid.UUID
-    resume_run_id: uuid.UUID | None = None
-    acknowledgement: Literal['all_player_shadow_summaries_no_live_changes']
-
-
-class StrengthBlunderRequest(BaseModel):
-    model_config = {'extra': 'forbid'}
-    parent_run_id: uuid.UUID
-    acknowledgement: Literal['compare_rating_strengths_only_no_live_changes']
 
 
 class FullDevelopmentRequest(BaseModel):
@@ -152,8 +121,7 @@ async def start_full_blunder_development(request: FullDevelopmentRequest,
         async def progress(self, *args, **kwargs):
             raise ValueError('Large development requires verified identity manifests, not historical position replay in the API.')
     try:
-        async with AsyncDBSession() as session:
-            await session.execute(text('SET TRANSACTION READ ONLY'))
+        async with read_transaction(AsyncDBSession) as session:
             await session.execute(text("SET LOCAL statement_timeout='10s'"))
             row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
                 {'id': str(request.parent_run_id)})).mappings().one_or_none()
@@ -166,73 +134,12 @@ async def start_full_blunder_development(request: FullDevelopmentRequest,
         draft=('Rating-aware blunders · CP-balanced diagnostics · RTX 4060', config))
 
 
-@router.post('/blunder-strength-comparison', status_code=202)
-async def start_blunder_strength_comparison(request: StrengthBlunderRequest,
-        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    from chessism_api.operations.research_algorithms.blunder_strength_job import configuration
-    from chessism_api.operations.research_algorithms.blunder_development_reuse import reference_plan
-    try:
-        async with AsyncDBSession() as session:
-            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
-                {'id': str(request.parent_run_id)})).mappings().one_or_none()
-            config = configuration(request.parent_run_id, row, await reference_plan(session))
-    except ValueError as error:
-        raise HTTPException(409, str(error)) from error
-    return await enqueue_run(None, account, redis,
-        draft=('Rating-aware blunders · weaker adjustments · shared GPU sample', config))
-
-
-@router.post('/blunder-cohort-summaries', status_code=202)
-async def start_blunder_cohort_summaries(request: CohortBlunderRequest,
-        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    from chessism_api.operations.research_algorithms.blunder_cohort_job import configuration
-    try:
-        async with AsyncDBSession() as session:
-            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
-                {'id': str(request.parent_run_id)})).mappings().one_or_none()
-            config = configuration(request.parent_run_id, row, request.resume_run_id)
-    except ValueError as error:
-        raise HTTPException(409, str(error)) from error
-    return await enqueue_run(None, account, redis,
-        draft=('Rating-aware blunders · all-player GPU 0.15 shadow summaries', config))
-
-
-@router.post('/blunder-threshold-comparison', status_code=202)
-async def start_blunder_threshold_comparison(request: ThresholdBlunderRequest,
-        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    from chessism_api.operations.research_algorithms.blunder_threshold_compare import configuration
-    try:
-        async with AsyncDBSession() as session:
-            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
-                {'id': str(request.parent_run_id)})).mappings().one_or_none()
-            config = configuration(request.parent_run_id, row)
-    except ValueError as error:
-        raise HTTPException(409, str(error)) from error
-    return await enqueue_run(None, account, redis,
-        draft=('Rating-aware blunders · 0.15 versus 0.20 · same 6,000 games', config))
-
-
-@router.post('/blunder-shadow-pilot', status_code=202)
-async def start_shadow_blunder_pilot(request: ShadowBlunderRequest,
-        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    from chessism_api.operations.research_algorithms.blunder_shadow_job import configuration
-    try:
-        async with AsyncDBSession() as session:
-            row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
-                {'id': str(request.parent_run_id)})).mappings().one_or_none()
-            config = configuration(request.parent_run_id, row, request.players)
-    except ValueError as error:
-        raise HTTPException(409, str(error)) from error
-    return await enqueue_run(None, account, redis,
-        draft=('Rating-aware blunders · 500 → 6,000-game shadow pilot', config))
-
-
 @router.post('/blunder-final-evaluation', status_code=202)
 async def start_final_blunder_evaluation(request: FinalBlunderRequest,
         account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
     from chessism_api.operations.research_algorithms.blunder_final_evaluation import configuration
     try:
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             row = (await session.execute(text('SELECT status,config,result FROM algorithm_run WHERE id=:id'),
                 {'id': str(request.parent_run_id)})).mappings().one_or_none()
             config = configuration(request.parent_run_id, row)
@@ -256,7 +163,7 @@ async def start_smooth_blunder_training(request: SmoothBlunderRequest,
         if request.sampling == 'development_reuse_v1':
             from chessism_api.operations.research_algorithms.blunder_development_reuse import reference_plan
         try:
-            async with AsyncDBSession() as session:
+            async with read_transaction(AsyncDBSession) as session:
                 plan=await reference_plan(session)
         except ValueError as error:
             raise HTTPException(409,str(error)) from error
@@ -267,18 +174,6 @@ async def start_smooth_blunder_training(request: SmoothBlunderRequest,
         name += ' · development reuse'
     return await enqueue_run(None, account, redis,
         draft=(name, configuration(request.games_per_group, plan, refinement)))
-
-
-@router.post('/blunder-validation', status_code=202)
-async def start_blunder_validation(request: FixedBlunderRequest,
-        account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    from chessism_api.operations.research_algorithms.blunder_validation_job import configuration
-    try:
-        config = configuration(request.player)
-    except ValueError as error:
-        raise HTTPException(422, str(error)) from error
-    return await enqueue_run(None, account, redis,
-        draft=(f"Fixed-coefficient blunders · CUDA validation · {config['player']}"[:100], config))
 
 
 @router.post('/blunder-training', status_code=202)
@@ -321,7 +216,7 @@ async def load_input_formula(request, session):
 @router.post('/input')
 async def configure_matrix_input(request: MatrixInputRequest):
     """Resolve column instructions and scope only. No source query or writes."""
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         recipe = await load_input_formula(request, session)
     try:
         config = resolve_definition(recipe, request.matrix_parameters.model_dump(mode='json'))
@@ -370,7 +265,7 @@ async def catalog():
 
 @router.post("/preflight")
 async def preflight(request: AlgorithmRequest | BuilderRequest):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         config = await request_config(request, session)
     # A bounded count is advisory, never an assertion of an exact total.
     from sqlalchemy.exc import DBAPIError
@@ -385,14 +280,14 @@ async def preflight(request: AlgorithmRequest | BuilderRequest):
 
 @router.post('/validate')
 async def validate(request: BuilderRequest):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         config = await request_config(request, session)
     return {'valid': True, 'schemas': config['schemas'], 'resources': capacity(config), 'materialized': False}
 
 
 @router.get("/definitions")
 async def definitions(limit: int = Query(100, ge=1, le=100), offset: int = Query(0, ge=0)):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         rows = list((await session.scalars(select(AlgorithmDefinition).order_by(AlgorithmDefinition.created_at.desc(), AlgorithmDefinition.id).offset(offset).limit(limit + 1))))
     return {"definitions": [definition_payload(row) for row in rows[:limit]], "has_more": len(rows) > limit}
 
@@ -431,7 +326,7 @@ async def start_run(definition_id: uuid.UUID, account: Account = Depends(get_cur
 
 @router.post('/sample', status_code=202)
 async def test_sample(request: BuilderRequest, account: Account = Depends(get_current_account), redis: ArqRedis = Depends(get_redis_pool)):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         config = await request_config(request, session)
     config['max_rows'] = min(config['max_rows'], 500)
     config['sample_run'] = True
@@ -440,7 +335,7 @@ async def test_sample(request: BuilderRequest, account: Account = Depends(get_cu
 
 async def enqueue_run(definition_id, account, redis, *, draft=None):
     run_id = str(uuid.uuid4())
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         await session.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": QUEUE_LOCK})
         if await session.scalar(select(func.count()).select_from(AlgorithmRun).where(AlgorithmRun.status.in_(ACTIVE))) >= 5:
             raise HTTPException(409, "The algorithm queue already has five active requests. Wait or cancel one.")
@@ -451,6 +346,8 @@ async def enqueue_run(definition_id, account, redis, *, draft=None):
             if definition is None:
                 raise HTTPException(404, "Algorithm definition not found.")
             name, config = definition.name, definition.config
+        if config.get("operation") in RETIRED_OPERATIONS:
+            raise HTTPException(409, RETIRED_MESSAGE)
         if not capacity(config)["safe_to_run"]:
             raise HTTPException(409, "Not enough local disk space above the protected reserve.")
         row = AlgorithmRun(id=run_id, definition_id=str(definition_id) if definition_id else None, name=name, config=deepcopy(config),
@@ -474,7 +371,7 @@ async def runs(limit: int = Query(30, ge=1, le=100), offset: int = Query(0, ge=0
 
 @router.get("/runs/{run_id}")
 async def run_details(run_id: uuid.UUID):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         row = await session.get(AlgorithmRun, str(run_id))
         if row is None:
             raise HTTPException(404, "Algorithm run not found.")
@@ -483,7 +380,7 @@ async def run_details(run_id: uuid.UUID):
 
 @router.post("/runs/{run_id}/cancel")
 async def cancel_run(run_id: uuid.UUID, redis: ArqRedis = Depends(get_redis_pool)):
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         row = await session.get(AlgorithmRun, str(run_id), with_for_update=True)
         if row is None:
             raise HTTPException(404, "Algorithm run not found.")

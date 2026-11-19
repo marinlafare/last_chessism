@@ -8,10 +8,12 @@ import time
 import numpy as np
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import write_transaction
 from chessism_api.database.postgresql.models import AlgorithmRun
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from ..matrix_constructor.artifact_files import file_operation
 from ..matrix_constructor.storage import matrix_catalog_lock, MatrixCatalogBusy
-from .config import BATCH_ROWS, SCATTER_LIMIT, VERSION, normalize_algorithm
+from .config import RETIRED_OPERATIONS, RETIRED_MESSAGE, BATCH_ROWS, SCATTER_LIMIT, VERSION, normalize_algorithm
 from .inputs import materialize
 from .numerics import Relationships, prepare_block
 from .repository import Reporter, RunCancelled, now, terminal
@@ -72,7 +74,7 @@ async def publish(run_id, result, reporter):
 
 
 async def run_algorithm_job(ctx, *, run_id):
-    async with AsyncDBSession() as session, session.begin():
+    async with write_transaction(AsyncDBSession) as session:
         row = await session.get(AlgorithmRun, run_id, with_for_update=True)
         if row is None or row.status != "queued":
             return {"run_id": run_id, "status": "not_queued"}
@@ -81,6 +83,8 @@ async def run_algorithm_job(ctx, *, run_id):
     reporter = Reporter(run_id)
     started = time.monotonic()
     try:
+        if config.get("operation") in RETIRED_OPERATIONS:
+            raise ValueError(RETIRED_MESSAGE)
         from ..canonical_blunders.benchmark_job import OPERATION as CANONICAL_TIMING, execute as time_canonical
         if config.get('operation') == CANONICAL_TIMING:
             result = await time_canonical(config, reporter)
@@ -91,30 +95,6 @@ async def run_algorithm_job(ctx, *, run_id):
             result = await train_full_development(config, reporter)
             await publish(run_id, result, reporter)
             return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
-        from .blunder_strength_job import OPERATION as STRENGTH_COMPARISON, execute as compare_strengths
-        if config.get('operation') == STRENGTH_COMPARISON:
-            result = await compare_strengths(config, reporter)
-            result['timings']['total_compute_seconds'] = time.monotonic() - started
-            await publish(run_id, result, reporter)
-            return {'run_id': run_id, 'status': 'complete', 'comparison_status': result['status']}
-        from .blunder_cohort_job import OPERATION as COHORT_BLUNDERS, execute as summarize_blunder_cohort
-        if config.get('operation') == COHORT_BLUNDERS:
-            result = await summarize_blunder_cohort(config, reporter)
-            result['timings']['total_compute_seconds'] = time.monotonic() - started
-            await publish(run_id, result, reporter)
-            return {'run_id': run_id, 'status': 'complete', 'cohort_status': result['status']}
-        from .blunder_threshold_compare import OPERATION as THRESHOLD_COMPARISON, execute as compare_thresholds
-        if config.get('operation') == THRESHOLD_COMPARISON:
-            result = await compare_thresholds(config, reporter)
-            result['timings']['total_compute_seconds'] = time.monotonic() - started
-            await publish(run_id, result, reporter)
-            return {'run_id': run_id, 'status': 'complete', 'comparison_status': result['status']}
-        from .blunder_shadow_job import OPERATION as SHADOW_BLUNDERS, execute as shadow_blunders
-        if config.get('operation') == SHADOW_BLUNDERS:
-            result = await shadow_blunders(config, reporter)
-            result['timings']['total_compute_seconds'] = time.monotonic() - started
-            await publish(run_id, result, reporter)
-            return {'run_id': run_id, 'status': 'complete', 'shadow_status': result['status']}
         from .blunder_final_evaluation import OPERATION as FINAL_BLUNDERS, execute as evaluate_final_blunders
         if config.get('operation') == FINAL_BLUNDERS:
             result = await evaluate_final_blunders(config, reporter)
@@ -127,12 +107,6 @@ async def run_algorithm_job(ctx, *, run_id):
             result['timings']['total_compute_seconds'] = time.monotonic() - started
             await publish(run_id, result, reporter)
             return {'run_id': run_id, 'status': 'complete', 'model_status': result['status']}
-        from .blunder_validation_job import OPERATION as FIXED_BLUNDERS, execute as validate_blunders
-        if config.get('operation') == FIXED_BLUNDERS:
-            result = await validate_blunders(config, reporter)
-            result['timings']['total_compute_seconds'] = time.monotonic() - started
-            await publish(run_id, result, reporter)
-            return {'run_id': run_id, 'status': 'complete', 'validation': result['status']}
         from .blunder_training import OPERATION as BLUNDER_TRAINING, execute as train_blunders
         if config.get('operation') == BLUNDER_TRAINING:
             result = await train_blunders(config, reporter)
@@ -169,7 +143,7 @@ async def run_algorithm_job(ctx, *, run_id):
         await terminal(run_id, "cancelled", str(error))
         return {"run_id": run_id, "status": "cancelled"}
     except asyncio.CancelledError:
-        await asyncio.shield(terminal(run_id, "failed", "Worker stopped or the configured run timeout was reached. Temporary inputs were removed."))
+        await finish_analysis_cleanup(terminal(run_id, "failed", "Worker stopped or the configured run timeout was reached. Temporary inputs were removed."))
         raise
     except Exception as error:
         await terminal(run_id, "failed", str(error)[:2000])

@@ -7,7 +7,6 @@ import AlgorithmForm from './research/algorithms/AlgorithmForm'
 import AlgorithmHistory, { ActiveAlgorithmRuns, SavedAlgorithms } from './research/algorithms/AlgorithmHistory'
 import CudaValidation from './research/algorithms/CudaValidation'
 import BlunderTraining from './research/algorithms/BlunderTraining'
-import BlunderValidation from './research/algorithms/BlunderValidation'
 import BlunderV2 from './research/algorithms/BlunderV2'
 import CanonicalBlunders from './research/algorithms/CanonicalBlunders'
 import useAlgorithms from './research/algorithms/useAlgorithms'
@@ -33,7 +32,6 @@ export default function Algorithms() {
       {model.notice && <div className="status-banner" role="status">{model.notice}</div>}
       <MatrixFormulaBrowser model={model} />
       <BlunderV2 onRun={model.trainBlundersV2} disabled={Boolean(model.working)} />
-      <BlunderValidation onRun={model.validateBlunders} disabled={Boolean(model.working)} />
       <BlunderTraining onRun={model.trainBlunders} disabled={Boolean(model.working)} />
       <CudaValidation onRun={model.runCuda} disabled={Boolean(model.working)} />
       {model.sourceMatrix?.config.definition_kind === 'template' ? <div ref={inputRef}>

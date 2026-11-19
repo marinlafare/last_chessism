@@ -87,7 +87,7 @@ async def exclusions(session, policy, reporter):
         if len(excluded)>sampling.MAX_SEEN_GAMES:
             raise ValueError('Historical exclusion manifest exceeds its bounded capacity.')
         verified.append({**ref,'method':method,'games':len(ids)})
-    from .blunder_strength_source import exploration_ids
+    from .blunder_development_reuse import exploration_ids
     excluded.update(await exploration_ids(session))
     from .blunder_full_source import additional_roles
     training, validation = await additional_roles(session)

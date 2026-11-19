@@ -141,8 +141,8 @@ class WiringTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_queue_dispatches_training_before_cpu_builder(self):
         row=SimpleNamespace(status='queued',config=training.configuration(),started_at=None)
-        session=AsyncMock(); session.begin=MagicMock(); session.get.return_value=row
-        factory=MagicMock(); factory.return_value.__aenter__.return_value=session
+        session=AsyncMock(); session.begin=AsyncMock(); session.get.return_value=row
+        factory=MagicMock(); factory.return_value=session
         result={'status':'candidate','included_rows':1,'timings':{}}
         with patch.object(jobs,'AsyncDBSession',factory),patch.object(jobs,'Reporter',return_value=AsyncMock()),patch.object(training,'execute',AsyncMock(return_value=result)),patch.object(jobs,'publish',AsyncMock()) as publish,patch.object(jobs,'normalize_algorithm') as cpu:
             reply=await jobs.run_algorithm_job({},run_id='test')

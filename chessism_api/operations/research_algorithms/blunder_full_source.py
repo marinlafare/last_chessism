@@ -10,10 +10,10 @@ from sqlalchemy import text
 from chessism_api.database.postgresql import research_reads as reads
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.transactions import write_transaction
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_balanced_sampling as balance, blunder_development_reuse as history
-from . import blunder_v2_source as source, blunder_v2_model as model, blunder_cohort_source as cohort
+from . import blunder_v2_source as source, blunder_v2_model as model
 from .blunder_training import game_blocks
 from .repository import RunCancelled
 
@@ -85,7 +85,7 @@ def choose_maximum_pool(metadata, policy, check=lambda: None):
 async def reserve(frozen, reporter, session_factory=AsyncDBSession):
     await reporter.check()
     payload = {'format': RESERVATION, 'source': frozen, 'canonical': False, 'production_changed': False}
-    async with session_factory() as session, session.begin():
+    async with write_transaction(session_factory) as session:
         saved = await session.scalar(text('''UPDATE algorithm_run SET result=CAST(:value AS jsonb)
             WHERE id=:id AND status='running' AND NOT cancel_requested RETURNING id'''),
             {'id': reporter.run_id, 'value': json.dumps(payload, allow_nan=False)})
@@ -243,7 +243,6 @@ def finalize_inputs(selected, folder, frozen, policy, check=lambda: None):
 
 
 async def extract(session, selected, folder, frozen, reporter):
-    layout = storage_for(session); table = layout.table('game') if layout else 'game'
     streams = {(s, m): (folder/f'staged-{s}-{m}.bin').open('xb') for s in (0, 1) for m in model.MODES}
     moves = (folder/'staged-bullet-moves.bin').open('xb'); offsets = Counter()
     processed = 0; digest = hashlib.sha256()
@@ -251,7 +250,7 @@ async def extract(session, selected, folder, frozen, reporter):
         for block in game_blocks(selected):
             await reporter.check()
             links = [g['link'] for g in block]
-            outcomes = dict((await session.execute(text(f'SELECT link,white_result FROM {table} WHERE link=ANY(CAST(:links AS bigint[]))'), {'links': links})).all())
+            outcomes = dict((await session.execute(text('SELECT link,white_result FROM public.game WHERE link=ANY(CAST(:links AS bigint[]))'), {'links': links})).all())
             records = (await session.execute(text(reads.positions(fen_ids=True)),
                 {'links': links, 'row_limit': sum(g['total_positions'] for g in block)+1})).all()
             grouped = {link: [(r[1], r[2], r[3], r[4]) for r in rows]

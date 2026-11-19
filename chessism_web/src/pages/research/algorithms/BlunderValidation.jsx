@@ -1,23 +1,6 @@
-import { useState } from 'react'
 import { pageStyleTarget } from '../../../appearance/styleCore.js'
 
 const number = value => Number.isFinite(value) ? value.toLocaleString(undefined, { maximumFractionDigits: 4 }) : '—'
-
-export default function BlunderValidation({ onRun, disabled = false }) {
-  const [player, setPlayer] = useState('')
-  return <section {...pageStyleTarget('blunder.fixed.panel')} className="algorithm-panel" aria-label="Fixed-coefficient blunders">
-    <h2 {...pageStyleTarget('title')}>Fixed-coefficient blunders</h2>
-    <p {...pageStyleTarget('text')}>Validate one player on the GPU using the existing Lichess coefficient (0.00368208) and 0.15 probability-drop threshold. No fitting or live summary changes.</p>
-    <form className="algorithm-actions" onSubmit={event => { event.preventDefault(); if (!disabled && player.trim()) onRun(player.trim()) }}>
-      <label {...pageStyleTarget('label')}>Player
-        <input {...pageStyleTarget('field')} required maxLength={128} value={player} disabled={disabled}
-          onChange={event => setPlayer(event.target.value)} placeholder="Player to validate" />
-      </label>
-      <button {...pageStyleTarget('button')} type="submit" disabled={disabled || !player.trim()}>Validate blunders on GPU</button>
-    </form>
-    <p {...pageStyleTarget('text')}>All fully analyzed games across bullet, blitz and rapid; at most 2 million source positions. Compares every move and each game's saved CPU count. This does not activate the candidate.</p>
-  </section>
-}
 
 export function BlunderValidationReport({ report }) {
   return <section {...pageStyleTarget('blunder.fixed.report')} className="algorithm-panel" aria-label="Fixed-coefficient blunder report">

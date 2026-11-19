@@ -233,8 +233,7 @@ class WiringTests(unittest.IsolatedAsyncioTestCase):
                 from tests.test_blunder_balanced import REF
                 from chessism_api.operations.research_algorithms.blunder_balanced_sampling import plan
                 with patch('chessism_api.operations.research_algorithms.blunder_balanced_source.reference_plan',AsyncMock(return_value=plan([REF]))),patch.object(routes,'AsyncDBSession') as session:
-                    session.return_value.__aenter__=AsyncMock()
-                    session.return_value.__aexit__=AsyncMock()
+                    session.return_value=AsyncMock()
                     self.assertEqual((await client.post(path,json={'sampling':'balanced_v1'})).status_code,202)
                     self.assertEqual(enqueue.call_args.kwargs['draft'][1]['sampling']['player_share_limit'],.1)
                     self.assertEqual((await client.post(path,json={'sampling':'balanced_v1','refinement':'calibration_v1'})).status_code,202)
@@ -244,8 +243,7 @@ class WiringTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual((await client.post(path,json={'sampling':'development_reuse_v1'})).status_code,422)
                 from chessism_api.operations.research_algorithms import blunder_development_reuse as reuse
                 with patch.object(reuse,'reference_plan',AsyncMock(return_value=reuse.plan([REF]))),patch.object(routes,'AsyncDBSession') as session:
-                    session.return_value.__aenter__=AsyncMock()
-                    session.return_value.__aexit__=AsyncMock()
+                    session.return_value=AsyncMock()
                     self.assertEqual((await client.post(path,json={'sampling':'development_reuse_v1','refinement':'calibration_v1'})).status_code,202)
                     self.assertEqual(enqueue.call_args.kwargs['draft'][1]['implementation_version'],4)
                     self.assertEqual(enqueue.call_args.kwargs['draft'][1]['sampling']['version'],'development_reuse_v1')

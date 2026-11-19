@@ -3,10 +3,9 @@ import { createRoot } from 'react-dom/client'
 import DefaultMatrices from '../../src/pages/research/matrices/DefaultMatrices'
 import CudaValidation from '../../src/pages/research/algorithms/CudaValidation'
 import BlunderTraining from '../../src/pages/research/algorithms/BlunderTraining'
-import BlunderValidation from '../../src/pages/research/algorithms/BlunderValidation'
 import BlunderV2 from '../../src/pages/research/algorithms/BlunderV2'
 import AlgorithmResults from '../../src/pages/research/algorithms/AlgorithmResults'
-import { runCudaValidation, trainBlunderModel, trainBlunderV2, validateFixedBlunders, fetchRun } from '../../src/pages/research/algorithms/algorithmApi'
+import { runCudaValidation, trainBlunderModel, trainBlunderV2, fetchRun } from '../../src/pages/research/algorithms/algorithmApi'
 import MatrixParametersForm from '../../src/pages/research/matrices/MatrixParametersForm'
 import '../../src/pages/research/matrices/matricesConstructor.css'
 import '../../src/pages/research/algorithms/algorithms.css'
@@ -40,7 +39,6 @@ window.fetch = async (input, options={}) => {
   window.summaryTest.requests.push({path,method:options.method||'GET',body:options.body ? JSON.parse(options.body) : null})
   let data
   if(path.endsWith('/matrices/defaults')) data={definitions}
-  else if(path.endsWith('/blunder-validation')) data={id:'fixed-blunder-fixture',status:'queued'}
   else if(path.endsWith('/runs/fixed-blunder-fixture')) data={name:'Fixed-coefficient blunders · CUDA validation · alice',status:'complete',result:{
     format:'chessism_fixed_blunder_validation_v1',status:'passed',canonical:false,production_changed:false,
     source:{player:'alice',games:10},rows:400,hardware:{name:'Fixture GPU'},rules:{coefficient:.00368208,probability_drop:.15},
@@ -150,8 +148,8 @@ function ValidationFixture() {
   const start=async (player,options)=>{setBusy(true);try{const queued=await runCudaValidation(player,options);setRun(await fetchRun(queued.id))}finally{setBusy(false)}}
   const train=async games=>{setBusy(true);try{const queued=await trainBlunderModel(games);setRun(await fetchRun(queued.id))}finally{setBusy(false)}}
   const smooth=async (games,sampling,refinement)=>{setBusy(true);try{const queued=await trainBlunderV2(games,sampling,refinement);setRun(await fetchRun(queued.id))}finally{setBusy(false)}}
-  const fixed=async player=>{setBusy(true);try{const queued=await validateFixedBlunders(player);setRun(await fetchRun(queued.id))}finally{setBusy(false)}}
-  return <><BlunderV2 onRun={smooth} disabled={busy}/><BlunderValidation onRun={fixed} disabled={busy}/><BlunderTraining onRun={train} disabled={busy}/><CudaValidation onRun={start} disabled={busy}/>{run && <AlgorithmResults run={run} onClose={()=>setRun(null)}/>}</>
+  const fixed=async ()=>setRun(await fetchRun('fixed-blunder-fixture'))
+  return <><BlunderV2 onRun={smooth} disabled={busy}/><button onClick={fixed}>Open saved fixed report</button><BlunderTraining onRun={train} disabled={busy}/><CudaValidation onRun={start} disabled={busy}/>{run && <AlgorithmResults run={run} onClose={()=>setRun(null)}/>}</>
 }
 createRoot(document.getElementById('root')).render(<main><DefaultMatrices/><ValidationFixture/>
   <MatrixParametersForm definition={definitions[0]} catalog={{limits:{},row_types:[{key:'score_distribution',filters:{players:true,modes:true,dates:true,analyzed_only:true}}]}}

@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import AsyncMock,patch
 import numpy as np
 from chessism_api.operations.canonical_blunders import registry,compute
-from chessism_api.operations.research_algorithms.blunder_threshold_compare import scalar15
+from chessism_api.operations.research_algorithms.blunder_full_diagnostics import scalar15
 
 
 def report():

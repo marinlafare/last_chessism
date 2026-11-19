@@ -11,10 +11,11 @@ import uuid
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_full_source as source, blunder_full_compute as compute
 from . import blunder_full_diagnostics as diagnostics
-from . import blunder_development_reuse as history, blunder_cohort_source as cohort
+from . import blunder_development_reuse as history, blunder_players as players
 from . import blunder_v2_model as model, blunder_refinement as refinement
 from .cuda_runtime import cuda_backend
 from .storage import ensure_capacity, workspace
@@ -69,8 +70,8 @@ async def execute(config, reporter):
     await reporter.progress('checking_large_gpu_budget', detail=f"Dedicated RTX 4060: {memory['pool_limit_bytes']/compute.GIB:.2f} GiB pool; {memory['runtime_reserve_bytes']/compute.GIB:.2f} GiB CUDA/runtime headroom. No final-test data loaded.")
     try:
         with workspace(reporter.run_id) as folder:
-            async with AsyncDBSession() as session:
-                await cohort.prepare(session)
+            async with read_transaction(AsyncDBSession) as session:
+                await players.prepare(session)
                 policy = await history.reference_plan(session)
                 roles, _, _ = await history.history(session, policy, reporter)
                 row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'),
@@ -78,7 +79,7 @@ async def execute(config, reporter):
                 if config != configuration(config['parent_run_id'], row, policy, roles):
                     raise ValueError('Frozen source/model instructions changed.')
                 original_gates = row['result']['original_quality_gates']
-                inventory = await cohort.profiles(session)
+                inventory = await players.profiles(session)
                 selected, frozen = await source.select(session, config, reporter)
                 # Persist before accessing development outcomes or score values.
                 await source.reserve(frozen, reporter)
@@ -100,13 +101,12 @@ async def execute(config, reporter):
                 asyncio.run_coroutine_threadsafe(reporter.progress('development_diagnostics', done, total, detail), loop).result(timeout=30)
             diagnostic_report = await file_operation(diagnostics.run, xp, folder, diagnostic_games, fits,
                 memory['pool_limit_bytes'], check, diagnostic_progress)
-            async with AsyncDBSession() as session:
+            async with read_transaction(AsyncDBSession) as session:
                 # A cloud/import job may have started after our source snapshot.
                 # Only read small revision markers; never stop it or discard a
                 # valid frozen development result merely because refreshes began.
-                await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
                 await session.execute(text("SET LOCAL statement_timeout='10s'"))
-                current = {p['player_name']: await cohort.current_revision(session, p['player_name']) for p in inventory}
+                current = {p['player_name']: await players.current_revision(session, p['player_name']) for p in inventory}
             revisions_match = current == {p['player_name']: p['revision'] for p in inventory}
         numerical = all(f.get('numerical', {}).get('max_prediction_error', 1) <= 1e-10 for f in fits)
         selected_ok = all(f.get('selection', {}).get('status') == 'passed' for f in fits)

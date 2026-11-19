@@ -13,6 +13,10 @@ BATCH_ROWS = 2048
 QUEUE = "algorithms_queue"
 ACTIVE = ("queued", "running")
 
+# Saved reports remain readable, but these CPU-baseline workflows are retired.
+RETIRED_OPERATIONS = frozenset(['fixed_blunder_cuda_validation', 'rating_blunder_shadow_pilot_v1', 'rating_blunder_threshold_comparison_v1', 'rating_blunder_cohort_shadow_v1', 'rating_blunder_strength_comparison_v1'])
+RETIRED_MESSAGE = "This historical comparison is no longer available. Saved reports remain available."
+
 
 def algorithm_catalog():
     from .builder_schema import AGGREGATIONS, BUILDER_MAX_ROWS, MAX_OUTPUTS, MAX_STEPS, OPERATIONS, SAMPLE_ROWS

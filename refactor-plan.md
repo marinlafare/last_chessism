@@ -1304,3 +1304,11 @@ The role installer owns only its security views/roles, not public-table repairs.
 Guard analytical transaction closure; preserve projection/selection calculations.
 No production backup/restore behavior, actual credentials, deploy or external DB.
 Focused schema, lifecycle, source, security and accepted P1 checks; no broad suite.
+
+## Approved historical research retirement
+Remove five saved-CPU comparison launch/dispatch paths and their now-dead source
+and compute implementations. Keep saved reports, exploration exclusions, fixed-rule
+oracles, current training/evaluation and CUDA publication. Retained full-development
+metadata uses canonical player/revision tables and explicit read/write transactions.
+Reject stale queued jobs and saved-definition replay before numerical or file work.
+Verify current calculations, API rejection, saved reports and history preservation.

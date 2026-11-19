@@ -1,14 +1,39 @@
 """Development-only diagnostics on staged inputs; no SQL or live-summary writes."""
 from collections import Counter, defaultdict
 import hashlib
+import math
 import time
 
 import numpy as np
 
 from . import blunder_full_compute as compute, blunder_v2_model as model, blunder_fixed as fixed
-from .blunder_shadow_compute import host
-from .blunder_strength_compute import describe
-from .blunder_threshold_compare import BANDS, scalar15
+
+BANDS = ('<1000', '1000–1499', '1500–1999', '2000–2499', '2500–2999', '3000+')
+
+
+def host(xp, value):
+    return xp.asnumpy(value) if hasattr(xp, 'asnumpy') else np.asarray(value)
+
+def describe(metrics, valid):
+    values = metrics[valid].sum(axis=0)
+    n = int(np.count_nonzero(valid))
+    if not n: return {'calibration_games': 0, 'mse': None, 'ece_pp': None, 'ece_5_bins_pp': None}
+    weights, predictions, outcomes = values[1:11], values[11:21], values[21:31]
+    return {'calibration_games': n, 'mse': float(values[0]/n),
+        'ece_pp': float(np.abs(predictions-outcomes).sum()*100/n),
+        'ece_5_bins_pp': float(np.abs((predictions-outcomes).reshape(5, 2).sum(axis=1)).sum()*100/n),
+        'bins': [{'bin': i, 'game_weight': float(w), 'predicted': float(predictions[i]/w),
+                  'observed': float(outcomes[i]/w)} for i, w in enumerate(weights) if w > 0]}
+
+def scalar15(before, after, bk, ak, u, d, a, b):
+    """Independent scalar .15 oracle; unchanged scalar mate/unsupported rules."""
+    if bk != 0 or ak != 0 or not all(math.isfinite(v) for v in (before, after, u, d)):
+        return model.scalar(before, after, bk, ak, u, d, a, b)
+    def expected(cp):
+        z = model.K0 * max(-1000., min(1000., cp)) * math.exp(a*u) + b*d
+        return .5 + .5*math.tanh(z/2)
+    return int(expected(before)-expected(after) >= .15)
+
 
 MODELS = ('coefficient_only', 'frozen_reference', 'candidate')
 
