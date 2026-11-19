@@ -6345,16 +6345,16 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Graph/admin verified; canonical backup metadata and approved historical-research retirement next",
+      "current_gate": "Canonical backup contract verified; approved historical research retirement and A4 remain",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "checks": 78,
-        "real_cuda_map_checks": 2,
-        "real_neo4j": "not run",
-        "archive": "docs/architecture/evidence/stage-a-graph-admin-2026-11-18.tar.gz",
-        "sha256": "1c95fac532644a9ad81df262c1420484c3370cf8a481c5d141ce4239a3e6b459",
+        "checks": 44,
+        "synthetic_pg_dump_restore": "passed",
+        "archive": "docs/architecture/evidence/stage-a-canonical-backup-2026-11-18.tar.gz",
+        "sha256": "336c157699e1eed2af63dd84033f047f9bee2755eb8fce8d7228dbd9db86269a",
+        "legacy_validator_definitions_preserved": 5,
         "production_access": false
       },
       "verification_attempts": [
@@ -8185,7 +8185,17 @@
         "sha256": "1c95fac532644a9ad81df262c1420484c3370cf8a481c5d141ce4239a3e6b459",
         "production_access": false
       },
-      "canonical_backup_metadata_authorization": "User approved manifest v9 with canonical identity/checksums; preserve old-backup validation and archive operations"
+      "canonical_backup_metadata_authorization": "User approved manifest v9 with canonical identity/checksums; preserve old-backup validation and archive operations",
+      "graph_admin_local_commit": "c25c1d1",
+      "canonical_backup_verification": {
+        "status": "passed",
+        "checks": 44,
+        "synthetic_pg_dump_restore": "passed",
+        "archive": "docs/architecture/evidence/stage-a-canonical-backup-2026-11-18.tar.gz",
+        "sha256": "336c157699e1eed2af63dd84033f047f9bee2755eb8fce8d7228dbd9db86269a",
+        "legacy_validator_definitions_preserved": 5,
+        "production_access": false
+      }
     }
   }
 }

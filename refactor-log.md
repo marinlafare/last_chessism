@@ -2274,3 +2274,15 @@ against real PostgreSQL and unchanged codec/backup-barrier units. Across gate12,
 15,16,17: 78 distinct checks pass; no remaining failures/errors/skips in these gates.
 No post-gate application edits. Existing live Neo4j/Redis/PostgreSQL and backup
 unchanged; all ephemeral test resources are removed. Stage A remains incomplete.
+
+Graph/admin local checkpoint: c25c1d1. Canonical backup metadata implementation
+follows the user's explicit format-9 approval. Gate18: four canonical backup
+checks passed. Gate19 actual synthetic dump/restore failed catalog comparison;
+gate20 recorded four exact equivalent PostgreSQL cast changes (three constraints,
+one index). Reused existing strict backup_contract normalization in canonical
+catalog fingerprint, version15. Gate21 actual pg_dump/pg_restore passes schema,
+row and sequence checks. Gate22 all42 schema/metadata/normalizer/old-validator
+checks pass; 44 distinct including the two dump phases. Old validation definitions
+remain AST-identical after class rename and are isolated from runtime profile use.
+Failed evidence retained; no tests bypassed or weakened. Archive commands/locations
+unchanged. No application DB, recovery checkpoint, Neo4j or real Redis accessed.

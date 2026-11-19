@@ -92,27 +92,9 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         definitions = await definition_backup_manifest(session)
         algorithms = await algorithm_backup_manifest(session)
-        from chessism_api.database.postgresql.fen_identity import SHAPE_SQL, schema_version
-        from chessism_api.database.postgresql.relational_storage import storage_for, describe_contract
-        layout = storage_for(session)
-        original_search_path = None
-        if layout:
-            original_search_path = await session.scalar(text("SHOW search_path"))
-            await session.execute(text("SELECT set_config('search_path','public',true)"))
-        fen_identity_version = schema_version((await session.execute(text(SHAPE_SQL))).mappings().all())
-        if original_search_path is not None:
-            await session.execute(text("SELECT set_config('search_path',:value,true)"),{'value':original_search_path})
-        if fen_identity_version != 'numeric_v2':
-            raise RuntimeError('Refusing a new backup from a partially migrated FEN schema')
-        from chessism_api.database.postgresql.fen_reference_identity import SHAPE_SQL as REFERENCE_SHAPE_SQL, schema_version as reference_version
-        relational_contract = None
-        if layout:
-            relational_contract = await describe_contract(session,layout)
-            fen_reference_version = layout.version
-        else:
-            fen_reference_version = reference_version((await session.execute(text(REFERENCE_SHAPE_SQL))).mappings().all())
-            if fen_reference_version != 'numeric_v1':
-                raise RuntimeError('Refusing a new backup before the game/player FEN reference migration')
+        from chessism_api.database.postgresql.canonical import backup as canonical_backup
+        from chessism_api.database.postgresql.transactions import driver_connection
+        canonical_contract = await canonical_backup.describe(await driver_connection(session))
         matrices = await backup_completed_matrices(session, publish_progress=publish_progress)
         info = await backup._pgbackrest_info(tolerate_missing=True)
         stanza_ready = bool(
@@ -201,9 +183,10 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
 
         completed_at = backup._iso_now()
         manifest = {
-            "schema_version": 7 if relational_contract else 6,
-            "fen_identity_version": fen_identity_version,
-            "fen_reference_version": fen_reference_version,
+            "schema_version": canonical_backup.FORMAT,
+            "fen_identity_version": "numeric_v2",
+            "fen_reference_version": canonical_backup.REFERENCES,
+            "canonical_schema": canonical_contract,
             "algorithms": algorithms,
             "matrix_definitions": definitions,
             "matrices": matrices,
@@ -227,8 +210,6 @@ async def _run_database_backup_job(ctx: dict[str, Any], session) -> dict[str, An
             "destination_uuid": backup.EXPECTED_VOLUME_UUID,
             "restore_tested": False,
         }
-        if relational_contract:
-            manifest['relational_storage'] = relational_contract
         manifest_path = backup.MANIFEST_DIRECTORY / f"{newest['backup_id']}.json"
         backup._atomic_write_json(manifest_path, manifest)
         manifest_sha256 = backup._sha256(manifest_path)

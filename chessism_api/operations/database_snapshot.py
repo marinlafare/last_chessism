@@ -93,23 +93,9 @@ async def snapshot_metadata(session, publish):
     from .matrix_constructor.definition_backups import definition_backup_manifest
     from .research_algorithms.backups import algorithm_backup_manifest
     from .matrix_backups import backup_completed_matrices
-    from chessism_api.database.postgresql.fen_identity import SHAPE_SQL, schema_version
-    from chessism_api.database.postgresql.relational_storage import storage_for, describe_contract
-    from chessism_api.database.postgresql.fen_reference_identity import (
-        SHAPE_SQL as REF_SQL, schema_version as reference_version,
-    )
-    layout = storage_for(session)
-    search_path = await session.scalar(text("SHOW search_path"))
-    await session.execute(text("SELECT set_config('search_path','public',true)"))
-    identity = schema_version((await session.execute(text(SHAPE_SQL))).mappings().all())
-    await session.execute(text("SELECT set_config('search_path',:value,true)"), {"value": search_path})
-    if identity != "numeric_v2":
-        raise RuntimeError("Refusing a snapshot of a partially migrated FEN schema")
-    contract = await describe_contract(session, layout) if layout else None
-    references = layout.version if layout else reference_version(
-        (await session.execute(text(REF_SQL))).mappings().all())
-    if references not in {"relational_v2", "relational_v3", "numeric_v1"}:
-        raise RuntimeError("Refusing a snapshot of partially migrated FEN references")
+    from chessism_api.database.postgresql.canonical import backup as canonical_backup
+    from chessism_api.database.postgresql.transactions import driver_connection
+    contract = await canonical_backup.describe(await driver_connection(session))
     # pg_dump does not contain cluster roles/passwords. Only explicitly supported
     # export-role identities can accompany the owner; restore them NOLOGIN.
     from .exports.backup_roles import role_manifest
@@ -122,7 +108,8 @@ async def snapshot_metadata(session, publish):
     locale = (await session.execute(text("""SELECT datname AS name, pg_encoding_to_char(encoding) AS encoding,
         datcollate AS collate, datctype AS ctype FROM pg_database WHERE datname=current_database()"""))).mappings().one()
     metadata = {
-        "schema_version": 8 if contract else 6, "fen_identity_version": identity, "fen_reference_version": references,
+        "schema_version": canonical_backup.FORMAT, "fen_identity_version": "numeric_v2",
+        "fen_reference_version": canonical_backup.REFERENCES,"canonical_schema":contract,
         "matrix_definitions": await definition_backup_manifest(session),
         "algorithms": await algorithm_backup_manifest(session),
         "matrices": await backup_completed_matrices(session, publish_progress=publish),
@@ -130,8 +117,6 @@ async def snapshot_metadata(session, publish):
         "database_support_roles": support_roles,
         "database_bytes": int(await session.scalar(text("SELECT pg_database_size(current_database())"))),
     }
-    if contract:
-        metadata["relational_storage"] = contract
     return metadata
 
 

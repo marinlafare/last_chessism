@@ -1038,3 +1038,30 @@ cancellation and the affected CUDA/CPU readers. Two existing map checks ran on t
 RTX 4060. No Neo4j server was contacted; the ported full Neo4j integration remains
 unexecuted. Historical function-upgrade tests now target initializer-owned triggers;
 the old giant profile-specific progress benchmark is deferred, not claimed passing.
+
+### Canonical backup identity (version 15; manifest format 9)
+
+The user approved explicit canonical backup metadata. Both existing archive paths
+retain their commands, destinations and orchestration. New manifests identify
+numeric FENs, native canonical references, schema version, DDL fingerprint and
+catalog fingerprint. Restore validation compares the artifact to its own recorded
+identity, checks the full catalog and verifies every owned identifier sequence is
+not behind stored IDs. It does not run application initialization or migrate data.
+
+A real synthetic pg_dump/pg_restore exposed PostgreSQL's equivalent varchar-array
+cast spelling on three constraints and one index. Catalog fingerprinting reuses
+the existing exact normalization for this spelling; all columns, constraints,
+indexes, functions and trigger states remain checked. No broad SQL normalization.
+
+Validation of pre-canonical recovery archives is retained separately in
+legacy_backup_validation.py. Its five identifier/layout/validation definitions are
+AST-identical to the original after the class rename. It cannot bind application
+sessions or install/migrate schemas. This is necessary recovery compatibility,
+not a runtime storage profile. Existing backup manifests take their original
+validation path unchanged.
+
+44 focused checks pass, including a real five-game dump/restore, 28 initializer
+checks, malformed metadata/catalog/sequence rejection and old-validator read-only
+behavior. No existing database, archive, recovery checkpoint or external service
+was accessed. This establishes the canonical backup contract; it does not perform
+a new backup of application data.

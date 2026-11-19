@@ -2,8 +2,9 @@
 from hashlib import sha256
 import json
 from pathlib import Path
+from ..backup_contract import normalize_definition
 
-VERSION = 14
+VERSION = 15
 CONTRACT = 'chessism_canonical_foundation'
 SQL_FILES = ('core.sql', 'support.sql', 'projections.sql', 'recovery.sql', 'home.sql', 'player_analytics.sql', 'fen_appearances.sql', 'exports.sql', 'research.sql', 'cuda.sql', 'graph.sql')
 INIT_LOCK = 6975310201
@@ -21,7 +22,7 @@ def schema_digest():
     return sha256(schema_sql().encode()).hexdigest()
 
 
-async def catalog_digest(connection):
+async def catalog_rows(connection):
     """Ignore data/sequence positions; detect changed columns, keys, indexes or code."""
     queries = (
         """SELECT n.nspname,c.relname, c.relkind::text, c.relrowsecurity, c.relforcerowsecurity
@@ -59,7 +60,16 @@ async def catalog_digest(connection):
            ORDER BY n.nspname,t.typname,e.enumsortorder""",
     )
     rows = [[dict(row) for row in await connection.fetch(query)] for query in queries]
-    return sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
+    # PostgreSQL reparses varchar[] casts when restoring pg_dump. Normalize only
+    # the already-tested equivalent spelling, never omit constraints or indexes.
+    for section, field in ((rows[2], 'definition'), (rows[3], 'indexdef')):
+        for row in section:
+            row[field] = normalize_definition(row[field])
+    return rows
+
+
+async def catalog_digest(connection):
+    return sha256(json.dumps(await catalog_rows(connection), sort_keys=True).encode()).hexdigest()
 
 
 async def validate(connection):

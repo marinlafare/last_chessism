@@ -395,6 +395,13 @@ async def _validate_fen_identity(socket_dir, manifest):
                                       user=RESTORE_USER, database=RESTORE_DATABASE,
                                       server_settings={'default_transaction_read_only': 'on', 'statement_timeout': '30000'})
     try:
+        from chessism_api.database.postgresql.canonical import backup as canonical_backup
+        if int(manifest.get('schema_version') or 0) >= canonical_backup.FORMAT:
+            if (manifest['schema_version'] != canonical_backup.FORMAT or expected != 'numeric_v2'
+                    or manifest.get('fen_reference_version') != canonical_backup.REFERENCES):
+                raise RuntimeError('Unsupported or inconsistent canonical backup format')
+            references = await canonical_backup.validate_restored(connection,manifest.get('canonical_schema'))
+            return {'version':'numeric_v2','references':references}
         result = await validate_identity(connection, allow_legacy=expected is None)
         if expected is not None and result['version'] != expected:
             raise RuntimeError('Restored FEN identity differs from its backup manifest')
@@ -406,7 +413,7 @@ async def _validate_fen_identity(socket_dir, manifest):
             if (manifest.get('relational_storage') or {}).get('version') != reference_expected:
                 raise RuntimeError('Backup storage versions disagree')
             from sqlalchemy.engine import URL
-            from chessism_api.database.postgresql.relational_storage import validate_backup_contract
+            from chessism_api.database.postgresql.legacy_backup_validation import validate_backup_contract
             result['references'] = await validate_backup_contract(
                 URL.create('postgresql+asyncpg',username=RESTORE_USER,database=RESTORE_DATABASE,
                            port=55432,query={'host':str(socket_dir)}),manifest.get('relational_storage'))
