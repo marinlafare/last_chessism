@@ -1462,3 +1462,32 @@ comparison: 351 frontend checks, same four baseline failures with identical
 details; 22 mounted React checks pass; 60 focused backend checks pass. Build,
 architecture, syntax and source integrity pass. See stage-c-completion.md and
 archived evidence. Stage C is not accepted until independent review; stop here.
+
+
+## Authorized Stage C final corrections (2026-11-19)
+Entry: reviewed clean 0f3e105; existing 351/347/4 frontend and 60 backend
+evidence reused after source-hash verification. Authorization: attachment
+761b6345-124c-4345-b398-e1592c72b217. A/B remain accepted, C requires corrections.
+
+Correction A: add actual HTTP-downloader/job regressions before code changes.
+Reject unsuccessful/incomplete requested archive coverage before this attempt's
+import transaction; use the existing failed ARQ exception envelope with failed
+month details. Preserve legitimate empty archives, exact post-commit counts,
+prior committed results and FEN follow-up behavior. Scope: chesscom.py, jobs.py
+if needed, focused ingestion regressions and verification evidence. No retries
+or persistence redesign. Gate: red reproduction and focused backend green.
+Commit: fix: reject incomplete archive downloads before ingestion.
+
+Correction B: add mounted acknowledgment-ordering regressions before code changes.
+Extend gameJobService with synchronous storage notifications, request ownership
+and identity-checked clearing; subscribe through a small React hook. Adopt this
+boundary in useTrackedGameJob, MainCharacters, PlayerWorkspace, DownloadNewGames
+and their regression fixtures. Persist before publishing, reject obsolete request
+acknowledgments and observe writes during mounting. Retain existing polling and
+workflow-specific completion actions. Gate: mounted red/green, shared polling
+and complete comparable frontend suite, build, architecture and integrity.
+Commit: fix: observe tracked job acknowledgments across navigation.
+
+Record both verified chunks, final source hashes and archived evidence. No live
+data/services, production, pushes, deployment or Stage D. Under-five-minute gates
+run directly. Stop pending a focused independent correction review.

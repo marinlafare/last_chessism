@@ -106,7 +106,7 @@ async def _download_format_and_insert(
                 "downloading",
                 total_steps,
                 index,
-                f"Downloaded {month}.",
+                f"Checked archive {month}.",
             )
 
     async with measured(reporter, "download_archives", len(months), "archive requests"):

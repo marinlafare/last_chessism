@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_c_verified_pending_independent_review",
+  "status": "stage_c_corrections_in_progress",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -8555,7 +8555,7 @@
     "next_action": "Accepted by focused independent review; preserve guarantees during authorized later stages."
   },
   "stage_c": {
-    "status": "verified_pending_independent_review",
+    "status": "corrections_required",
     "baseline": "5c037d8ede820da423f9004941a90b874dfb7510",
     "authorization": "270262d3-33bd-4c1e-9857-de1eed4f0d1b/Pasted text.txt",
     "batches": {
@@ -8570,7 +8570,7 @@
     "evidence": "docs/architecture/evidence/stage-c-frontend-2026-11-19.tar.gz",
     "evidence_sha256": "47f9d46f9fb525143ed26105135347aef03a62b2fd534604b7795ed6f5737d15",
     "completed_at": "2026-11-19T22:38:54.575260+00:00",
-    "next_action": "Independent Stage C acceptance review. Stop implementation; no Stage D.",
+    "next_action": "Implement only authorized corrections A and B; then focused independent review.",
     "verification": {
       "frontend_baseline": {
         "tests": 346,
@@ -8630,5 +8630,29 @@
       "Failed ARQ ingestion jobs retain failure propagation; absent committed counts are unknown, not zero.",
       "Existing unrelated four frontend failures remain."
     ]
+  },
+  "stage_c_corrections": {
+    "baseline": "0f3e1057570fbefba622e7371233bfc269454b6f",
+    "authorization": "761b6345-124c-4345-b398-e1592c72b217/Pasted text.txt",
+    "status": "in_progress",
+    "current_chunk": "B",
+    "chunks": {
+      "A": {
+        "status": "verified",
+        "tests": 70,
+        "new_methods": 10,
+        "red_failing_methods": 6,
+        "red_failure_entries": 9,
+        "red_error_entries": 1,
+        "green_failures": 0,
+        "green_errors": 0,
+        "green_skips": 0
+      },
+      "B": {
+        "status": "in_progress"
+      }
+    },
+    "workspace": "/tmp/chessism-stage-c-corrections-20261119",
+    "independent_acceptance": false
   }
 }

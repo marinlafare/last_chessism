@@ -110,7 +110,7 @@ async def download_month(
     year: int,
     month: int,
     client: httpx.AsyncClient,
-) -> Optional[httpx.Response]:
+) -> httpx.Response:
     """Fetch one monthly archive, retrying once on an empty response."""
     month_str = f"{month:02d}"
     download_url = (
@@ -120,42 +120,22 @@ async def download_month(
         .replace("{month}", month_str)
     )
 
-    try:
+    games_response = await client.get(
+        download_url, follow_redirects=True, timeout=5,
+        headers={"User-Agent": constants.USER_AGENT},
+    )
+    games_response.raise_for_status()
+    if not games_response.content:
+        # Retain the existing empty-body retry; an HTTP error is never an empty archive.
+        await asyncio.sleep(1)
         games_response = await client.get(
-            download_url,
-            follow_redirects=True,
-            timeout=5,
-            headers={"User-Agent": constants.USER_AGENT}
+            download_url, follow_redirects=True, timeout=10,
+            headers={"User-Agent": constants.USER_AGENT},
         )
-        
-        if not games_response.content:
-            await asyncio.sleep(1)
-            games_response = await client.get(
-                download_url,
-                follow_redirects=True,
-                timeout=10,
-                headers={"User-Agent": constants.USER_AGENT}
-            )
-        
-        if not games_response.content:
-            print(f"No content after two attempts for {player_name} in {year}-{month_str}.")
-            return None
-
         games_response.raise_for_status()
-        return games_response
-
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            print(f"No games found for {player_name} in {year}-{month_str} (404).")
-            return None
-        print(f"HTTP error downloading month {year}-{month_str}: {e.response.status_code} - {e.response.text}")
-        return None
-    except httpx.RequestError as e:
-        print(f"Request error downloading month {year}-{month_str}: {e}")
-        return None
-    except Exception as e:
-        print(f"An unexpected error occurred downloading month {year}-{month_str}: {e}")
-        return None
+    if not games_response.content:
+        raise ValueError("Archive response has no content")
+    return games_response
 
 
 async def _month_of_games(
@@ -163,27 +143,13 @@ async def _month_of_games(
     year: int,
     month: int,
     client: httpx.AsyncClient,
-) -> Optional[Dict[str, Any]]:
-    """
-    Downloads a month of games and returns as parsed JSON dictionary.
-    """
-    pgn_response = await download_month(player_name, year, month, client)
-    
-    if pgn_response is None:
-        return None
-
-    try:
-        text_games = pgn_response.text
-        text_games = text_games.replace(' \\"Let"s Play!','lets_play') 
-        
-        parsed_json = json.loads(text_games)
-        return parsed_json
-    except json.JSONDecodeError as e:
-        print(f'JSON decoding failed for year: {year}, month: {month}: {e}')
-        return None
-    except Exception as e:
-        print(f"Error filtering raw PGN for {year}-{month}: {e}")
-        return None
+) -> Dict[str, Any]:
+    response = await download_month(player_name, year, month, client)
+    text_games = response.text.replace(' \\"Let"s Play!', 'lets_play')
+    archive = json.loads(text_games)
+    if not isinstance(archive, dict) or not isinstance(archive.get('games'), list):
+        raise ValueError("Archive response must contain a games list")
+    return archive
 
 
 async def download_months(
@@ -197,6 +163,7 @@ async def download_months(
     to comply with Chess.com policies.
     """
     all_games_by_month: Dict[int, Dict[int, List[Dict[str, Any]]]] = {}
+    failures = {}
     
     async with httpx.AsyncClient(timeout=15, http2=False) as shared_client:
         print(f"Starting serial download of {len(valid_dates)} months...")
@@ -213,15 +180,9 @@ async def download_months(
             try:
                 result = await _month_of_games(player_name, year, month, shared_client)
 
-                if result is None:
-                    print(f"No data for {year}-{month}.")
-                elif result.get('games') is not None:
-                    all_games_by_month.setdefault(year, {})[month] = result['games']
-                else:
-                    print(f"No games or invalid data for {year}-{month} (missing/empty 'games' key in parsed JSON).")
-
-            except Exception as e:
-                print(f"An error occurred processing {month_str}: {e}")
+                all_games_by_month.setdefault(year, {})[month] = result['games']
+            except (httpx.HTTPError, ValueError) as error:
+                failures[month_str] = str(error)
 
             finally:
                 if progress_callback:
@@ -230,4 +191,12 @@ async def download_months(
         end_time = time.time()
         print(f"Finished downloading {len(valid_dates)} months in {end_time - start_time:.2f} seconds.")
 
+    if failures:
+        successful = sum(len(months) for months in all_games_by_month.values())
+        details = '; '.join(f"{month}: {error}" for month, error in failures.items())
+        # The coordinator imports only after this function returns complete coverage.
+        raise RuntimeError(
+            f"Incomplete archive download for {player_name}: "
+            f"{successful}/{len(valid_dates)} archives downloaded; failed {details}"
+        )
     return all_games_by_month

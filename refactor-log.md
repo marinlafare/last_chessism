@@ -2666,3 +2666,32 @@ Handoff: docs/architecture/stage-c-completion.md.
 Evidence: docs/architecture/evidence/stage-c-frontend-2026-11-19.tar.gz
 SHA256 47f9d46f9fb525143ed26105135347aef03a62b2fd534604b7795ed6f5737d15.
 Next action: independent Stage C acceptance review. Stop implementation.
+
+
+### 2026-11-19 — Stage C correction authorization and baseline
+Independent review requests corrections for swallowed archive failures and late
+acknowledgments missed by mounted consumers. Verified expected repository/branch,
+clean 0f3e105 and accepted A/B ancestry. All 564 frontend and four backend evidence
+hashes match. Reuse that exact 351-test baseline (same four unresolved appearance/
+navigation failures), 60 passing backend checks and 22 mounted checks. User has
+authorized both focused chunks, local commits and synthetic verification; no
+additional approval cycle or unrelated full suites. Begin A with actual downloader
+and coordinator regressions; no production code modified before red reproduction.
+
+### Stage C correction A — verified
+Ten new checks exercise actual monthly HTTP download, parsing, importer and job
+orchestration against HTTP MockTransport and an isolated transactional persistence
+double. On reviewed code six methods reproduce defects (nine failed assertions
+and one malformed-payload error, including subtests); four preservation methods
+pass. Green: all 70 checks pass in 2.97s, zero failures/errors/skips. HTTP 404/503,
+transport errors, malformed payloads and missing games lists now retain failed
+month details and cause failed ARQ execution. Valid empty lists remain successes.
+
+Decision: require complete requested download coverage before this attempt's import
+transaction. Mixed downloads commit nothing from this attempt; earlier commits
+remain unchanged. Keep normal success counts/FEN status and the existing failed
+exception envelope (type/message), with no new partial-success status or consumer
+interpretation. Error text includes failed months and downloaded/requested count.
+Cancellation propagates. No HTTP retry policy, persistence or serializer change.
+Source hashes and red/green logs retained in the corrections evidence workspace.
+Next: correction B mounted reproductions and shared storage ownership.
