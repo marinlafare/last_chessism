@@ -1780,3 +1780,74 @@ Version 9, ID-owned derived snapshots and canonical hours/latest reads are ready
 local checkpoint. Source invalidation, both concurrency orders, cancellation and
 late failure tests passed. Original DB/checkpoint/services remain untouched.
 Stage A remains incomplete/unaccepted. Next: canonical catalogs/rating distribution.
+
+### Canonical game catalogs and rating distribution — started 2026-11-18
+
+Player metadata committed as 2eec444; clean tree confirmed. Next scoped conversion
+removes relational query rewriting/profile branches from live catalog, exact rating
+distribution and latest-opponent ratings. Keep cached-section behavior and formulas;
+use one guarded read snapshot and canonical IDs in live cache keys. No new DDL.
+
+Catalog/rating conversion prepared. Concrete canonical SQL replaces runtime profile
+selection and query rewriting; operations own one guarded read snapshot for profile,
+counts and visible-opponent enrichment. Live Redis keys include canonical player IDs.
+Saved catalog enrichment calls the same adapter without its old lazy operation cycle.
+Seven calculation/cache-validation functions and the shared opening SQL are unchanged.
+No schema or deployment changes.
+
+Four existing rating service tests retain cache/deletion/mode/error assertions and
+now mock the explicit adapter, including cleanup checks. Old SQL-rewriter string
+assertions are mapped to real canonical PostgreSQL oracles, not removed behavior.
+16 new PostgreSQL cases cover all catalog bins, live/saved parity, standard/self-play
+counts, search minimums, paging/ties, exact ratings, cache identity/outages, one-snapshot
+enrichment, database timeouts, readonly errors, repeated cancellation and HTTP routes.
+
+Changed/new Python parses, pure-function/expression identity and git diff --check pass.
+Prepared focused gate: 44 schema/catalog/metadata + 26 unit/route/transaction + all
+68 P1 = 138 checks; no skips permitted. No new schema means no repeated broad DDL gate.
+Sources frozen at /tmp/chessism-canonical-a3-catalogs-20261118-01.
+Only private bounded networkless PostgreSQL/Redis; original DB/checkpoint/services
+remain untouched. Stage A incomplete/unaccepted. Review before the next conversion.
+
+Catalog/rating gate launched: supervisor PID 918128; startup confirmed.
+Monitor: `python3 /tmp/chessism-canonical-a3-catalogs-20261118-01/monitor.py`. Returning control without polling.
+Review results, frozen hashes and owned cleanup before a local commit.
+
+### Catalog/rating launch 1 — Git startup crash, zero tests started
+
+Supervisor exited after 0.73 seconds. git diff --check died with SIGBUS (exit -7),
+without stdout/stderr, before container creation. No application checks or suites
+ran. Original command-error JSON and traceback remain in launch-1 evidence.
+All 1,763 frozen source hashes match; supervisor exited and exact-label Docker
+inspection confirms no owned containers exist. A bounded foreground repeat of
+exactly git diff --check passed with exit 0. No repository reset/repair was used.
+
+Timing indicates a launcher race: refactor-manifest.json was rewritten at
+1795046246.5317817 while the supervisor's startup check ran between
+1795046246.0843794 and 1795046246.8141837. Truncating a file while Git memory-maps
+it can cause SIGBUS. This is the suspected cause, not a proven Git diagnostic.
+The ephemeral runner now waits for a launch-ready marker after all repository
+tracking writes, with a 15-second startup deadline. The launch record is also
+replaced atomically. Source/Git checks and every test still run; none is weakened.
+
+Retry: /tmp/chessism-canonical-a3-catalogs-20261118-02. Same 138 checks, source
+hashes, suites, resource limits and cleanup. No application/test/schema changes.
+Stage A remains incomplete; no local commit until this gate passes and is reviewed.
+
+Catalog/rating launch 2: supervisor PID 931873; startup confirmed.
+Tracking writes complete before releasing launch-ready.
+Monitor: `python3 /tmp/chessism-canonical-a3-catalogs-20261118-02/monitor.py`. Returning control without polling.
+
+### Catalog/rating verification passed — 2026-11-18
+
+44 PostgreSQL/schema/metadata, 26 unit/route/transaction and all 68 P1 checks passed:
+138 total, zero failures/errors/skips, 27.11 seconds on Python 3.10.22. Raw/structured
+results agree; all 1,763 frozen source hashes match. Supervisor exited; all five
+owned containers removed, independently confirmed by exact-label Docker inspection.
+The synchronized launch completed without another Git startup crash. No app/test
+changes followed the passing run. No redundant broad suite required.
+
+Both attempts, including the original pre-test Git crash, archived, read back and
+byte-checked at docs/architecture/evidence/stage-a-catalogs-2026-11-18.tar.gz.
+Original DB/checkpoint/services remain untouched. Stage A is incomplete/unaccepted.
+Next: canonical chart drill-down and behavioural activity/rating/day consumers.

@@ -6,6 +6,8 @@ import json
 
 from redis.exceptions import RedisError
 
+from chessism_api.database.postgresql.player_catalog_reads import latest_opponent_ratings
+
 from .player_analytics_summary import enabled, read_snapshot, counts
 
 CATALOG_SORTS = ('games', 'wins', 'losses', 'draws')
@@ -90,10 +92,9 @@ async def catalog_snapshot_page(session, redis, scope, *, kind, mode, color, sea
     matching = [row for row in filter_catalog_bin(ranked, sort_by, ratio_bin) if matches(row)]
     rows = [dict(row) for row in matching[(page - 1) * limit:page * limit]]
     if kind == 'opponents':
-        from .player_game_catalog import _latest_opponent_ratings, RATING_MODES
-        ratings = await _latest_opponent_ratings(session, [row['key'] for row in rows if row['key']], mode)
+        ratings = await latest_opponent_ratings(session, [row['key'] for row in rows if row['key']], mode)
         for row in rows:
-            row['latest_ratings'] = ratings.get(row['key'], dict.fromkeys(RATING_MODES if mode == 'all' else [mode]))
+            row['latest_ratings'] = ratings.get(row['key'], dict.fromkeys(('bullet','blitz','rapid') if mode == 'all' else [mode]))
     total = len(matching)
     return {'version': 1, **scope.response_base(), 'kind': kind, 'color': color, 'search': search, 'sort_by': sort_by, 'ratio_bin': ratio_bin,
             'rows': rows, 'total_games': sum(row['games'] for row in matching), 'summary_revision': saved['summary_revision'],

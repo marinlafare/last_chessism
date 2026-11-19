@@ -6345,33 +6345,33 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical player metadata snapshots and hours \u2014 passed, local commit pending",
+      "current_gate": "canonical game catalogs and rating distribution \u2014 passed, local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
         "attempt": 2,
-        "entry_commit": "870c035c1a56bc9c5ea5085492c484a55daf079b",
-        "evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-02",
+        "entry_commit": "2eec4443419d322171982fc7904923518382f118",
+        "evidence_directory": "/tmp/chessism-canonical-a3-catalogs-20261118-02",
         "expected_checks": {
-          "foundation": 105,
-          "workflow": 20,
+          "foundation": 44,
+          "workflow": 26,
           "p1": 68
         },
-        "total_checks": 193,
-        "frozen_source_files": 1761,
-        "protected_baseline_files": 1619,
-        "correction_scope": "new PostgreSQL test fixture/contract assumptions only",
-        "previous_evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-01",
-        "supervisor_pid": 857672,
+        "total_checks": 138,
+        "frozen_source_files": 1763,
+        "protected_baseline_files": 1615,
+        "previous_evidence_directory": "/tmp/chessism-canonical-a3-catalogs-20261118-01",
+        "correction_scope": "Ephemeral launcher waits for tracking updates; application/tests/schema unchanged",
+        "supervisor_pid": 931873,
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 105,
+            "tests": 44,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 37.62095093727112,
+            "elapsed_seconds": 16.24918270111084,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6379,11 +6379,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 20,
+            "tests": 26,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.16207170486450195,
+            "elapsed_seconds": 0.2076272964477539,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6395,41 +6395,41 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 3.8770360946655273,
+            "elapsed_seconds": 3.042699098587036,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "total_passed": 193,
-        "elapsed_seconds": 49.77635192871094,
-        "source_integrity": "All 1761 frozen source hashes match",
+        "total_passed": 138,
+        "elapsed_seconds": 27.105095148086548,
+        "source_integrity": "All 1763 frozen input hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-p1",
+            "container": "chessism-canonical-a3-catalogs-626de04df6-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-workflow",
+            "container": "chessism-canonical-a3-catalogs-626de04df6-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-foundation",
+            "container": "chessism-canonical-a3-catalogs-626de04df6-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-redis",
+            "container": "chessism-canonical-a3-catalogs-626de04df6-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-postgres",
+            "container": "chessism-canonical-a3-catalogs-626de04df6-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "evidence_archive": "docs/architecture/evidence/stage-a-player-metadata-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "2c3164ab68fcc697d3085051700aff01dce3163b9535fce5097c36d2b5319c91",
+        "evidence_archive": "docs/architecture/evidence/stage-a-catalogs-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "b8e1c507777e2442080fbda01be1f8a9f132b0a6d2e7f09d4c67146c045a8980",
         "commit_pending": true
       },
       "verification_attempts": [
@@ -6786,6 +6786,28 @@
           ],
           "cleanup_independently_confirmed": true,
           "failure_category": "Three new-test assumptions: fourth dirty day, route whitespace, existing CUDA control table"
+        },
+        {
+          "status": "failed",
+          "entry_commit": "2eec4443419d322171982fc7904923518382f118",
+          "evidence_directory": "/tmp/chessism-canonical-a3-catalogs-20261118-01",
+          "expected_checks": {
+            "foundation": 44,
+            "workflow": 26,
+            "p1": 68
+          },
+          "total_checks": 138,
+          "frozen_source_files": 1763,
+          "protected_baseline_files": 1615,
+          "supervisor_pid": 918128,
+          "attempt": 1,
+          "results": {},
+          "application_tests_started": 0,
+          "elapsed_seconds": 0.729804277420044,
+          "failure_category": "Git SIGBUS during startup check; overlapping tracking-file write is suspected",
+          "source_integrity": "All 1763 frozen input hashes match",
+          "cleanup": [],
+          "cleanup_independently_confirmed": true
         }
       ],
       "completed_verifications": [
@@ -7189,6 +7211,91 @@
           "evidence_archive_sha256": "22f1c2883b5408c23c850b16378f170d149324da57cb115648ff0561f4e2255f",
           "commit_pending": false,
           "commit_sha": "870c035c1a56bc9c5ea5085492c484a55daf079b"
+        },
+        {
+          "status": "passed",
+          "attempt": 2,
+          "entry_commit": "870c035c1a56bc9c5ea5085492c484a55daf079b",
+          "evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-02",
+          "expected_checks": {
+            "foundation": 105,
+            "workflow": 20,
+            "p1": 68
+          },
+          "total_checks": 193,
+          "frozen_source_files": 1761,
+          "protected_baseline_files": 1619,
+          "correction_scope": "new PostgreSQL test fixture/contract assumptions only",
+          "previous_evidence_directory": "/tmp/chessism-canonical-a3-player-metadata-20261118-01",
+          "supervisor_pid": 857672,
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 105,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 37.62095093727112,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 20,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.16207170486450195,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.8770360946655273,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 193,
+          "elapsed_seconds": 49.77635192871094,
+          "source_integrity": "All 1761 frozen source hashes match",
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-player-metadata-3fa193ccdc-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "evidence_archive": "docs/architecture/evidence/stage-a-player-metadata-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "2c3164ab68fcc697d3085051700aff01dce3163b9535fce5097c36d2b5319c91",
+          "commit_pending": false,
+          "commit_sha": "2eec4443419d322171982fc7904923518382f118"
         }
       ]
     }

@@ -10,7 +10,6 @@ from fastapi import FastAPI
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_rating_distribution as ppd
 from chessism_api.routers import players
 
@@ -75,37 +74,36 @@ class DistributionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.redis = AsyncMock()
         self.redis.get.return_value = None
         self.session = AsyncMock()
-        self.session.info = {SESSION_KEY: RelationalStorage('candidate', 'archive', 'reads', 'relational_v3')}
-        self.session.scalar.return_value = 'hikaru'
-        result = MagicMock()
-        result.mappings.return_value.all.return_value = ROWS
-        self.session.execute.return_value = result
-        self.context = MagicMock()
-        self.context.__aenter__ = AsyncMock(return_value=self.session)
-        self.context.__aexit__ = AsyncMock(return_value=False)
+        self.session.in_transaction = MagicMock(return_value=True)
+        self.profile = AsyncMock(return_value={'id':42, 'player_name':'hikaru'})
+        self.rows = AsyncMock(return_value=ROWS)
+        self.feature = patch.dict(os.environ,{'CHESSISM_PLAYER_SUMMARIES':'0'})
+        self.feature.start()
+        self.addCleanup(self.feature.stop)
 
     async def call(self, mode='blitz'):
-        with patch.object(ppd, 'AsyncDBSession', return_value=self.context), \
+        with patch.object(ppd, 'AsyncDBSession', return_value=self.session), \
+                patch.object(ppd.storage, 'active_profile', self.profile), \
+                patch.object(ppd.storage, 'rating_counts', self.rows), \
                 patch.object(ppd, 'READ_SLOTS', asyncio.Semaphore(2)):
-            return await ppd.get_player_rating_distribution('Hikaru', mode, self.redis)
+            result = await ppd.get_player_rating_distribution('Hikaru', mode, self.redis)
+        self.session.close.assert_awaited()
+        return result
 
     async def test_cache_hit_does_not_group_games(self):
         self.redis.get.return_value = json.dumps(snapshot(ROWS))
         data = await self.call()
         self.assertTrue(data['cache_hit'])
-        self.session.scalar.assert_awaited_once()
-        self.assertFalse(any('COUNT(' in str(call.args[0]) for call in self.session.execute.call_args_list))
+        self.profile.assert_awaited_once_with(self.session,'hikaru')
+        self.rows.assert_not_awaited()
+        self.session.begin.assert_awaited_once()
+        self.session.commit.assert_awaited_once()
+        self.session.close.assert_awaited_once()
 
     async def test_miss_reads_own_rating_and_caches_all_modes(self):
         data = await self.call()
         self.assertEqual(data['y'], [20, 30, 0, 50])
-        query = str(self.session.execute.call_args.args[0])
-        self.assertIn('CASE WHEN gp.is_white THEN g.white_elo ELSE g.black_elo END', query)
-        self.assertIn('gp.player_id=', query)
-        self.assertIn('GROUP BY gp.mode, gp.rating', query)
-        self.assertNotIn('fen', query.lower())
-        self.assertNotIn('LIMIT', query)
-        self.assertEqual(self.session.execute.call_args.args[1], {'player': 'hikaru'})
+        self.rows.assert_awaited_once_with(self.session,42)
         self.assertEqual(self.redis.set.call_args.kwargs, {'ex': 60})
         saved = json.loads(self.redis.set.call_args.args[1])
         self.assertEqual(saved['counts'], ROWS)
@@ -115,11 +113,14 @@ class DistributionServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(data['cache_hit'])
 
     async def test_deleted_player_cannot_use_cache(self):
-        self.session.scalar.return_value = None
+        self.profile.return_value = None
         self.redis.get.return_value = json.dumps(snapshot(ROWS))
         with self.assertRaises(LookupError):
             await self.call()
         self.redis.get.assert_not_awaited()
+        self.rows.assert_not_awaited()
+        self.session.rollback.assert_awaited_once()
+        self.session.close.assert_awaited_once()
 
     async def test_invalid_cache_is_replaced(self):
         self.redis.get.return_value = 'broken json'

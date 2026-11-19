@@ -735,3 +735,38 @@ their already planned conversions before A4 retirement. Historical multi-profile
 parity scripts remain mapping debt; they are not claimed to pass on canonical V9.
 The new focused PostgreSQL suite covers metadata/hours behavior; broader catalog,
 distribution and CUDA parity belongs with those consumer conversions.
+
+## A3 game catalogs and rating distribution
+
+`player_catalog_reads.py` replaces profile-selected grouping and rating SQL with
+canonical game/side queries. Both self-play contributions remain; variants, custom
+starts and empty games stay excluded. The catalog preserves normalized opening
+keys, selected-mode/color grouping, minimum counts before ranking, ten-point outcome
+bins, exact ratio ordering, literal search, totals and pagination beyond the last page.
+Visible opponent ratings compare the latest eligible side candidates with the
+existing date/link/black-side tie order. Own-rating counts include nonpositive values
+for the existing percentage calculator to report as excluded.
+
+Both operations now own one guarded read-only snapshot for profile eligibility,
+source grouping and page enrichment. Bounded slots, two-second queue waits, eight-
+second SQL limits, timeout-to-busy errors and Redis fallback remain. Numeric profile
+IDs join live cache keys so recreated names cannot reuse previous counts. Requests
+still reject deleted/untracked profiles before cached responses. Live Redis data
+retains its existing 60-second freshness policy; this is not immediate invalidation.
+Saved sections retain their revision-based freshness and manual ownership behavior.
+
+The catalog snapshot reader calls the shared concrete rating adapter directly,
+removing its lazy import cycle with the catalog operation. The shared opening-key
+SQL moves with persistence; chart membership imports that same unchanged expression.
+There is no new schema, query-rewriting adapter, compatibility alias or interface.
+Seven ranking/percentage/cache-validation functions are AST-identical to the prior
+checkpoint. The four rating service tests now mock explicit persistence operations
+and assert transaction closure; their obsolete rewriter-text assertions are replaced
+by real PostgreSQL rating/eligibility/count oracles. Calculation and route tests stay.
+
+Sixteen new isolated PostgreSQL tests cover the catalog/rating contracts, all 0–100%
+outcome boundaries for both catalogs, live/saved parity, zero/negative ratings,
+standard eligibility and self-play, deletion/recreation, Redis errors, snapshot
+consistency, read-only rejection, actual database timeouts, repeated cancellation,
+real routes and prior cached visibility after expensive source loss. Broader explorer,
+hero, score-based and CUDA conversion/acceptance remain subsequent Stage A work.

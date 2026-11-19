@@ -5,17 +5,16 @@ The cache contains exact ratings for all three modes so mode switches reuse
 the same snapshot. Game changes become visible within CACHE_SECONDS.
 """
 import asyncio
-import hashlib
 import json
 import logging
 from datetime import datetime, timezone
 
 from redis.exceptions import RedisError
-from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_reads import player_rows_sql
+from chessism_api.database.postgresql import player_catalog_reads as storage
+from chessism_api.database.postgresql.transactions import read_transaction
 
 CACHE_SECONDS = 60
 BIN_WIDTH = 10
@@ -88,57 +87,43 @@ async def _cached_snapshot(redis, key):
     return None
 
 
-async def get_player_rating_distribution(player_name, mode, redis):
+async def get_player_rating_distribution(player_name, mode, redis, *, session_factory=None):
     player, mode = normalize_selection(player_name, mode)
-    key = 'chessism:rating-ppd:v1:' + hashlib.sha256(player.encode()).hexdigest()
-    # Check current existence even on a cache hit; deleted players must not
-    # keep serving their cached history. This is a single indexed lookup.
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION READ ONLY'))
-        await session.execute(text("SET LOCAL statement_timeout = '8s'"))
-        exists = await session.scalar(text('''SELECT player_name FROM player
-            WHERE player_name=:player AND deleted_at IS NULL AND joined>0'''), {'player': player})
-        if exists:
+    try:
+        async with read_transaction(session_factory or AsyncDBSession) as session:
+            await storage.read_limits(session)
+            profile = await storage.active_profile(session, player)
+            if not profile:
+                raise LookupError(f'Player {player!r} was not found.')
             from .player_analytics_summary import read_snapshot
             saved = await read_snapshot(session, player, 'distribution')
             if saved is not None:
                 return {**percentage_distribution(player, mode, saved, cache_hit=True),
-                        'summary_revision': saved['summary_revision'], 'summary_stale': saved['summary_stale']}
-    if not exists:
-        raise LookupError(f'Player {player!r} was not found.')
-    snapshot = await _cached_snapshot(redis, key)
-    if snapshot is not None:
-        return percentage_distribution(player, mode, snapshot, cache_hit=True)
-
-    try:
-        await asyncio.wait_for(READ_SLOTS.acquire(), timeout=2)
-    except asyncio.TimeoutError as error:
-        raise DistributionBusy('Rating calculations are busy. Please retry shortly.') from error
-    try:
-        snapshot = await _cached_snapshot(redis, key)
-        if snapshot is not None:
-            return percentage_distribution(player, mode, snapshot, cache_hit=True)
-        async with AsyncDBSession() as session:
-            await session.execute(text('SET TRANSACTION READ ONLY'))
-            await session.execute(text("SET LOCAL statement_timeout = '8s'"))
-            query = player_rows_sql(session, '''SELECT gp.mode, gp.rating, COUNT(*)::bigint AS games
-                FROM game_player gp
-                WHERE gp.player_name=:player AND gp.mode IN ('bullet','blitz','rapid')
-                GROUP BY gp.mode, gp.rating ORDER BY gp.mode, gp.rating''', ('mode', 'rating'))
-            rows = (await session.execute(query, {'player': player})).mappings().all()
-        snapshot = {
-            'version': 1, 'generated_at': datetime.now(timezone.utc).isoformat(),
-            'counts': [{'mode': row['mode'], 'rating': row['rating'], 'games': int(row['games'])} for row in rows],
-        }
-        payload = percentage_distribution(player, mode, snapshot)
+                        'summary_revision':saved['summary_revision'], 'summary_stale':saved['summary_stale']}
+            key = 'chessism:rating-ppd:v2:' + str(profile['id'])
+            snapshot = await _cached_snapshot(redis,key)
+            if snapshot is not None:
+                return percentage_distribution(player, mode, snapshot, cache_hit=True)
+            try:
+                await asyncio.wait_for(READ_SLOTS.acquire(), timeout=2)
+            except asyncio.TimeoutError as error:
+                raise DistributionBusy('Rating calculations are busy. Please retry shortly.') from error
+            try:
+                snapshot = await _cached_snapshot(redis,key)
+                if snapshot is not None:
+                    return percentage_distribution(player, mode, snapshot, cache_hit=True)
+                rows = await storage.rating_counts(session,profile['id'])
+            finally:
+                READ_SLOTS.release()
+        snapshot = {'version':1, 'generated_at':datetime.now(timezone.utc).isoformat(),
+            'counts':[{'mode':row['mode'], 'rating':row['rating'], 'games':int(row['games'])} for row in rows]}
+        payload = percentage_distribution(player,mode,snapshot)
         try:
-            await redis.set(key, json.dumps(snapshot), ex=CACHE_SECONDS)
+            await redis.set(key,json.dumps(snapshot),ex=CACHE_SECONDS)
         except RedisError:
             LOG.warning('Could not retain player rating counts in the cache.')
         return payload
     except DBAPIError as error:
-        if getattr(error.orig, 'sqlstate', None) == '57014':
+        if getattr(error.orig,'sqlstate',None) in ('57014','55P03'):
             raise DistributionBusy('Rating calculation timed out. Please retry shortly.') from error
         raise
-    finally:
-        READ_SLOTS.release()

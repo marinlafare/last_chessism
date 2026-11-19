@@ -10,7 +10,7 @@ from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.relational_reads import player_rows_sql
 from chessism_api.operations.player_hero_analytics import _analytics_scope
-from chessism_api.operations.player_game_catalog import OPENING_KEY_SQL
+from chessism_api.database.postgresql.player_catalog_reads import OPENING_KEY_SQL
 
 RESULTS = {'win': 1, 'draw': 0.5, 'loss': 0}
 

@@ -167,6 +167,29 @@ refresh/invalidation, late failure metadata, cancellation/rollback/lock release,
 hours/latest routes, manual ownership, schema initialization and relevant P1 checks.
 Do not run broad suites or real application services for this focused change.
 
+## Completed logical change — canonical game catalogs and rating distribution (138 checks passed)
+
+Entry: player metadata gate passed 193 checks; local commit `2eec444`.
+Replace profile-selected opponent/opening group queries, visible-opponent ratings
+and exact own-rating histogram reads with one canonical SQL adapter. Preserve
+standard/nonempty eligibility, self-play sides, unknown/invalid ratings, normalized
+opening keys, selected-mode/color minimum groups, exact percentage bins, deterministic
+ties, search, pagination and public route shapes. Reuse saved metadata sections.
+
+Operations own one guarded readonly snapshot for existence, source counts and
+visible-page enrichment; preserve bounded read slots, timeouts and Redis fallback.
+Use numeric player identity in live Redis keys as well as saved catalog keys, so
+name reuse cannot serve an earlier profile's counts. No account/auth contract changes.
+Keep existing calculation/route tests; replace obsolete SQL-rewriter mock assertions
+with adapter-call checks plus real canonical PostgreSQL source-oracle coverage.
+Move the shared opening SQL expression to its concrete adapter and update the
+existing chart membership import. No new schema or compatibility aliases.
+
+Focused gate: catalog/live-vs-saved parity, every outcome-bin boundary, single-search
+minimums, metadata eligibility and rating ties, identity/cache/error/cancellation
+paths, real routes, prior metadata tests and relevant P1 checks. No full suite.
+Explorer/hero/score-based analytics remain subsequent consumer conversions.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.
