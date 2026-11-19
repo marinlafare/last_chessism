@@ -11,10 +11,10 @@ from pydantic import BaseModel, Field
 from arq.connections import ArqRedis
 import math
 
+from chessism_api.operations.engine_client import ENGINE_URL, EngineServiceRequestError, call_engine_service
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.operations.analysis_settings import DEFAULT_ANALYSIS_NODES
 from chessism_api.operations.analysis import (
-    ENGINE_URL,
     MAX_ANALYSIS_BATCH_SIZE,
     MAX_GLOBAL_ANALYSIS_BATCH_SIZE,
     MAX_LOOP_ANALYSIS_BATCH_SIZE,
@@ -99,10 +99,6 @@ class PlayerGameAnalysisConfirmRequest(BaseModel):
     nodes_limit: Literal[100000] = DEFAULT_ANALYSIS_NODES
 
 
-def _analysis_timeout(total_fens: int) -> int:
-    return math.ceil(total_fens * 2.1) + 600
-
-
 def _enqueued_job_id(job: Any) -> str:
     if job is None:
         raise HTTPException(status_code=503, detail="The job could not be queued")
@@ -132,27 +128,12 @@ async def api_analyze_fen(data: FenAnalysisRequest = Body(...)) -> list[dict[str
     """
     Runs immediate Stockfish analysis for user-supplied FEN positions.
     """
-    payload = {
-        "fens": data.fens,
-        "nodes_limit": data.nodes_limit,
-        "multipv": data.multipv,
-    }
-
     try:
-        async with httpx.AsyncClient(timeout=None) as client:
-            response = await client.post(ENGINE_URL, json=payload)
-            response.raise_for_status()
-            result = response.json()
-    except httpx.HTTPStatusError as exc:
-        raise HTTPException(
-            status_code=exc.response.status_code,
-            detail=exc.response.text or "Stockfish analysis failed",
-        ) from exc
-    except httpx.RequestError as exc:
-        raise HTTPException(status_code=503, detail=f"Stockfish service unavailable: {exc}") from exc
-
-    if not isinstance(result, list):
-        raise HTTPException(status_code=502, detail="Unexpected Stockfish response")
+        async with httpx.AsyncClient() as client:
+            result = await call_engine_service(client, ENGINE_URL, data.fens,
+                                               data.nodes_limit, multipv=data.multipv)
+    except EngineServiceRequestError as error:
+        raise HTTPException(status_code=error.status_code, detail=str(error)) from error
 
     await record_analysis_times(timing_rows_from_engine_results(
         data.fens,
@@ -208,9 +189,8 @@ async def api_run_analysis_job(
     """
     total_fens = data.total_fens_to_process
     queue_name = "analysis_queue"
-    calculated_timeout = _analysis_timeout(total_fens)
     
-    print(f"Enqueuing analysis job on {queue_name}. Target: {total_fens} FENs. Calculated timeout: {calculated_timeout}s")
+    print(f"Enqueuing analysis job on {queue_name}. Target: {total_fens} FENs.")
     
     job = await redis.enqueue_job(
         'run_analysis_job',
@@ -218,7 +198,6 @@ async def api_run_analysis_job(
         batch_size=data.batch_size,
         nodes_limit=data.nodes_limit,
         _queue_name=queue_name,
-        _job_timeout=calculated_timeout
     )
     job_id = str(getattr(job, "job_id", job))
     
@@ -251,9 +230,8 @@ async def api_run_player_analysis_job(
     player_name = data.player_name.lower()
     total_fens = data.total_fens_to_process
     queue_name = "analysis_queue"
-    calculated_timeout = _analysis_timeout(total_fens)
 
-    print(f"Enqueuing PLAYER analysis job for '{player_name}' on {queue_name}. Calculated timeout: {calculated_timeout}s")
+    print(f"Enqueuing PLAYER analysis job for '{player_name}' on {queue_name}.")
     
     job = await redis.enqueue_job(
         'run_player_analysis_job',
@@ -262,7 +240,6 @@ async def api_run_player_analysis_job(
         batch_size=data.batch_size,
         nodes_limit=data.nodes_limit,
         _queue_name=queue_name,
-        _job_timeout=calculated_timeout
     )
     job_id = str(getattr(job, "job_id", job))
     
@@ -287,8 +264,6 @@ async def api_run_analysis_loop_job(
         raise HTTPException(status_code=422, detail="Player name is required for player loops")
 
     total_fens = data.positions_per_run * data.runs
-    total_cool_off = data.cool_off * max(0, data.runs - 1)
-    calculated_timeout = _analysis_timeout(total_fens) + total_cool_off
     queue_name = "analysis_queue"
     job = await redis.enqueue_job(
         "run_analysis_loop_job",
@@ -300,7 +275,6 @@ async def api_run_analysis_loop_job(
         cool_off=data.cool_off,
         nodes_limit=data.nodes_limit,
         _queue_name=queue_name,
-        _job_timeout=calculated_timeout,
     )
     job_id = _enqueued_job_id(job)
 
@@ -439,9 +413,6 @@ async def api_run_player_game_analysis_job(
     if not game_links:
         raise HTTPException(status_code=409, detail="The preview contains no games")
     planned_fens = max(0, int(plan.get("fens_to_analyze") or 0))
-    planned_stockfish_fens = max(0, int(plan.get("stockfish_fens") or planned_fens))
-    cool_off_count = max(0, math.ceil(planned_stockfish_fens / PLAYER_GAME_ANALYSIS_CHUNK_SIZE) - 1)
-    calculated_timeout = _analysis_timeout(max(1, planned_stockfish_fens)) + (cool_off_count * data.cool_off)
     job = await redis.enqueue_job(
         "run_player_games_analysis_job",
         player_name=str(plan.get("player_name") or "").lower(),
@@ -455,7 +426,6 @@ async def api_run_player_game_analysis_job(
         selection_order=plan.get("selection_order"),
         selected_games=int(plan.get("selected_games") or len(game_links)),
         _queue_name="analysis_queue",
-        _job_timeout=calculated_timeout,
     )
     job_id = _enqueued_job_id(job)
     await redis.delete(plan_key)

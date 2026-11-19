@@ -3,6 +3,7 @@ import os
 import constants
 from arq import create_pool
 from arq.worker import func
+from stockfish_core.http_policy import ANALYSIS_JOB_SECONDS
 
 from chessism_api.operations.analysis import (
     run_analysis_job, 
@@ -100,10 +101,10 @@ class WorkerSettings:
         func(run_pending_repetition_refresh, timeout=240, keep_result=0, max_tries=1),
         func(run_commonness_refresh, timeout=600, keep_result=0, max_tries=1),
         func(run_commonness_page_refresh, timeout=600, keep_result=0, max_tries=1),
-        run_analysis_job, 
-        run_player_analysis_job,
-        run_analysis_loop_job,
-        run_player_games_analysis_job,
+        func(run_analysis_job, timeout=ANALYSIS_JOB_SECONDS, max_tries=1),
+        func(run_player_analysis_job, timeout=ANALYSIS_JOB_SECONDS, max_tries=1),
+        func(run_analysis_loop_job, timeout=ANALYSIS_JOB_SECONDS, max_tries=1),
+        func(run_player_games_analysis_job, timeout=ANALYSIS_JOB_SECONDS, max_tries=1),
         run_fen_batch_job,
         run_fen_pipeline,
         run_create_player_games_job,

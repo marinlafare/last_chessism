@@ -34,8 +34,9 @@ from chessism_api.operations.analysis_scheduling import balanced_analysis_batch_
 from chessism_api.operations.tablebase import analyze_tablebase_positions
 # ---
 
-# --- Engine service URL ---
-ENGINE_URL = "http://stockfish-service:9999/analyze"
+from chessism_api.operations.engine_client import (
+    ENGINE_URL, EngineServiceRequestError, call_engine_service as _call_engine_service,
+)
 
 # Concurrency for analysis batches (number of parallel workers per job)
 ANALYSIS_CONCURRENCY = max(1, int(os.getenv("ANALYSIS_CONCURRENCY", "4")))
@@ -74,56 +75,6 @@ redis.call('SET', KEYS[1], cjson.encode(incoming), 'EX', tonumber(ARGV[2]))
 redis.call('EXPIRE', KEYS[2], tonumber(ARGV[2]))
 return incoming['processed']
 """
-
-
-class EngineServiceRequestError(RuntimeError):
-    """A permanent request error that must fail the queued analysis job."""
-
-
-async def _call_engine_service(
-    client: httpx.AsyncClient,
-    url: str,
-    fens: List[str],
-    nodes: int,
-    *,
-    progress_job_id: str | None = None,
-    progress_attempt_id: str | None = None,
-    progress_total: int | None = None,
-    progress_detail_prefix: str | None = None,
-) -> Optional[List[Dict[str, Any]]]:
-    """
-    Sends a batch of FENs to the specified analysis engine service.
-    """
-    payload = {
-        "fens": fens,
-        "nodes_limit": nodes
-    }
-    if progress_job_id:
-        payload.update({
-            "progress_job_id": progress_job_id,
-            "progress_attempt_id": progress_attempt_id,
-            "progress_total": progress_total or len(fens),
-            "progress_detail_prefix": progress_detail_prefix,
-        })
-    try:
-        response = await client.post(url, json=payload, timeout=None) # Disable timeout
-        response.raise_for_status()
-        return response.json()
-    except httpx.HTTPStatusError as e:
-        message = (
-            "HTTP error calling engine service: "
-            f"{e.response.status_code} - {e.response.text}"
-        )
-        print(message, flush=True)
-        if 400 <= e.response.status_code < 500:
-            raise EngineServiceRequestError(message) from e
-        return None
-    except httpx.RequestError as e:
-        print(f"Request error calling engine service: {repr(e)}", flush=True)
-        return None
-    except Exception as e:
-        print(f"Unexpected error in _call_engine_service: {repr(e)}", flush=True)
-        return None
 
 
 async def _write_job_progress(
@@ -195,7 +146,7 @@ def _format_engine_results(
     continuations = []
     for item in engine_output:
         if not item or not item.get("is_valid"):
-            continue
+            raise EngineServiceRequestError("Stockfish rejected an acquired position", 422)
 
         fen_str = item.get("fen")
         analysis = item.get("analysis", {})
@@ -221,6 +172,8 @@ def _format_engine_results(
         if isinstance(wdl, list) and len(wdl) >= 3:
             wdl_win, wdl_draw, wdl_loss = wdl[0], wdl[1], wdl[2]
 
+        if not fen_str or score_cp is None:
+            raise EngineServiceRequestError("Stockfish returned no score for an acquired position")
         if fen_str and score_cp is not None:
             formatted_results.append({
                 "fen": fen_str,
@@ -371,6 +324,7 @@ async def _run_analysis_job(
     total_failed_fens = 0
     job_start_time = time.time()
     counter_lock = asyncio.Lock()
+    stopped = asyncio.Event()
     overall_progress_total = int(progress_total or total_fens_to_process)
     if reset_progress:
         progress_attempt_id = await _reset_job_progress(ctx, arq_job_id)
@@ -391,8 +345,10 @@ async def _run_analysis_job(
         nonlocal total_claimed, total_processed, total_engine_processed
         nonlocal total_failed_batches, total_failed_fens
         async with httpx.AsyncClient() as client:
-            while True:
+            while not stopped.is_set():
                 async with counter_lock:
+                    if stopped.is_set():
+                        return
                     remaining = total_fens_to_process - total_claimed
                     if remaining <= 0:
                         return
@@ -410,9 +366,18 @@ async def _run_analysis_job(
                 reserved_fens = current_batch_size
                 committed = False
                 # Acquisition failures are fatal; processing retries start after handoff.
-                session, fens_to_process = await fetch_batch(current_batch_size)
+                try:
+                    session, fens_to_process = await fetch_batch(current_batch_size)
+                except BaseException:
+                    stopped.set()
+                    raise
 
                 try:
+                    if stopped.is_set():
+                        if session is not None:
+                            await finish_analysis_cleanup(session.rollback())
+                        return
+
                     if not fens_to_process or session is None:
                         async with counter_lock:
                             total_claimed -= reserved_fens
@@ -444,13 +409,7 @@ async def _run_analysis_job(
                     batch_duration = batch_end_time - batch_start_time
 
                     if not engine_results:
-                        print(f"[{job_id}] Failed to get results from engine service. Skipping batch.", flush=True)
-                        async with counter_lock:
-                            total_failed_batches += 1
-                            total_claimed -= reserved_fens
-                        await finish_analysis_cleanup(session.rollback())
-                        await asyncio.sleep(1)
-                        continue
+                        raise EngineServiceRequestError("Stockfish returned an empty batch")
 
                     await record_analysis_times(timing_rows_from_engine_results(
                         fens_to_process,
@@ -462,15 +421,8 @@ async def _run_analysis_job(
                     # 3. Format results
                     db_ready_data, continuation_rows = _format_engine_results(engine_results)
 
-                    if not db_ready_data:
-                        print(f"[{job_id}] No valid analysis data returned from engine. Skipping batch.", flush=True)
-                        async with counter_lock:
-                            total_failed_batches += 1
-                            total_failed_fens += len(fens_to_process)
-                            total_claimed -= reserved_fens
-                        await finish_analysis_cleanup(session.rollback())
-                        await asyncio.sleep(1)
-                        continue
+                    if len(db_ready_data) != len(fens_to_process):
+                        raise EngineServiceRequestError("Stockfish returned an incomplete scored batch")
 
                     # 4. Save results (using the same session)
                     await stage_fen_results(session, db_ready_data, continuation_rows,
@@ -505,26 +457,19 @@ async def _run_analysis_job(
                         ) + f"committed {total_so_far}/{total_fens_to_process}"
                     )
 
-                except (EngineServiceRequestError, asyncio.CancelledError) as e:
-                    if isinstance(e, EngineServiceRequestError):
-                        print(f"CRITICAL: Permanent error in {job_id}: {e}", flush=True)
-                        async with counter_lock:
-                            total_failed_batches += 1
+                except BaseException:
+                    # Stop admission before releasing locks, so a sibling cannot
+                    # reacquire this failed batch and reset its HTTP retry budget.
+                    stopped.set()
+                    total_failed_batches += 1
+                    if not committed:
+                        total_failed_fens += len(fens_to_process or ())
                     if session is not None and not committed:
                         try:
                             await finish_analysis_cleanup(session.rollback())
                         except BaseException as error:
                             print(f"Failed to roll back analysis session: {error!r}", flush=True)
                     raise
-                except Exception as e:
-                    print(f"CRITICAL: Unhandled error in {job_id} analysis loop: {repr(e)}", flush=True)
-                    async with counter_lock:
-                        total_failed_batches += 1
-                        if not committed:
-                            total_claimed -= reserved_fens
-                    if session:
-                        await finish_analysis_cleanup(session.rollback()) # Ensure locks are released on failure
-                    await asyncio.sleep(1)
                 finally:
                     if session is not None:
                         # A close failure must not replace a fatal error or cancellation.

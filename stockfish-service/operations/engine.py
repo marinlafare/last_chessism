@@ -19,6 +19,28 @@ STOCKFISH_PATH = os.environ.get("STOCKFISH_PATH", "/usr/local/bin/stockfish")
 HASH_MB = HASH_MIB
 ENGINE_COUNT = max(1, int(os.environ.get("STOCKFISH_ENGINE_COUNT", "4")))
 ANALYSE_TIMEOUT_SEC = STALL_SECONDS
+from stockfish_core.http_policy import ENGINE_START_SECONDS, ENGINE_CLOSE_SECONDS, QUEUE_SECONDS
+
+
+async def finish_engine_cleanup(operation):
+    """Drain engine/request cleanup despite repeated cancellation, then propagate it."""
+    task = asyncio.ensure_future(operation)
+    cancellation = None
+    while not task.done():
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError as error:
+            cancellation = cancellation or error
+        except Exception:
+            break
+    try:
+        task.result()
+    except BaseException:
+        if cancellation is None:
+            raise
+    if cancellation is not None:
+        raise cancellation
+
 
 
 def convert_to_serializable(value: Any) -> Any:
@@ -94,33 +116,23 @@ async def _start_engine(engine_number: int | None = None) -> tuple[Any, chess.en
     """
     transport = None
     engine_uci = None
-    try:
+
+    async def open_engine():
+        nonlocal transport, engine_uci
         verify_binary(STOCKFISH_PATH)
         transport, engine_uci = await chess.engine.popen_uci([STOCKFISH_PATH])
         await configure(engine_uci, THREADS, HASH_MB)
 
-        label = f" {engine_number}" if engine_number is not None else ""
-        print(
-            f"--- [ENGINE{label}] Ready: Threads={THREADS}, Hash={HASH_MB} MiB ---",
-            flush=True,
-        )
+    try:
+        await asyncio.wait_for(open_engine(), timeout=ENGINE_START_SECONDS)
         return transport, engine_uci
-
-    except Exception as e:
-        if engine_uci is not None:
-            try:
-                await asyncio.wait_for(engine_uci.quit(), timeout=5)
-            except Exception:
-                pass
-        if transport is not None:
-            try:
-                transport.close()
-            except Exception:
-                pass
-        label = f" {engine_number}" if engine_number is not None else ""
-        error_msg = f"ERROR: Failed to initialize Stockfish engine{label}: {e}"
-        print(error_msg, flush=True)
-        raise HTTPException(status_code=500, detail=error_msg)
+    except BaseException:
+        try:
+            await finish_engine_cleanup(EnginePool._shutdown_slot(
+                EngineSlot(engine_number or 0, transport, engine_uci)))
+        except BaseException as error:
+            print(f"Engine startup cleanup failed: {error!r}", flush=True)
+        raise
 
 
 @dataclass
@@ -173,11 +185,9 @@ class EnginePool:
                     slots.append(
                         EngineSlot(number=number, transport=transport, engine=engine)
                     )
-            except Exception:
-                await asyncio.gather(
-                    *(self._shutdown_slot(slot) for slot in slots),
-                    return_exceptions=True,
-                )
+            except BaseException:
+                await finish_engine_cleanup(asyncio.gather(
+                    *(self._shutdown_slot(slot) for slot in slots), return_exceptions=True))
                 raise
 
             self._slots = slots
@@ -190,12 +200,20 @@ class EnginePool:
     @asynccontextmanager
     async def acquire(self):
         await self.initialize()
-        slot = await self._available.get()
+        slot = await asyncio.wait_for(self._available.get(), timeout=QUEUE_SECONDS)
         slot.busy = True
         try:
             if slot.engine is None:
                 await self.restart(slot, "unavailable")
             yield slot
+        except BaseException:
+            # A cancelled/timed-out UCI command must never share its process
+            # with the next lease, even if python-chess has already sent stop.
+            try:
+                await finish_engine_cleanup(self._shutdown_slot(slot))
+            except BaseException as error:
+                print(f"Engine lease cleanup failed: {error!r}", flush=True)
+            raise
         finally:
             slot.busy = False
             if self._initialized:
@@ -218,27 +236,24 @@ class EnginePool:
             self._initialized = False
             slots = self._slots
             self._slots = []
-            await asyncio.gather(
-                *(self._shutdown_slot(slot) for slot in slots),
-                return_exceptions=True,
-            )
+            await finish_engine_cleanup(asyncio.gather(
+                *(self._shutdown_slot(slot) for slot in slots), return_exceptions=True))
             self._available = asyncio.Queue(maxsize=self._size)
             print("--- [ENGINE POOL] Shut down ---", flush=True)
 
     @staticmethod
     async def _shutdown_slot(slot: EngineSlot) -> None:
-        if slot.engine:
-            try:
-                await asyncio.wait_for(slot.engine.quit(), timeout=5)
-            except Exception:
-                pass
-        if slot.transport:
-            try:
-                slot.transport.close()
-            except Exception:
-                pass
-        slot.engine = None
-        slot.transport = None
+        try:
+            if slot.engine is not None:
+                await asyncio.wait_for(slot.engine.quit(), timeout=ENGINE_CLOSE_SECONDS)
+        except Exception:
+            pass
+        finally:
+            transport = slot.transport
+            slot.engine = None
+            slot.transport = None
+            if transport is not None:
+                transport.close()
 
 
 engine_pool = EnginePool()

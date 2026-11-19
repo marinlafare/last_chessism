@@ -599,24 +599,27 @@ class AnalysisFailureJobTests(unittest.IsolatedAsyncioTestCase):
                 await self._assert_cleanup_already_underway(
                     owner="worker", trigger="sibling", step="rollback", close_fails=close_fails)
 
-    async def test_existing_processing_retry_behavior_is_preserved(self):
+    async def test_processing_failures_propagate_without_reselection(self):
         for kind in ("no_result", "invalid_result", "write_failure"):
             with self.subTest(kind=kind):
                 self.sleep.reset_mock()
+                self.progress.reset_mock()
                 first, second = session_for(), session_for()
                 fetch = AsyncMock(side_effect=[(first, ["fen"]), (second, ["fen"])])
                 self.engine.side_effect = ([None, engine_result()] if kind == "no_result" else
                                            [[{"is_valid": False}], engine_result()] if kind == "invalid_result" else None)
                 self.stage.side_effect = [RuntimeError("write failed"), None] if kind == "write_failure" else None
-                result = await self.run_job(fetch, total_fens_to_process=1)
-                self.assertEqual(result["processed"], 1)
-                self.assertEqual(result["failed_batches"], 1)
-                self.assertEqual(result["failed"], int(kind == "invalid_result"))
+                with self.assertRaises(RuntimeError):
+                    await self.run_job(fetch, total_fens_to_process=1)
+                fetch.assert_awaited_once_with(1)
                 first.rollback.assert_awaited_once()
                 first.close.assert_awaited_once()
-                second.commit.assert_awaited_once()
-                second.close.assert_awaited_once()
-                self.sleep.assert_awaited_once_with(1)
+                first.commit.assert_not_awaited()
+                second.commit.assert_not_awaited()
+                second.close.assert_not_awaited()
+                self.sleep.assert_not_awaited()
+                self.assertEqual(self.phases()[-1], "failed")
+                self.assertNotIn("complete", self.phases())
 
     async def test_later_loop_failure_preserves_previous_pass_and_stops_further_cooldowns(self):
         committed, failed, empty = session_for(["fen"]), session_for(), session_for()

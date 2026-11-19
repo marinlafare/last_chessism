@@ -275,18 +275,21 @@ class ProgressAttemptContractTests(unittest.IsolatedAsyncioTestCase):
             with self.subTest(identity=identity), self.assertRaises(ValueError):
                 request_type(fens=["fen"], **identity)
 
-    async def test_engine_client_transmits_the_attempt_without_changing_request_policy(self):
+    async def test_engine_client_transmits_the_attempt_with_a_finite_deadline(self):
         response = Mock()
-        response.json.return_value = [{"fen": "fen"}]
+        response.json.return_value = [{"fen": "fen", "is_valid": True, "analysis": {"score": 0}}]
         client = Mock(post=AsyncMock(return_value=response))
         result = await analysis._call_engine_service(
             client, analysis.ENGINE_URL, ["fen"], 100,
             progress_job_id="job", progress_attempt_id="attempt", progress_total=20,
             progress_detail_prefix="run 2",
         )
-        self.assertEqual(result, [{"fen": "fen"}])
-        client.post.assert_awaited_once_with(analysis.ENGINE_URL, timeout=None, json={
-            "fens": ["fen"], "nodes_limit": 100, "progress_job_id": "job",
+        self.assertEqual(result, response.json.return_value)
+        timeout = client.post.await_args.kwargs['timeout']
+        for field in ('connect', 'read', 'write', 'pool'):
+            self.assertGreater(getattr(timeout, field), 0)
+        client.post.assert_awaited_once_with(analysis.ENGINE_URL, timeout=timeout, json={
+            "fens": ["fen"], "nodes_limit": 100, "multipv": 4, "progress_job_id": "job",
             "progress_attempt_id": "attempt", "progress_total": 20, "progress_detail_prefix": "run 2",
         })
 
