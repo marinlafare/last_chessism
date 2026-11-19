@@ -2564,3 +2564,58 @@ Archive: docs/architecture/evidence/stage-b-execution-2026-11-19.tar.gz,
 SHA256 a1362793c103c1fdb70daf549b127c10d1faba05f447187e25c8d2fc7a5e0c9e.
 Stop after local evidence checkpoint. Next: one independent Stage B acceptance
 review. Stage A remains accepted; Stage B is not yet independently accepted.
+
+2026-11-19 — Authorized focused Stage B cancellation correction. Verified clean
+62563a6 in the expected repository/branch. Independent review reproduced wait_for
+losing simultaneous external cancellation on Python 3.10 HTTP completion and
+Python 3.11 engine-slot handoff. Start event-controlled red regressions before
+production changes, then one small shared deadline operation and explicit slot
+reclamation. Inspect startup/search/quit and repeated cleanup cancellation as
+part of the same defect. No cloud, persistence, retry-policy or Stage C/D changes.
+
+2026-11-19 — Cancellation correction implemented in local commit
+7783e54d573fd34135c39fc6f2aea90b51ebf63f; focused independent re-review pending.
+Added one 29-line wait_with_timeout function using asyncio.wait plus cancellation-
+safe child drainage. Replaced the five Stage B wait_for sites. Pool reclamation
+returns an acquired-but-unhanded slot exactly once. Engine cleanup receives the
+original cancellation, and no longer swallows a new cancellation as a retryable
+timeout. HTTP callers cannot consume a cancelled result; interrupted processes
+are discarded before reuse. Retry constants, schema, locking, scoring and cloud
+transitions are unchanged.
+
+Red gates ran before production changes on both Python versions. Eight initial
+race cases all failed; supplementary cases covered initializer cleanup and external
+cancellation during timeout cleanup. Actual PostgreSQL reproduced one FEN commit
+after the response-ready cancellation. First PG setup was correctly blocked by
+the isolated-socket naming guard; renamed only the disposable verification
+workspace and preserved the failed attempt. No isolation guard was weakened.
+
+First corrected run: Python 3.11 passed 35; Python 3.10's only eight failures were
+cancel(msg) assertions after awaiting a cancelled Task. A separate probe reproduced
+that message loss for plain Event.wait on Python 3.10. Tests retain all assertions:
+observe the original reason at the consumer boundary and require CancelledError
+at the outer await. Rechecked the final exact tests against immutable read-only
+baseline source overlays (Git hashes verified): 13 cases, 10 failures/2 errors/1
+pass on EACH runtime. Thus the observation change does not conceal the defect.
+
+Final corrected gates: 36/36 on Python 3.10.22 and 36/36 on Python 3.11.17;
+61/61 relevant P1/PostgreSQL/Redis/ARQ checks; 1/1 real Stockfish 16.1 smoke
+(search, mate/invalid values, cancellation, process exit and replacement).
+Zero green failures/errors/skips. Thirteen new regression methods; gate counts
+overlap. The new real PostgreSQL cancellation test now leaves zero saved scores,
+zero analyzed-count increments and no checked-out sessions/held row locks.
+No existing test deleted, weakened or skipped. Unrelated Stage B baseline debt
+remains separately documented; no full application suite rerun.
+
+Six changed/new Python files compile; whitespace clean. Both runtimes used
+identical final sources; all 779 Python/SQL hashes match. Canonical persistence,
+analysis orchestration, worker registration, retry policy, cloud transitions and
+frontend source are unchanged; service scoring/progress ASTs unchanged. All
+owned containers removed, no verifier active. Existing databases, queues, backups,
+Neo4j and GCP untouched. No push, merge or deployment. No operation exceeded 5 min.
+
+Handoff: docs/architecture/stage-b-cancellation-correction.md.
+Evidence: docs/architecture/evidence/stage-b-cancellation-correction-2026-11-19.tar.gz
+SHA256 32f4d72f5e00815edb24cb0f02d4f74bc8edf8fcb4d59002332334d4a1c42599.
+Stop after the evidence checkpoint for the short independent cancellation
+re-review. Stage B has not been declared accepted; no Stage C/D work begins.

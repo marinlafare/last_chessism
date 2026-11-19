@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_b_verified_pending_independent_review",
+  "status": "stage_b_verified_pending_focused_rereview",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -8385,7 +8385,7 @@
     "commit_sha": "c13f07d3edaa228dd864f721d6622f88b71280aa"
   },
   "stage_b": {
-    "status": "verified_pending_independent_review",
+    "status": "verified_pending_focused_rereview",
     "baseline": "7d9fe8e97372603cccd2ec8d95de8a378203544c",
     "authorization": "da40c3b8-f712-44b7-bcd7-f885c7b44b66/Pasted text.txt",
     "current_batch": null,
@@ -8460,6 +8460,98 @@
       "Unchanged frontend and cloud-worker algorithms reuse accepted Stage A evidence.",
       "Previously documented Redis-reset visibility limitation and unrelated baseline testing debt remain."
     ],
-    "next_action": "One independent Stage B acceptance review; no Stage C/D implementation."
+    "next_action": "One short independent re-review of the cancellation correction; Stage B remains unaccepted. No Stage C/D."
+  },
+  "stage_b_cancellation_correction": {
+    "status": "verified_pending_independent_rereview",
+    "baseline": "62563a6a0e5091e5b7aa44afc03fafcdf5a7c367",
+    "authorization": "81f85ee1-b698-4f51-926d-6afe2536930a/Pasted text.txt",
+    "phase": "completed",
+    "independent_acceptance": false,
+    "red": {
+      "python310": {
+        "tests": 12,
+        "failures": 10,
+        "errors": 2,
+        "skips": 0
+      },
+      "python311": {
+        "tests": 12,
+        "failures": 9,
+        "errors": 2,
+        "skips": 0
+      },
+      "postgres310": {
+        "tests": 1,
+        "failures": 1,
+        "errors": 0,
+        "skips": 0,
+        "detail": "One FEN score committed after response-ready cancellation"
+      },
+      "existing_engine_checks_passed_each_runtime": 23
+    },
+    "completed_at": "2026-11-19T21:42:39.747614+00:00",
+    "commit_sha": "7783e54d573fd34135c39fc6f2aea90b51ebf63f",
+    "documentation": "docs/architecture/stage-b-cancellation-correction.md",
+    "evidence": "docs/architecture/evidence/stage-b-cancellation-correction-2026-11-19.tar.gz",
+    "evidence_sha256": "32f4d72f5e00815edb24cb0f02d4f74bc8edf8fcb4d59002332334d4a1c42599",
+    "final_baseline_recheck": {
+      "method": "Final tests against immutable source overlays from 62563a6; hashes verified against Git.",
+      "python310": {
+        "tests": 13,
+        "failures": 10,
+        "errors": 2,
+        "skips": 0
+      },
+      "python311": {
+        "tests": 13,
+        "failures": 10,
+        "errors": 2,
+        "skips": 0
+      }
+    },
+    "verification": {
+      "python310": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "python311": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "p1_and_postgres_redis_arq": {
+        "tests": 61,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "real_stockfish": {
+        "tests": 1,
+        "failures": 0,
+        "errors": 0,
+        "skips": 0
+      },
+      "new_regression_methods": 13,
+      "changed_python_files_compiled": 6,
+      "final_hashed_sources": 779,
+      "source_hash_drift": 0,
+      "unchanged_cloud_database_retry_policy_and_scoring": true,
+      "owned_containers_removed": true,
+      "active_verification_processes": 0
+    },
+    "verification_notes": [
+      "Python 3.10 loses cancellation message at the outer Task await even for plain Event.wait. Tests retain the reason assertion inside the consumer and assert CancelledError outside; no platform skips or removed assertions.",
+      "Initial PG probe rejected the disposable workspace name; renamed the workspace to meet the existing isolation guard. No guard or fixture weakened.",
+      "All earlier red/initial-green/environment results preserved; no unrelated baseline test debt repaired."
+    ],
+    "limitations": [
+      "Production/GCP and large-load behavior not exercised.",
+      "Cleanup remains cooperative; the new helper drains before propagating cancellation."
+    ],
+    "next_action": "Short independent cancellation re-review; do not declare Stage B accepted or begin Stage C."
   }
 }

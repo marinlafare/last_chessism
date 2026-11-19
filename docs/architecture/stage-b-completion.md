@@ -3,6 +3,11 @@
 Implemented and verified on 2026-11-19; **independent Stage B acceptance pending**.
 Stage A remains formally accepted. No Stage C/D work is authorized or started.
 
+Follow-up: independent review requested one cancellation-race correction. It is
+implemented in `7783e54`; see [the focused correction handoff](stage-b-cancellation-correction.md).
+Stage B now awaits only the short independent re-review of that finding. The
+original implementation and verification record follows.
+
 Repository: `/home/jon/Desktop/workshop/last_chessism`, branch
 `refactor/p1-analysis-failure-propagation`. Entry was clean accepted
 `7d9fe8e97372603cccd2ec8d95de8a378203544c`.

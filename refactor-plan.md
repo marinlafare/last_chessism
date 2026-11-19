@@ -1,8 +1,9 @@
 # Chessism V1 architectural refactoring
 
-**Current checkpoint — 2026-11-19:** Stage A is formally ACCEPTED. Stage B B1–B3
-is implemented and verified, pending one independent acceptance review. See
-`docs/architecture/stage-b-completion.md`. Do not begin Stage C or D.
+**Current checkpoint — 2026-11-19:** Stage A is formally ACCEPTED. The Stage B
+cancellation correction is implemented and verified in `7783e54`, pending one
+short independent re-review. See `docs/architecture/stage-b-cancellation-correction.md`.
+Do not begin Stage C or D.
 
 ## Historical Stage A execution plan
 
@@ -1404,3 +1405,33 @@ commit `f073914`. Integrated gate: 255 passed (145 PostgreSQL); final focused:
 same baseline 1 failure/1 error, zero skips or new failures/errors. All verification
 resources removed. See the Stage B handoff and archived evidence. Next action:
 one independent B1–B3 acceptance review; stop implementation until authorized.
+
+## Authorized Stage B cancellation-race correction (2026-11-19)
+
+Entry: clean reviewed 62563a6, expected repository/branch. Authorization:
+81f85ee1-b698-4f51-926d-6afe2536930a/Pasted text.txt. One focused chunk:
+
+1. Add deterministic tests before production changes: response/slot completion
+   racing external cancellation, startup/search completion, repeated cancellation
+   and cleanup failure, concurrent slot ownership, real timeout distinction.
+   Capture red results on available Python 3.10 and 3.11 cached runtimes.
+2. Replace the five Stage B wait_for boundaries (HTTP, startup, queue, search,
+   quit) with a small shared cancellation-preserving deadline operation. The
+   caller owns any successfully acquired resource, even when cancellation wins
+   its handoff. Reclaim that pool slot explicitly. Preserve primary cancellation
+   through endpoint/initialization cleanup if repeat cancellation arrives.
+3. Verify new races plus existing client/service lifecycle checks on both Python
+   versions; reuse the isolated PostgreSQL/Redis Stage B execution and P1 checks.
+   A short real-engine smoke checks the changed process lifecycle. No broad suite.
+4. Record evidence, source integrity and unchanged cloud/database/scoring/retry
+   contracts; create local correction/evidence commits. No push or deployment.
+
+Exit: focused tests pass with no added failures/errors/skips; owned resources
+removed; stop for one short independent re-review. Stage B remains unaccepted.
+
+Correction gate complete: 36 checks passed on each Python 3.10/3.11 runtime;
+61 P1/PostgreSQL/Redis/ARQ checks passed; real Stockfish smoke passed. Final new
+regressions also tested against immutable reviewed code: 12/13 fail on both
+runtimes, including a real post-cancellation database commit. No green failures,
+errors or skips. Local implementation commit `7783e54`; all owned resources removed.
+Stop here for the focused independent re-review.
