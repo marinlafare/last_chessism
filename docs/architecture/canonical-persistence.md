@@ -916,3 +916,30 @@ Histogram and common-position snapshots remain independently refreshed caches.
 A changed source stamp invalidates pagination; readers retain stale snapshots and
 report their timestamp rather than scanning FENs synchronously. Missing initialized
 metadata is an error, not a successful empty dataset.
+
+
+### Canonical structured dataset sources
+
+The allowlisted export catalog/compiler reads only the fixed canonical tables.
+It no longer chooses a runtime profile. Predicates participate in join selection,
+so selecting only a move SAN or participant name still enforces standard-game
+scope. Stored zero-move standard games remain visible, as in the actual compact
+export source; variants stay excluded. The derived game_player relation preserves
+two self-play sides without a surrogate ID. FEN occurrences retain repetitions,
+initial positions and missing evaluation values. Average rating casts before
+addition to avoid overflow at valid integer limits.
+
+Approved public changes identify structured catalog version 2: player_games uses
+(game_id,is_white), player_game_id is rejected, elapsed_seconds is float64 and
+joined is int64. Parquet schemas, preview metadata and completed manifests agree.
+The compiler retains server-owned identifiers/joins and typed bound values.
+Preview and file readers own guarded read-only UTC snapshots; file threads and
+streams finish before cancellation closes the writer/session. No read-time DDL.
+
+The canonical PostgreSQL source/preview/file checks supersede miniature-v3 source
+fixtures. The legacy test_exports_database.py and test_analytical_exports_database.py
+lifecycle/role scenarios remain to port with their metadata and restricted-reader
+installation in the next export step. Their imports now use the canonical compiler;
+they are not reported as executed by this source-only gate. Authentication/job
+ownership/publication and role installation are not certified by mocked checkpoint
+callbacks in these source tests. No production role, credential or data changes.

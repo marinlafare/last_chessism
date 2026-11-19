@@ -7,7 +7,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import bindparam, text
 
-from .catalog import SOURCES
+from .catalog import SOURCES, TABLES
 from .config import MAX_COLUMNS, MAX_ROWS
 
 
@@ -128,12 +128,12 @@ def effective_order(spec):
     return order
 
 
-def compile_query(spec, tables, limit=None):
+def compile_query(spec, limit=None):
     source = SOURCES[spec.source]
     where, params, expanding, filtered = filter_sql(spec.where, source.columns)
     ordering = effective_order(spec)
     used = set(spec.select) | filtered | {item['field'] for item in ordering}
-    aliases = set(re.findall(r'\b([a-z]+)\.', ' '.join(source.columns[key].expression for key in used)))
+    aliases = set(re.findall(r'\b([a-z]+)\.', ' '.join([source.predicate, *(source.columns[key].expression for key in used)])))
     joins, added = [], set()
 
     def include(alias):
@@ -142,13 +142,13 @@ def compile_query(spec, tables, limit=None):
         template, dependencies = source.joins[alias]
         for dependency in dependencies:
             include(dependency)
-        added.add(alias); joins.append(template.format(**tables))
+        added.add(alias); joins.append(template.format(**TABLES))
 
     for alias in sorted(aliases):
         include(alias)
     projection = ', '.join(f'{source.columns[key].expression} AS "{key}"' for key in spec.select)
     order_sql = ', '.join(f'({source.columns[o["field"]].expression}) {o["direction"].upper()} NULLS LAST' for o in ordering)
-    sql = f'''SELECT {projection} FROM {source.base.format(**tables)}
+    sql = f'''SELECT {projection} FROM {source.base.format(**TABLES)}
         {' '.join(joins)} WHERE ({source.predicate}) AND ({where})
         ORDER BY {order_sql} LIMIT :export_limit'''
     params['export_limit'] = limit if limit is not None else spec.limit + 1

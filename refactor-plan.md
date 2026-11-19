@@ -1228,3 +1228,24 @@ Verify canonical source values, page ties, legal examples, constraints, missing-
 failure, consistent snapshots, atomic rollback, cancellation, contention, stale error
 suppression and existing route/cache tests. No actual Redis/Neo4j or source DB use.
 Run this expected-under-five-minute focused gate directly; no user handoff.
+
+
+## Completed logical change — canonical structured dataset exports (112 passed)
+
+Entry: FEN cache conversion verified (147 checks), committed as 7d6d323.
+Use one canonical table map in the strict structured compiler, its preview/file
+readers and the analytical view installer. Keep the explicit allowlist and bound
+values. Apply approved participant key (game_id,is_white), float64 elapsed_seconds,
+int64 joined; advance the structured catalog version to identify these changes.
+Keep standard-game scope, including stored zero-move standard games: the actual old
+export source had no nonempty-game predicate. Do not import unrelated analytics
+eligibility rules. Preserve self-play sides, repeated FEN occurrences, score/NULL
+representations, stable ordering, bounded streams and Parquet metadata.
+
+Use guarded read transactions and drain active file threads/streams on cancellation.
+Verify every source/column on canonical PostgreSQL, preview and file parity, empty
+output, native identities, fractions/large timestamps, numeric extrema, injection
+rejection, snapshot races, failure and repeated cancellation. Existing credential,
+job lifecycle and restricted analytical-reader conversion will follow together;
+this chunk does not claim those tables have been initialized or tested end to end.
+No live installation, role changes, network, GPU, real database or checkpoint access.

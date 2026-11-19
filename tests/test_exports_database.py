@@ -24,7 +24,7 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations.exports import config, files, jobs, service
 from chessism_api.operations.exports.auth import token_hash
-from chessism_api.operations.exports.catalog import SOURCES, tables_for
+from chessism_api.operations.exports.catalog import SOURCES, TABLES
 from chessism_api.operations.exports.models import Base, ExportClient, ExportJob
 from chessism_api.operations.exports.query import ExportSpec, compile_query
 from chessism_api.redis_client import get_redis_pool
@@ -100,7 +100,7 @@ class ExportDatabaseTests(ExportDatabaseFixture):
         async with AsyncDBSession() as session:
             for name,source in SOURCES.items():
                 spec=ExportSpec(source=name,select=list(source.columns),limit=100)
-                query,params=compile_query(spec,tables_for(session))
+                query,params=compile_query(spec)
                 rows=(await session.execute(query,params)).mappings().all()
                 self.assertEqual(len(rows),expected[name],name)
                 identities=[tuple(row[k] for k in source.keys) for row in rows]

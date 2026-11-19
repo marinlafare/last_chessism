@@ -1,13 +1,13 @@
 # Request-driven DataFrame exports
 
-This integration reads Chessism's validated compact (`relational_v3`) database.
+This integration reads Chessism's canonical PostgreSQL database.
 The original structured endpoint never accepts SQL, arbitrary joins, filesystem paths, Python code, or access
 to authentication, billing, backup, cloud-control or integration tables.
 Saved matrix definitions are not required and their existing APIs are unchanged.
 
 For finished analytical datasets, including restricted SQL and player move-score
 matrices, see [the analytical integration contract](ANALYTICAL.md). Those are
-separate opt-in routes; the original structured API remains compatible.
+separate opt-in routes. The canonical structured catalog is version 2.
 
 ## Connection and authentication
 
@@ -54,7 +54,11 @@ and `player_games`. `positions` has one row per distinct FEN;
 `game_positions` retains each occurrence. `moves` has one row per **played
 half-move**, not one row per physical `moves` record. Its `player` is the mover.
 To include both sides of a player's games, filter `white_player OR black_player`.
-No deduplication or score-perspective conversion is implicit.
+No deduplication or score-perspective conversion is implicit. Game-related sources
+retain standard-game scope, including stored zero-move standard games. The
+`player_games` key is `(game_id, is_white)`, including both sides of self-play;
+`player_game_id` is no longer available. `elapsed_seconds` is float64 and `joined`
+is int64. Clients selecting the removed ID must update their requests.
 
 `POST` to the base URL submits a JSON specification:
 

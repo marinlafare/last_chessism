@@ -13,7 +13,7 @@ from sqlalchemy import select, text
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from .auth import token_hash
-from .catalog import SOURCES, tables_for
+from .catalog import SOURCES, TABLES
 from .config import MAX_ROWS
 from .models import Base, ExportClient
 from .service import now
@@ -30,9 +30,7 @@ async def main(args):
             print('Export metadata installed: public.export_client, public.export_job. Chess tables unchanged.')
         elif args.action == 'install-analytics':
             from .analytical_admin import install
-            async with AsyncDBSession() as session:
-                tables = tables_for(session)
-            await install(engine, tables, args.output)
+            await install(engine, TABLES, args.output)
             print('Analytical views and isolated reader installed. Chess rows unchanged. Reader credential was saved privately.')
         elif args.action == 'enable-analytics':
             async with AsyncDBSession() as session:

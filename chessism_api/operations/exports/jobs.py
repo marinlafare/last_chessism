@@ -14,7 +14,9 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.redis_client import redis_settings
 from . import config, files
-from .catalog import SOURCES, tables_for
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+from .catalog import CATALOG_VERSION, SOURCES
 from .models import ExportClient, ExportJob
 from .query import ExportSpec, compile_query, effective_order
 from .service import WORKER_LOCK, enqueue, now
@@ -35,7 +37,7 @@ async def disk_work(function, *args):
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
-        await task
+        await finish_analysis_cleanup(task)
         raise
 
 
@@ -50,7 +52,7 @@ async def checkpoint(job_id, **values):
         await session.commit()
 
 
-async def construct(job):
+async def construct(job, *, session_factory=None):
     document = files.read_request(job.id)
     if hashlib.sha256(files.canonical_bytes(document)).hexdigest() != job.request_sha256:
         raise ValueError('Stored request checksum mismatch.')
@@ -67,16 +69,14 @@ async def construct(job):
     count, truncated, snapshot, snapshot_at = 0, False, None, None
     last_progress = time.monotonic()
     try:
-        async with AsyncDBSession() as session:
-            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
-            await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+        async with read_transaction(session_factory or AsyncDBSession) as session:
             await session.execute(text("SET LOCAL statement_timeout = '60s'"))
             await session.execute(text("SET LOCAL lock_timeout = '2s'"))
             await session.execute(text('SET LOCAL max_parallel_workers_per_gather = 1'))
             await session.execute(text('SET LOCAL jit = off'))
             snapshot_at, snapshot = (await session.execute(text('SELECT transaction_timestamp(), pg_current_snapshot()::text'))).one()
             await checkpoint(job.id, phase='reading', snapshot_at=snapshot_at)
-            query, params = compile_query(spec, tables_for(session))
+            query, params = compile_query(spec)
             stream = await session.stream(query, params, execution_options={'yield_per': config.BATCH_ROWS})
             try:
                 async for rows in stream.mappings().partitions(config.BATCH_ROWS):
@@ -91,7 +91,7 @@ async def construct(job):
                     if progress:
                         last_progress = time.monotonic()
             finally:
-                await stream.close()
+                await finish_analysis_cleanup(stream.close())
         # Release the database snapshot before footer validation and hashing.
     finally:
         await disk_work(writer.close)
@@ -103,7 +103,7 @@ async def construct(job):
     completed = now()
     expires = completed + timedelta(seconds=config.RETENTION)
     manifest = {
-        'format': 'parquet', 'format_version': 1, 'catalog_version': 1, 'export_id': job.id,
+        'format': 'parquet', 'format_version': 1, 'catalog_version': CATALOG_VERSION, 'export_id': job.id,
         'source': spec.source, 'row_meaning': SOURCES[spec.source].meaning,
         'source_definition': document, 'request_sha256': job.request_sha256,
         'filters': spec.where, 'selection_order': effective_order(spec), 'row_limit': spec.limit,

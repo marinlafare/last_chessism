@@ -1,11 +1,14 @@
-"""Public dataset contract backed by compact-v3 tables, never caller SQL.
+"""Public dataset contract backed by canonical PostgreSQL tables, never caller SQL.
 
 All joins are named, server-owned many-to-one relationships. Each source has a
 stable key, including the two sides of a full move as separate half-moves.
 """
 from dataclasses import dataclass, field
 
-from chessism_api.database.postgresql.relational_storage import storage_for
+CATALOG_VERSION = 2
+TABLES = {name: f'public.{name}' for name in (
+    'game', 'player', 'game_mode', 'fen', 'moves', 'game_player', 'game_fen_association')}
+STANDARD_GAME = 'g.is_standard'
 
 
 @dataclass(frozen=True)
@@ -27,14 +30,14 @@ class Source:
 
 GAME_COLUMNS = {
     'game_id': Column('g.link', 'int64'),
-    'played_at': Column('g.played_at', 'timestamp[us, UTC]', 'Stored game start date/time in UTC; NULL when unavailable.'),
+    'played_at': Column('g.played_at', 'timestamp[us, UTC]', 'Stored game start date/time in UTC.'),
     'white_player_id': Column('g.white_player_id', 'int64'),
     'black_player_id': Column('g.black_player_id', 'int64'),
     'white_player': Column('wp.player_name', 'string'),
     'black_player': Column('bp.player_name', 'string'),
     'white_rating': Column('g.white_elo', 'int32'),
     'black_rating': Column('g.black_elo', 'int32'),
-    'average_rating': Column('g.avg_elo', 'float64'),
+    'average_rating': Column('((g.white_elo::bigint + g.black_elo::bigint) / 2.0)::float8', 'float64'),
     'white_result': Column('g.white_result', 'float64'),
     'black_result': Column('g.black_result', 'float64'),
     'white_result_name': Column('g.white_str_result', 'string'),
@@ -43,7 +46,7 @@ GAME_COLUMNS = {
     'time_control': Column('g.time_control', 'string'),
     'opening': Column('g.eco', 'string', 'Stored opening suffix, not an opening classifier.'),
     'moves': Column('g.n_moves', 'int32'),
-    'elapsed_seconds': Column('g.time_elapsed', 'int32'),
+    'elapsed_seconds': Column('g.time_elapsed', 'float64'),
 }
 GAME_JOINS = {
     'wp': ('LEFT JOIN {player} wp ON wp.id = g.white_player_id', ('g',)),
@@ -85,7 +88,6 @@ ARRIVAL_JOINS = {
 }
 PLAYER_GAME_COLUMNS = {
     **GAME_COLUMNS,
-    'player_game_id': Column('gp.id', 'int64'),
     'game_id': Column('gp.game_link', 'int64'),
     'player_id': Column('gp.player_id', 'int64'),
     'player': Column('p.player_name', 'string'),
@@ -107,21 +109,21 @@ MOVE_COLUMNS = {
     'player_rating': Column('CASE WHEN s.is_white THEN g.white_elo ELSE g.black_elo END', 'int32'),
 }
 SOURCES = {
-    'games': Source('{game} g', ('game_id',), 'One game.', GAME_COLUMNS, GAME_JOINS),
+    'games': Source('{game} g', ('game_id',), 'One standard game, including zero-move games.', GAME_COLUMNS, GAME_JOINS, STANDARD_GAME),
     'players': Source('{player} p', ('player_id',), 'One player identity; profiles can be incomplete.', {
         'player_id': Column('p.id', 'int64'), 'player_name': Column('p.player_name', 'string'),
         'name': Column('p.name', 'string'), 'title': Column('p.title', 'string'),
-        'joined': Column('p.joined', 'int32', 'Stored Unix seconds; zero means unknown.'),
+        'joined': Column('p.joined', 'int64', 'Stored Unix seconds; zero means unknown.'),
         'country': Column('p.country', 'string'), 'verified': Column('p.verified', 'bool'),
         'deleted_at': Column('p.deleted_at', 'timestamp[us, UTC]'),
     }),
     'positions': Source('{fen} f', ('fen_id',), 'One distinct canonical FEN.', POSITION_COLUMNS),
     'game_positions': Source('{game_fen_association} a', ('game_id', 'move_number', 'is_white'),
         'One resulting FEN occurrence in a game. Repetitions are retained; player means mover.',
-        ARRIVAL_COLUMNS, ARRIVAL_JOINS),
-    'player_games': Source('{game_player} gp', ('player_game_id',), 'One recorded player participation in a game.',
+        ARRIVAL_COLUMNS, ARRIVAL_JOINS, STANDARD_GAME),
+    'player_games': Source('{game_player} gp', ('game_id', 'is_white'), 'One player side in a standard game; self-play retains both sides.',
         PLAYER_GAME_COLUMNS, {'g': ('JOIN {game} g ON g.link = gp.game_link', ()),
-                             'p': ('JOIN {player} p ON p.id = gp.player_id', ()), **GAME_JOINS}),
+                             'p': ('JOIN {player} p ON p.id = gp.player_id', ()), **GAME_JOINS}, STANDARD_GAME),
     'moves': Source('''{moves} m CROSS JOIN LATERAL (VALUES
         (TRUE, m.white_move, m.white_reaction_time, m.white_time_left),
         (FALSE, m.black_move, m.black_reaction_time, m.black_time_left)
@@ -130,19 +132,12 @@ SOURCES = {
         {'g': ('JOIN {game} g ON g.link = m.link', ()), **GAME_JOINS,
          'a': ('LEFT JOIN {game_fen_association} a ON a.game_link = m.link AND a.n_move = m.n_move AND a.is_white = s.is_white', ()),
          'f': ('LEFT JOIN {fen} f ON f.fen_id = a.fen_id', ('a',))},
-        "NULLIF(BTRIM(s.san), '') IS NOT NULL AND s.san <> '--'"),
+        STANDARD_GAME + " AND NULLIF(BTRIM(s.san), '') IS NOT NULL AND s.san <> '--'"),
 }
 
 
-def tables_for(session):
-    layout = storage_for(session)
-    if not layout or not layout.compact:
-        raise RuntimeError('Dataset exports require the validated relational_v3 database profile.')
-    return {name: layout.table(name) for name in ('game', 'player', 'game_mode', 'fen', 'moves', 'game_player', 'game_fen_association')}
-
-
 def public_catalog(allowed, max_rows):
-    return {'version': 1, 'format': 'parquet', 'max_rows': max_rows, 'max_columns': 48,
+    return {'version': CATALOG_VERSION, 'format': 'parquet', 'max_rows': max_rows, 'max_columns': 48,
             'operators': ['eq', 'ne', 'in', 'not_in', 'gt', 'gte', 'lt', 'lte', 'is_null', 'is_not_null'],
             'sources': [{'name': name, 'row_meaning': s.meaning, 'keys': list(s.keys),
                 'columns': [{'name': key, 'type': col.dtype, 'nullable': True, 'description': col.description}

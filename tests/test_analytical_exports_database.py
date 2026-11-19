@@ -14,7 +14,7 @@ from sqlalchemy import text
 from tests.test_exports_database import ExportDatabaseFixture, SCHEMA
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.operations.exports import analytical_admin, analytical_reader, jobs, service
-from chessism_api.operations.exports.catalog import tables_for
+from chessism_api.operations.exports.catalog import TABLES
 from chessism_api.operations.exports.analytical_spec import SQLExportSpec, MoveMatrixSpec, StoredLegacyMoveMatrixSpec
 from chessism_api.operations.exports.analytical_spec import AnalyticalPreviewSpec
 from chessism_api.operations.exports.analytical_preview import preview
@@ -34,7 +34,7 @@ class AnalyticalDatabaseFixture(ExportDatabaseFixture):
         year_choice.start()
         self.addCleanup(year_choice.stop)
         self.credential=Path(self.directory.name)/'reader.json'
-        async with AsyncDBSession() as session:tables=tables_for(session)
+        tables=TABLES
         await analytical_admin.install(self.engine,tables,str(self.credential))
         self.reader_env=patch.dict(os.environ,{'CHESSISM_EXPORT_READER_FILE':str(self.credential)})
         self.reader_env.start()
@@ -246,7 +246,7 @@ class AnalyticalDatabaseTests(AnalyticalDatabaseFixture):
                           (SQLExportSpec(sql='SELECT avg(white_rating) AS average FROM exports_data_v1.games'),'UNSUPPORTED_RESULT_TYPE')):
             status,path=await self.run_spec(spec)
             self.assertEqual(status.error_code,code,status.error);self.assertFalse(path.exists())
-        async with AsyncDBSession() as session:tables=tables_for(session)
+        tables=TABLES
         from chessism_api.operations.exports.catalog import SOURCES
         query=analytical_admin.view_select(SOURCES['moves'],tables)
         async with self.engine.begin() as conn:

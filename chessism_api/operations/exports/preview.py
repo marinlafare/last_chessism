@@ -8,7 +8,8 @@ from redis.exceptions import RedisError
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from .catalog import SOURCES, tables_for
+from chessism_api.database.postgresql.transactions import read_transaction
+from .catalog import SOURCES
 from .query import compile_query, effective_order
 from .writer import preview_value
 
@@ -43,16 +44,14 @@ async def preview_slot(redis, client_id, *, analytical=False):
             LOG.warning('Preview lease release unavailable; lease will expire.')
 
 
-async def structured_preview(spec):
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
-        await session.execute(text("SET LOCAL TIME ZONE 'UTC'"))
+async def structured_preview(spec, *, session_factory=None):
+    async with read_transaction(session_factory or AsyncDBSession) as session:
         await session.execute(text("SET LOCAL statement_timeout = '12s'"))
         await session.execute(text("SET LOCAL lock_timeout = '1s'"))
         await session.execute(text('SET LOCAL max_parallel_workers_per_gather = 1'))
         snapshot_at = await session.scalar(text('SELECT transaction_timestamp()'))
         limit = min(spec.limit, 100)
-        statement, params = compile_query(spec, tables_for(session), limit=limit+1)
+        statement, params = compile_query(spec, limit=limit+1)
         rows = (await session.execute(statement, params)).mappings().all()
     return {'kind': 'live_preview', 'source': spec.source, 'snapshot_at': snapshot_at,
         'columns': [{'name': key, 'type': SOURCES[spec.source].columns[key].dtype} for key in spec.select],

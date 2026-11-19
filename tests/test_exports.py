@@ -22,14 +22,11 @@ from chessism_api.operations.exports.writer import ParquetOutput
 from chessism_api.routers.exports import router
 from chessism_api.redis_client import get_redis_pool
 
-TABLES = {key: f'"public"."{key}"' for key in ('game','player','fen','game_mode','moves','game_player','game_fen_association')}
-
-
 class QueryTests(unittest.TestCase):
     def test_bound_values_and_only_required_joins(self):
         attack = "hikaru'; DROP TABLE game; --"
         spec = ExportSpec(source='games', select=['game_id', 'white_rating'], where={'field':'white_player','op':'eq','value':attack})
-        sql, params = compile_query(spec, TABLES)
+        sql, params = compile_query(spec)
         self.assertNotIn(attack, str(sql)); self.assertEqual(params['filter_0'], attack)
         self.assertIn('wp ON', str(sql)); self.assertNotIn(' bp ON', str(sql))
         self.assertNotIn('fen', str(sql)); self.assertNotIn('COUNT', str(sql))
@@ -41,7 +38,7 @@ class QueryTests(unittest.TestCase):
             {'any':[{'field':'white_player','op':'eq','value':'hikaru'}, {'field':'black_player','op':'eq','value':'hikaru'}]},
             {'field':'mode','op':'in','value':['blitz','rapid']}, {'field':'score_cp','op':'is_not_null'}]},
             order_by=[{'field':'played_at','direction':'asc'}])
-        sql, params = compile_query(spec, TABLES)
+        sql, params = compile_query(spec)
         self.assertIn(' OR ', str(sql)); self.assertIn(' AND ', str(sql))
         self.assertIn('a ON', str(sql)); self.assertIn('f ON', str(sql))
         self.assertEqual(params['filter_2'], ['blitz','rapid'])
@@ -71,11 +68,38 @@ class QueryTests(unittest.TestCase):
 
     def test_timestamp_values_remain_aware_and_column_types_are_explicit(self):
         spec=ExportSpec(source='games',select=['played_at'],where={'field':'played_at','op':'gte','value':'2026-01-01T01:00:00+01:00'})
-        _,params=compile_query(spec,TABLES)
+        _,params=compile_query(spec)
         self.assertEqual(params['filter_0'],datetime(2026,1,1,tzinfo=timezone.utc))
         self.assertEqual(catalog.SOURCES['positions'].columns['score_cp'].dtype, 'int32')
         self.assertEqual(catalog.public_catalog(['games'], 100)['sources'][0]['name'], 'games')
         self.assertEqual(len(catalog.public_catalog(['games'], 100)['sources']), 1)
+
+    def test_approved_catalog_keys_types_and_removed_identity(self):
+        public = catalog.public_catalog(list(catalog.SOURCES), 100)
+        self.assertEqual(public['version'], 2)
+        player_games = next(s for s in public['sources'] if s['name'] == 'player_games')
+        self.assertEqual(player_games['keys'], ['game_id', 'is_white'])
+        self.assertNotIn('player_game_id', catalog.SOURCES['player_games'].columns)
+        self.assertEqual(catalog.GAME_COLUMNS['elapsed_seconds'].dtype, 'float64')
+        self.assertEqual(catalog.SOURCES['players'].columns['joined'].dtype, 'int64')
+        for option in ({'select': ['player_game_id']},
+                       {'select': ['player'], 'order_by': [{'field': 'player_game_id'}]},
+                       {'select': ['player'], 'where': {'field': 'player_game_id', 'op': 'eq', 'value': 1}}):
+            with self.assertRaises(ValidationError): ExportSpec(source='player_games', **option)
+
+    def test_predicates_require_game_join_even_when_no_game_fields_are_selected(self):
+        for source, fields in [('moves', ['san']), ('player_games', ['player']), ('game_positions', ['fen'])]:
+            query, _ = compile_query(ExportSpec(source=source, select=fields))
+            self.assertIn('JOIN public.game g ON', str(query))
+            self.assertIn('g.is_standard', str(query))
+            self.assertNotIn('g.n_moves>0', str(query))
+        ordering = effective_order(ExportSpec(source='player_games', select=['player']))
+        self.assertEqual(ordering, [{'field': 'game_id', 'direction': 'asc'}, {'field': 'is_white', 'direction': 'desc'}])
+
+    def test_new_numeric_filters_preserve_fraction_and_large_join_timestamp(self):
+        for source, field, value in [('games', 'elapsed_seconds', 1.25), ('players', 'joined', 2**40)]:
+            _, params = compile_query(ExportSpec(source=source, select=[field], where={'field': field, 'op': 'eq', 'value': value}))
+            self.assertEqual(params['filter_0'], value)
 
 
 class ParquetTests(unittest.TestCase):

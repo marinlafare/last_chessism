@@ -6345,31 +6345,31 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical FEN appearance snapshots \u2014 verified, local checkpoint pending",
+      "current_gate": "canonical structured exports \u2014 verified, local checkpoint pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "entry_commit": "af6b7ca3e39ef40fa8942033ba1b733ddf92f4fa",
-        "scope": "canonical FEN appearance/common-position snapshots",
-        "evidence_directory": "/tmp/chessism-canonical-a3-appearances-20261118-01",
+        "entry_commit": "7d6d323efd612dce4f36e6fee526ceac5bef2971",
+        "scope": "canonical structured dataset sources and bounded reads",
+        "evidence_directory": "/tmp/chessism-canonical-a3-export-sources-20261118-01",
         "planned_tests": {
-          "foundation": 47,
-          "workflow": 32,
+          "foundation": 14,
+          "workflow": 30,
           "p1": 68
         },
-        "planned_total": 147,
-        "source_input_count": 1774,
-        "protected_baseline_count": 1593,
+        "planned_total": 112,
+        "source_input_count": 1775,
+        "protected_baseline_count": 1584,
         "process_policy": "Run directly; expected under five minutes",
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 47,
+            "tests": 14,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 11.85338020324707,
+            "elapsed_seconds": 4.157581329345703,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6377,11 +6377,11 @@
           },
           "workflow": {
             "suite": "workflow",
-            "tests": 32,
+            "tests": 30,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.4129664897918701,
+            "elapsed_seconds": 0.31432294845581055,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6393,104 +6393,40 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 2.8838937282562256,
+            "elapsed_seconds": 3.033233642578125,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "elapsed_seconds": 21.636900424957275,
+        "elapsed_seconds": 14.983549356460571,
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-appearances-9c53bf771b-p1",
+            "container": "chessism-canonical-a3-export-sources-6cb58fb701-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-appearances-9c53bf771b-workflow",
+            "container": "chessism-canonical-a3-export-sources-6cb58fb701-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-appearances-9c53bf771b-foundation",
+            "container": "chessism-canonical-a3-export-sources-6cb58fb701-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-appearances-9c53bf771b-redis",
+            "container": "chessism-canonical-a3-export-sources-6cb58fb701-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-appearances-9c53bf771b-postgres",
+            "container": "chessism-canonical-a3-export-sources-6cb58fb701-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "source_integrity": "All 1774 inputs verified. Only two unit-test result mocks changed after initial gate; 32 affected checks rerun without warnings. Production/PostgreSQL/P1 inputs unchanged.",
-        "workflow_rerun": {
-          "run_id": "f5375fefdfdd4be290e1cde82b35334e",
-          "containers": {
-            "workflow": {
-              "name": "chessism-canonical-a3-appearances-f5375fefdf-workflow",
-              "image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
-              "network": "none",
-              "mounts": [
-                {
-                  "Type": "bind",
-                  "Source": "/home/jon/Desktop/workshop/last_chessism",
-                  "Destination": "/workspace",
-                  "Mode": "",
-                  "RW": false,
-                  "Propagation": "rprivate"
-                },
-                {
-                  "Type": "bind",
-                  "Source": "/tmp/chessism-canonical-a3-appearances-20261118-01-workflow",
-                  "Destination": "/tmp/chessism-canonical-a3-appearances-20261118-01-workflow",
-                  "Mode": "",
-                  "RW": true,
-                  "Propagation": "rprivate"
-                },
-                {
-                  "Type": "bind",
-                  "Source": "/dev/null",
-                  "Destination": "/workspace/.env",
-                  "Mode": "",
-                  "RW": false,
-                  "Propagation": "rprivate"
-                }
-              ],
-              "no_ports": true
-            }
-          },
-          "results": {
-            "workflow": {
-              "suite": "workflow",
-              "tests": 32,
-              "failures": 0,
-              "errors": 0,
-              "skips": 0,
-              "elapsed_seconds": 0.4129664897918701,
-              "failure_details": [],
-              "error_details": [],
-              "skip_details": [],
-              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
-            }
-          },
-          "production_access": false,
-          "started_at": 1795051920.7128115,
-          "unchanged_baseline_files": 1593,
-          "source_unchanged": true,
-          "passed": true,
-          "cleanup": [
-            {
-              "container": "chessism-canonical-a3-appearances-f5375fefdf-workflow",
-              "removed": true
-            }
-          ],
-          "finished_at": 1795051922.6395428,
-          "elapsed_seconds": 1.9267313480377197
-        },
-        "evidence_archive": "docs/architecture/evidence/stage-a-appearances-2026-11-18.tar.gz",
-        "evidence_sha256": "081a1f2047ca2926d9d33186767cedf2169e822ca6fe51957934521a300caca7"
+        "source_integrity": "All 1775 frozen hashes match, including all application and test files; no post-gate edits.",
+        "evidence_archive": "docs/architecture/evidence/stage-a-export-sources-2026-11-18.tar.gz",
+        "evidence_sha256": "e61a98419f40ded95065e3737525eda40ff47f26bf6e1c1a13ea386968c6a788"
       },
       "verification_attempts": [
         {
@@ -7916,6 +7852,151 @@
           "evidence_archive_sha256": "8dcc121dfa3d512b7934a8b01fb48ac719079e08ddb484f57cca5171bffdbc0b",
           "commit_pending": false,
           "commit": "af6b7ca3e39ef40fa8942033ba1b733ddf92f4fa"
+        },
+        {
+          "status": "passed",
+          "entry_commit": "af6b7ca3e39ef40fa8942033ba1b733ddf92f4fa",
+          "scope": "canonical FEN appearance/common-position snapshots",
+          "evidence_directory": "/tmp/chessism-canonical-a3-appearances-20261118-01",
+          "planned_tests": {
+            "foundation": 47,
+            "workflow": 32,
+            "p1": 68
+          },
+          "planned_total": 147,
+          "source_input_count": 1774,
+          "protected_baseline_count": 1593,
+          "process_policy": "Run directly; expected under five minutes",
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 47,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 11.85338020324707,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 32,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.4129664897918701,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 2.8838937282562256,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "elapsed_seconds": 21.636900424957275,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-appearances-9c53bf771b-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-appearances-9c53bf771b-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-appearances-9c53bf771b-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-appearances-9c53bf771b-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-appearances-9c53bf771b-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity": "All 1774 inputs verified. Only two unit-test result mocks changed after initial gate; 32 affected checks rerun without warnings. Production/PostgreSQL/P1 inputs unchanged.",
+          "workflow_rerun": {
+            "run_id": "f5375fefdfdd4be290e1cde82b35334e",
+            "containers": {
+              "workflow": {
+                "name": "chessism-canonical-a3-appearances-f5375fefdf-workflow",
+                "image": "sha256:ba1c705b2daf726ab8c6b4036f945413585fb657590933e2673e0424970721be",
+                "network": "none",
+                "mounts": [
+                  {
+                    "Type": "bind",
+                    "Source": "/home/jon/Desktop/workshop/last_chessism",
+                    "Destination": "/workspace",
+                    "Mode": "",
+                    "RW": false,
+                    "Propagation": "rprivate"
+                  },
+                  {
+                    "Type": "bind",
+                    "Source": "/tmp/chessism-canonical-a3-appearances-20261118-01-workflow",
+                    "Destination": "/tmp/chessism-canonical-a3-appearances-20261118-01-workflow",
+                    "Mode": "",
+                    "RW": true,
+                    "Propagation": "rprivate"
+                  },
+                  {
+                    "Type": "bind",
+                    "Source": "/dev/null",
+                    "Destination": "/workspace/.env",
+                    "Mode": "",
+                    "RW": false,
+                    "Propagation": "rprivate"
+                  }
+                ],
+                "no_ports": true
+              }
+            },
+            "results": {
+              "workflow": {
+                "suite": "workflow",
+                "tests": 32,
+                "failures": 0,
+                "errors": 0,
+                "skips": 0,
+                "elapsed_seconds": 0.4129664897918701,
+                "failure_details": [],
+                "error_details": [],
+                "skip_details": [],
+                "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+              }
+            },
+            "production_access": false,
+            "started_at": 1795051920.7128115,
+            "unchanged_baseline_files": 1593,
+            "source_unchanged": true,
+            "passed": true,
+            "cleanup": [
+              {
+                "container": "chessism-canonical-a3-appearances-f5375fefdf-workflow",
+                "removed": true
+              }
+            ],
+            "finished_at": 1795051922.6395428,
+            "elapsed_seconds": 1.9267313480377197
+          },
+          "evidence_archive": "docs/architecture/evidence/stage-a-appearances-2026-11-18.tar.gz",
+          "evidence_sha256": "081a1f2047ca2926d9d33186767cedf2169e822ca6fe51957934521a300caca7",
+          "commit": "7d6d323efd612dce4f36e6fee526ceac5bef2971"
         }
       ],
       "process_handoff_policy": "Run operations expected to take under five minutes directly; provide monitor.py and return control only for operations expected to exceed five minutes (user update 2026-11-18).",

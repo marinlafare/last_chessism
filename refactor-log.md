@@ -2115,3 +2115,28 @@ Evidence archived and byte-checked at docs/architecture/evidence/stage-a-appeara
 No source database, original services, recovery checkpoint or production access.
 Local checkpoint follows. Stage A remains incomplete/unaccepted. Next: approved
 canonical dataset exports, preserving credential and job ownership boundaries.
+
+### Canonical structured dataset sources — started 2026-11-18
+
+FEN cache checkpoint is 7d6d323, clean on entry. The approved export field/key
+changes are now next. Verified a planning discrepancy: the old compact export
+source filters standard games but does not exclude zero-move games (reference
+builder and ingestion classification). Preserve that behavior instead of copying
+nonempty eligibility from engine analytics. Native participant rows remain per side.
+Source/compiler/read conversion is separate from the upcoming credentials/jobs and
+restricted analytical installation conversion; no claim of complete export runtime.
+
+Prepared 14 new canonical source/preview/Parquet PostgreSQL checks + 30 workflow
+(including three new contract tests) + 68 P1 = 112 checks. No errors/failures/skips
+allowed. Source hashes and Python syntax verified; no schema version change.
+Evidence: /tmp/chessism-canonical-a3-export-sources-20261118-01
+
+Canonical structured export gate passed: 14 new PostgreSQL + 30 workflow + 68 P1
+= 112 checks, zero failures/errors/skips, in 14.98 seconds (Python 3.10.22).
+All 1775 frozen inputs match. Raw/structured results agree; no coroutine warnings.
+All five owned containers independently confirmed absent. Evidence archived and
+byte-checked at docs/architecture/evidence/stage-a-export-sources-2026-11-18.tar.gz.
+Approved key/types verified in SQL, JSON, Arrow and manifest; native self-play,
+zero-move scope, source filtering, errors and repeated cleanup cancellation pass.
+No application/test edits after gate. Local checkpoint follows. Stage A remains
+incomplete/unaccepted; export metadata/lifecycle and analytical-reader port next.
