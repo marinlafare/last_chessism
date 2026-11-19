@@ -109,3 +109,14 @@ before retirement. This explains the additional work beyond the earlier estimate
 Next: independent acceptance review of Stage A's actual code and saved evidence.
 Stage A is implemented but **not formally accepted**. Do not start Stage B or C
 from this handoff.
+
+
+## Numeric acceptance correction — 2026-11-19
+
+The independent review of e02d47a found INTEGER-min overflow in two remaining
+read/projection paths. The focused correction widens score operands before ABS
+and player-sign negation, preserving all formulas and raw values. Red reproduced
+both errors; green passed 64 focused checks (49 real PostgreSQL), no failures,
+errors or skips. See [numeric correction](stage-a-numeric-correction.md) for
+semantics, exact scope and evidence. Stage A acceptance still awaits the requested
+brief independent re-review. No Stage B work has begun.

@@ -1340,3 +1340,20 @@ remain; no original database or recovery archive was read or changed. Final broa
 comparison and focused follow-ups are recorded in the manifest and acceptance
 packet. Existing unrelated test debt remains explicit. No Stage B/C work authorized
 by this completion record. Independent acceptance has not occurred.
+
+
+## Authorized correction — Stage A score arithmetic bounds (2026-11-19)
+Entry: reviewed e02d47a; clean worktree; single numeric blocker, no new stage.
+Verify White-relative CP, mate and tablebase conventions. Add actual PostgreSQL
+regressions for page aggregation and engine refresh, full INTEGER bounds, both
+perspectives, raw-score preservation and unchanged bounded accuracy formulas.
+Reproduce overflow, then widen score operands to bigint before ABS/negation, as
+in existing matrix readers. No schema, classification, formula or API changes.
+Gate: focused new PG checks plus affected reads/recovery/matrix/scoring checks;
+syntax and scope review. No broad-suite rerun. Preserve original data/checkpoint.
+Exit: evidence and local commit; stop for brief independent numeric re-review.
+
+Numeric correction gate completed: red reproduced both overflow paths; green
+64/64 (49 PostgreSQL), no failures/errors/skips. Only SQL operand widths changed.
+See docs/architecture/stage-a-numeric-correction.md and archived evidence.
+Next: local checkpoint and brief independent numeric re-review; stop implementation.

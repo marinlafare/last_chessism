@@ -77,7 +77,7 @@ def page_sql(status):
         LEFT JOIN public.game_mode mode ON mode.id=g.mode_id
         LEFT JOIN LATERAL (
             SELECT AVG(f.score)::float8 AS avg_score,
-                AVG(ABS(f.score))::float8 AS avg_abs_score,MAX(ABS(f.score))::float8 AS max_abs_score
+                AVG(ABS(f.score::bigint))::float8 AS avg_abs_score,MAX(ABS(f.score::bigint))::float8 AS max_abs_score
             FROM public.game_fen_association a JOIN public.fen f ON f.fen_id=a.fen_id
             WHERE a.game_link=gas.link
         ) scores ON TRUE ORDER BY {order}'''

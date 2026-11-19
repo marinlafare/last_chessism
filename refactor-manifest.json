@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_a_implemented_pending_independent_acceptance",
+  "status": "stage_a_numeric_corrected_pending_independent_review",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -8357,5 +8357,30 @@
     },
     "implementation_tip": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326",
     "implementation_completed_at": "2026-11-19T04:37:29.146330+00:00"
+  },
+  "stage_a_numeric_correction": {
+    "status": "verified_pending_local_commit",
+    "baseline": "e02d47a623dbda63bcb76c11b12473891f37eb2b",
+    "authorization": "78722f67-28ca-4cbf-bbc6-ff00540c9ab3/Pasted text.txt",
+    "scope": "Widen arithmetic in analysis pages and engine summary; preserve raw scores and formulas",
+    "independent_acceptance": false,
+    "tests_run": 64,
+    "postgres_checks": 49,
+    "new_regression_tests": 5,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "red": {
+      "tests_run": 5,
+      "errors": 2,
+      "reason": "integer out of range for -2147483648 in both reported paths"
+    },
+    "verification_seconds": 23.26,
+    "evidence": "docs/architecture/evidence/stage-a-numeric-correction-2026-11-19.tar.gz",
+    "evidence_sha256": "0fd9ade0d90744ebc712f659e646ddf499d4bcad8fb72ef645cf4085b3739bc7",
+    "documentation": "docs/architecture/stage-a-numeric-correction.md",
+    "environment_attempt": "Initial green import stopped before tests: dummy AUTH settings missing; fixed in runner only; evidence preserved.",
+    "disposable_containers_removed": true,
+    "source_hash_drift": 0
   }
 }

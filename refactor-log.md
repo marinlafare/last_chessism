@@ -2478,3 +2478,30 @@ Evidence: docs/architecture/evidence/stage-a-final-comparison-2026-11-18.tar.gz 
 Local Stage A implementation/evidence checkpoint: 782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326.
 Working tree was clean immediately after checkpoint; this tracking-only update
 records its identity. No push/merge/deployment. Independent acceptance pending.
+
+
+2026-11-19 — Starting authorized numeric correction at clean e02d47a.
+Confirmed canonical INTEGER accepts both extrema; analysis page ABS and summary
+ABS/negation overflow before result casts. Matrix readers already widen first.
+Stored scores are White-relative; Stockfish mate_score=10000; tablebase mapping
+is +/-1000 or zero with separate source/WDL/DTZ. Existing accuracy saturates all
+numeric encodings for probability but excludes mate/tablebase from CP deltas.
+Preserve that documented legacy formula, including its >=9000 magnitude heuristic
+for unattributed scores; verified evaluation typing remains stricter. No global
+clamp, new abstraction or stage. Focused PostgreSQL red/green gates only.
+
+Numeric correction verified: reproduced both original integer-overflow errors
+on unchanged e02d47a application SQL. Five new real-PostgreSQL regressions then
+passed after widening operands to bigint in four application lines. Final focused
+gate: 64 tests, 49 real PG checks, zero failures/errors/skips, 23.26 seconds with
+startup/cleanup. Existing recovery checks cover rollback, failure propagation and
+repeated cancellation; six matrix checks include the prior extrema regression.
+First green attempt stopped at test imports due to missing synthetic AUTH settings;
+kept evidence and supplied dummy settings only. Restricted helper selection to
+scoring/serialization; no application or assertion weakening. No broad-suite rerun.
+Syntax/diff checks and unchanged Python structure outside SQL literals pass; source
+and test hash drift zero. All owned containers removed; original database, backup,
+Redis, Neo4j and GCP untouched. Raw score/type/formula semantics retained; legacy
+accuracy's magnitude heuristic for untyped values remains explicitly documented.
+Evidence: docs/architecture/evidence/stage-a-numeric-correction-2026-11-19.tar.gz SHA256 0fd9ade0d90744ebc712f659e646ddf499d4bcad8fb72ef645cf4085b3739bc7.
+Independent numeric re-review pending; Stage A not accepted. No Stage B begun.

@@ -67,12 +67,12 @@ scored AS MATERIALIZED (
         association.is_white AS move_is_white,
         fen.analysis_source,
         CASE
-            WHEN normalized.is_white THEN fen.score
-            ELSE -fen.score
+            WHEN normalized.is_white THEN fen.score::bigint
+            ELSE -fen.score::bigint
         END AS player_score,
         CASE
             WHEN fen.analysis_source = 'tablebase' THEN 'tablebase'
-            WHEN ABS(fen.score) >= 9000 THEN 'mate'
+            WHEN ABS(fen.score::bigint) >= 9000 THEN 'mate'
             ELSE 'cp'
         END AS score_kind
     FROM normalized
