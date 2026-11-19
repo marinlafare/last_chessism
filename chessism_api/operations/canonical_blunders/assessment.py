@@ -4,27 +4,8 @@ Canonical input validates contiguous plies starting at one. Assessed moves plus
 the recorded unassessed plies therefore give the exact number of moves per side.
 No FEN scan, source inference, or GPU recalculation is needed for this projection.
 """
-from sqlalchemy import text
-from .schema import table
 
 POLICY = 'complete_player_moves_v1'
-
-
-async def install_view(connection, layout):
-    await connection.execute(text(f'''CREATE OR REPLACE VIEW {table(layout, 'assessment')} AS
-        WITH totals AS (
-            SELECT b.*, white_assessed + black_assessed +
-                jsonb_array_length(flags->'unassessed') AS total_plies
-            FROM {table(layout, 'game')} b
-        ), coverage AS (
-            SELECT totals.*,
-                CASE WHEN status='assessed' THEN (total_plies+1)/2-white_assessed END AS white_unassessed,
-                CASE WHEN status='assessed' THEN total_plies/2-black_assessed END AS black_unassessed
-            FROM totals
-        ) SELECT coverage.*,
-            COALESCE(status='assessed' AND white_assessed>0 AND white_unassessed=0, false) AS white_complete,
-            COALESCE(status='assessed' AND black_assessed>0 AND black_unassessed=0, false) AS black_complete
-        FROM coverage'''))
 
 
 def empty_mode():

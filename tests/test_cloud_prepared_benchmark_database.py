@@ -2,6 +2,7 @@
 import json
 import time
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from uuid import uuid4
 from sqlalchemy import text
 import test_cloud_analysis_database as existing
@@ -14,17 +15,17 @@ from chessism_api.routers.cloud_game_drafts import save_entry,remove_entry,AddSe
 
 
 @unittest.skipUnless(existing.TEST_URL,'requires isolated PostgreSQL')
-class PreparedTiming(unittest.IsolatedAsyncioTestCase):
+class PreparedTiming(CanonicalDatabaseTestCase):
     asyncSetUp = DraftDatabaseTests.asyncSetUp
     asyncTearDown = DraftDatabaseTests.asyncTearDown
 
     async def test_total_calculate_and_add(self):
         async with AsyncDBSession() as s,s.begin():
             await s.execute(text("""INSERT INTO fen(fen,n_games,moves_counter,score)
-                SELECT 'prepared-benchmark-'||i,1,'{}',CASE WHEN i%4=0 THEN 15 END
+                SELECT 'prepared-benchmark-'||i||' w - -',1,'{}',CASE WHEN i%4=0 THEN 15 END
                 FROM generate_series(1,100000) i"""))
-            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,move_color)
-                SELECT 101,fen_id,repeat,'white' FROM fen CROSS JOIN generate_series(1,10) repeat
+            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,is_white)
+                SELECT 101,fen_id,((fen_id-4)*10+repeat+2)::int,true FROM fen CROSS JOIN generate_series(1,10) repeat
                 WHERE fen LIKE 'prepared-benchmark-%'"""))
             await s.execute(text('ANALYZE fen'));await s.execute(text('ANALYZE game_fen_association'))
         from chessism_api.database.postgresql.game_analysis_reads import POSITION_COUNTS_SQL

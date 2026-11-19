@@ -2,6 +2,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 from fastapi import HTTPException
@@ -14,14 +15,13 @@ from chessism_api.operations.game_analysis_views import (
     preview_player_games_for_analysis,
 )
 from chessism_api.database.postgresql.models import (CloudGamePreparedSelection, CloudGamePreparedChunk,
-    CloudGameDraftEntryFen, CloudGameDraftFen, CloudAnalysisRun, CloudFenClaim, Fen, GameAnalysisSummary)
+    CloudGameDraftEntryFen, CloudGameDraftFen, CloudAnalysisRun, CloudFenClaim, Fen, GameAnalysisCoverage)
 from chessism_api.operations.cloud_analysis import prepared_selection as prepared, draft_cache
-from chessism_api.operations.cloud_analysis.migrate_prepared_selections import upgrade
 from chessism_api.routers.cloud_game_drafts import save_entry, remove_entry, current_draft, AddSelection, Revision
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL')
-class PreparedSelectionTests(unittest.IsolatedAsyncioTestCase):
+class PreparedSelectionTests(CanonicalDatabaseTestCase):
     asyncSetUp = DraftDatabaseTests.asyncSetUp
     asyncTearDown = DraftDatabaseTests.asyncTearDown
     available = DraftDatabaseTests.available
@@ -55,7 +55,7 @@ class PreparedSelectionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_only_missing_ids_retained_and_claims_counted(self):
         async with AsyncDBSession() as s, s.begin():
-            (await s.get(Fen, self.fens[0])).score = 12
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 12
             s.add(CloudAnalysisRun(id='e'*32,job_id=self.job.id,positions=[],launch={},receipts={}))
             await s.flush(); s.add(CloudFenClaim(fen=self.fens[1],run_id='e'*32))
         selected = await self.calculate()
@@ -100,7 +100,7 @@ class PreparedSelectionTests(unittest.IsolatedAsyncioTestCase):
     async def test_live_launch_rechecks_new_scores_after_calculate(self):
         selected = await self.calculate()
         async with AsyncDBSession() as s, s.begin():
-            (await s.get(Fen,self.fens[0])).score = 0
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 0
         await self.add(selected)
         self.assertEqual(self.draft['preview']['fens_to_analyze'], 3)  # captured calculation
         await self.available()
@@ -119,8 +119,6 @@ class PreparedSelectionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.draft['preview']['fens_to_analyze'], 3)
 
     async def test_migration_repeatable_and_empty_missing_set(self):
-        async with self.engine.begin() as c:
-            await c.run_sync(upgrade); await c.run_sync(upgrade)
         async with AsyncDBSession() as s, s.begin():
             await s.execute(text('UPDATE fen SET score=0'))
         selected = await self.calculate()
@@ -130,7 +128,7 @@ class PreparedSelectionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_game_selector_commits_preparation_for_subsequent_add(self):
         async with AsyncDBSession() as s, s.begin():
-            s.add_all([GameAnalysisSummary(link=link, total_positions=2, unscored_positions=2)
+            s.add_all([GameAnalysisCoverage(link=link, total_positions=2, unscored_positions=2)
                        for link in (101,102,103)])
         ident = uuid4().hex
         selected = await preview_player_games_for_analysis(

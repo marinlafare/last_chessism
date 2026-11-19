@@ -1,0 +1,1509 @@
+{
+  "baseline_commit": "a2ef5a6",
+  "removed_files": [
+    "chessism_api/database/postgresql/ask_db.py",
+    "chessism_api/database/postgresql/cloud_migration.py",
+    "chessism_api/database/postgresql/compact_storage.py",
+    "chessism_api/database/postgresql/db_interface.py",
+    "chessism_api/database/postgresql/fen_identity_migration.py",
+    "chessism_api/database/postgresql/fen_reference_migration.py",
+    "chessism_api/database/postgresql/fen_references.py",
+    "chessism_api/database/postgresql/home_summary_schema.py",
+    "chessism_api/database/postgresql/player_analytics_schema.py",
+    "chessism_api/database/postgresql/relational_reads.py",
+    "chessism_api/database/postgresql/relational_storage.py",
+    "chessism_api/database/postgresql/stockfish_summary_schema.py",
+    "chessism_api/operations/canonical_blunders/coverage_upgrade.py",
+    "chessism_api/operations/canonical_blunders/cpu_retirement.py",
+    "chessism_api/operations/canonical_blunders/retired_counter.py",
+    "chessism_api/operations/canonical_blunders/schema.py",
+    "chessism_api/operations/cloud_analysis/migrate_auto_sequences.py",
+    "chessism_api/operations/cloud_analysis/migrate_cancellation.py",
+    "chessism_api/operations/cloud_analysis/migrate_columns.py",
+    "chessism_api/operations/cloud_analysis/migrate_draft_cache.py",
+    "chessism_api/operations/cloud_analysis/migrate_game_drafts.py",
+    "chessism_api/operations/cloud_analysis/migrate_game_fen_queue.py",
+    "chessism_api/operations/cloud_analysis/migrate_input_preparation.py",
+    "chessism_api/operations/cloud_analysis/migrate_prepared_selections.py",
+    "chessism_api/operations/cloud_analysis/migrate_recovery.py",
+    "chessism_api/operations/cloud_analysis/migrate_sequences.py",
+    "chessism_api/operations/cloud_analysis/migrate_work_units.py",
+    "chessism_api/operations/compact_summaries.py",
+    "chessism_api/operations/compact_writes.py",
+    "chessism_api/operations/cuda_summaries/no_move_upgrade.py",
+    "chessism_api/operations/evaluation_repair/__init__.py",
+    "chessism_api/operations/evaluation_repair/aggregates.py",
+    "chessism_api/operations/evaluation_repair/artifacts.py",
+    "chessism_api/operations/evaluation_repair/legacy_batch.py",
+    "chessism_api/operations/evaluation_repair/legacy_policy.py",
+    "chessism_api/operations/evaluation_repair/plan.py",
+    "chessism_api/operations/evaluation_repair/profile.py",
+    "chessism_api/operations/evaluation_repair/publish.py",
+    "chessism_api/operations/evaluation_repair/rating_delta.py",
+    "chessism_api/operations/evaluation_repair/refresh_routing.py",
+    "chessism_api/operations/evaluation_repair/shadow.py",
+    "chessism_api/operations/evaluation_repair/tablebase_review.py",
+    "chessism_api/operations/fen_backup/migrate.py",
+    "chessism_api/operations/ingestion_pipeline/fen_workers.py",
+    "chessism_api/operations/ingestion_pipeline/game_repository.py",
+    "chessism_api/operations/ingestion_pipeline/relational_repository.py",
+    "chessism_api/operations/relational_coverage.py",
+    "chessism_api/operations/relational_projection.py",
+    "docker-compose.compact.yml",
+    "scripts/check_snapshot_schema.py",
+    "scripts/compact_db_application_checks.py",
+    "scripts/compact_db_indexes.py",
+    "scripts/compact_db_live.py",
+    "scripts/compact_db_live_evidence.py",
+    "scripts/compact_db_migration.py",
+    "scripts/compact_db_preflight.py",
+    "scripts/compact_db_queries.py",
+    "scripts/correct_zero_move_blunder_selection.py",
+    "scripts/db_refactor_application_checks.py",
+    "scripts/db_refactor_candidate.py",
+    "scripts/db_refactor_comparison.py",
+    "scripts/db_refactor_corpus.py",
+    "scripts/db_refactor_cutover.py",
+    "scripts/db_refactor_e2e_support.py",
+    "scripts/db_refactor_live.py",
+    "scripts/db_refactor_live_evidence.py",
+    "scripts/db_refactor_live_target.py",
+    "scripts/db_refactor_migration_sequence.py",
+    "scripts/db_refactor_online_backup.py",
+    "scripts/db_refactor_release_rehearsal.py",
+    "scripts/db_refactor_roundtrip.py",
+    "scripts/db_refactor_runtime_probe.py",
+    "scripts/db_refactor_salience_bridge.py",
+    "scripts/db_refactor_sequences.py",
+    "scripts/db_refactor_switch_rehearsal.py",
+    "scripts/db_refactor_tuning.py",
+    "scripts/db_refactor_workload.py",
+    "scripts/db_refactor_write_checks.py",
+    "scripts/db_refactor_write_store.py",
+    "scripts/fen_migration_progress.py",
+    "scripts/fen_rehearsal_readiness.py",
+    "scripts/launch_db_refactor_http_backup.py",
+    "scripts/migrate_compact_db.py",
+    "scripts/migrate_fen_identity.py",
+    "scripts/migrate_game_player.py",
+    "scripts/preview_evaluation_repair.py",
+    "scripts/publish_evaluation_repair.py",
+    "scripts/rehearse_fen_identity.py",
+    "scripts/repair_legacy_provenance.py",
+    "scripts/route_provenance_refresh.py",
+    "scripts/run_compact_db_acceptance.py",
+    "scripts/run_compact_db_baseline.py",
+    "scripts/run_compact_db_candidate.py",
+    "scripts/run_compact_db_preflight.py",
+    "scripts/run_compact_index_retune.py",
+    "scripts/run_compact_post_backup.py",
+    "scripts/run_db_refactor_application.py",
+    "scripts/run_db_refactor_baseline.py",
+    "scripts/run_db_refactor_candidate.py",
+    "scripts/run_db_refactor_corpus.py",
+    "scripts/run_db_refactor_cutover_preflight.py",
+    "scripts/run_db_refactor_http_backup.py",
+    "scripts/run_db_refactor_migration_sequence.py",
+    "scripts/run_db_refactor_read_retune.py",
+    "scripts/run_db_refactor_release.py",
+    "scripts/run_db_refactor_write_validation.py",
+    "scripts/watch_compact_db.py",
+    "scripts/watch_db_refactor.py",
+    "scripts/watch_fen_migration.py",
+    "tests/balanced_postgres_fixture.py",
+    "tests/benchmark_ingestion_writes.py",
+    "tests/benchmark_neo4j_ingestion.py",
+    "tests/check_accuracy_cuda_postgres.py",
+    "tests/check_blunder_training_postgres.py",
+    "tests/check_blunder_v2_postgres.py",
+    "tests/check_canonical_benchmark_postgres.py",
+    "tests/check_canonical_blunders_postgres.py",
+    "tests/check_canonical_coverage_postgres.py",
+    "tests/check_canonical_worker_postgres.py",
+    "tests/check_cloud_game_queue_postgres.py",
+    "tests/check_compact_live_postgres.py",
+    "tests/check_compact_storage_postgres.py",
+    "tests/check_cuda_metadata_postgres.py",
+    "tests/check_cuda_player_postgres.py",
+    "tests/check_cuda_reader_postgres.py",
+    "tests/check_cuda_rerun_postgres.py",
+    "tests/check_db_refactor_candidate_postgres.py",
+    "tests/check_db_refactor_corpus_postgres.py",
+    "tests/check_db_refactor_sequence_postgres.py",
+    "tests/check_db_refactor_switch_postgres.py",
+    "tests/check_evaluation_repair_postgres.py",
+    "tests/check_evaluation_repair_publication_postgres.py",
+    "tests/check_fen_refresh_cost_postgres.py",
+    "tests/check_frequency_cuda_integration.py",
+    "tests/check_gpu_only_refresh_postgres.py",
+    "tests/check_ingestion_bulk_postgres.py",
+    "tests/check_legacy_provenance_postgres.py",
+    "tests/check_manual_cuda_postgres.py",
+    "tests/check_no_move_selection_postgres.py",
+    "tests/check_player_analytics_postgres.py",
+    "tests/check_player_stockfish_postgres.py",
+    "tests/check_position_games_postgres.py",
+    "tests/check_provenance_refresh_postgres.py",
+    "tests/check_relational_application_postgres.py",
+    "tests/check_relational_application_prepare_postgres.py",
+    "tests/check_relational_online_backup_postgres.py",
+    "tests/check_relational_reads_postgres.py",
+    "tests/check_salience_cuda_integration.py",
+    "tests/check_shared_cuda_postgres.py",
+    "tests/check_summary_matrices_postgres.py",
+    "tests/db_refactor_live_fixture.py",
+    "tests/development_reuse_postgres_fixture.py",
+    "tests/final_evaluation_postgres_fixture.py",
+    "tests/full_development_postgres_fixture.py",
+    "tests/test_compact_acceptance.py",
+    "tests/test_compact_indexes.py",
+    "tests/test_compact_live.py",
+    "tests/test_compact_storage.py",
+    "tests/test_db_refactor_application.py",
+    "tests/test_db_refactor_baseline.py",
+    "tests/test_db_refactor_candidate.py",
+    "tests/test_db_refactor_corpus.py",
+    "tests/test_db_refactor_cutover.py",
+    "tests/test_db_refactor_http_backup.py",
+    "tests/test_db_refactor_live.py",
+    "tests/test_db_refactor_release.py",
+    "tests/test_db_refactor_sequence.py",
+    "tests/test_db_refactor_tuning.py",
+    "tests/test_db_refactor_write_validation.py",
+    "tests/test_evaluation_pipeline_database.py",
+    "tests/test_evaluation_repair.py",
+    "tests/test_evaluation_repair_changes.py",
+    "tests/test_evaluation_repair_publication.py",
+    "tests/test_fen_identity_migration.py",
+    "tests/test_fen_migration_progress.py",
+    "tests/test_fen_reference_database.py",
+    "tests/test_fen_reference_migration.py",
+    "tests/test_fen_rehearsal_readiness.py",
+    "tests/test_legacy_provenance_repair.py",
+    "tests/test_relational_reads.py",
+    "tests/test_relational_storage.py",
+    "docker-compose.migration.yml"
+  ],
+  "test_dispositions": [
+    {
+      "file": "tests/test_db_refactor_baseline.py",
+      "tests": [
+        "tests.test_db_refactor_baseline.WorkloadTests.test_fixed_distinct_cohorts",
+        "tests.test_db_refactor_baseline.WorkloadTests.test_too_few_players_fails_closed",
+        "tests.test_db_refactor_baseline.WorkloadTests.test_bind_parameters_preserves_postgres_casts",
+        "tests.test_db_refactor_baseline.WorkloadTests.test_suite_uses_deployed_literals_without_importing_code",
+        "tests.test_db_refactor_baseline.WorkloadTests.test_fingerprints_normalize_json_object_order_but_not_row_order",
+        "tests.test_db_refactor_baseline.WorkloadTests.test_watcher_does_not_claim_live_cutover",
+        "tests.test_db_refactor_baseline.MeasurementTests.test_uses_readonly_transactions_and_separates_first_observation",
+        "tests.test_db_refactor_baseline.MeasurementTests.test_non_repeatable_results_fail",
+        "tests.test_db_refactor_baseline.MeasurementTests.test_connection_guard_rejects_live_or_writable_database"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_candidate.py",
+      "tests": [
+        "tests.test_db_refactor_candidate.CandidateTests.test_medium_requires_real_profile_and_thousands_of_games",
+        "tests.test_db_refactor_candidate.CandidateTests.test_no_suitable_player_fails_instead_of_using_nineteen_games",
+        "tests.test_db_refactor_candidate.CandidateTests.test_ddl_guard_rejects_production_even_on_a_local_socket",
+        "tests.test_db_refactor_candidate.CandidateTests.test_numeric_adapter_preserves_cases_and_args",
+        "tests.test_db_refactor_candidate.CandidateTests.test_unknown_numeric_mapping_fails_closed",
+        "tests.test_db_refactor_candidate.CandidateTests.test_comparison_never_hides_result_mismatches_or_timeouts",
+        "tests.test_db_refactor_candidate.CandidateTests.test_baseline_manifest_and_paths_are_bound",
+        "tests.test_db_refactor_candidate.CandidateTests.test_standard_classification_preserves_variant_and_custom_start_exceptions",
+        "tests.test_db_refactor_candidate.CandidateTests.test_watcher_does_not_confuse_rehearsal_with_live_migration"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_tuning.py",
+      "tests": [
+        "tests.test_db_refactor_tuning.TuningTests.test_recent_contract_casts_time_without_changing_digest_rules",
+        "tests.test_db_refactor_tuning.TuningTests.test_frequency_keeps_complete_boundary_ties_before_fetching_fens",
+        "tests.test_db_refactor_tuning.TuningTests.test_page_filters_both_sides_before_limiting_and_keeps_self_play",
+        "tests.test_db_refactor_tuning.TuningTests.test_all_slow_read_shapes_use_native_tables",
+        "tests.test_db_refactor_tuning.TuningTests.test_diagnosis_rejects_changed_values_and_checks_original_hashes"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_write_validation.py",
+      "tests": [
+        "tests.test_db_refactor_write_validation.WriteValidationTests.test_archive_classification_and_eco_are_lossless",
+        "tests.test_db_refactor_write_validation.WriteValidationTests.test_no_autocommit_or_unguarded_writer",
+        "tests.test_db_refactor_write_validation.WriteValidationTests.test_backup_paths_cannot_target_production_or_existing_source",
+        "tests.test_db_refactor_write_validation.WriteValidationTests.test_watcher_does_not_claim_a_live_migration_or_full_app_acceptance"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_application.py",
+      "tests": [
+        "tests.test_db_refactor_application.ApplicationRehearsalTests.test_only_accepted_distinct_restore_can_be_written",
+        "tests.test_db_refactor_application.ApplicationRehearsalTests.test_private_transport_preserves_ownership",
+        "tests.test_db_refactor_application.ApplicationRehearsalTests.test_online_target_cannot_be_live",
+        "tests.test_db_refactor_application.ApplicationRehearsalTests.test_monitor_has_real_bytes_not_a_guessed_whole_job_percentage"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_cutover.py",
+      "tests": [
+        "tests.test_db_refactor_cutover.CutoverInventoryTests.test_foreign_keys_distinguish_active_from_retained_data",
+        "tests.test_db_refactor_cutover.CutoverInventoryTests.test_only_distinct_accepted_online_restore_is_selected"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_release.py",
+      "tests": [
+        "tests.test_db_refactor_release.ReleaseRehearsalTests.test_live_and_unaccepted_sources_refused_before_copy",
+        "tests.test_db_refactor_release.ReleaseRehearsalTests.test_copy_progress_is_explicitly_local",
+        "tests.test_db_refactor_release.CloneTests.test_copy_is_independent_and_existing_target_refused"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_http_backup.py",
+      "tests": [
+        "tests.test_db_refactor_http_backup.HttpBackupSafetyTests.test_environment_does_not_inherit_live_urls_or_credentials",
+        "tests.test_db_refactor_http_backup.HttpBackupSafetyTests.test_docker_plan_is_network_isolated_without_live_mounts",
+        "tests.test_db_refactor_http_backup.HttpBackupSafetyTests.test_requires_accepted_canonical_restart_evidence",
+        "tests.test_db_refactor_http_backup.HttpBackupSafetyTests.test_progress_reports_real_queue_and_backup_steps"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_sequence.py",
+      "tests": [
+        "tests.test_db_refactor_sequence.MigrationSequenceTests.test_launch_is_private_and_rebuilds_legacy_source",
+        "tests.test_db_refactor_sequence.MigrationSequenceTests.test_gate_requires_same_backup_and_all_prior_checks",
+        "tests.test_db_refactor_sequence.MigrationSequenceTests.test_progress_uses_real_index_counters"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_live.py",
+      "tests": [
+        "tests.test_db_refactor_live.LiveEvidenceTests.test_backup_must_be_recent_tested_and_same_cluster",
+        "tests.test_db_refactor_live.LiveEvidenceTests.test_plan_binds_code_and_evidence_without_granting_approval",
+        "tests.test_db_refactor_live.LiveEvidenceTests.test_live_watch_does_not_claim_no_live_changes",
+        "tests.test_db_refactor_live.ApprovalTests.test_shared_memory_checks_server_mount_and_rejects_old_live_limit",
+        "tests.test_db_refactor_live.ApprovalTests.test_unreviewed_shared_memory_backend_is_rejected",
+        "tests.test_db_refactor_live.ApprovalTests.test_unverified_or_ambiguous_mount_is_rejected",
+        "tests.test_db_refactor_live.ApprovalTests.test_discarding_archive_wrapper_is_refused",
+        "tests.test_db_refactor_live.ApprovalTests.test_missing_approval_fails_before_importing_connections"
+      ],
+      "reason": "Historical profile migration/rehearsal tooling removed; no runtime operation remains.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_db_refactor_corpus.py",
+      "tests": [
+        "tests.test_db_refactor_corpus.CorpusSafetyTests.test_failed_or_wrong_source_acceptance_refused",
+        "tests.test_db_refactor_corpus.CorpusSafetyTests.test_launch_and_watch_explicitly_private",
+        "tests.test_db_refactor_corpus.ExplicitSummaryFactoryTests.test_summary_refresh_never_falls_back_to_global_database",
+        "tests.test_db_refactor_corpus.ExplicitSummaryFactoryTests.test_unowned_summary_transactions_rejected"
+      ],
+      "reason": "Rehearsal supervisor removed; current summary transaction assertions moved unchanged.",
+      "replacement": [
+        "tests.test_summary_transaction_ownership"
+      ]
+    },
+    {
+      "file": "tests/test_compact_acceptance.py",
+      "tests": [
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_literals_do_not_interpolate_names_as_sql",
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_only_integral_numeric_representation_is_normalized",
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_psql_json_stream",
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_cases_share_names_and_keep_queries_bounded",
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_candidate_evidence_and_paths_are_required",
+        "tests.test_compact_acceptance.CompactAcceptanceTests.test_watcher_labels_acceptance_not_migration_complete"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_compact_indexes.py",
+      "tests": [
+        "tests.test_compact_indexes.CompactIndexTests.test_reviewed_old_and_new_expressions",
+        "tests.test_compact_indexes.CompactIndexTests.test_unexpected_target_or_definition_is_rejected",
+        "tests.test_compact_indexes.CompactIndexTests.test_plan_must_actually_use_the_reviewed_index",
+        "tests.test_compact_indexes.CompactIndexTests.test_only_expected_single_issue_evidence_can_be_reused",
+        "tests.test_compact_indexes.CompactIndexTests.test_only_exact_index_is_removed_from_contract_comparison"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_compact_live.py",
+      "tests": [
+        "tests.test_compact_live.EvidenceTests.test_only_recent_exact_verified_compressed_snapshot",
+        "tests.test_compact_live.EvidenceTests.test_live_progress_does_not_claim_isolation",
+        "tests.test_compact_live.GuardTests.test_paths_never_authorize_live_data",
+        "tests.test_compact_live.GuardTests.test_missing_approval_does_not_connect"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_identity_migration.py",
+      "tests": [
+        "tests.test_fen_identity_migration.MigrationTests.test_exact_copy_keeps_old_table_sequences_constraints_and_is_idempotent",
+        "tests.test_fen_identity_migration.MigrationTests.test_interruption_keeps_text_table_active_and_retry_uses_existing_ids",
+        "tests.test_fen_identity_migration.MigrationTests.test_empty_database_and_sequence_validation",
+        "tests.test_fen_identity_migration.MigrationTests.test_unexpected_dependencies_fail_closed",
+        "tests.test_fen_identity_migration.MigrationTests.test_comparison_detects_corruption",
+        "tests.test_fen_identity_migration.MigrationTests.test_restore_refuses_broken_child_sequence"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_reference_migration.py",
+      "tests": [
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_exact_copy_constraints_sequence_triggers_and_retry",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_interruption_after_swap_rolls_back_both_tables_and_triggers",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_corruption_detected_for_each_table",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_missing_parent_is_not_silently_dropped",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_external_dependencies_fail_closed",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_additional_constraints_are_not_silently_lost",
+        "tests.test_fen_reference_migration.ReferenceMigrationTests.test_empty_tables_and_sequence_guard"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_migration_progress.py",
+      "tests": [
+        "tests.test_fen_migration_progress.ProgressTests.test_snapshot_uses_catalog_only_and_handles_no_counters",
+        "tests.test_fen_migration_progress.ProgressTests.test_heartbeat_does_not_add_duplicate_stages",
+        "tests.test_fen_migration_progress.ProgressTests.test_stats_error_is_reported_without_failing_migration",
+        "tests.test_fen_migration_progress.ProgressTests.test_percentage_is_only_for_current_substage",
+        "tests.test_fen_migration_progress.ProgressTests.test_completed_deployment_does_not_claim_app_is_still_paused",
+        "tests.test_fen_migration_progress.ProgressTests.test_old_deployment_cannot_mark_a_new_migration_reopened",
+        "tests.test_fen_migration_progress.ProgressTests.test_reference_rehearsal_has_its_own_stages_and_never_claims_live_cutover",
+        "tests.test_fen_migration_progress.ProgressTests.test_reference_rehearsal_explains_restore_before_migration_stages",
+        "tests.test_fen_migration_progress.ProgressTests.test_recovery_wait_and_failed_phase_are_visible"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_rehearsal_readiness.py",
+      "tests": [
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_waits_past_read_only_startup_until_recovery_finishes",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_ready_database_does_not_sleep",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_persistent_read_only_mode_fails_closed",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_recovery_timeout_is_bounded",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_stuck_query_is_also_bounded",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_connection_failure_propagates",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_cancellation_propagates",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_invalid_probe_fails_closed",
+        "tests.test_fen_rehearsal_readiness.RecoveryReadinessTests.test_invalid_limits_are_rejected"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_relational_reads.py",
+      "tests": [
+        "tests.test_relational_reads.RelationalReadTests.test_legacy_text_and_string_are_unchanged",
+        "tests.test_relational_reads.RelationalReadTests.test_count_never_joins_game_or_other_player_names",
+        "tests.test_relational_reads.RelationalReadTests.test_projection_contains_only_needed_dimensions",
+        "tests.test_relational_reads.RelationalReadTests.test_only_expected_top_level_generated_time_is_excluded",
+        "tests.test_relational_reads.RelationalReadTests.test_real_changes_still_fail",
+        "tests.test_relational_reads.RelationalReadTests.test_rating_query_filters_before_ranking_and_decodes_after",
+        "tests.test_relational_reads.RelationalReadTests.test_rating_retest_covers_modes_and_calendar_boundaries"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_evaluation_repair.py",
+      "tests": [
+        "tests.test_evaluation_repair.ArtifactTests.test_non_overwriting_report_and_tampering",
+        "tests.test_evaluation_repair.ArtifactTests.test_bounds_duplicates_and_known_sources_rejected",
+        "tests.test_evaluation_repair.ArtifactTests.test_illegal_pv_and_type_collision_rejected",
+        "tests.test_evaluation_repair.ArtifactTests.test_native_mate_direction_survives_serialization",
+        "tests.test_evaluation_repair.ArtifactTests.test_legacy_pv_is_not_mistaken_for_forced_mate_proof",
+        "tests.test_evaluation_repair.ShadowTests.test_bounded_verified_shadow_preserves_old_data",
+        "tests.test_evaluation_repair.ShadowTests.test_wrong_binary_never_starts_engine",
+        "tests.test_evaluation_repair.ShadowTests.test_engine_failure_closes_only_its_own_process"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_evaluation_repair_changes.py",
+      "tests": [
+        "tests.test_evaluation_repair_changes.ChangedRepairTests.test_bounded_profile_and_nonexact_engine_scores",
+        "tests.test_evaluation_repair_changes.ChangedRepairTests.test_explicit_policy_and_same_bucket",
+        "tests.test_evaluation_repair_changes.ChangedRepairTests.test_counter_boundaries",
+        "tests.test_evaluation_repair_changes.ChangedRepairTests.test_stable_mate_requires_stronger_search_and_independent_winner",
+        "tests.test_evaluation_repair_changes.ChangedRepairTests.test_no_reinterpretation_or_mate_downgrade"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_evaluation_repair_publication.py",
+      "tests": [
+        "tests.test_evaluation_repair_publication.PublicationValidationTests.test_matching_explicit_candidate",
+        "tests.test_evaluation_repair_publication.PublicationValidationTests.test_changed_or_fabricated_metadata_fails_even_with_new_checksum",
+        "tests.test_evaluation_repair_publication.PublicationValidationTests.test_profile_checksums_approval_and_input_binding",
+        "tests.test_evaluation_repair_publication.PublicationValidationTests.test_duplicate_alternative_and_terminal_mate"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_legacy_provenance_repair.py",
+      "tests": [
+        "tests.test_legacy_provenance_repair.LegacyPolicyTests.test_assumption_only_changes_source_and_leaves_timestamp_unknown",
+        "tests.test_legacy_provenance_repair.LegacyPolicyTests.test_known_unscored_and_large_mates_are_never_relabelled",
+        "tests.test_legacy_provenance_repair.LegacyPolicyTests.test_small_positions_get_real_tablebase_result_or_stay_unchanged",
+        "tests.test_legacy_provenance_repair.LegacyPolicyTests.test_rating_patch_preserves_totals_and_other_groups"
+      ],
+      "reason": "Removed historical migration/profile/legacy-repair implementation.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_evaluations_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_pipeline_cleanup.py",
+      "tests": [
+        "tests.test_pipeline_cleanup.CleanupTests.test_failures_go_to_worker_logging_not_repository"
+      ],
+      "reason": "Unreachable old three-job ingestion worker removed; active bounded worker uses normal logging.",
+      "replacement": [
+        "tests.test_fen_batch_coordination"
+      ]
+    },
+    {
+      "file": "tests/test_cuda_blunder_summary.py",
+      "tests": [
+        "tests.test_cuda_blunder_summary.BlunderReductionTests.test_cached_correction_only_removes_zero_move_counts"
+      ],
+      "reason": "One-time zero-move snapshot migration removed; current reduction cases retained unchanged.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_cuda_blunder_summary.BlunderReductionTests.test_exact_counts_and_coverage"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_column_database.py",
+      "tests": [
+        "tests.test_cloud_column_database.ColumnDatabaseTests.test_cleanup_schema_repair_preserves_legacy_empty_null_and_paused_job",
+        "tests.test_cloud_column_database.ColumnDatabaseTests.test_cleanup_schema_repair_rejects_nonempty_legacy_string_arrays",
+        "tests.test_cloud_column_database.ColumnDatabaseTests.test_migration_is_lossless_atomic_and_repeatable",
+        "tests.test_cloud_column_database.ColumnDatabaseTests.test_unknown_recovery_field_rolls_back_before_dropping_json"
+      ],
+      "reason": "Old JSON-to-columns migration/repair removed; active cloud behavioral tests retained.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.test_cloud_column_database"
+      ]
+    },
+    {
+      "file": "tests/test_relational_storage.py",
+      "tests": [
+        "tests.test_relational_storage.RelationalStorageTests.test_explicit_opt_in_and_quoted_identifiers",
+        "tests.test_relational_storage.RelationalStorageTests.test_no_lossy_archive_classification",
+        "tests.test_relational_storage.RelationalStorageTests.test_saved_score_matrix_metric_is_computed_only_when_selected",
+        "tests.test_relational_storage.RelationalStorageTests.test_empty_games_keep_metadata_without_an_archive_profile"
+      ],
+      "reason": "Profile opt-in and shortened ECO were retired; canonical schema keeps original ECO text. Matrix laziness and metadata preservation remain as native checks.",
+      "replacement": [
+        "tests.test_persistence_contracts",
+        "tests.check_canonical_imports_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_compact_storage.py",
+      "tests": [
+        "tests.test_compact_storage.CompactTypesTests.test_lossless_integers_and_nulls",
+        "tests.test_compact_storage.CompactTypesTests.test_compact_metadata_does_not_mutate_legacy_models",
+        "tests.test_compact_storage.PrivateGuardTests.test_live_locations_are_rejected"
+      ],
+      "reason": "Removed profile metadata/private migration guards; exact integer and null contracts retained at the actual result boundary.",
+      "replacement": [
+        "tests.test_persistence_contracts",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_reference_writes.py",
+      "tests": [
+        "tests.test_fen_reference_writes.ReferenceWriteTests.test_portable_input_becomes_numeric_without_mutating_payload",
+        "tests.test_fen_reference_writes.ReferenceWriteTests.test_missing_mismatched_or_empty_identity_fails_before_insert",
+        "tests.test_fen_reference_writes.ReferenceWriteTests.test_startup_rejects_legacy_or_half_migration"
+      ],
+      "reason": "Old writer and startup adapter removed; native association identity/rollback and runtime admission replace them.",
+      "replacement": [
+        "tests.check_canonical_fens_postgres",
+        "tests.check_canonical_runtime_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_db_refactor_candidate_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "command",
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_db_refactor_switch_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_db_refactor_corpus_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_db_refactor_sequence_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_compact_storage_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "fixture",
+        "exercise",
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_compact_live_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "run"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_relational_application_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "setup",
+        "check_application",
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_relational_online_backup_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_relational_application_prepare_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_relational_reads_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_evaluation_repair_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_evaluation_repair_publication_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "reason": "Historical migration/profile/rehearsal verification; the corresponding commands and layouts no longer exist.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/db_refactor_live_fixture.py",
+      "tests": [],
+      "helper_functions": [
+        "exercise_live"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres",
+        "tests.check_canonical_runtime_postgres",
+        "tests.check_canonical_backup_postgres"
+      ]
+    },
+    {
+      "file": "tests/check_legacy_provenance_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres",
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/check_provenance_refresh_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check",
+        "routing_check"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres",
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/check_no_move_selection_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres",
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/check_canonical_coverage_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres",
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/check_gpu_only_refresh_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check",
+        "automatic_refresh_check"
+      ],
+      "reason": "Historical one-time schema, saved-counter or provenance repair; current canonical behavior has dedicated native checks.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres",
+        "tests.check_canonical_cuda_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_fen_reference_database.py",
+      "tests": [
+        "tests.test_fen_reference_database.ReferenceDatabaseTests.test_ingestion_is_idempotent_and_orm_still_returns_full_positions",
+        "tests.test_fen_reference_database.ReferenceDatabaseTests.test_cloud_and_local_summary_refreshes_find_numeric_associations",
+        "tests.test_fen_reference_database.ReferenceDatabaseTests.test_explorer_and_move_labels_still_accept_portable_fen_text",
+        "tests.test_fen_reference_database.ReferenceDatabaseTests.test_every_matrix_catalog_column_compiles_on_numeric_schema"
+      ],
+      "helper_functions": [],
+      "reason": "DBInterface and legacy ORM fixture replaced by native ingestion, summaries, explorer and matrix checks.",
+      "replacement": [
+        "tests.check_canonical_fens_postgres",
+        "tests.check_canonical_summaries_postgres",
+        "tests.check_canonical_fen_views_postgres",
+        "tests.check_canonical_matrices_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_evaluation_pipeline_database.py",
+      "tests": [
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_local_scores_continuations_and_totals_commit_or_rollback_together",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_invalid_duplicate_or_missing_results_leave_no_partial_writes",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_one_statement_per_batch_not_one_trigger_per_fen",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_missing_totals_roll_back_scores_instead_of_silently_losing_counts",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_large_writer_input_keeps_bounded_statements",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_restore_preserves_missing_and_known_metadata_exactly",
+        "tests.test_evaluation_pipeline_database.EvaluationPipelineTests.test_tablebase_writes_preserve_type_and_atomic_counts"
+      ],
+      "helper_functions": [],
+      "reason": "Legacy ORM fixture replaced by canonical engine/tablebase/backup transactions, including the exact missing-provenance restore regression.",
+      "replacement": [
+        "tests.check_canonical_evaluations_postgres",
+        "tests.check_canonical_tablebase_postgres",
+        "tests.test_fen_backup"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_work_units_database.py",
+      "tests": [
+        "tests.test_cloud_work_units_database.WorkUnitDatabaseTests.test_additive_migration_blocks_active_work_and_is_repeatable"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_sequences_database.py",
+      "tests": [
+        "tests.test_cloud_sequences_database.SequenceDatabaseTests.test_additive_migration_refuses_active_work_and_is_repeatable"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_auto_sequences_database.py",
+      "tests": [
+        "tests.test_cloud_auto_sequences_database.AutoSequenceDatabaseTests.test_additive_migration_is_repeatable_and_preserves_old_jobs"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_game_drafts_database.py",
+      "tests": [
+        "tests.test_cloud_game_drafts_database.DraftDatabaseTests.test_migration_repeatable_during_running_job_and_no_json_columns"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_import_recovery_database.py",
+      "tests": [
+        "tests.test_cloud_import_recovery_database.ImportRecoveryTests.test_history_migration_requires_idle_jobs_and_is_repeatable"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_incremental_drafts_database.py",
+      "tests": [
+        "tests.test_cloud_incremental_drafts_database.IncrementalDraftTests.test_migration_is_additive_repeatable_and_native_columns_only"
+      ],
+      "reason": "One-time additive migration removed; canonical initialization/repetition/admission is verified directly.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_prepared_selections_database.py",
+      "tests": [
+        "tests.test_cloud_prepared_selections_database.PreparedSelectionTests.test_migration_repeatable_and_empty_missing_set"
+      ],
+      "reason": "Remove only installer calls; retain the empty selection or missing input assertions unchanged.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_cloud_input_preparation_database.py",
+      "tests": [
+        "tests.test_cloud_input_preparation_database.InputPreparationTests.test_sealing_rejects_missing_staged_input_and_migration_repeats"
+      ],
+      "reason": "Remove only installer calls; retain the empty selection or missing input assertions unchanged.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres"
+      ]
+    },
+    {
+      "file": "tests/test_pipeline_helpers.py",
+      "tests": [
+        "tests.test_pipeline_helpers.PlayerSalienceTests.test_salience_schema_separates_player_state_from_game_values"
+      ],
+      "reason": "Move structural assertions from unused historical ORM definitions to the actual canonical PostgreSQL tables; use numeric owner and native side keys.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres.CanonicalPostgresTests.test_quality_projection_columns_keep_state_and_values_separate"
+      ]
+    },
+    {
+      "file": "tests/test_pipeline_helpers.py",
+      "tests": [
+        "tests.test_pipeline_helpers.PlayerHeroAnalyticsTests.test_game_player_engine_summary_keeps_only_player_game_score_fields"
+      ],
+      "reason": "Move structural assertions from unused historical ORM definitions to the actual canonical PostgreSQL tables; use numeric owner and native side keys.",
+      "replacement": [
+        "tests.check_canonical_schema_postgres.CanonicalPostgresTests.test_quality_projection_columns_keep_state_and_values_separate"
+      ]
+    },
+    {
+      "file": "tests/balanced_postgres_fixture.py",
+      "tests": [],
+      "helper_functions": [
+        "verify"
+      ],
+      "source_sha256": "4428ab9f26ba60998fcde7aae21ae1b681f456a10de1052cb2c406718773a47d",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/benchmark_ingestion_writes.py",
+      "tests": [],
+      "helper_functions": [
+        "key",
+        "benchmark"
+      ],
+      "source_sha256": "e223caf628255a2a6141c5d4aafae5660581c36475af946240048e61d09bfa0e",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_ingestion_postgres",
+        "tests.check_canonical_fens_postgres",
+        "tests.check_canonical_admin_graph_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/benchmark_neo4j_ingestion.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "48ed126e25bdb7b808986fc8600229e2e6aa1bc413d0dc8ca4c13882b79bb71b",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_ingestion_postgres",
+        "tests.check_canonical_fens_postgres",
+        "tests.check_canonical_admin_graph_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_accuracy_cuda_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "3068e5a95688635555f2dcfa35d6bbc578ad6c682ad5507ac438d64355b84d91",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_blunder_training_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "c732874948bbbc07d5d5fe9387092d88898fe9f958d6f8652a5e6cf2def57098",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_blunder_v2_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "857c06a867f05bf3cba7400f8280c76e5b32c0176582af49f520e0834f9516cf",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_canonical_benchmark_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "2a8fce01e9cee2c4a0c98a5dc6168c0834947a79318fee3c55012a8e2f31ba91",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_canonical_blunders_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check",
+        "main"
+      ],
+      "source_sha256": "0a280ffdf831c1a5fbc9a24276409f44f6ba2a2128d0153ac50313b24de8e6e4",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_canonical_worker_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "40882a02c29f0a66b79a5d2601918d659c4754b96acbe5831c50ab655f21dd73",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_cloud_game_queue_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "fixture",
+        "new_job",
+        "claim",
+        "count_rows",
+        "correctness",
+        "coordinator",
+        "benchmark",
+        "main"
+      ],
+      "source_sha256": "78659bb835d5c8e6996ee97907af54f422f002cc743d0e437f1eca1ef9fd36d5",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_selection_postgres",
+        "tests.test_cloud_game_drafts_database",
+        "tests.test_cloud_input_preparation_database",
+        "tests.test_cloud_prepared_selections_database"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_cuda_metadata_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "f610e81c28d59279d30b956de1908d07f65faebb3b84e51127027ad33b92c412",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_cuda_player_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "771cf1a1679e96cdc59efff29d283abed28a2dae2bce72ff1b7ddce7af4215df",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_cuda_reader_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "bb63a4ebc2f74a53c7dd9a9dd319c6483555ce30d34aeb62ddbc6428e72729f3",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_cuda_rerun_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "0179d95d666e323b2b88632f95227dd5c500a585f500487670dd26afd97279c9",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_fen_refresh_cost_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "2271b2227f48756aff4e5bedd7044b43f59680b0acaeace906f1374b3312bd85",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_recovery_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_frequency_cuda_integration.py",
+      "tests": [],
+      "helper_functions": [
+        "check",
+        "main"
+      ],
+      "source_sha256": "1feb7721e24784366b39278ba95fa32f38822180fe1b46fbe500cb8f8095805a",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_ingestion_bulk_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "fixture",
+        "exercise",
+        "main",
+        "exercise_coverage"
+      ],
+      "source_sha256": "b09a464ec69862690643db12033f48bf8f35e25bb41e1b25b63a03e55455a695",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_imports_postgres",
+        "tests.check_canonical_ingestion_postgres",
+        "tests.check_canonical_fens_postgres",
+        "tests.check_canonical_admin_graph_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_manual_cuda_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "a88d4bae5089987cb7ec91befff1aa20c7bb49877f98bdce4e7de2b008362431",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_player_analytics_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "695484fb282aefbb8608ccc421262b20b174feedaa4dc676e350ac9a35b53bea",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_activity_postgres",
+        "tests.check_canonical_quality_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_player_stockfish_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "dad6950c6cd9fd3a1f3716893f85cb7b594abd51b99b31103864c528ae2454eb",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_position_games_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "63091e803ef8c5bc9a9bbce16cfa019c9ed6ee77c7c98509a858884f5fa1fc9a",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_position_popups_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_salience_cuda_integration.py",
+      "tests": [],
+      "helper_functions": [
+        "check",
+        "main"
+      ],
+      "source_sha256": "22c08adf2cd5957a11e90d0e43eb3931a086c3e93ac5cdb69713268e5288ac60",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_shared_cuda_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "check"
+      ],
+      "source_sha256": "c4a0705ce25248424c83cc1e88bef4be0e4219b2977635cc420b820467899293",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_cuda_postgres",
+        "tests.check_canonical_worker_lifecycle_postgres",
+        "tests.check_canonical_runtime_tools_postgres",
+        "tests.test_cuda_input_snapshot",
+        "tests.test_cuda_accuracy"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/check_summary_matrices_postgres.py",
+      "tests": [],
+      "helper_functions": [
+        "main"
+      ],
+      "source_sha256": "f8ea6bc5cba1f4e3981159171fd10863758b2cfaaf0b57efffee2ccef2a943b1",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_matrices_postgres"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/development_reuse_postgres_fixture.py",
+      "tests": [],
+      "helper_functions": [
+        "verify"
+      ],
+      "source_sha256": "b4940b547680d5c145d7cc0e89d199cd742226fd01c9833b87f29a34a147c3b5",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/final_evaluation_postgres_fixture.py",
+      "tests": [],
+      "helper_functions": [
+        "verify"
+      ],
+      "source_sha256": "c19a6adbec9b66e633319b35488af046d046d823d0f27620fd78e22ccb58f7d0",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    },
+    {
+      "file": "tests/full_development_postgres_fixture.py",
+      "tests": [],
+      "helper_functions": [
+        "verify"
+      ],
+      "source_sha256": "aa1454d3c4e393270cdd1e133e0bf9a88b2f66ee86d630df1e149fdabe5ad53b",
+      "reason": "Retire the standalone candidate/public dual-layout harness after native source/publication conversion. Preserve numerical unit tests; worker checkpoint/retry assertions are now exercised on canonical PostgreSQL. Performance measurements and cross-layout parity are not a current runtime contract.",
+      "replacement": [
+        "tests.check_canonical_research_postgres",
+        "tests.test_blunder_balanced",
+        "tests.test_blunder_full_development",
+        "tests.test_blunder_v2"
+      ],
+      "verification_limit": "Native PostgreSQL checks replace obsolete layout plumbing; no claim of new production/Neo4j performance benchmarking."
+    }
+  ],
+  "status": "Runtime retirement complete; focused checks passed; final broad comparison pending",
+  "retained_core_orm": "Canonical numeric/composite mappings used by current cloud/backup tests; no startup schema creation or historical columns.",
+  "standalone_harness_retirement_limit": "Historical dual-profile and production performance harnesses are retired. Native PostgreSQL and retained mathematical unit checks cover current behavior; no new real Neo4j/GCP/performance validation claimed.",
+  "final_gate_test_ports": {
+    "reason": "Broad suite found mocks still returning context managers, retired SQL identifiers, and format6 backup assumptions. Port to caller-owned transactions, native keys and approved format9; behavior assertions retained.",
+    "retired_helper_cases": [
+      "test_reuse_cloud_mapping_and_reject_missing_or_unrelated_keys",
+      "test_resolver_is_bounded_not_one_query_per_fen"
+    ],
+    "replacement_cases": [
+      "tests.check_canonical_evaluations_postgres.CanonicalEvaluationTests.test_whole_batch_validation_and_missing_identity_preserve_prior_commits",
+      "tests.check_canonical_evaluations_postgres.CanonicalEvaluationTests.test_bounded_statements_include_typed_all_null_columns",
+      "tests.check_canonical_evaluations_postgres.CanonicalEvaluationTests.test_scores_alternatives_and_totals_commit_together"
+    ]
+  },
+  "obsolete_maintenance_compose": "Both compact and game-player migration launchers reference retired installers; removed as A4 maintenance-only entrypoints. No compose command executed."
+}

@@ -11,9 +11,8 @@ jobs.py
        -> postgresql/game_imports.py          bulk writes and exact retry checks
        -> postgresql/game_import_summaries.py  game totals and side-key pending work
   -> fen_orchestrator.py
-       -> fen_batches.py       compact-storage bounded replay + atomic bulk writes
+       -> fen_batches.py       canonical bounded replay + atomic bulk writes
        -> fen_bulk.py          COPY staging, identity resolution, exact deltas
-       -> fen_workers.py       compatibility workers for older storage profiles
        -> fen_core.py          pure chess replay and aggregation
        -> fen_repository.py    claims, move reads, state, scoped recounts
   -> tablebase.py       Syzygy marking (outside this package; shared analysis)
@@ -43,9 +42,8 @@ Supporting modules:
   summary invalidation together. Formatting has no writes. Zero-move metadata is
   retained; month/global totals explicitly exclude variants/custom starts and
   zero-move games. Side-specific projections retain both self-play perspectives.
-- `game_repository.py` and `relational_repository.py` remain only for the obsolete
-  persistence paths pending their Stage A4 retirement. Game imports and bounded FEN
-  persistence now use canonical tables; other consumers are still being converted.
+- Game imports and bounded FEN persistence use the canonical PostgreSQL schema.
+  Historical writers and profile adapters have been removed.
 - `pgn.py` rejects games without a clock for every played half-move. Such games
   are intentionally unusable for Chessism and must not be silently accepted.
 - FEN child workers claim games with `FOR UPDATE SKIP LOCKED`. A game becomes
@@ -237,8 +235,7 @@ as a maintenance shortcut.
 The endgame coordinator now uses the same atomic release helper for finished
 jobs, stale-job cleanup and reservation-error cleanup. Its progress snapshots
 also use `write_job_progress`, preserving the existing fields and 24-hour TTL.
-Compact writes return before the legacy writer; no duplicate compact conversion
-remains in that unreachable branch. `tests/test_tablebase_lifecycle.py` covers
+`tests/test_tablebase_lifecycle.py` covers
 the progress contract, stale-owner race, queue failure and malformed snapshots.
 
 ### Worker-only release — 2026-10-27

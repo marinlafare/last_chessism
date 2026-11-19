@@ -1,9 +1,11 @@
 """Opt-in tests against an EMPTY, isolated PostgreSQL database, never the app DB.
 
-Set CHESSISM_CLOUD_TEST_DATABASE_URL to .../chessism_cloud_test. Each test creates
-and drops its own random schema. Do not point this at production.
+Set CHESSISM_CANONICAL_TEST_SOCKET to an isolated disposable server. Each test
+creates and drops a fresh canonical database; no application database is used.
 """
 import asyncio
+import chess
+import random
 from contextlib import suppress
 import hashlib
 import json
@@ -12,12 +14,13 @@ from pathlib import Path
 import tempfile
 from types import SimpleNamespace
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 from datetime import datetime, timezone
 
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
-from sqlalchemy import func, select, text
+from sqlalchemy import func, select, text, URL
 from sqlalchemy.ext.asyncio import create_async_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import (
@@ -31,22 +34,21 @@ from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
 from cloud_job.launch import configuration, expected_contract
 from stockfish_batch.checkpoints import BatchCheckpoints, encode
 
-TEST_URL = os.environ.get("CHESSISM_CLOUD_TEST_DATABASE_URL", "")
+TEST_URL = os.environ.get("CHESSISM_CANONICAL_TEST_SOCKET", "")
 
 
 @unittest.skipUnless(TEST_URL, "requires explicitly isolated PostgreSQL test database")
-class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class CloudDatabaseTests(CanonicalDatabaseTestCase):
     async def asyncSetUp(self):
-        if not TEST_URL.endswith("/chessism_cloud_test"):
-            raise RuntimeError("Refusing any database not named chessism_cloud_test")
-        self.schema = "cloud_test_" + uuid4().hex
-        self.admin = create_async_engine(TEST_URL)
-        async with self.admin.begin() as connection:
-            await connection.execute(text(f'CREATE SCHEMA "{self.schema}"'))
-        self.engine = create_async_engine(TEST_URL, connect_args={"server_settings": {"search_path": self.schema}})
+        from chessism_api.database.postgresql import canonical
+        await CanonicalDatabaseTestCase.asyncSetUp(self)
+        await canonical.initialize(self.db)
+        self.schema = 'public'
+        self.url = URL.create('postgresql+asyncpg',username='test',database=self.name,
+            port=55432,query={'host':self.socket})
+        self.engine = create_async_engine(self.url)
+        self.addAsyncCleanup(self.engine.dispose)
         AsyncDBSession.configure(bind=self.engine)
-        async with self.engine.begin() as connection:
-            await connection.run_sync(Base.metadata.create_all)
         self.fens = [
             # Production keys intentionally omit halfmove/fullmove counters.
             "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -",
@@ -57,14 +59,11 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
                                     target=1000, imported=0, status="running")
         async with AsyncDBSession() as session, session.begin():
             session.add(self.job)
-            session.add(DatabaseSummary(id=1, n_positions=3, unscored_fens=3))
+            await session.execute(text("UPDATE database_summary SET n_positions=3,unscored_fens=3 WHERE id=1"))
             session.add_all([Fen(fen=fen, n_games=10-index, moves_counter="{}") for index, fen in enumerate(self.fens)])
 
     async def asyncTearDown(self):
-        await self.engine.dispose()
-        async with self.admin.begin() as connection:
-            await connection.execute(text(f'DROP SCHEMA "{self.schema}" CASCADE'))
-        await self.admin.dispose()
+        pass  # Registered cleanups dispose the engine before dropping this private database.
 
     async def reserved_run(self, count=2):
         await controller.reserve(self.job, count)
@@ -155,7 +154,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_fresh_recheck_excludes_scored_fens_even_after_claim_release(self):
         from chessism_api.database.postgresql.fen_claims import unclaimed_locked_fens
         async with AsyncDBSession() as session, session.begin():
-            row = await session.get(Fen, self.fens[0], with_for_update=True)
+            row = await session.scalar(select(Fen).where(Fen.fen == self.fens[0]).with_for_update())
             row.score = 10
         async with AsyncDBSession() as session:
             self.assertEqual(await unclaimed_locked_fens(session, self.fens), self.fens[1:])
@@ -176,7 +175,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await controller.save_job(self.job.id, status="paused")
         cloud = Mock()
         async def test_engine(*args, **kwargs):
-            engine = create_async_engine(TEST_URL, connect_args={"server_settings": {"search_path": self.schema}})
+            engine = create_async_engine(self.url)
             AsyncDBSession.configure(bind=engine, info={})
             return engine
         with tempfile.TemporaryDirectory() as directory, \
@@ -277,7 +276,12 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_large_reservation_claims_every_fen_and_api_returns_lightweight_summary(self):
         from chessism_api.routers.cloud_analysis import cloud_jobs
         from sqlalchemy import insert
-        extra = ["8/8/8/8/8/8/4k3/6K1 w - - 0 " + str(i) for i in range(1, 1301)]
+        extra=[];seen=set(self.fens);board=chess.Board();rng=random.Random(1303)
+        while len(extra)<1300:
+            if board.is_game_over():board.reset()
+            board.push(rng.choice(list(board.legal_moves)))
+            fen=' '.join(board.fen().split()[:4])
+            if fen not in seen:extra.append(fen);seen.add(fen)
         async with AsyncDBSession() as session, session.begin():
             await session.execute(insert(Fen), [{"fen": f, "n_games": 1, "moves_counter": "{}"} for f in extra])
         await controller.reserve(self.job, 1303)
@@ -436,7 +440,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(await importer.import_batch(run.id, raw, 0), 2)
         self.assertEqual(await importer.import_batch(run.id, raw, 0), 0)
         async with AsyncDBSession() as session:
-            saved = await session.get(Fen, self.fens[0])
+            saved = await session.scalar(select(Fen).where(Fen.fen == self.fens[0]))
             self.assertEqual(saved.analysis_source, "stockfish")
             self.assertEqual((saved.score, saved.next_moves, saved.wdl_win), (19, "e2e4", 200))
             self.assertIsNotNone(saved.analyzed_at)
@@ -462,7 +466,7 @@ class CloudDatabaseTests(unittest.IsolatedAsyncioTestCase):
             with self.assertRaises(RuntimeError):
                 await importer.import_batch(run.id, raw, 0)
         async with AsyncDBSession() as session:
-            self.assertIsNone((await session.get(Fen, self.fens[0])).score)
+            self.assertIsNone((await session.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score)
             self.assertEqual((await session.get(CloudAnalysisRun, run.id)).receipts, {})
             self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).imported, 0)
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 2)

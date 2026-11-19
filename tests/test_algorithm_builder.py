@@ -180,7 +180,7 @@ class BuilderApiTests(unittest.IsolatedAsyncioTestCase):
         app.dependency_overrides[get_redis_pool] = lambda: AsyncMock()
         from unittest.mock import MagicMock
         factory = MagicMock()
-        factory.return_value.__aenter__.return_value = AsyncMock()
+        factory.return_value = AsyncMock()
         normalized = normalize_builder(SPEC, {**MATRIX, 'filters': {'max_rows': 10000}})
         normalized['max_rows'] = 10000
         queued = AsyncMock(return_value={'id': 'sample', 'status': 'queued'})

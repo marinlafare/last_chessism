@@ -68,7 +68,7 @@ class CanonicalRecoveryTests(CanonicalDatabaseTestCase):
         await self.publish()
         before = await self.pending()
         self.assertFalse(await canonical.initialize(self.db))
-        self.assertEqual(await canonical.validate(self.db), 6)
+        self.assertEqual(await canonical.validate(self.db), canonical.VERSION)
         self.assertEqual(await self.pending(), before)
 
     async def test_local_scores_and_refresh_requests_commit_or_rollback_together(self):

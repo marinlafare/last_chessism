@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import json
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 
 import test_cloud_analysis_database as existing
@@ -14,7 +15,6 @@ from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnal
 from chessism_api.operations.cloud_analysis import controller, importer, history
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet
 from chessism_api.operations.cloud_analysis import work_units_results as results
-from chessism_api.operations.cloud_analysis.migrate_work_units import upgrade
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
 from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs
 from stockfish_batch.checkpoints import BatchCheckpoints, encode
@@ -23,7 +23,7 @@ IMAGE = 'us-central1-docker.pkg.dev/chessism-production/chessism-workers/stockfi
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL test database')
-class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class WorkUnitDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
 
@@ -109,7 +109,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_invalid_fen_rolls_back_unit_claims_and_records_failed_validation(self):
         root = await self.root()
         async with AsyncDBSession() as session, session.begin():
-            session.add(Fen(fen='invalid FEN', n_games=100, moves_counter='{}'))
+            session.add(Fen(fen='8/8/8/8/8/8/8/8 w - -', n_games=100, moves_counter='{}'))
         with self.assertRaises(ValueError):
             await fleet.reserve_unit(self.job, root, {'units': []}, 0, 1)
         async with AsyncDBSession() as session:
@@ -137,11 +137,11 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
             await connection.execute(text('ALTER TABLE cloud_fen_claim SET (autovacuum_enabled = false)'))
             await connection.execute(text("""
                 INSERT INTO fen(fen, n_games, moves_counter)
-                SELECT repeat(md5(i::text), 2), 100000-i, '{}' FROM generate_series(1,100000) i
+                SELECT repeat(md5(i::text), 2)||' w - -', 100000-i, '{}' FROM generate_series(1,100000) i
             """))
             await connection.execute(text("""
                 INSERT INTO cloud_fen_claim(fen,run_id)
-                SELECT repeat(md5(i::text), 2), :run FROM generate_series(1,10000) i
+                SELECT repeat(md5(i::text), 2)||' w - -', :run FROM generate_series(1,10000) i
             """), {'run': root.id})
             await connection.execute(text('DELETE FROM cloud_fen_claim'))
             await connection.execute(text('ANALYZE fen'))
@@ -149,7 +149,7 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with self.engine.begin() as connection:
             await connection.execute(text("""
                 INSERT INTO cloud_fen_claim(fen,run_id)
-                SELECT repeat(md5(i::text), 2), :run FROM generate_series(1,5000) i
+                SELECT repeat(md5(i::text), 2)||' w - -', :run FROM generate_series(1,5000) i
             """), {'run': root.id})
             self.assertEqual(await connection.scalar(text(
                 "SELECT reltuples FROM pg_class WHERE oid = 'cloud_fen_claim'::regclass")), 0)
@@ -289,16 +289,3 @@ class WorkUnitDatabaseTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(job.target, count)
                 self.assertEqual(job.selection['execution_mode'], mode)
             await controller.save_job(created['id'], status='complete')
-
-    async def test_additive_migration_blocks_active_work_and_is_repeatable(self):
-        with self.assertRaisesRegex(ValueError, 'Finish/recover'):
-            async with self.engine.begin() as connection: await connection.run_sync(upgrade)
-        await controller.save_job(self.job.id, status='complete')
-        async with self.engine.begin() as connection:
-            await connection.execute(text('DROP TABLE cloud_batch_unit'))
-            await connection.execute(text('DROP TABLE cloud_control_work_unit'))
-        for _ in range(2):
-            async with self.engine.begin() as connection: await connection.run_sync(upgrade)
-        async with AsyncDBSession() as session:
-            self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).selection, self.job.selection)
-            self.assertEqual(await session.scalar(select(func.count()).select_from(CloudBatchUnit)), 0)

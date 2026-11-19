@@ -1,5 +1,6 @@
 """Opt-in disposable PostgreSQL regression tests for finalization memory fixes."""
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -15,7 +16,7 @@ from test_cloud_run_analysis import fixture
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires explicitly isolated PostgreSQL')
-class FinalizationDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class FinalizationDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
     reserved_run = existing.CloudDatabaseTests.reserved_run

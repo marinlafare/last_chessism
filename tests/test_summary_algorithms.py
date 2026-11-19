@@ -46,10 +46,10 @@ class SummaryMatrixTests(unittest.TestCase):
 
     def test_score_rows_do_not_filter_to_the_players_own_moves(self):
         count, query, params = matrix_sql(self.recipe('score-distribution'))
-        self.assertNotIn('gfa.move_color=gp.color', query)
+        self.assertNotIn('gfa.is_white=gp.is_white', query)
         self.assertNotIn('DISTINCT', query)
         self.assertNotIn('is_fully_analyzed', query)
-        self.assertLess(query.index('LIMIT :max_rows'), query.index('LEFT JOIN fen'))
+        self.assertLess(query.index('LIMIT :max_rows'), query.index('LEFT JOIN public.fen'))
         self.assertNotIn("test'player", query)
         self.assertEqual(params['players'], ["test'player"])
         self.assertIn('LIMIT :count_limit', count)
@@ -58,7 +58,7 @@ class SummaryMatrixTests(unittest.TestCase):
 
     def test_blunders_use_prior_ply_not_lag_over_a_sample(self):
         _, query, _ = matrix_sql(self.recipe('blunder-moves'))
-        self.assertIn('gfa.move_color=gp.color', query)
+        self.assertIn('gfa.is_white=gp.is_white', query)
         self.assertIn('coverage.is_fully_analyzed', query)
         self.assertIn("THEN s.n_move-1 ELSE s.n_move", query)
         self.assertIn('15.0', query)

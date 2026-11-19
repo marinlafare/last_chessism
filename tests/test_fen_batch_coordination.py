@@ -12,7 +12,9 @@ class FenCoordinatorTests(unittest.IsolatedAsyncioTestCase):
         for name in ('start_ingestion_stage', 'finish_ingestion_stage',
                      'reset_stage_progress', 'increment_stage_progress',
                      'release_fen_processing_claims'):
-            self.enterContext(patch.object(fen_batches, name, new_callable=AsyncMock))
+            change = patch.object(fen_batches, name, new_callable=AsyncMock)
+            change.start()
+            self.addCleanup(change.stop)
         self.redis = SimpleNamespace(enqueue_job=AsyncMock())
         self.ctx = {'redis': self.redis, 'job_id': 'synthetic-coordinator'}
         self.tasks = []

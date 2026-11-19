@@ -22,11 +22,6 @@ from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
     run_fen_pipeline,
 )
 from chessism_api.operations.ingestion_pipeline.fen_batches import run_fen_batch_job
-from chessism_api.operations.ingestion_pipeline.fen_workers import (
-    run_fen_generation_job,
-    run_fen_insertion_job,
-    run_association_insertion_job,
-)
 from chessism_api.operations.ingestion_pipeline.jobs import (
     run_create_player_games_job,
     run_update_player_games_job,
@@ -109,11 +104,8 @@ class WorkerSettings:
         run_player_analysis_job,
         run_analysis_loop_job,
         run_player_games_analysis_job,
-        run_fen_generation_job,
         run_fen_batch_job,
         run_fen_pipeline,
-        run_fen_insertion_job,
-        run_association_insertion_job,
         run_create_player_games_job,
         run_update_player_games_job,
         run_fen_analysis_backup_job,

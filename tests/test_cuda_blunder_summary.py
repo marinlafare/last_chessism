@@ -2,7 +2,7 @@
 import sys
 import unittest
 import numpy as np
-from chessism_api.operations.cuda_summaries import blunder_summary, no_move_upgrade
+from chessism_api.operations.cuda_summaries import blunder_summary
 from chessism_api.operations.canonical_blunders.assessment import empty_mode
 
 
@@ -26,18 +26,6 @@ def fixture():
 
 
 class BlunderReductionTests(unittest.TestCase):
-    def test_cached_correction_only_removes_zero_move_counts(self):
-        rows,expected=fixture()
-        snapshots={'alice':expected}
-        result=no_move_upgrade.corrected(np,snapshots,[{'player_name':'alice','mode':'blitz'}],require_cuda=False)
-        self.assertEqual(result['alice']['blitz']['unassessed_games'],0)
-        self.assertEqual(expected['blitz']['unassessed_games'],1)
-        for mode in expected:
-            for key in expected[mode]:
-                if mode=='blitz' and key=='unassessed_games': continue
-                self.assertEqual(result['alice'][mode][key],expected[mode][key])
-        with self.assertRaises(ValueError):
-            no_move_upgrade.corrected(np,snapshots,[{'player_name':'alice','mode':'blitz'}]*2,require_cuda=False)
     def test_exact_counts_and_coverage(self):
         rows,expected = fixture()
         self.assertEqual(blunder_summary.reduce(np,rows,require_cuda=False),expected)
@@ -57,7 +45,6 @@ def cuda_check():
     assert blunder_summary.reduce(cp,[])=={mode:empty_mode() for mode in expected}
     assert blunder_summary.reduce(cp,[rows[0]])['blitz']==empty_mode()
     assert blunder_summary.reduce(cp,[rows[4]])['bullet']['ineligible_games']==1
-    assert no_move_upgrade.corrected(cp,{'alice':expected},[{'player_name':'alice','mode':'blitz'}])['alice']['blitz']['unassessed_games']==0
     cp.cuda.get_current_stream().synchronize()
     print('PASS RTX 4060 final blunder reduction: exact counts beyond 2^53, all modes, coverage, empty bins; no CPU fallback',flush=True)
 

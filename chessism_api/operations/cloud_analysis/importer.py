@@ -7,8 +7,8 @@ from sqlalchemy import delete, select, text, update
 
 from . import runtime  # Set up the standalone package path for the host controller.
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.transactions import write_transaction
-from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, Fen, CloudResultBatch, CloudBatchUnit
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudFenClaim, CloudResultBatch, CloudBatchUnit
 from chessism_api.database.postgresql import cloud_columns
 from chessism_api.database.postgresql.cloud_codec import read_document, write_document, checksum
 from chessism_api.operations.analysis import _format_engine_results
@@ -82,8 +82,7 @@ async def import_batch(run_id, raw, index, *, task_index=None, download_seconds=
                 raise ValueError('An already imported checkpoint has changed')
             return 0
         fens = [result["fen"] for result in results]
-        rows = (await session.scalars(select(Fen).where(Fen.fen.in_(fens))
-                                      .order_by(Fen.fen).with_for_update())).all()
+        rows = (await session.execute(text('SELECT fen,score FROM public.fen WHERE fen=ANY(CAST(:fens AS text[])) ORDER BY fen FOR UPDATE'), {'fens':fens})).all()
         claims = set((await session.scalars(select(CloudFenClaim.fen).where(
             CloudFenClaim.run_id == run.id, CloudFenClaim.fen.in_(fens)
         ))).all())
@@ -128,15 +127,12 @@ async def refresh_projections(positions=None, *, run_id=None, timings=None):
         return await refresh_unit_projections([run_id], timings=timings)
     if positions is None:
         raise ValueError('Summary refresh requires positions or a saved run')
-    from chessism_api.database.postgresql.models import GameFenAssociation
     from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
     links = set()
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         for offset in range(0, len(positions), 1000):
-            links.update((await session.scalars(select(GameFenAssociation.game_link)
-                .join(Fen, Fen.fen_id == GameFenAssociation.fen_id).where(
-                Fen.fen.in_([row["fen"] for row in positions[offset:offset + 1000]])
-            ).distinct())).all())
+            links.update((await session.scalars(text('SELECT DISTINCT a.game_link FROM public.game_fen_association a JOIN public.fen f ON f.fen_id=a.fen_id WHERE f.fen=ANY(CAST(:fens AS text[]))'),
+                {'fens':[row['fen'] for row in positions[offset:offset+1000]]})).all())
     if links:
         await refresh_game_analysis_summary(links)
 
@@ -156,7 +152,7 @@ async def refresh_unit_projections(run_ids, *, timings=None):
     from chessism_api.operations.game_analysis_summary import refresh_game_analysis_summary
     measure = timings.measure if timings is not None else lambda phase: nullcontext()
     with measure('summary_affected_games'):
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             refs = (await session.scalars(select(CloudAnalysisRun._positions_ref).where(
                 CloudAnalysisRun.id.in_(run_ids)))).all()
             if len(refs) != len(set(run_ids)) or not all(refs):

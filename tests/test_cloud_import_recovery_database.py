@@ -1,6 +1,7 @@
 """Runs only through the isolated PostgreSQL harness or an explicit test DB."""
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text, inspect
 from test_cloud_analysis_database import CloudDatabaseTests, TEST_URL
@@ -9,12 +10,11 @@ from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnaly
 from chessism_api.operations.cloud_analysis import controller, importer, recovery_history
 from chessism_api.operations.cloud_analysis.batch_validation import prepare_batch
 from chessism_api.operations.cloud_analysis.read_recovery import RecoveringClient, RecoveringStorage
-from chessism_api.operations.cloud_analysis.migrate_recovery import upgrade
 from chessism_api.routers.cloud_analysis import resume_cloud_job
 
 
 @unittest.skipUnless(TEST_URL, 'requires explicitly isolated PostgreSQL')
-class ImportRecoveryTests(unittest.IsolatedAsyncioTestCase):
+class ImportRecoveryTests(CanonicalDatabaseTestCase):
     asyncSetUp = CloudDatabaseTests.asyncSetUp
     asyncTearDown = CloudDatabaseTests.asyncTearDown
     reserved_run = CloudDatabaseTests.reserved_run
@@ -37,17 +37,6 @@ class ImportRecoveryTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary['counts'], {'retry': 1, 'recovered': 1})
         self.assertEqual(summary['events'][0]['episode_id'], summary['events'][1]['episode_id'])
 
-    async def test_history_migration_requires_idle_jobs_and_is_repeatable(self):
-        async with self.engine.begin() as connection:
-            await connection.run_sync(lambda c: CloudRecoveryEvent.__table__.drop(c))
-        with self.assertRaisesRegex(ValueError, 'Finish/recover'):
-            async with self.engine.begin() as connection:
-                await connection.run_sync(upgrade)
-        async with self.engine.begin() as connection:
-            await connection.execute(text("UPDATE cloud_analysis_job SET status='complete'"))
-            await connection.run_sync(upgrade)
-            await connection.run_sync(upgrade)
-            self.assertTrue(await connection.run_sync(lambda c: inspect(c).has_table('cloud_recovery_event')))
 
     async def test_prevalidated_writer_is_atomic_idempotent_and_rejects_changed_contract(self):
         run = await self.reserved_run(2)

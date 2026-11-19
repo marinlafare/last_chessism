@@ -4,9 +4,10 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import json
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from fastapi import HTTPException
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, text
 import test_cloud_analysis_database as existing
 import test_cloud_auto_sequences_database as auto_tests
 import test_cloud_work_units_database as unit_tests
@@ -14,15 +15,14 @@ from test_cloud_game_drafts import plan
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnalysisRun, CloudBatchSequence,
     CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame, CloudControllerHeartbeat,
-    CloudFenClaim, Fen, Game, Player, GameFenAssociation, GameAnalysisSummary)
+    CloudFenClaim, Fen, Game, Player, GameFenAssociation, GameAnalysisCoverage)
 from chessism_api.routers.cloud_game_drafts import (create_draft, current_draft, save_entry,
     remove_entry, preview_draft, submit_draft, Revision, AddSelection, SubmitDraft)
 from chessism_api.operations.cloud_analysis import controller, sequence, game_drafts
-from chessism_api.operations.cloud_analysis.migrate_game_drafts import upgrade
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL database')
-class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class DraftDatabaseTests(CanonicalDatabaseTestCase):
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
     reload = unit_tests.WorkUnitDatabaseTests.reload
     objects = unit_tests.WorkUnitDatabaseTests.objects
@@ -34,12 +34,14 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         await existing.CloudDatabaseTests.asyncSetUp(self)
         async with AsyncDBSession() as s, s.begin():
-            s.add_all([Player(player_name='hikaru'), Player(player_name='magnuscarlsen')])
+            s.add_all([Player(player_name='hikaru',joined=1), Player(player_name='magnuscarlsen',joined=1)])
             s.add(CloudControllerHeartbeat(id=1, seen_at=datetime.now(timezone.utc)))
             await s.flush()
+            owners=dict((await s.execute(select(Player.player_name,Player.id))).all())
+            mode=await s.scalar(text("INSERT INTO game_mode(name) VALUES('blitz') RETURNING id"))
             for link in (101, 102, 103):
-                s.add(Game(link=link, white='hikaru', black='magnuscarlsen',
-                    year=2026, month=10, day=1, hour=0, minute=0, second=0,
+                s.add(Game(link=link,white_player_id=owners['hikaru'],black_player_id=owners['magnuscarlsen'],
+                    played_at=datetime(2026,10,1,tzinfo=timezone.utc),mode_id=mode,rules='chess',
                     white_elo=2800, black_elo=2800, white_result=1, black_result=0,
                     white_str_result='win', black_str_result='resigned', time_control='180',
                     eco='B01', time_elapsed=60, n_moves=2, fens_done=True))
@@ -47,7 +49,7 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
             fen_ids = dict((await s.execute(select(Fen.fen, Fen.fen_id))).all())
             for link, indexes in ((101, (0, 1)), (102, (0, 2)), (103, (1, 2))):
                 for move, index in enumerate(indexes):
-                    s.add(GameFenAssociation(game_link=link, fen_id=fen_ids[self.fens[index]], n_move=move, move_color='white'))
+                    s.add(GameFenAssociation(game_link=link, fen_id=fen_ids[self.fens[index]], n_move=move+1, is_white=True))
         self.draft = await create_draft()
 
     async def add(self, links=(101, 102), player='hikaru', replace=None):
@@ -85,7 +87,7 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
     async def test_scored_and_reserved_positions_are_excluded(self):
         await self.add()
         async with AsyncDBSession() as s, s.begin():
-            (await s.get(Fen, self.fens[0])).score = 1
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 1
             s.add(CloudAnalysisRun(id='f'*32, job_id=self.job.id, positions=[], launch={}, receipts={}))
             await s.flush()
             s.add(CloudFenClaim(fen=self.fens[1], run_id='f'*32))
@@ -126,7 +128,7 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.preview()
         await self.available()
         async with AsyncDBSession() as s, s.begin():
-            (await s.get(Fen, self.fens[0])).score = 1  # completed since preview
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 1  # completed since preview
         with patch('chessism_api.operations.cloud_analysis.schemas.MAX_BATCH_FENS_PER_VM', 1):
             first, second = await asyncio.gather(self.submit(), self.submit())
         self.assertEqual(first['id'], second['id'])
@@ -175,14 +177,6 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException):
             await self.submit()
 
-    async def test_migration_repeatable_during_running_job_and_no_json_columns(self):
-        for _ in range(2):
-            async with self.engine.begin() as c:
-                await c.run_sync(upgrade)
-        async with AsyncDBSession() as s:
-            self.assertEqual((await s.get(CloudAnalysisJob, self.job.id)).status, 'running')
-        for model in (CloudGameDraft, CloudGameDraftEntry, CloudGameDraftGame):
-            self.assertFalse(any('JSON' in str(c.type) for c in model.__table__.columns))
 
     async def test_expired_token_and_foreign_entry_cannot_mutate_draft(self):
         redis = AsyncMock()
@@ -240,7 +234,7 @@ class DraftDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as s:
             self.assertEqual(await s.scalar(select(func.count()).select_from(CloudFenClaim)), 0)
             self.assertEqual(await s.scalar(select(func.count()).select_from(Fen).where(Fen.score.is_not(None))), 3)
-            summaries = (await s.scalars(select(GameAnalysisSummary))).all()
+            summaries = (await s.scalars(select(GameAnalysisCoverage))).all()
             self.assertEqual(len(summaries), 3)
             self.assertTrue(all(row.is_fully_analyzed for row in summaries))
         from chessism_api.routers.cloud_analysis import cloud_jobs

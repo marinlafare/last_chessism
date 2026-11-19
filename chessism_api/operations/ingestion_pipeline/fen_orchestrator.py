@@ -13,11 +13,6 @@ from chessism_api.operations.ingestion_pipeline.fen_repository import (
     count_pending_games, release_fen_processing_claims,
 )
 from chessism_api.operations.ingestion_pipeline.fen_batches import run_bounded_pipeline
-from chessism_api.operations.ingestion_pipeline.fen_workers import (
-    run_association_insertion_job,
-    run_fen_generation_job,
-    run_fen_insertion_job,
-)
 from chessism_api.operations.ingestion_pipeline.progress import (
     increment_stage_progress,
     reset_stage_progress,
@@ -365,7 +360,4 @@ async def run_fen_pipeline(
 __all__ = [
     "ensure_fen_pipeline_enqueued",
     "run_fen_pipeline",
-    "run_fen_generation_job",
-    "run_fen_insertion_job",
-    "run_association_insertion_job",
 ]

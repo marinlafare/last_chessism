@@ -93,8 +93,8 @@ class WiringTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_existing_queue_dispatches_cuda_without_cpu_normalization(self):
         row = SimpleNamespace(status='queued', config=job.configuration('alice'), started_at=None)
-        session = AsyncMock(); session.begin = MagicMock(); session.get.return_value = row
-        factory = MagicMock(); factory.return_value.__aenter__.return_value = session
+        session = AsyncMock(); session.get.return_value = row
+        factory = MagicMock(return_value=session)
         result = {'status':'passed','timings':{},'included_rows':10}
         with patch.object(jobs, 'AsyncDBSession', factory), patch.object(jobs, 'Reporter', return_value=AsyncMock()), patch.object(job, 'execute', AsyncMock(return_value=result)) as execute, patch.object(jobs, 'publish', AsyncMock()) as publish, patch.object(jobs, 'normalize_algorithm') as cpu:
             reply = await jobs.run_algorithm_job({}, run_id='test')

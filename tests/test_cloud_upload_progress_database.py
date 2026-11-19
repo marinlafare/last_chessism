@@ -1,5 +1,6 @@
 """Real native-column queries against a disposable PostgreSQL schema only."""
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from uuid import uuid4
 
@@ -10,7 +11,7 @@ from chessism_api.operations.cloud_analysis import upload_progress
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires explicitly isolated PostgreSQL database')
-class UploadProgressDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class UploadProgressDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
 

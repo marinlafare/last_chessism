@@ -1145,3 +1145,19 @@ native participants and closes snapshots/streams before local reference compute.
 The existing single-side report format still rejects self-play; saved reports
 and their formulas are unchanged. Supported CUDA comparison/status/rollback
 commands use native keys. Fifty distinct focused checks pass.
+
+### Storage retirement
+Runtime has one canonical initializer/validator; no storage-profile dispatch,
+DBInterface, ask_db, or one-time migration commands remain. Read-only old archive
+validation is retained unchanged. The remaining ORM mappings describe canonical
+identities; obsolete materialized projections are gone. Game-information reads
+derive names, calendar fields and mode from native relationships.
+112 existing cloud database checks now run against newly initialized canonical
+databases. Three native worker checks retain checkpoint/retry/cancellation
+coverage formerly coupled to dual-layout fixtures. Test dispositions are recorded
+in storage-retirement-tests.json. Final broad comparison is complete: 1,279 API
+checks across one broad run and focused corrections, one preexisting failure and
+two preexisting errors; 287 worker checks with seven unchanged skips; 68 P1 checks
+pass; frontend 346 checks with four identical existing failures. Offline API
+discovery has 257 opt-in skips; affected PG/Redis behavior is covered separately.
+Independent Stage A acceptance remains pending.

@@ -1,4 +1,4 @@
-# chessism_api/database/postgresql/models.py
+"""Canonical ORM mappings. Only the canonical initializer creates database objects."""
 import enum
 from typing import Any, Dict
 from sqlalchemy import (
@@ -369,692 +369,97 @@ class AccountRole(str, enum.Enum):
     user = "user"
 
 
-def to_dict(obj: Base) -> Dict[str, Any]:
-    """
-    Serializes a SQLAlchemy ORM object into a dictionary.
-    """
-    return {c.name: getattr(obj, c.name) for c in obj.__table__.columns}
-
-
 class Player(Base):
-    __tablename__ = "player"
-    player_name = Column("player_name", String, primary_key=True, nullable=False, unique=True)
-    name = Column('name', String, nullable=True)
-    url = Column('url', String, nullable=True)
-    title = Column('title', String, nullable=True)
-    avatar = Column('avatar', String, nullable=True)
-    followers = Column('followers', Integer,nullable=True)
-    country = Column('country', String, nullable=True)
-    location = Column('location', String, nullable=True)
-    timezone = Column('timezone', String(64), nullable=True)
-    timezone_source = Column('timezone_source', String(32), nullable=True)
-    joined = Column('joined', BigInteger, nullable=True) # Use BigInteger for Unix timestamps
-    status = Column('status', String, nullable=True)
-    is_streamer = Column('is_streamer', Boolean, nullable=True)
-    twitch_url = Column('twitch_url', String, nullable=True)
-    verified = Column('verified', Boolean, nullable=True)
-    league = Column('league', String, nullable=True)
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
-    
-    stats = relationship(
-        "PlayerStats", 
-        back_populates="player", 
-        uselist=False, # one-to-one relationship
-        cascade="all, delete-orphan"
-    )
+    __tablename__ = 'player'
+    id = Column(BigInteger, Identity(always=True), primary_key=True)
+    player_name = Column(Text, nullable=False, unique=True)
+    name = Column(Text)
+    url = Column(Text)
+    title = Column(Text)
+    avatar = Column(Text)
+    followers = Column(Integer)
+    country = Column(Text)
+    location = Column(Text)
+    timezone = Column(String(64))
+    timezone_source = Column(String(32))
+    joined = Column(BigInteger)
+    status = Column(Text)
+    is_streamer = Column(Boolean)
+    twitch_url = Column(Text)
+    verified = Column(Boolean)
+    league = Column(Text)
+    deleted_at = Column(DateTime(timezone=True))
 
 class Game(Base):
     __tablename__ = 'game'
-    link = Column('link',BigInteger, primary_key = True, unique = True)
-    white = Column("white", String, ForeignKey("player.player_name"), nullable=False)
-    black = Column("black", String, ForeignKey("player.player_name"), nullable=False)
-
-    year = Column("year", Integer, nullable=False)
-    month = Column("month", Integer, nullable=False)
-    day = Column("day", Integer, nullable=False)
-    hour = Column("hour", Integer, nullable=False)
-    minute = Column("minute", Integer, nullable=False)
-    second = Column("second", Integer, nullable=False)
-        
-    white_elo = Column("white_elo", Integer, nullable=False)
-    black_elo = Column("black_elo", Integer, nullable=False)
-    white_result = Column("white_result", Float, nullable=False)
-    black_result = Column("black_result", Float, nullable=False)
-    white_str_result = Column("white_str_result", String, nullable=False)
-    black_str_result = Column("black_str_result", String, nullable=False)
-    time_control = Column("time_control", String, nullable=False)
-    mode = Column("mode", String(16), nullable=True)
-    played_at = Column("played_at", DateTime(timezone=True), nullable=True)
-    avg_elo = Column("avg_elo", Float, nullable=True)
-    eco = Column("eco", String, nullable=False)
-    
-    time_elapsed = Column("time_elapsed", Float, nullable=False)
-    
-    n_moves = Column("n_moves", Integer, nullable=False)
-    fens_done = Column('fens_done', Boolean, nullable = False)
-    rules = Column(
-        "rules",
-        String(32),
-        nullable=False,
-        default="chess",
-        server_default="chess",
-    )
-    initial_setup = Column("initial_setup", String(128), nullable=True)
-    # A separate claim flag keeps concurrent extraction workers from selecting
-    # the same game without treating an uncommitted extraction as complete.
-    fens_processing = Column(
-        "fens_processing",
-        Boolean,
-        nullable=False,
-        default=False,
-        server_default=text("false"),
-    )
-    
-    white_player = relationship(Player, foreign_keys=[white])
-    black_player = relationship(Player, foreign_keys=[black])
-    
-    # --- MODIFIED: Point to the new association class ---
-    fens = relationship(
-        'Fen',
-        secondary='game_fen_association',
-        back_populates='games',
-        # --- FIX: Tell SQLAlchemy this overlaps with the 'fen_associations' relationship ---
-        overlaps="fen_associations" 
-    )
-    
-    # --- NEW: Add direct relationship to the association object ---
-    fen_associations = relationship("GameFenAssociation", back_populates="game", overlaps="games,fens")
-
-    __table_args__ = (
-        Index("ix_game_mode", "mode"),
-        Index("ix_game_played_at", "played_at"),
-        Index("ix_game_mode_avg_elo", "mode", "avg_elo"),
-        Index("ix_game_white_played_at", "white", "played_at"),
-        Index("ix_game_black_played_at", "black", "played_at"),
-    )
-
-
-class NoMovesGame(Base):
-    """Tombstone for a downloaded game that contains no played moves."""
-
-    __tablename__ = "no_moves_games"
-
-    game_id = Column(BigInteger, primary_key=True)
-    played_at = Column(DateTime(timezone=True), nullable=False, index=True)
-
-
-class GamePlayer(Base):
-    __tablename__ = "game_player"
-
-    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
-    color = Column(String(5), primary_key=True, nullable=False)
-    player_name = Column(String, ForeignKey("player.player_name"), nullable=False)
-    opponent_name = Column(String, ForeignKey("player.player_name"), nullable=False)
-    result = Column(Float, nullable=False)
-    rating = Column(Integer, nullable=False)
-    opponent_rating = Column(Integer, nullable=False)
-    mode = Column(String(16), nullable=True)
-    played_at = Column(DateTime(timezone=True), nullable=True)
-    eco = Column(String, nullable=False)
-    n_moves = Column(Integer, nullable=False)
+    link = Column(BigInteger, primary_key=True)
+    white_player_id = Column(BigInteger, ForeignKey('player.id'), nullable=False)
+    black_player_id = Column(BigInteger, ForeignKey('player.id'), nullable=False)
+    mode_id = Column(SmallInteger)
+    played_at = Column(DateTime(timezone=True), nullable=False)
+    white_elo = Column(Integer, nullable=False)
+    black_elo = Column(Integer, nullable=False)
+    white_result = Column(Float, nullable=False)
+    black_result = Column(Float, nullable=False)
+    white_str_result = Column(Text, nullable=False)
+    black_str_result = Column(Text, nullable=False)
+    time_control = Column(Text, nullable=False)
+    eco = Column(Text, nullable=False)
     time_elapsed = Column(Float, nullable=False)
-    avg_elo = Column(Float, nullable=True)
-
-    game = relationship(Game, foreign_keys=[link])
-    player = relationship(Player, foreign_keys=[player_name])
-    opponent = relationship(Player, foreign_keys=[opponent_name])
-
-    __table_args__ = (
-        Index("ix_game_player_player_played_at", "player_name", "played_at"),
-        Index("ix_game_player_player_mode_played_at", "player_name", "mode", "played_at"),
-        Index("ix_game_player_mode_rating", "mode", "rating"),
-        Index("ix_game_player_link", "link"),
-    )
+    n_moves = Column(Integer, nullable=False)
+    fens_done = Column(Boolean, nullable=False, server_default='false')
+    fens_processing = Column(Boolean, nullable=False, server_default='false')
+    rules = Column(String(32), nullable=False)
+    initial_setup = Column(String(128))
 
 
-class GameOpening(Base):
-    __tablename__ = "game_opening"
-
-    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
-    n_moves = Column(Integer, primary_key=True, nullable=False)
-    opening = Column(String, nullable=False)
-    mode = Column(String(16), nullable=True)
-    avg_elo = Column(Float, nullable=True)
-    played_at = Column(DateTime(timezone=True), nullable=True)
-
-    game = relationship(Game, foreign_keys=[link])
-
-    __table_args__ = (
-        Index("ix_game_opening_mode_n_moves_opening", "mode", "n_moves", "opening"),
-        Index("ix_game_opening_n_moves_mode_avg_elo", "n_moves", "mode", "avg_elo"),
-    )
-
-
-class GameAnalysisSummary(Base):
-    __tablename__ = "game_analysis_summary"
-
-    link = Column(BigInteger, ForeignKey("game.link", ondelete="CASCADE"), primary_key=True)
-    total_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    analyzed_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    unscored_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    is_fully_analyzed = Column(Boolean, nullable=False, default=False, server_default="false")
-    score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    avg_score = Column(Float, nullable=True)
-    avg_abs_score = Column(Float, nullable=True)
-    max_abs_score = Column(Float, nullable=True)
-    equal_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    small_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    clear_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    decisive_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    mate_positions = Column(Integer, nullable=False, default=0, server_default="0")
+class GameAnalysisCoverage(Base):
+    __tablename__ = 'game_analysis_coverage'
+    link = Column(BigInteger, ForeignKey('game.link', ondelete='CASCADE'), primary_key=True)
+    total_positions = Column(Integer, nullable=False, default=0)
+    analyzed_positions = Column(Integer, nullable=False, default=0)
+    unscored_positions = Column(Integer, nullable=False, default=0)
+    is_fully_analyzed = Column(Boolean, nullable=False, default=False)
+    equal_positions = Column(Integer, nullable=False, default=0)
+    small_positions = Column(Integer, nullable=False, default=0)
+    clear_positions = Column(Integer, nullable=False, default=0)
+    decisive_positions = Column(Integer, nullable=False, default=0)
+    mate_positions = Column(Integer, nullable=False, default=0)
     refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    game = relationship(Game, foreign_keys=[link])
-
-    __table_args__ = (
-        Index(
-            "ix_game_analysis_summary_fully_positions",
-            total_positions.desc(),
-            max_abs_score.desc().nulls_last(),
-            link.desc(),
-            postgresql_where=is_fully_analyzed.is_(True) & (total_positions > 0),
-        ),
-        Index(
-            "ix_game_analysis_summary_incomplete",
-            unscored_positions.desc(),
-            total_positions.desc(),
-            link.desc(),
-            postgresql_where=is_fully_analyzed.is_(False) & (total_positions > 0),
-        ),
-        Index(
-            "ix_game_analysis_summary_all_positions",
-            is_fully_analyzed.desc(),
-            total_positions.desc(),
-            link.desc(),
-            postgresql_where=total_positions > 0,
-        ),
-    )
-
-
-class GamePlayerEngineSummary(Base):
-    """Compact player-perspective engine score for one fully analyzed game."""
-
-    __tablename__ = "game_player_engine_summary"
-
-    game_link = Column(BigInteger, primary_key=True)
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", name="fk_game_player_engine_summary_player"),
-        nullable=False,
-    )
-    player_color = Column(String(5), primary_key=True)
-    analyzed_player_moves = Column(Integer, nullable=False, default=0, server_default="0")
-    own_move_cp_gain = Column(Float, nullable=False, default=0, server_default="0")
-    own_move_cp_loss = Column(Float, nullable=False, default=0, server_default="0")
-    game_efficiency = Column(Float, nullable=True)
-    mean_win_percent_loss = Column(Float, nullable=True)
-    median_win_percent_loss = Column(Float, nullable=True)
-    blunder_count = Column(Integer, nullable=False, default=0, server_default="0")
-    mate_for_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    mate_against_positions = Column(Integer, nullable=False, default=0, server_default="0")
-    final_player_cp = Column(Float, nullable=True)
-    result = Column(String(8), nullable=False)
-    end_by = Column(String(40), nullable=False)
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["game_link", "player_color"],
-            ["game_player.link", "game_player.color"],
-            ondelete="CASCADE",
-            name="fk_game_player_engine_summary_game_player",
-        ),
-        Index(
-            "ix_game_player_engine_summary_player_game",
-            "player_name",
-            "game_link",
-        ),
-    )
-
-
-class PlayerSalienceSummary(Base):
-    """State and corpus totals for one tracked player's salience projection."""
-
-    __tablename__ = "player_salience_summary"
-
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    status = Column(String(16), nullable=False, default="stale", server_default="stale")
-    source_game_count = Column(BigInteger, nullable=False, default=0, server_default="0")
-    source_position_count = Column(BigInteger, nullable=False, default=0, server_default="0")
-    effective_game_count = Column(Float, nullable=False, default=0, server_default="0")
-    error = Column(String, nullable=True)
-
-    __table_args__ = (
-        CheckConstraint(
-            "status IN ('stale', 'queued', 'running', 'ready', 'failed')",
-            name="player_salience_summary_status",
-        ),
-        Index("ix_player_salience_summary_status", "status", "player_name"),
-    )
-
-
-class PlayerPositionFrequency(Base):
-    """Repeated-position frequency; absent rows have implicit frequency one."""
-
-    __tablename__ = "player_position_frequency"
-
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    player_color = Column(String(5), primary_key=True)
-    fen_id = Column(
-        BigInteger,
-        ForeignKey("fen.fen_id", name="fk_player_position_frequency_fen_id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    games_with_position = Column(BigInteger, nullable=False)
-    total_occurrences = Column(BigInteger, nullable=False)
-
-    __table_args__ = (
-        CheckConstraint(
-            "player_color IN ('white', 'black')",
-            name="player_position_frequency_color",
-        ),
-        CheckConstraint(
-            "games_with_position > 1",
-            name="player_position_frequency_games_positive",
-        ),
-        CheckConstraint(
-            "total_occurrences >= games_with_position",
-            name="player_position_frequency_occurrences_valid",
-        ),
-    )
-
-
-class PlayerSaliencePendingGame(Base):
-    """Durable append-only ingestion work awaiting a salience refresh."""
-
-    __tablename__ = "player_salience_pending_game"
-
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    game_link = Column(BigInteger, primary_key=True)
-    player_color = Column(String(5), primary_key=True)
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["game_link", "player_color"],
-            ["game_player.link", "game_player.color"],
-            ondelete="CASCADE",
-            name="fk_player_salience_pending_game_player",
-        ),
-        CheckConstraint(
-            "player_color IN ('white', 'black')",
-            name="player_salience_pending_game_color",
-        ),
-    )
-
-
-class GamePlayerSalience(Base):
-    """Corpus-relative information weight for one player in one game."""
-
-    __tablename__ = "game_player_salience"
-
-    game_link = Column(BigInteger, primary_key=True)
-    player_color = Column(String(5), primary_key=True)
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", ondelete="CASCADE"),
-        nullable=False,
-    )
-    salience = Column(Float, nullable=False)
-    weighted_numerator = Column(Float, nullable=False)
-    depth_weight_sum = Column(Float, nullable=False)
-    position_occurrence_count = Column(Integer, nullable=False)
-    unique_position_count = Column(Integer, nullable=False)
-    repeated_position_count = Column(Integer, nullable=False)
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["game_link", "player_color"],
-            ["game_player.link", "game_player.color"],
-            ondelete="CASCADE",
-            name="fk_game_player_salience_game_player",
-        ),
-        CheckConstraint(
-            "salience > 0 AND salience <= 1",
-            name="game_player_salience_range",
-        ),
-        CheckConstraint(
-            "weighted_numerator > 0 AND depth_weight_sum > 0",
-            name="game_player_salience_components_positive",
-        ),
-        CheckConstraint(
-            "position_occurrence_count > 0",
-            name="game_player_salience_occurrence_count",
-        ),
-        CheckConstraint(
-            "unique_position_count > 0 "
-            "AND unique_position_count <= position_occurrence_count",
-            name="game_player_salience_unique_count",
-        ),
-        CheckConstraint(
-            "repeated_position_count = position_occurrence_count - unique_position_count",
-            name="game_player_salience_repeated_count",
-        ),
-        Index("ix_game_player_salience_player_game", "player_name", "game_link"),
-    )
-
-
-class ScoredPositionSummary(Base):
-    __tablename__ = "scored_position_summary"
-
-    id = Column(Integer, primary_key=True, default=1, server_default="1")
-    total_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    analyzed_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
-    scored_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    nonzero_scored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
-    unscored_fens = Column(BigInteger, nullable=False, default=0, server_default="0")
-    equal_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    small_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    clear_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    decisive_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    mate_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    equal_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
-    small_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
-    clear_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
-    decisive_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
-    mate_appearances = Column(BigInteger, nullable=False, default=0, server_default="0")
-    equal_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    small_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    clear_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    decisive_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    mate_abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    white_better = Column(BigInteger, nullable=False, default=0, server_default="0")
-    black_better = Column(BigInteger, nullable=False, default=0, server_default="0")
-    balanced = Column(BigInteger, nullable=False, default=0, server_default="0")
-    score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    abs_score_sum = Column(Float, nullable=False, default=0, server_default="0")
-    wdl_win_sum = Column(Float, nullable=False, default=0, server_default="0")
-    wdl_draw_sum = Column(Float, nullable=False, default=0, server_default="0")
-    wdl_loss_sum = Column(Float, nullable=False, default=0, server_default="0")
-    wdl_positions = Column(BigInteger, nullable=False, default=0, server_default="0")
-    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("id = 1", name="scored_position_summary_singleton"),
-    )
-
-
-class HomeSummarySource(Base):
-    __tablename__ = "home_summary_source"
-    id = Column(Integer, primary_key=True, default=1)
-    revision = Column(BigInteger, nullable=False, server_default="1")
-    __table_args__ = (CheckConstraint("id = 1", name="home_summary_source_singleton"),)
-
-
-class HomeTitledSummary(Base):
-    """One coherent snapshot; no JSON and no per-position rows."""
-    __tablename__ = "home_titled_summary"
-    id = Column(Integer, primary_key=True, default=1)
-    source_revision = Column(BigInteger, nullable=True)
-    total_fens = Column(BigInteger, nullable=False, server_default="0")
-    titled_players = Column(BigInteger, nullable=False, server_default="0")
-    titled_fens = Column(BigInteger, nullable=False, server_default="0")
-    titled_games = Column(BigInteger, nullable=False, server_default="0")
-    refreshed_at = Column(DateTime(timezone=True), nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(String(240), nullable=True)
-    __table_args__ = (
-        CheckConstraint("id = 1", name="home_titled_summary_singleton"),
-        CheckConstraint("total_fens >= titled_fens AND titled_fens >= 0 AND titled_games >= 0 "
-                        "AND titled_players >= 0", name="home_titled_counts_valid"),
-    )
-
-
-class HomeTitledPlayerSummary(Base):
-    """At most one row per titled player. Two half-units represent one game."""
-    __tablename__ = "home_titled_player_summary"
-    player_name = Column(String, primary_key=True)
-    title = Column(String(8), nullable=False)
-    games = Column(BigInteger, nullable=False)
-    game_half_units = Column(BigInteger, nullable=False)
-    __table_args__ = (
-        CheckConstraint("games >= 0 AND game_half_units >= games AND game_half_units <= games * 2",
-                        name="home_titled_player_counts_valid"),
-    )
-
-
-class FenAppearanceSummary(Base):
-    """Snapshot metadata shared by all-FEN and unscored-FEN histograms."""
-    __tablename__ = "fen_appearance_summary"
-    id = Column(Integer, primary_key=True, default=1)
-    source_updated_at = Column(DateTime(timezone=True), nullable=True)
-    refreshed_at = Column(DateTime(timezone=True), nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(String(240), nullable=True)
-    __table_args__ = (CheckConstraint("id = 1", name="fen_appearance_singleton"),)
-
-
-class FenAppearanceBin(Base):
-    __tablename__ = "fen_appearance_bin"
-    appearances = Column(BigInteger, primary_key=True)
-    total_fens = Column(BigInteger, nullable=False)
-    unscored_fens = Column(BigInteger, nullable=False)
-    __table_args__ = (
-        CheckConstraint("appearances >= 0", name="fen_appearance_nonnegative"),
-        CheckConstraint("total_fens >= 0 AND unscored_fens >= 0 AND unscored_fens <= total_fens",
-                        name="fen_appearance_counts_valid"),
-    )
-
-
-class FenCommonnessSummary(Base):
-    __tablename__ = "fen_commonness_summary"
-    id = Column(Integer, primary_key=True, default=1)
-    source_updated_at = Column(DateTime(timezone=True), nullable=True)
-    refreshed_at = Column(DateTime(timezone=True), nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(String(240), nullable=True)
-    __table_args__ = (CheckConstraint("id = 1", name="fen_commonness_singleton"),)
-
-
-class FenCommonnessPosition(Base):
-    """At most ten cached identities/labels; no per-occurrence tracking."""
-    __tablename__ = "fen_commonness_position"
-    rank = Column(SmallInteger, primary_key=True)
-    fen = Column(String, nullable=False, unique=True)
-    appearances = Column(BigInteger, nullable=False)
-    n_move = Column(Integer, nullable=True)
-    move_color = Column(String(5), nullable=True)
-    san = Column(String(32), nullable=True)
-    label_occurrences = Column(BigInteger, nullable=False, default=0)
-    example_game_link = Column(BigInteger, nullable=True)
-    example_line = Column(Text, nullable=True)
-    __table_args__ = (
-        CheckConstraint("rank BETWEEN 1 AND 10", name="fen_commonness_rank_valid"),
-        CheckConstraint("appearances > 1 AND label_occurrences >= 0", name="fen_commonness_counts_valid"),
-    )
-
-
-class PendingRepetitionSummary(Base):
-    """Small, durable cache metadata; empty histograms are valid snapshots."""
-    __tablename__ = "pending_repetition_summary"
-    id = Column(Integer, primary_key=True, default=1)
-    source_updated_at = Column(DateTime(timezone=True), nullable=True)
-    refreshed_at = Column(DateTime(timezone=True), nullable=True)
-    attempted_at = Column(DateTime(timezone=True), nullable=True)
-    last_error = Column(String(240), nullable=True)
-    __table_args__ = (CheckConstraint("id = 1", name="pending_repetition_singleton"),)
-
-
-class PendingRepetitionBin(Base):
-    __tablename__ = "pending_repetition_bin"
-    repetitions = Column(BigInteger, primary_key=True)
-    fen_count = Column(BigInteger, nullable=False)
-    __table_args__ = (
-        CheckConstraint("fen_count >= 0", name="pending_repetition_count_nonnegative"),
-    )
-
-
-class ScoredRatingSummary(Base):
-    __tablename__ = "scored_rating_summary"
-
-    id = Column(Integer, primary_key=True, default=1, server_default="1")
-    rating_basis = Column(String(32), nullable=False, default="avg_elo")
-    source_full_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    source_distinct_ratings = Column(BigInteger, nullable=False, default=0, server_default="0")
-    groups_payload = Column(JSON, nullable=False)
-    ratings_payload = Column(JSON, nullable=False)
-    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("id = 1", name="scored_rating_summary_singleton"),
-    )
-
-
-class Month(Base):
-    __tablename__ = "months"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    
-    player_name = Column("player_name",
-                         String,
-                         ForeignKey("player.player_name"),
-                         primary_key = False,
-                         unique=False,
-                         nullable=False)
-    year = Column("year", Integer, nullable=False, unique=False)
-    month = Column("month", Integer, nullable=False, unique=False)
-    n_games = Column("n_games",Integer, nullable=False, unique=False)
-    
-    player = relationship(Player, foreign_keys=[player_name])
-    
-    __table_args__ = (
-        UniqueConstraint('player_name', 'year', 'month', name='_player_year_month_uc'),
-    )
-
-
-class Move(Base):
-    __tablename__ = "moves"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    link = Column("link",BigInteger,ForeignKey("game.link"),
-                 nullable=False,unique=False)
-    n_move = Column("n_move", Integer, nullable=False)
-    white_move = Column("white_move", String, nullable=False)
-    black_move = Column("black_move", String, nullable=False)
-    white_reaction_time = Column("white_reaction_time", Float, nullable=False)
-    black_reaction_time = Column("black_reaction_time", Float, nullable=False)
-    white_time_left = Column("white_time_left", Float, nullable=False)
-    black_time_left = Column("black_time_left", Float, nullable=False)
-    
-    game = relationship(Game, foreign_keys=[link])
-    
-    __table_args__ = (
-        UniqueConstraint('link', 'n_move', name='_game_link_move_num_uc'),
-    )
 
 
 class Fen(Base):
-    __tablename__ = "fen"
-    # The primary key already provides the unique btree lookup used by every
-    # FEN query. Adding index=True/unique=True here creates a duplicate 5 GB
-    # index (ix_fen_fen) with the same key and ordering as fen_pkey.
-    fen = Column('fen', String, primary_key=True)
-    fen_id = Column(BigInteger, Identity(), nullable=False)
-    n_games = Column('n_games',BigInteger, nullable = False)
-    moves_counter = Column('moves_counter',String, nullable = False)
-    next_moves = Column('next_moves',String, nullable = True)
-    score = Column('score', Float, nullable = True)
-    wdl_win = Column('wdl_win', Float, nullable=True)
-    wdl_draw = Column('wdl_draw', Float, nullable=True)
-    wdl_loss = Column('wdl_loss', Float, nullable=True)
-    piece_count = Column('piece_count', SmallInteger, nullable=True)
-    analysis_source = Column('analysis_source', String(32), nullable=True)
-    tablebase_wdl = Column('tablebase_wdl', SmallInteger, nullable=True)
-    tablebase_dtz = Column('tablebase_dtz', Integer, nullable=True)
-    analyzed_at = Column('analyzed_at', DateTime(timezone=True), nullable=True)
-    
-    # --- MODIFIED: Point to the new association class ---
-    games = relationship(
-        'Game',
-        secondary='game_fen_association',
-        back_populates='fens',
-        overlaps="game_associations"
-    )
-    
-    # --- NEW: Add direct relationship to the association object ---
-    game_associations = relationship("GameFenAssociation", back_populates="fen", overlaps="games,fens")
-
-    continuations = relationship(
-        "FenContinuation",
-        back_populates="fen",
-        cascade="all, delete-orphan"
-    )
-
-    __table_args__ = (
-        UniqueConstraint('fen_id', name='uq_fen_fen_id'),
-        Index('ix_fen_backup_changed', analyzed_at, fen,
-              postgresql_where=text('score IS NOT NULL')),
-        Index(
-            "ix_fen_pending_tablebase",
-            n_games.desc(),
-            fen,
-            postgresql_where=text(
-                "score IS NULL "
-                "AND COALESCE(analysis_source, '') <> 'tablebase_unavailable' "
-                "AND COALESCE(piece_count, "
-                "char_length(translate(split_part(fen, ' ', 1), '12345678/', ''))) <= 5"
-            ),
-        ),
-    )
-
+    __tablename__ = 'fen'
+    fen_id = Column(BigInteger, Identity(always=True), primary_key=True)
+    fen = Column(Text, nullable=False, unique=True)
+    n_games = Column(BigInteger, nullable=False, server_default='0')
+    moves_counter = Column(Text, nullable=False, server_default="''")
+    next_moves = Column(Text)
+    score = Column(Integer)
+    wdl_win = Column(SmallInteger)
+    wdl_draw = Column(SmallInteger)
+    wdl_loss = Column(SmallInteger)
+    piece_count = Column(SmallInteger)
+    analysis_source = Column(String(32))
+    tablebase_wdl = Column(SmallInteger)
+    tablebase_dtz = Column(Integer)
+    analyzed_at = Column(DateTime(timezone=True))
 
 
 class GameFenAssociation(Base):
     __tablename__ = 'game_fen_association'
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    
-    game_link = Column(BigInteger, ForeignKey('game.link'), nullable=False, index=True)
-    fen_id = Column(BigInteger, ForeignKey('fen.fen_id', name='fk_game_fen_association_fen_id'), nullable=False, index=True)
-    n_move = Column(Integer, nullable=False)
-    move_color = Column(String(5), nullable=False) # 'white' or 'black'
-
-    # --- FIX: Add overlaps parameter to both relationships ---
-    game = relationship("Game", back_populates="fen_associations", overlaps="games,fens")
-    fen = relationship("Fen", back_populates="game_associations", overlaps="games,fens")
-
-    __table_args__ = (
-        UniqueConstraint('game_link', 'fen_id', 'n_move', 'move_color', name='_game_fen_move_color_uc'),
-        Index(
-            "ix_game_fen_association_game_order",
-            "game_link",
-            "n_move",
-            "move_color",
-        ),
-    )
+    game_link = Column(BigInteger, ForeignKey('game.link', ondelete='CASCADE'), primary_key=True)
+    n_move = Column(Integer, primary_key=True)
+    is_white = Column(Boolean, primary_key=True)
+    fen_id = Column(BigInteger, ForeignKey('fen.fen_id'), nullable=False)
 
 
 class FenContinuation(Base):
-    __tablename__ = "fen_continuation"
-    id = Column(Integer, primary_key=True, autoincrement=True)
-    fen_id = Column(BigInteger, ForeignKey('fen.fen_id', name='fk_fen_continuation_fen_id'), nullable=False)
-    rank = Column(Integer, nullable=False) # PV rank: 2..4
-    move = Column(String, nullable=False) # First move of the continuation
-    score = Column(Float, nullable=False)
-
-    fen = relationship("Fen", back_populates="continuations")
-
-    __table_args__ = (
-        UniqueConstraint('fen_id', 'rank', name='uq_fen_continuation_fen_id_rank'),
-    )
+    __tablename__ = 'fen_continuation'
+    fen_id = Column(BigInteger, ForeignKey('fen.fen_id', ondelete='CASCADE'), primary_key=True)
+    rank = Column(SmallInteger, primary_key=True)
+    move = Column(Text, nullable=False)
+    score = Column(Integer, nullable=False)
 
 
 class AnalysisTime(Base):
@@ -1116,86 +521,6 @@ class IngestionPipelineStageTiming(Base):
     )
 
 
-class PlayerStats(Base):
-    __tablename__ = "player_stats"
-    
-    player_name = Column(
-        String, 
-        ForeignKey("player.player_name", ondelete="CASCADE"), 
-        primary_key=True
-    )
-    
-    last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-    
-    player = relationship("Player", back_populates="stats")
-
-    # --- Rapid ---
-    chess_rapid_last_rating = Column(Integer, nullable=True)
-    chess_rapid_best_rating = Column(Integer, nullable=True)
-    chess_rapid_games = Column(Integer, nullable=True)
-    chess_rapid_wins = Column(Integer, nullable=True)
-    chess_rapid_losses = Column(Integer, nullable=True)
-    chess_rapid_draws = Column(Integer, nullable=True)
-    # --- NEW: Percentile ---
-    chess_rapid_last_percentile = Column(Float, nullable=True)
-
-    # --- Blitz ---
-    chess_blitz_last_rating = Column(Integer, nullable=True)
-    chess_blitz_best_rating = Column(Integer, nullable=True)
-    chess_blitz_games = Column(Integer, nullable=True)
-    chess_blitz_wins = Column(Integer, nullable=True)
-    chess_blitz_losses = Column(Integer, nullable=True)
-    chess_blitz_draws = Column(Integer, nullable=True)
-    # --- NEW: Percentile ---
-    chess_blitz_last_percentile = Column(Float, nullable=True)
-
-    # --- Bullet ---
-    chess_bullet_last_rating = Column(Integer, nullable=True)
-    chess_bullet_best_rating = Column(Integer, nullable=True)
-    chess_bullet_games = Column(Integer, nullable=True)
-    chess_bullet_wins = Column(Integer, nullable=True)
-    chess_bullet_losses = Column(Integer, nullable=True)
-    chess_bullet_draws = Column(Integer, nullable=True)
-    # --- NEW: Percentile ---
-    chess_bullet_last_percentile = Column(Float, nullable=True)
-
-    # --- Other ---
-    fide = Column(Integer, nullable=True)
-    puzzle_rush_best_score = Column(Integer, nullable=True)
-    tactics_highest_rating = Column(Integer, nullable=True)
-    tactics_lowest_rating = Column(Integer, nullable=True)
-
-
-class MainCharacterModeSummary(Base):
-    __tablename__ = "main_character_mode_summary"
-
-    mode = Column(String(16), primary_key=True, nullable=False)
-    player_name = Column(
-        String,
-        ForeignKey("player.player_name", ondelete="CASCADE"),
-        primary_key=True,
-        nullable=False
-    )
-    n_games = Column(Integer, nullable=False, default=0)
-    rating = Column(Integer, nullable=True)
-    avg_game_rating = Column(Integer, nullable=True)
-    last_rating = Column(Integer, nullable=True)
-    wins = Column(Integer, nullable=False, default=0)
-    draws = Column(Integer, nullable=False, default=0)
-    losses = Column(Integer, nullable=False, default=0)
-    as_white = Column(Integer, nullable=False, default=0)
-    as_black = Column(Integer, nullable=False, default=0)
-    last_game_at = Column(DateTime(timezone=True), nullable=True)
-    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    player = relationship(Player, foreign_keys=[player_name])
-
-    __table_args__ = (
-        Index("ix_main_character_mode_summary_mode_rating", "mode", "rating"),
-        Index("ix_main_character_mode_summary_mode_games", "mode", "n_games"),
-    )
-
-
 class DatabaseSummary(Base):
     __tablename__ = "database_summary"
 
@@ -1215,36 +540,6 @@ class DatabaseSummary(Base):
 
     __table_args__ = (
         CheckConstraint("id = 1", name="database_summary_singleton"),
-    )
-
-
-class FenPipelineSummary(Base):
-    """Cheap durable coverage counters for the automatic FEN pipeline UI."""
-
-    __tablename__ = "fen_pipeline_summary"
-
-    id = Column(Integer, primary_key=True, default=1, server_default="1")
-    parsed_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    analyzable_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    excluded_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    fen_extracted_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    tablebase_marked_games = Column(BigInteger, nullable=False, default=0, server_default="0")
-    refreshed_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    __table_args__ = (
-        CheckConstraint("id = 1", name="fen_pipeline_summary_singleton"),
-        CheckConstraint(
-            "parsed_games >= 0 AND fen_extracted_games >= 0 AND tablebase_marked_games >= 0",
-            name="fen_pipeline_summary_nonnegative",
-        ),
-        CheckConstraint(
-            "fen_extracted_games <= parsed_games",
-            name="fen_pipeline_summary_extracted_lte_parsed",
-        ),
-        CheckConstraint(
-            "tablebase_marked_games <= fen_extracted_games",
-            name="fen_pipeline_summary_tablebase_lte_extracted",
-        ),
     )
 
 

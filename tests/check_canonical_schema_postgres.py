@@ -382,5 +382,23 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
         self.assertEqual(await other.fetchval('SELECT count(*) FROM cloud_fen_claim'),0)
 
 
+    async def test_quality_projection_columns_keep_state_and_values_separate(self):
+        await canonical.initialize(self.db)
+        expected={
+            'player_salience_summary':{'player_id','status','source_game_count','source_position_count','effective_game_count','error'},
+            'player_position_frequency':{'player_id','is_white','fen_id','games_with_position','total_occurrences'},
+            'player_salience_pending_game':{'game_link','is_white'},
+            'game_player_salience':{'game_link','is_white','salience','weighted_numerator','depth_weight_sum',
+                'position_occurrence_count','unique_position_count','repeated_position_count'},
+            'game_player_engine_summary':{'game_link','is_white','analyzed_player_moves','own_move_cp_gain','own_move_cp_loss',
+                'game_efficiency','mean_win_percent_loss','median_win_percent_loss','mate_for_positions',
+                'mate_against_positions','final_player_cp','result','end_by'},
+        }
+        for table,columns in expected.items():
+            rows=await self.db.fetch("SELECT column_name,data_type FROM information_schema.columns WHERE table_schema='public' AND table_name=$1",table)
+            self.assertEqual({r['column_name'] for r in rows},columns,table)
+            self.assertTrue(all(r['data_type'] not in ('json','jsonb') for r in rows),table)
+
+
 if __name__ == '__main__':
     unittest.main()

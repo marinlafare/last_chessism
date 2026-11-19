@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import json
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text
 import test_cloud_analysis_database as existing
@@ -16,7 +17,6 @@ from chessism_api.database.postgresql.models import (
 from chessism_api.operations.cloud_analysis import controller, sequence, importer
 from chessism_api.operations.cloud_analysis import work_units_controller as fleet
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
-from chessism_api.operations.cloud_analysis.migrate_sequences import upgrade
 from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs
 
 
@@ -28,7 +28,7 @@ async def persisted_legacy_stop(job_id):
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL database')
-class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class SequenceDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
     reload = units_test.WorkUnitDatabaseTests.reload
@@ -191,7 +191,7 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.cloud.start_recovery.call_count,1 if stop else 2)
         async with AsyncDBSession() as session:
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)),0)
-            self.assertIsNone((await session.get(Fen,new_fen)).score)
+            self.assertIsNone((await session.scalar(select(Fen).where(Fen.fen == new_fen))).score)
 
     async def test_failed_or_paused_loop_never_advances_the_sequence(self):
         await self.start()
@@ -225,16 +225,6 @@ class SequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         await self.tick()
         self.assertEqual(self.cloud.start_recovery.call_count, 1)
 
-    async def test_additive_migration_refuses_active_work_and_is_repeatable(self):
-        with self.assertRaisesRegex(ValueError,'Finish/recover'):
-            async with self.engine.begin() as c:await c.run_sync(upgrade)
-        await controller.save_job(self.job.id,status='complete')
-        async with self.engine.begin() as c:
-            await c.execute(text('DROP TABLE cloud_sequence_control'))
-            await c.execute(text('DROP TABLE cloud_batch_cycle'))
-            await c.execute(text('DROP TABLE cloud_batch_sequence'))
-        for _ in range(2):
-            async with self.engine.begin() as c:await c.run_sync(upgrade)
 
 
 if __name__=='__main__':unittest.main()

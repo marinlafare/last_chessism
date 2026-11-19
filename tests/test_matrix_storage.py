@@ -200,6 +200,9 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
                         "bytes_added": 25, "snapshots": []}
             newest = {"backup_id": "testF", "type": "full", "database_bytes": 50,
                       "database_delta_bytes": 50, "repository_bytes": 10, "repository_delta_bytes": 10}
+            from chessism_api.database.postgresql.canonical import CONTRACT, VERSION
+            canonical_contract = {'contract':CONTRACT,'version':VERSION,
+                                  'ddl_sha256':'a'*64,'catalog_sha256':'b'*64}
             calls = []
             async def save_matrices(*args, **kwargs):
                 calls.append("matrices"); return matrices
@@ -208,8 +211,8 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
             patches = (
                 patch.object(job, "ensure_backup_reservation", AsyncMock()),
                 patch.object(job, "release_backup", AsyncMock()),
-                patch('chessism_api.database.postgresql.fen_identity.schema_version', return_value='numeric_v2'),
-                patch('chessism_api.database.postgresql.fen_reference_identity.schema_version', return_value='numeric_v1'),
+                patch('chessism_api.database.postgresql.transactions.driver_connection', AsyncMock()),
+                patch('chessism_api.database.postgresql.canonical.backup.describe', AsyncMock(return_value=canonical_contract)),
                 patch.object(job, "backup_completed_matrices", side_effect=save_matrices),
                 patch.object(job, "definition_backup_manifest", AsyncMock(return_value={"count": 0, "storage": "postgresql"})),
                 patch.object(job, "algorithm_backup_manifest", AsyncMock(return_value={"schema_version": 1, "definitions": {"count": 0}, "completed_runs": {"count": 0}})),
@@ -236,8 +239,9 @@ class MatrixBackupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(calls, ["matrices", "database"])
             self.assertEqual(result["matrices"], matrices)
             manifest = json.loads((root / "manifests" / "testF.json").read_text())
-            self.assertEqual(manifest["schema_version"], 6)
-            self.assertEqual(manifest["fen_reference_version"], 'numeric_v1')
+            self.assertEqual(manifest["schema_version"], 9)
+            self.assertEqual(manifest["fen_reference_version"], 'canonical_v1')
+            self.assertEqual(manifest["canonical_schema"], canonical_contract)
             self.assertEqual(manifest["algorithms"]["completed_runs"]["count"], 0)
             self.assertEqual(manifest["matrices"], matrices)
             self.assertEqual(manifest["matrix_definitions"], {"count": 0, "storage": "postgresql"})

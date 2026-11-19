@@ -2404,3 +2404,73 @@ rejection; all pass. Reuse other 44 unchanged checks. Native rerun comparison
 counts all four sides, detects one real statistic change, and model rollback
 requires its existing explicit acknowledgement. No live data/Redis/GCP accessed.
 Evidence: docs/architecture/evidence/stage-a-native-research-tools-2026-11-18.tar.gz SHA256 4dc207b4e3f014dfff5c90fea79a4c3f473caf3ff638478da4042e530431ab60.
+
+A4 removes unused profile adapters/DBInterface/ask_db, historical migrations and
+three obsolete ingestion child jobs, preserving the active bounded worker. Old
+archive validator AST is unchanged. Remove 27 standalone dual-layout test harnesses
+with explicit dispositions; preserve numerical unit tests and port important
+worker orchestration cases to canonical PG. Three native worker lifecycle checks
+pass (gate38): checkpoint rollback/retry without re-extraction/double-counting,
+cancellation retaining earlier publications and input files, binary failures/
+backoff/retry without CPU fallback. Gate37 had incomplete array-device fixtures.
+
+Final ORM audit found the game-information read still selecting historical
+columns. Convert it to a native projection preserving its payload, serializing
+its timestamp at the HTTP boundary. Remove unused historical ORM projections;
+remaining FEN/game/player/coverage mappings use canonical integer/composite keys.
+Port existing cloud DB fixtures to one initialized private database per test.
+Migration-only methods retire; empty-selection/sealing assertions stay. Move
+two old ORM structure assertions to actual canonical table introspection.
+
+Gate39 stopped at a whitespace check before starting resources. Gate40: 63 checks,
+62 passed; one old large-reservation fixture violated four-field FEN identity.
+Replace that fixture with 1,300 unique legal positions. Existing backup21 and
+evaluation20, new game payload and projection-structure checks pass. Gate41 was
+invalid: temporary suite lacked a multiprocessing main guard, allowing spawned
+validation children to execute tests. Gracefully stopped the supervisor; all its
+owned containers removed. No results reused from that run. Gate42 uses guarded
+execution and explicit method selection: 112 distinct cloud checks pass, 0 errors/
+failures/skips, 185.14 seconds. Benchmark fixtures retain occurrence cardinality
+with unique native keys; illegal-position test uses a syntactically valid key.
+No live database, Redis, GCP, Neo4j or checkpoint accessed.
+
+Final comparison will use the cached production Python3.10 runtime. The earlier
+Python3.11 overlay was temporary and is no longer present; package index still
+lacks pinned pglast5.9. The failed temporary dependency probe changed no project
+dependencies. Port the four reporting tests' Python3.11-only enterContext helper
+to patch.start/addCleanup, preserving assertions, as already done for FEN tests.
+Broader API/worker/frontend/P1 verification remains pending. Stage A is not accepted.
+Evidence: docs/architecture/evidence/stage-a-storage-retirement-2026-11-18.tar.gz SHA256 2073b45b4e0c59fd24b1b3e04d3cfdebdf333ade6b7f010633d5eac516afbaf1.
+
+Stage A final comparison completed (independent acceptance pending). API broad
+run: 1276 checks, 3 failures, 11 errors, 257 offline opt-in skips. Two SQL oracles
+still named retired columns/casts; transaction mocks returned context wrappers;
+a backup mock asserted obsolete format6; one removed FEN helper import and a
+missing cloud SDK caused loader errors. Port current behavior without weakening
+assertions: 37 affected checks pass, four cloud-read checks pass in the controller
+runtime, final backup-identity fixture check passes. Two retired helper tests map
+to real canonical evaluation tests. Effective API discovery is 1279: 1 failure,
+2 errors, 257 skips. All three remaining defects independently reproduced from
+unchanged 0fde829 source with matching assertions/exceptions. Old profile and
+matrix tests were retired/ported; eight old time-filter mock errors no longer occur.
+
+Initial worker comparison used the API Python3.10 image, which lacks required
+Python3.11 APIs/cloud SDK; it is invalid worker evidence. Same unchanged worker
+suite in supported cached Python3.11: 287 tests, 0 failures/errors, same seven
+skips. P1: 68/68 pass with isolated Redis. Frontend: pinned lockfile dependencies
+in a disposable copy, 346 tests/342 pass/four existing failures, zero skips.
+Three full failure blocks match the baseline; navigation rerun with the actual
+read-only parent layout (including preserved hegel_.md) proves the fourth matches
+exactly. Architecture/source-size/build pass. Initial missing dependencies/parent
+fixtures are retained as failed environment attempts, never counted as passes.
+
+Baseline discovery inventory:1450; final:1279 (61 added/renamed identities,232
+removed/renamed identities). Full identity lists and retirement dispositions saved.
+No tests hidden or skipped to obtain the comparison. New opt-in FEN/matrix cases
+passed earlier PG gates; P1 Redis cases passed separately. Unrelated offline skips
+remain. Only explicitly ported tests and A4 maintenance/tracking files changed
+after broad verification; application sources unchanged. Remove the remaining
+maintenance-only compose launcher whose installer was retired; no compose invoked.
+All owned verification containers independently confirmed removed. No live DB,
+backup checkpoint, Redis, Neo4j, GCP or production resources accessed.
+Evidence: docs/architecture/evidence/stage-a-final-comparison-2026-11-18.tar.gz SHA256 70dd8c92e1dab50abc0a8d7aff77a781da9204f5f42661a61163c4929f501738.

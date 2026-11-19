@@ -26,8 +26,9 @@ class ReportingTests(unittest.TestCase):
         self.connection = self.engine.connect()
         self.addCleanup(self.engine.dispose)
         self.addCleanup(self.connection.close)
-        self.enterContext(patch.object(columns, 'ROOTS', roots))
-        self.enterContext(patch.object(columns, 'TABLES', tables))
+        for name,value in (('ROOTS',roots),('TABLES',tables)):
+            change=patch.object(columns,name,value)
+            change.start();self.addCleanup(change.stop)
         self.statements = []
         event.listen(self.engine, 'before_cursor_execute',
                      lambda conn, cursor, statement, parameters, context, many: self.statements.append(statement))

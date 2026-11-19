@@ -329,7 +329,9 @@ class FenAggregationTests(unittest.TestCase):
         fen_column = models.Fen.__table__.c.fen
         index_names = {index.name for index in models.Fen.__table__.indexes}
 
-        self.assertTrue(fen_column.primary_key)
+        self.assertTrue(models.Fen.__table__.c.fen_id.primary_key)
+        self.assertFalse(fen_column.primary_key)
+        self.assertTrue(fen_column.unique)
         self.assertNotIn("ix_fen_fen", index_names)
 
     def test_expected_fen_positions_counts_only_played_half_moves(self):
@@ -392,39 +394,6 @@ class PlayerSalienceTests(unittest.TestCase):
 
         self.assertAlmostEqual(player_salience.salience_weighted_accuracy(rows), 80.0)
 
-    def test_salience_schema_separates_player_state_from_game_values(self):
-        summary_columns = set(models.PlayerSalienceSummary.__table__.columns.keys())
-        frequency_columns = set(models.PlayerPositionFrequency.__table__.columns.keys())
-        pending_columns = set(models.PlayerSaliencePendingGame.__table__.columns.keys())
-        game_columns = set(models.GamePlayerSalience.__table__.columns.keys())
-
-        self.assertEqual(
-            summary_columns,
-            {
-                "player_name", "status", "source_game_count",
-                "source_position_count", "effective_game_count", "error",
-            },
-        )
-        self.assertEqual(
-            frequency_columns,
-            {
-                "player_name", "player_color", "fen_id",
-                "games_with_position", "total_occurrences",
-            },
-        )
-        self.assertEqual(
-            pending_columns,
-            {"player_name", "game_link", "player_color"},
-        )
-        self.assertEqual(
-            game_columns,
-            {
-                "game_link", "player_color", "player_name", "salience",
-                "weighted_numerator", "depth_weight_sum",
-                "position_occurrence_count", "unique_position_count",
-                "repeated_position_count",
-            },
-        )
 
 
 class DatabaseBackupPolicyTests(unittest.TestCase):
@@ -772,19 +741,6 @@ class PlayerHeroAnalyticsTests(unittest.TestCase):
         self.assertEqual(points, [["2026-09-20", 87.46]])
         self.assertTrue(all(len(point) == 2 for point in points))
 
-    def test_game_player_engine_summary_keeps_only_player_game_score_fields(self):
-        columns = set(models.GamePlayerEngineSummary.__table__.columns.keys())
-
-        self.assertEqual(columns, {
-            "game_link", "player_name", "player_color", "analyzed_player_moves",
-            "own_move_cp_gain", "own_move_cp_loss", "game_efficiency",
-            "mean_win_percent_loss", "median_win_percent_loss", "blunder_count",
-            "mate_for_positions", "mate_against_positions", "final_player_cp",
-            "result", "end_by",
-        })
-        self.assertNotIn("player_cp_sum", columns)
-        self.assertNotIn("opponent_move_cp_gain", columns)
-        self.assertNotIn("tablebase_winning", columns)
 
     def test_lichess_blunder_uses_winning_chance_loss_not_fixed_cp_loss(self):
         from chessism_api.operations.research_algorithms.legacy_blunder_reference import is_lichess_blunder
@@ -2291,13 +2247,6 @@ class PlayerAnalyticsTests(unittest.IsolatedAsyncioTestCase):
 
 
 class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
-    @staticmethod
-    def _session_context(session):
-        context = MagicMock()
-        context.__aenter__ = AsyncMock(return_value=session)
-        context.__aexit__ = AsyncMock(return_value=False)
-        return context
-
     async def test_preview_classifies_shell_opponents_as_exclusive(self):
         player_result = MagicMock()
         player_result.mappings.return_value.first.return_value = {
@@ -2314,12 +2263,12 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
             "analyzed_fen_associations": 1_500,
         }
         session = AsyncMock()
-        session.execute.side_effect = [player_result, counts_result]
+        session.execute.side_effect = [MagicMock(), MagicMock(), player_result, counts_result]
 
         with patch.object(
             player_deletion,
             "AsyncDBSession",
-            return_value=self._session_context(session),
+            return_value=session,
         ):
             preview = await player_deletion.get_player_deletion_preview("Hikaru")
 
@@ -2328,13 +2277,13 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(preview["shared_games"], 25)
         self.assertEqual(preview["fen_rows_deleted"], 0)
         self.assertEqual(preview["analysis_rows_deleted"], 0)
-        classification_sql = str(session.execute.await_args_list[1].args[0])
+        classification_sql = str(session.execute.await_args_list[3].args[0])
         self.assertIn("COALESCE(opponent.joined, 0) = 0", classification_sql)
         self.assertIn("COALESCE(opponent.joined, 0) <> 0", classification_sql)
 
     async def test_game_batch_updates_frequency_but_never_deletes_fens(self):
         links_result = MagicMock()
-        links_result.scalars.return_value.all.return_value = [101, 102]
+        links_result.scalars.return_value = [101, 102]
         update_result = MagicMock()
         delete_result = MagicMock()
         delete_result.rowcount = 2
@@ -2342,37 +2291,34 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         session.execute.side_effect = [
             links_result,
             update_result,
-            update_result,
-            update_result,
             delete_result,
         ]
 
         with patch.object(
             player_deletion,
             "AsyncDBSession",
-            return_value=self._session_context(session),
+            return_value=session,
         ):
             deleted = await player_deletion._delete_exclusive_game_batch("hikaru", [101, 102])
 
         self.assertEqual(deleted, 2)
         session.commit.assert_awaited_once()
         sql = "\n".join(str(call.args[0]) for call in session.execute.await_args_list)
-        self.assertIn("UPDATE fen current_fen", sql)
-        self.assertIn("DELETE FROM game_fen_association", sql)
-        self.assertIn("DELETE FROM moves", sql)
+        self.assertIn("UPDATE fen SET n_games", sql)
+        # Canonical foreign keys cascade game-owned occurrences and moves;
+        # real-PG deletion tests verify those dependent rows disappear.
+        self.assertIn("FOR UPDATE OF g,opponent SKIP LOCKED", sql)
         self.assertIn("DELETE FROM game", sql)
         self.assertNotIn("DELETE FROM fen\n", sql)
         self.assertNotIn("DELETE FROM fen_continuation", sql)
 
     async def test_demotion_keeps_the_player_identity_as_a_deleted_shell(self):
-        remaining_result = MagicMock()
-        remaining_result.scalar.return_value = 0
         mutation_result = MagicMock()
         updated_result = MagicMock()
         updated_result.rowcount = 1
         session = AsyncMock()
+        session.scalar.side_effect = [17, False]
         session.execute.side_effect = [
-            remaining_result,
             mutation_result,
             mutation_result,
             mutation_result,
@@ -2386,14 +2332,14 @@ class PlayerDeletionSafetyTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(
             player_deletion,
             "AsyncDBSession",
-            return_value=self._session_context(session),
+            return_value=session,
         ):
             await player_deletion._demote_player("hikaru")
 
         sql = "\n".join(str(call.args[0]) for call in session.execute.await_args_list)
         self.assertIn("UPDATE player", sql)
-        self.assertIn("joined = 0", sql)
-        self.assertIn("deleted_at = CURRENT_TIMESTAMP", sql)
+        self.assertIn("joined=0", sql)
+        self.assertIn("deleted_at=CURRENT_TIMESTAMP", sql)
         self.assertIn("DELETE FROM game_player_salience", sql)
         self.assertIn("DELETE FROM player_position_frequency", sql)
         self.assertIn("DELETE FROM player_salience_pending_game", sql)

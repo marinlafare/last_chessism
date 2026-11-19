@@ -155,5 +155,24 @@ class CanonicalIngestionTests(CanonicalDatabaseTestCase):
         self.assertEqual(tuple(row),(12,5,7))
 
 
-if __name__=='__main__':
+    async def test_game_information_endpoint_reads_native_standard_variant_and_empty_records(self):
+        import json
+        from fastapi import HTTPException
+        from chessism_api.routers.games import api_read_game
+        await self.run_import()
+        with patch.object(jobs,'AsyncDBSession',self.factory):
+            for link,rules,moves in ((101,'chess',2),(102,'chess960',2),(104,'chess',0),(105,'chess',2)):
+                output=json.loads((await api_read_game(str(link))).body)
+                self.assertEqual((output['link'],output['rules'],output['n_moves']),(link,rules,moves))
+                self.assertEqual(output['white'],'white')
+                self.assertEqual(output['black'],'white' if link==105 else 'black')
+                self.assertEqual(output['avg_elo'],1550.0)
+                self.assertEqual((output['year'],output['month'],output['day'],output['hour'],output['minute']),(2026,1,31,23,59))
+                self.assertEqual(output['played_at'],'2026-01-31T23:59:00+00:00')
+            with self.assertRaises(HTTPException) as error:await api_read_game('999')
+            self.assertEqual(error.exception.status_code,404)
+        self.assertEqual(self.engine.pool.checkedout(),0)
+
+
+if __name__ == '__main__':
     unittest.main()

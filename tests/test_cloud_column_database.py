@@ -2,18 +2,18 @@
 import asyncio
 import json
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 import test_cloud_analysis_database as existing
 from sqlalchemy import select, text, func
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.models import CloudAnalysisJob, CloudAnalysisRun, CloudResultBatch, CloudFenClaim, Fen
 from chessism_api.database.postgresql.cloud_codec import read_document, checksum
-from chessism_api.database.postgresql.cloud_migration import migrate, repair_cleanup_resources
 from chessism_api.operations.cloud_analysis import controller, importer, history
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL test database')
-class ColumnDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class ColumnDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
     reserved_run = existing.CloudDatabaseTests.reserved_run
@@ -45,33 +45,7 @@ class ColumnDatabaseTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(current.launch['cleanup_report']['complete'])
         self.assertEqual(worker.cloud.mock_calls, [])
 
-    async def test_cleanup_schema_repair_preserves_legacy_empty_null_and_paused_job(self):
-        run = await self.reserved_run()
-        original = {'cleanup_report': {'remaining_compute': []},
-                    'cleanup_verification': {'remaining_compute': None}}
-        await controller.save_run(run.id, status='cleaning', launch=original)
-        await controller.save_job(self.job.id, status='paused')
-        async with self.engine.begin() as c:
-            await c.execute(text('DROP TABLE cloud_control_compute_resource'))
-            await c.execute(text("ALTER TABLE cloud_control_launch ADD COLUMN cleanup_report__remaining_compute TEXT[] DEFAULT '{}'"))
-            await c.execute(text('ALTER TABLE cloud_control_launch ADD COLUMN cleanup_verification__remaining_compute TEXT[]'))
-        async with self.engine.begin() as c:
-            self.assertEqual(await c.run_sync(repair_cleanup_resources), 2)
-            self.assertEqual(await c.run_sync(repair_cleanup_resources), 0)
-            restored = await c.run_sync(read_document, run.id + ':launch')
-            self.assertEqual(restored, original)
-        async with AsyncDBSession() as session:
-            self.assertEqual((await session.get(CloudAnalysisJob, self.job.id)).status, 'paused')
 
-    async def test_cleanup_schema_repair_rejects_nonempty_legacy_string_arrays(self):
-        run = await self.reserved_run()
-        async with self.engine.begin() as c:
-            await c.execute(text("ALTER TABLE cloud_control_launch ADD COLUMN cleanup_report__remaining_compute TEXT[] DEFAULT ARRAY['unknown-identity']"))
-        with self.assertRaisesRegex(ValueError, 'Nonempty legacy'):
-            async with self.engine.begin() as c:
-                await c.run_sync(repair_cleanup_resources)
-        async with self.engine.connect() as c:
-            self.assertEqual(await c.scalar(text('SELECT cleanup_report__remaining_compute FROM cloud_control_launch LIMIT 1')), ['unknown-identity'])
 
     async def test_simultaneous_redelivery_commits_once_and_records_batch_timings(self):
         run = await self.reserved_run()
@@ -154,33 +128,7 @@ class ColumnDatabaseTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(saved.imported_count, 502)
             self.assertEqual(await session.scalar(select(func.count()).select_from(CloudFenClaim)), 501)
 
-    async def test_migration_is_lossless_atomic_and_repeatable(self):
-        await controller.save_job(self.job.id, status='complete')
-        original = {'backend': 'batch_spot', 'n_vms': 1, 'game_links': [1, 2], 'plan_id': None}
-        async with self.engine.begin() as c:
-            await c.execute(text('ALTER TABLE cloud_analysis_job ADD COLUMN selection JSON'))
-            await c.execute(text('UPDATE cloud_analysis_job SET selection=CAST(:value AS JSON)'), {'value': json.dumps(original)})
-        async with self.engine.begin() as c:
-            self.assertEqual(await c.run_sync(migrate), 1)
-        async with self.engine.begin() as c:
-            self.assertEqual(await c.run_sync(migrate), 0)
-            restored = await c.run_sync(read_document, self.job.id + ':selection')
-            self.assertEqual(checksum(restored), checksum(original))
-            remaining = await c.scalar(text("SELECT count(*) FROM information_schema.columns WHERE table_schema=current_schema() AND table_name LIKE 'cloud_%' AND data_type IN ('json','jsonb')"))
-            self.assertEqual(remaining, 0)
 
-    async def test_unknown_recovery_field_rolls_back_before_dropping_json(self):
-        await controller.save_job(self.job.id, status='complete')
-        async with self.engine.begin() as c:
-            await c.execute(text('ALTER TABLE cloud_analysis_job ADD COLUMN selection JSON'))
-            await c.execute(text('UPDATE cloud_analysis_job SET selection=CAST(:value AS JSON)'),
-                            {'value': json.dumps({'unsupported': True})})
-        with self.assertRaisesRegex(ValueError, 'Unsupported'):
-            async with self.engine.begin() as c:
-                await c.run_sync(migrate)
-        async with self.engine.connect() as c:
-            preserved = await c.scalar(text('SELECT selection FROM cloud_analysis_job'))
-            self.assertEqual(preserved, {'unsupported': True})
 
 
 if __name__ == '__main__': unittest.main()

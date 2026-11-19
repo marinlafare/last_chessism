@@ -4,6 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 import json
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func, text
 import test_cloud_analysis_database as existing
@@ -15,7 +16,6 @@ from chessism_api.operations.cloud_analysis import controller, sequence, auto_se
 from chessism_api.operations.cloud_analysis.schemas import CloudJobRequest
 from chessism_api.routers.cloud_analysis import create_cloud_job, cloud_jobs, retry_cloud_job, resume_cloud_job
 from test_cloud_sequences_database import persisted_legacy_stop
-from chessism_api.operations.cloud_analysis.migrate_auto_sequences import upgrade
 from cloud_job.recovery import WORKFLOW, RecoveryClient
 from stockfish_batch.checkpoints import digest, encode
 
@@ -23,7 +23,7 @@ EXECUTION=WORKFLOW+'/executions/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
 
 
 @unittest.skipUnless(existing.TEST_URL,'requires isolated PostgreSQL database')
-class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class AutoSequenceDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp=existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown=existing.CloudDatabaseTests.asyncTearDown
     reload=units_test.WorkUnitDatabaseTests.reload
@@ -165,17 +165,6 @@ class AutoSequenceDatabaseTests(unittest.IsolatedAsyncioTestCase):
         async with AsyncDBSession() as s:
             self.assertEqual(await s.scalar(select(func.count()).select_from(CloudFenClaim)),0)
 
-    async def test_additive_migration_is_repeatable_and_preserves_old_jobs(self):
-        with self.assertRaisesRegex(ValueError,'Finish/recover'):
-            async with self.engine.begin() as c:await c.run_sync(upgrade)
-        await controller.save_job(self.job.id,status='complete')
-        async with self.engine.begin() as c:
-            await c.execute(text('DROP TABLE cloud_sequence_control'))
-            await c.execute(text('ALTER TABLE cloud_control_work_unit DROP COLUMN uploaded'))
-        for _ in range(2):
-            async with self.engine.begin() as c:await c.run_sync(upgrade)
-        async with AsyncDBSession() as s:
-            self.assertEqual((await s.get(CloudAnalysisJob,self.job.id)).status,'complete')
 
     async def test_restart_after_partial_cleanup_uses_saved_plan_not_cloud_files(self):
         await self.start()

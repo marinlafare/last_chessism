@@ -100,7 +100,6 @@ async def pending_items(session, run, limit=32768, *, after=None):
 
 async def stage(session, run, items, parts, timings):
     """Commit this batch's canonical results, staged counts and cursor together."""
-    from ..canonical_blunders.schema import table
     p = {'id': run['id'], 'links': [i['game_link'] for i in items], 'model': run['model_id']}
     if parts:
         from .bulk import temp_rows, json_rows

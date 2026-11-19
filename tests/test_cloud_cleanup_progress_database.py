@@ -1,6 +1,7 @@
 """Disposable database only: cleanup progress is reporting, never authorization."""
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from sqlalchemy import select
 import test_cloud_analysis_database as existing
 from chessism_api.database.postgresql.engine import AsyncDBSession
@@ -10,7 +11,7 @@ from chessism_api.routers.cloud_analysis import cloud_jobs
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires explicitly isolated PostgreSQL')
-class CleanupProgressTests(unittest.IsolatedAsyncioTestCase):
+class CleanupProgressTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
 

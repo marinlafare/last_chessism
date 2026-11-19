@@ -1,6 +1,7 @@
 """Real, disposable PostgreSQL; no live data, Google calls or billable launches."""
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, patch
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -12,14 +13,13 @@ from chessism_api.database.postgresql.models import (
     CloudGameDraftEntry, Fen, CloudFenClaim, CloudAnalysisRun, GameFenAssociation,
 )
 from chessism_api.operations.cloud_analysis import draft_cache, game_drafts
-from chessism_api.operations.cloud_analysis.migrate_draft_cache import upgrade
 from chessism_api.routers.cloud_game_drafts import (
     current_draft, remove_entry, submit_draft, Revision, SubmitDraft,
 )
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL database')
-class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
+class IncrementalDraftTests(CanonicalDatabaseTestCase):
     asyncSetUp = drafts_tests.DraftDatabaseTests.asyncSetUp
     asyncTearDown = drafts_tests.DraftDatabaseTests.asyncTearDown
     add = drafts_tests.DraftDatabaseTests.add
@@ -112,7 +112,7 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
         await self.available()
         async with AsyncDBSession() as s, s.begin():
             extra = await s.scalar(select(Fen.fen_id).where(Fen.fen == self.fens[2]))
-            s.add(GameFenAssociation(game_link=101, fen_id=extra, n_move=3, move_color='white'))
+            s.add(GameFenAssociation(game_link=101, fen_id=extra, n_move=3, is_white=True))
         with self.assertRaises(HTTPException) as error:
             await submit_draft(self.draft['id'], SubmitDraft(revision=self.draft['revision']))
         self.assertIn('increased', error.exception.detail)
@@ -130,12 +130,12 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
     async def test_refresh_rebuilds_current_membership_and_eligibility(self):
         await self.add((101,))
         async with AsyncDBSession() as s, s.begin():
-            (await s.get(Fen, self.fens[0])).score = 1
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 1
             s.add(CloudAnalysisRun(id='e'*32, job_id=self.job.id, positions=[], launch={}, receipts={}))
             await s.flush()
             s.add(CloudFenClaim(fen=self.fens[1], run_id='e'*32))
             extra = await s.scalar(select(Fen.fen_id).where(Fen.fen == self.fens[2]))
-            s.add(GameFenAssociation(game_link=101, fen_id=extra, n_move=3, move_color='white'))
+            s.add(GameFenAssociation(game_link=101, fen_id=extra, n_move=3, is_white=True))
         preview = await self.preview()
         self.assertEqual((preview['unique_missing_fens'], preview['claimed_fens'], preview['fens_to_analyze']), (2, 1, 1))
         await self.remove(self.draft['entries'][0]['id'])
@@ -149,7 +149,7 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
             self.draft = await create_draft()
             await self.add((101, 102))
             async with AsyncDBSession() as s, s.begin():
-                (await s.get(Fen, self.fens[0])).score = 1
+                (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score = 1
             result = await submit_draft(self.draft['id'], SubmitDraft(
                 revision=self.draft['revision'], backend=backend, n_vms=6, n_cpus=100))
             self.assertEqual(result['target'], 2)
@@ -164,16 +164,6 @@ class IncrementalDraftTests(unittest.IsolatedAsyncioTestCase):
                 self.assertGreater(await s.scalar(select(func.count()).select_from(CloudGameDraftEntry)), 0)
             await save_job(result['id'], status='complete')
 
-    async def test_migration_is_additive_repeatable_and_native_columns_only(self):
-        async with self.engine.begin() as c:
-            for model in (CloudGameDraftEntryFen, CloudGameDraftFen, CloudGameDraftCache):
-                await c.run_sync(lambda conn, model=model: model.__table__.drop(conn))
-            await c.run_sync(upgrade)
-            await c.run_sync(upgrade)
-        for model in (CloudGameDraftCache, CloudGameDraftEntryFen, CloudGameDraftFen):
-            self.assertFalse(any('JSON' in str(c.type) for c in model.__table__.columns))
-        await self.add((101,))
-        await self.assert_counts(1, 2)
 
 
 if __name__ == '__main__': unittest.main()

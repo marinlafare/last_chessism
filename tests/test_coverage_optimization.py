@@ -64,7 +64,7 @@ class CoverageOptimizationTests(unittest.IsolatedAsyncioTestCase):
         full = coverage_source_sql(scoped=False)
         self.assertNotIn('LATERAL', full)
         self.assertIn('GROUP BY a.game_link', full)
-        for expression in ('count(f.score)', 'abs(f.score)<50', 'abs(f.score)>=50',
-                           'abs(f.score)>=150', 'abs(f.score)>=300', 'abs(f.score)>=9000'):
+        for expression in ('count(f.score)', 'abs(f.score::bigint)<50', 'abs(f.score::bigint)>=50',
+                           'abs(f.score::bigint)>=150', 'abs(f.score::bigint)>=300', 'abs(f.score::bigint)>=9000'):
             self.assertIn(expression, scoped)
             self.assertIn(expression, full)

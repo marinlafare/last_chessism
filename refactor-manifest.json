@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "awaiting_batch_1_review",
+  "status": "stage_a_implemented_pending_independent_acceptance",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -1556,8 +1556,8 @@
   "stage_a_completion": {
     "authorization_source": "/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt",
     "entry_commit": "35be4fce19d692914df76904cb638b361351b346",
-    "status": "in_progress",
-    "current_chunk": "A3.1",
+    "status": "implemented_pending_independent_acceptance",
+    "current_chunk": "A4",
     "started_at": "2026-11-11T00:30:30.215098+00:00",
     "baseline_input_hashes_matched": 1699,
     "baseline_debt": "API 1450: 3 failures, 10 errors, 276 skips; worker 287: 0 failures/errors, 7 skips; frontend 346: 4 failures, 0 skips. Exact details retained in historical verification.",
@@ -3913,7 +3913,7 @@
       {
         "id": "A3.1",
         "name": "Queries and summaries",
-        "status": "in_progress",
+        "status": "completed_pending_stage_acceptance",
         "verification": {
           "status": "passed",
           "gate": "canonical dashboard counts and mode rankings",
@@ -6291,21 +6291,24 @@
             },
             "checkpoint_note": "Saved in the local WIP commit containing docs/architecture/stage-a-resume.md; Stage A remains incomplete."
           }
-        ]
+        ],
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
       },
       {
         "id": "A3.2",
         "name": "Feature consumers and synthetic performance",
-        "status": "pending",
+        "status": "completed_pending_stage_acceptance",
         "verification": null,
-        "commit_sha": null
+        "commit_sha": null,
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
       },
       {
         "id": "A4",
         "name": "Retirement and final integration",
-        "status": "pending",
+        "status": "completed_pending_stage_acceptance",
         "verification": null,
-        "commit_sha": null
+        "commit_sha": null,
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
       }
     ],
     "pending_process": null,
@@ -6345,18 +6348,10 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Native research and administration verified; A4 removal and final consumer/import audit in progress",
+      "current_gate": "Stage A implementation and final comparison complete; independent acceptance review pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
-      "current_verification": {
-        "status": "passed",
-        "checks": 44,
-        "synthetic_pg_dump_restore": "passed",
-        "archive": "docs/architecture/evidence/stage-a-canonical-backup-2026-11-18.tar.gz",
-        "sha256": "336c157699e1eed2af63dd84033f047f9bee2755eb8fce8d7228dbd9db86269a",
-        "legacy_validator_definitions_preserved": 5,
-        "production_access": false
-      },
+      "current_verification": null,
       "verification_attempts": [
         {
           "status": "failed",
@@ -8160,7 +8155,7 @@
         "source": "User asynchronous reply: Approve these export contract changes",
         "applies_to": "upcoming canonical dataset exports"
       },
-      "next_scope": "Complete coordinated CUDA conversion, then remaining research/admin/graph/backup consumers and A4 retirement.",
+      "next_scope": "Independent Stage A acceptance review only. Do not begin Stage B/C.",
       "continuation_authorization": "/home/jon/.codex/attachments/ec6637db-553b-4054-85c1-c8af30164a85/Pasted text.txt",
       "cuda_verification": {
         "status": "passed",
@@ -8283,6 +8278,76 @@
         "limitations": [
           "Existing salience SQLite reports accept only one player side per game; self-play is rejected before publication."
         ]
+      },
+      "storage_retirement": {
+        "status": "verified_pending_stage_acceptance",
+        "archive": "docs/architecture/evidence/stage-a-storage-retirement-2026-11-18.tar.gz",
+        "sha256": "2073b45b4e0c59fd24b1b3e04d3cfdebdf333ade6b7f010633d5eac516afbaf1",
+        "cloud_checks": 112,
+        "worker_lifecycle_checks": 3,
+        "other_core_backup_evaluation_checks": 43,
+        "main_guard_failure": "Gate41 invalid due spawned suite reexecution; discarded as verification evidence, stopped and all owned containers removed. Corrected gate42 passes all 112 distinct cloud checks.",
+        "models": "Removed unused historical projections; remaining core mappings match canonical numeric/composite identities.",
+        "test_dispositions": "docs/architecture/storage-retirement-tests.json",
+        "legacy_archive_validator_ast_unchanged": true,
+        "missing_module_or_model_imports": 0,
+        "accepted": false
+      },
+      "stage_boundary_verification": {
+        "status": "verified_with_preexisting_debt",
+        "archive": "docs/architecture/evidence/stage-a-final-comparison-2026-11-18.tar.gz",
+        "sha256": "70dd8c92e1dab50abc0a8d7aff77a781da9204f5f42661a61163c4929f501738",
+        "api": {
+          "baseline_tests": 1450,
+          "baseline_failures": 3,
+          "baseline_errors": 10,
+          "baseline_skips": 276,
+          "broad_initial_tests": 1276,
+          "effective_tests": 1279,
+          "failures": 1,
+          "errors": 2,
+          "skips": 257,
+          "composition": "One broad API run plus 37 affected fixture checks and four cloud SDK checks. Two failed import placeholders replaced by actual tests; no second full API run."
+        },
+        "worker": {
+          "tests": 287,
+          "failures": 0,
+          "errors": 0,
+          "skips": 7,
+          "python": "3.11.17 (main, Oct  1 2026, 21:52:00) [GCC 12.2.0]",
+          "elapsed_seconds": 25.639628887176514
+        },
+        "p1": {
+          "tests": 68,
+          "failures": 0,
+          "errors": 0,
+          "skips": 0,
+          "elapsed_seconds": 2.4389662742614746
+        },
+        "frontend": {
+          "tests": 346,
+          "passed": 342,
+          "failures": 4,
+          "errors": 0,
+          "skips": 0,
+          "cancelled": 0,
+          "assertion_details_match_baseline": true,
+          "architecture_source_size_build": "passed"
+        },
+        "test_discovery_delta": {
+          "added_or_renamed_identities": 61,
+          "removed_or_renamed_identities": 232,
+          "identities_recorded_in": "final/comparison.json inside evidence archive"
+        },
+        "api_remaining_debt": [
+          "test_cloud_auto_sequences.AutoSequenceTests.test_split_total_instead_of_multiplying_or_balancing",
+          "test_cloud_analysis.ControllerGateTests.test_real_cleanup_writes_tmp_plan_and_can_recreate_it_after_restart",
+          "test_pipeline_helpers.AnalysisJobsApiTests.test_analysis_jobs_lists_running_and_queued_from_server_queue"
+        ],
+        "baseline_debt_independently_reproduced": true,
+        "production_access": false,
+        "all_owned_containers_removed": true,
+        "accepted": false
       }
     }
   }

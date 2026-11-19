@@ -2,6 +2,7 @@
 from contextlib import ExitStack
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from unittest.mock import AsyncMock, Mock, patch
 from sqlalchemy import select, func
 from fastapi import HTTPException
@@ -19,7 +20,7 @@ from chessism_api.operations.cloud_analysis.work_units_controller import lanes
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires isolated PostgreSQL')
-class CancellationDatabaseTests(unittest.IsolatedAsyncioTestCase):
+class CancellationDatabaseTests(CanonicalDatabaseTestCase):
     asyncSetUp = existing.CloudDatabaseTests.asyncSetUp
     asyncTearDown = existing.CloudDatabaseTests.asyncTearDown
     reserved_run = existing.CloudDatabaseTests.reserved_run

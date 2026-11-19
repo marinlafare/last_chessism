@@ -1,3 +1,4 @@
+from fastapi.encoders import jsonable_encoder
 import json
 import time
 from typing import Any, Dict
@@ -245,7 +246,7 @@ async def api_read_game(link: str) -> JSONResponse:
     game = await read_game(link)
     if not game:
         raise HTTPException(status_code=404, detail=f"Game with link '{link}' not found.")
-    return JSONResponse(content=game[0])
+    return JSONResponse(content=jsonable_encoder(game[0]))
 
 
 @router.get("/{game_id}/score")

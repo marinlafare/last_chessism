@@ -12,7 +12,7 @@ os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/
 from chessism_api.operations import backup_files, database_backups, database_restore_tests
 from chessism_api.operations.redis_ownership import release_owned
 from chessism_api.operations.restore_workspace import workspace_lock, remove_workspace
-from chessism_api.operations.ingestion_pipeline import progress, fen_orchestrator, fen_workers
+from chessism_api.operations.ingestion_pipeline import progress, fen_orchestrator
 from chessism_api.operations.cloud_analysis.result_receipts import task_receipts, completion_manifest
 from cleaning_job.local_artifacts import plan, encode, digest
 
@@ -210,11 +210,6 @@ class CleanupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(list(path.parent.iterdir()), [path])
             self.assertEqual(backup_files.read_json(path, {}), {'status': 'original'})
 
-    def test_failures_go_to_worker_logging_not_repository(self):
-        with self.assertLogs(fen_workers.logger, level='ERROR') as logs:
-            fen_workers._write_failures('worker', [{'game': 123, 'error': 'bad move'}])
-        self.assertIn('worker', logs.output[0])
-        self.assertIn('bad move', logs.output[0])
 
     def test_task_receipts_are_isolated_and_original_not_modified(self):
         first = {'sha256': 'batch', 'records': [{'id': 'a', 'object': 'tasks/000000/batches/000000.json', 'sha256': 'a'}]}

@@ -1,7 +1,6 @@
 import unittest
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_score_position_page as pages
 from chessism_api.database.postgresql import player_position_reads as reads
 from chessism_api.operations.player_blunder_page import blunder_rows_sql
@@ -16,7 +15,7 @@ def result(rows):
 
 class QueryTests(unittest.TestCase):
     def setUp(self):
-        self.session = SimpleNamespace(info={SESSION_KEY: RelationalStorage('core', 'archive', 'reads')})
+        self.session = SimpleNamespace()
 
     def test_bound_occurrences_before_scores_no_frequency_ranking(self):
         sql = reads.EXAMPLE_OCCURRENCES
@@ -53,7 +52,7 @@ class QueryTests(unittest.TestCase):
         self.assertNotIn('canonical_blunder_engine', sql)
         self.assertNotIn('saved.blunder_count', sql)
         self.assertIn('UNION ALL', sql)
-        self.assertIn('game_player_id=gp.id', sql)
+        self.assertIn('game_link=gp.game_link AND is_white=gp.is_white', sql)
 
 
 class PageTests(unittest.IsolatedAsyncioTestCase):

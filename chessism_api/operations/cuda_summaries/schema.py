@@ -1,4 +1,4 @@
-"""Additive manual-run state. Installation never starts calculations."""
+"""Canonical manual-run controls. Only the empty initializer owns their schema."""
 from sqlalchemy import text
 
 CONTROL = 'public.cuda_summary_control'

@@ -7,23 +7,20 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 os.environ.setdefault('DATABASE_URL', 'postgresql+asyncpg://test:test@localhost/test')
 
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_score_distribution as scores
 from chessism_api.operations import player_score_histogram as batches
 
 
 class QueryTests(unittest.TestCase):
     def test_histogram_does_not_materialize_distinct_positions_before_scoring(self):
-        session = SimpleNamespace(info={
-            SESSION_KEY: RelationalStorage('candidate', 'archive', 'reads', 'relational_v3'),
-        })
+        session = SimpleNamespace()
         query = scores.positions_sql(session)
-        self.assertIn('"candidate"."game_fen_association"', query)
+        self.assertIn('public.game_fen_association', query)
         self.assertNotIn('GROUP BY', query)
         self.assertNotIn('occurrences AS MATERIALIZED', query)
         self.assertIn('WHEN f.score IS NULL', query)
         self.assertIn("f.analysis_source='tablebase'", query)
-        self.assertIn('WHEN o.is_white THEN f.score ELSE -f.score', query)
+        self.assertIn('WHEN o.is_white THEN f.score::bigint ELSE -f.score::bigint', query)
 
     def test_bins_and_page_cursor_contract(self):
         bins = scores.bins()
@@ -162,7 +159,7 @@ class HistogramServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_counts_cache_and_snapshot_contract(self):
         session = AsyncMock()
-        session.info = {SESSION_KEY: RelationalStorage('candidate', 'archive', 'reads', 'relational_v3')}
+        session.info = {}
         context = MagicMock()
         context.__aenter__ = AsyncMock(return_value=session)
         context.__aexit__ = AsyncMock(return_value=False)
@@ -173,10 +170,10 @@ class HistogramServiceTests(unittest.IsolatedAsyncioTestCase):
             {'mode': 'bullet', 'score_kind': 'mate', 'bin_id': None, 'positions': 1},
         ]
         endings.mappings.return_value.all.return_value = [{'mode': 'bullet', 'games': 3}]
-        session.execute.side_effect = [MagicMock(), endings]
+        session.execute.side_effect = lambda statement,*a,**kw: endings if 'SELECT' in str(statement) else MagicMock()
         redis = AsyncMock()
         redis.get.return_value = None
-        with patch.object(scores, 'AsyncDBSession', return_value=context), \
+        with patch.object(scores, 'AsyncDBSession', return_value=session), \
                 patch.object(scores, 'prepare', AsyncMock()), \
                 patch.object(scores, 'source_state', AsyncMock(return_value='snapshot')), \
                 patch.object(scores, 'read_histogram_batches', AsyncMock(return_value=counts)) as reader, \
@@ -295,7 +292,7 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stale_histogram_is_immediate_until_refresh_requested(self):
         operation = AsyncMock(return_value={'snapshot': 'new', 'stale': False})
-        with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
+        with patch.object(scores, 'AsyncDBSession', return_value=self.session), \
                 patch.object(scores, 'prepare', AsyncMock()), \
                 patch.object(scores, 'source_state', AsyncMock(return_value='new')), \
                 patch.object(scores, 'read_cache', AsyncMock(return_value=self.payload)), \
@@ -320,6 +317,7 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(scores, 'AsyncDBSession', return_value=self.session), \
                 patch.object(scores, 'source_state', AsyncMock()) as revision, \
                 patch.object(scores, 'shared_calculation', AsyncMock()) as calculation, \
+                patch('chessism_api.operations.player_frequency_position_page.read_ranked_page', AsyncMock(return_value=None)), \
                 patch.object(scores, 'read_position_page', AsyncMock(return_value=chunk)) as reader:
             data = await scores.get_positions('player', AsyncMock(), bin_id=6,
                 modes=['bullet'], snapshot='old', cursor='seek')

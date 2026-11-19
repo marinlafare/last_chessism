@@ -119,7 +119,6 @@ async def require_storage_contract(connection, layout: BackupLayout) -> None:
         if not view:
             raise RuntimeError(f'Missing relational read contract: {table}')
     if layout.compact:
-        from .compact_storage import require_compact_contract
         await require_compact_contract(connection, layout)
 
 
@@ -170,3 +169,42 @@ async def validate_backup_contract(url, expected):
         return {'version':layout.version,'schema_matches':True}
     finally:
         await engine.dispose()
+
+
+PLAYER_TABLES = ('months', 'player_stats', 'main_character_mode_summary', 'home_titled_player_summary')
+
+
+async def require_compact_contract(connection, layout):
+    rows = (await connection.execute(text("""SELECT table_schema,table_name,column_name,data_type
+        FROM information_schema.columns WHERE table_schema IN (:core,:archive)"""),
+        {'core':layout.core, 'archive':layout.archive})).mappings().all()
+    types = {(r['table_schema'],r['table_name'],r['column_name']):r['data_type'] for r in rows}
+    expected = {('fen','score'):'integer', ('fen_continuation','score'):'integer',
+        ('game_fen_association','is_white'):'boolean',
+        **{('fen',field):'smallint' for field in ('wdl_win','wdl_draw','wdl_loss')},
+        **{(table,'player_id'):'bigint' for table in PLAYER_TABLES}}
+    if any(types.get((layout.core,table,column)) != kind for (table,column),kind in expected.items()):
+        raise RuntimeError('Compact storage has incorrect column types')
+    if (layout.archive,'moves','id') in types:
+        raise RuntimeError('Archived moves still have the removed identity')
+    for schema,table,keys,kind in (
+        (layout.core,'moves',['link','n_move'],'p'),
+        (layout.archive,'moves',['link','n_move'],'p'),
+        (layout.core,'game_fen_association',['game_link','n_move','is_white'],'u'),
+        (layout.core,'months',['player_id','year','month'],'u'),
+        (layout.core,'player_stats',['player_id'],'p'),
+        (layout.core,'main_character_mode_summary',['mode','player_id'],'p'),
+        (layout.core,'home_titled_player_summary',['player_id'],'p'),
+    ):
+        valid = await connection.scalar(text("""SELECT EXISTS(SELECT 1 FROM pg_constraint k
+            JOIN pg_class t ON t.oid=k.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+            WHERE n.nspname=:schema AND t.relname=:table AND k.contype::text=:kind
+            AND k.convalidated AND ARRAY(SELECT a.attname::text FROM unnest(k.conkey) WITH ORDINALITY x(id,ord)
+                JOIN pg_attribute a ON a.attrelid=t.oid AND a.attnum=x.id ORDER BY x.ord)=CAST(:keys AS text[]))"""),
+            {'schema':schema,'table':table,'keys':keys,'kind':kind})
+        if not valid:
+            raise RuntimeError(f'Missing compact key: {schema}.{table}')
+    for table in PLAYER_TABLES:
+        if not await connection.scalar(text("""SELECT EXISTS(SELECT 1 FROM information_schema.views
+            WHERE table_schema=:schema AND table_name=:table)"""), {'schema':layout.reads,'table':table}):
+            raise RuntimeError(f'Missing compact read adapter: {table}')

@@ -2,6 +2,7 @@
 import hashlib
 import asyncio
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 from sqlalchemy import select, text, func
@@ -12,12 +13,11 @@ from chessism_api.database.postgresql.models import (CloudAnalysisJob, CloudAnal
     CloudInputPreparation, CloudInputChunk, CloudJobCancellation, CloudGameDraftCache, Fen)
 from chessism_api.operations.cloud_analysis import input_preparation as prep, input_validation as validation
 from chessism_api.operations.cloud_analysis import game_fen_queue, cancellation
-from chessism_api.operations.cloud_analysis.migrate_input_preparation import upgrade
 from chessism_api.routers.cloud_game_drafts import submit_draft, SubmitDraft
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires disposable PostgreSQL')
-class InputPreparationTests(unittest.IsolatedAsyncioTestCase):
+class InputPreparationTests(CanonicalDatabaseTestCase):
     asyncTearDown = draft_tests.DraftDatabaseTests.asyncTearDown
 
     async def asyncSetUp(self):
@@ -171,7 +171,7 @@ class InputPreparationTests(unittest.IsolatedAsyncioTestCase):
         await prep.begin(self.job,3)
         await game_fen_queue.ensure_queue(self.job.id,[101,102,103])
         async with AsyncDBSession() as s,s.begin():
-            (await s.get(Fen,self.fens[0])).score=0
+            (await s.scalar(select(Fen).where(Fen.fen == self.fens[0]))).score=0
             other=CloudAnalysisRun(id='e'*32,job_id=self.job.id,status='complete',positions=[],launch={},receipts={})
             s.add(other);await s.flush()
             s.add(CloudFenClaim(fen=self.fens[2],run_id=other.id))
@@ -198,8 +198,6 @@ class InputPreparationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(await s.get(CloudGameDraftCache,self.draft['id']))
 
     async def test_sealing_rejects_missing_staged_input_and_migration_repeats(self):
-        async with self.engine.begin() as c:
-            await c.run_sync(upgrade); await c.run_sync(upgrade)
         await prep.begin(self.job,3);await self.step()
         async with AsyncDBSession() as s,s.begin():
             await s.execute(text('DELETE FROM cloud_input_chunk'))

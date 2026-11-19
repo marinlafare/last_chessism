@@ -126,3 +126,20 @@ async def position_counts(session, links):
     _require_transaction(session)
     result = await session.execute(text(POSITION_COUNTS_SQL), {'game_links': list(links)})
     return dict(result.mappings().one())
+
+
+async def game_record(session, link):
+    """The existing game-information payload, derived from canonical relationships."""
+    _require_transaction(session)
+    result = await session.execute(text('''SELECT g.link,w.player_name AS white,b.player_name AS black,
+        extract(year FROM g.played_at)::int AS year,extract(month FROM g.played_at)::int AS month,
+        extract(day FROM g.played_at)::int AS day,extract(hour FROM g.played_at)::int AS hour,
+        extract(minute FROM g.played_at)::int AS minute,extract(second FROM g.played_at)::int AS second,
+        g.white_elo,g.black_elo,g.white_result,g.black_result,g.white_str_result,g.black_str_result,
+        g.time_control,m.name AS mode,g.played_at,
+        (g.white_elo::double precision+g.black_elo)/2.0 AS avg_elo,
+        g.eco,g.time_elapsed,g.n_moves,g.fens_done,g.rules,g.initial_setup,g.fens_processing
+        FROM public.game g JOIN public.player w ON w.id=g.white_player_id
+        JOIN public.player b ON b.id=g.black_player_id
+        LEFT JOIN public.game_mode m ON m.id=g.mode_id WHERE g.link=:link'''), {'link':link})
+    return [dict(row) for row in result.mappings()]

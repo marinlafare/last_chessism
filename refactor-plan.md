@@ -1324,10 +1324,19 @@ bytes, unknown metadata, rollback/cancellation, snapshot/late commits and malfor
 inputs. This resolves the final known live compact-storage backup consumer.
 
 
-## In progress — A4 obsolete storage retirement
+## Completed implementation — A4 obsolete storage retirement (acceptance pending)
 Remove unused DBInterface/ask_db/profile adapters and historical migration/repair
 commands after dependency inventory. Keep old archive validators read-only and
 AST-identical. Keep model adoption/rollback and active bounded ingestion. Port
 current query/transaction tests; map retired migration-specific identities in
 storage-retirement-tests.json. Verify import closure, native persistence and P1
 checks; reserve one broader comparison for the Stage A boundary.
+
+
+## Stage A boundary — implementation verified, independent review pending
+A2 native writes, A3 required reads/feature consumers and A4 runtime retirement are
+implemented. Schema17 is the sole runtime contract. Supported backup validators
+remain; no original database or recovery archive was read or changed. Final broad
+comparison and focused follow-ups are recorded in the manifest and acceptance
+packet. Existing unrelated test debt remains explicit. No Stage B/C work authorized
+by this completion record. Independent acceptance has not occurred.

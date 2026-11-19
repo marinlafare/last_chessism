@@ -2,6 +2,7 @@
 import json
 import time
 import unittest
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from uuid import uuid4
 from sqlalchemy import select, text
 import test_cloud_analysis_database as existing
@@ -12,7 +13,7 @@ from chessism_api.operations.cloud_analysis import draft_cache, game_drafts
 
 
 @unittest.skipUnless(existing.TEST_URL, 'requires explicitly isolated PostgreSQL')
-class DraftCacheTiming(unittest.IsolatedAsyncioTestCase):
+class DraftCacheTiming(CanonicalDatabaseTestCase):
     asyncSetUp = fixtures.DraftDatabaseTests.asyncSetUp
     asyncTearDown = fixtures.DraftDatabaseTests.asyncTearDown
     add = fixtures.DraftDatabaseTests.add
@@ -20,14 +21,14 @@ class DraftCacheTiming(unittest.IsolatedAsyncioTestCase):
     async def test_add_delta_against_full_union(self):
         async with AsyncDBSession() as s, s.begin():
             await s.execute(text("""INSERT INTO fen(fen,n_games,moves_counter)
-                SELECT 'draft-benchmark-'||i,1,'{}' FROM generate_series(1,100500) i"""))
+                SELECT 'draft-benchmark-'||i||' w - -',1,'{}' FROM generate_series(1,100500) i"""))
             # Repeated appearances make the old association scan substantially
             # larger than its unique set; these are synthetic, not chess games.
-            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,move_color)
-                SELECT 101,fen_id,repeat,'white' FROM fen CROSS JOIN generate_series(1,10) repeat
+            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,is_white)
+                SELECT 101,fen_id,((fen_id-4)*10+repeat+2)::int,true FROM fen CROSS JOIN generate_series(1,10) repeat
                 WHERE fen LIKE 'draft-benchmark-%' AND fen_id <= 100003"""))
-            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,move_color)
-                SELECT 102,fen_id,1,'white' FROM fen
+            await s.execute(text("""INSERT INTO game_fen_association(game_link,fen_id,n_move,is_white)
+                SELECT 102,fen_id,(fen_id+2)::int,true FROM fen
                 WHERE fen LIKE 'draft-benchmark-%' AND fen_id > 99503"""))
             await s.execute(text('ANALYZE fen'))
             await s.execute(text('ANALYZE game_fen_association'))

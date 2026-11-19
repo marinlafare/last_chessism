@@ -5,10 +5,10 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
-from sqlalchemy import select
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.models import Game, to_dict
+from chessism_api.database.postgresql.game_analysis_reads import game_record
+from chessism_api.database.postgresql.transactions import read_transaction
 from chessism_api.operations.ingestion_pipeline import PARSING_GAMES
 from chessism_api.operations.ingestion_pipeline.chesscom import download_months
 from chessism_api.operations.ingestion_pipeline.fen_orchestrator import (
@@ -66,9 +66,8 @@ async def _write_game_job_progress(
 
 
 async def read_game(link: int | str) -> list[dict[str, Any]]:
-    async with AsyncDBSession() as session:
-        result = await session.execute(select(Game).where(Game.link == int(link)))
-        return [to_dict(game) for game in result.scalars().all()]
+    async with read_transaction(AsyncDBSession) as session:
+        return await game_record(session, int(link))
 
 
 def _successful_archive_months(
