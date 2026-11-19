@@ -1851,3 +1851,84 @@ Both attempts, including the original pre-test Git crash, archived, read back an
 byte-checked at docs/architecture/evidence/stage-a-catalogs-2026-11-18.tar.gz.
 Original DB/checkpoint/services remain untouched. Stage A is incomplete/unaccepted.
 Next: canonical chart drill-down and behavioural activity/rating/day consumers.
+
+### Canonical chart and behavioural reads — started 2026-11-18
+
+Catalog/rating gate committed locally as 479a062; clean tree confirmed. Scope is
+chart metadata drill-down and the three behavioural activity/rating/day readers.
+Preserve calculations and saved/manual paths; replace obsolete side-view fields
+with concrete canonical SQL in one guarded read snapshot. No schema changes.
+Focused PostgreSQL/route/error/cancellation gate follows before the next commit.
+
+Chart and behavioural conversion prepared. One fixed canonical game-side projection
+replaces field-driven profile rewriting; operations own guarded readonly snapshots.
+No schema changes. Day ties are deterministic; other response and presentation
+statements are AST-identical. Other hero definitions are unchanged. Existing tests
+are untouched; 19 new PostgreSQL cases use independent source-record oracles.
+
+Prepared focused gate: 63 schema/chart/activity/catalog/metadata + 25 calculation/
+transaction/time-filter + all 68 P1 = 156 checks. Includes DST/mean zones, live and
+saved ratings, cache/manual paths, pagination, snapshot concurrency, real timeouts,
+readonly failures and repeated cancellation. No skips allowed. Python syntax and
+git diff --check pass. Runtime checks have not run yet. Frozen inputs and a launch
+barrier prevent source/Git scans before all tracking writes finish.
+Monitor: /tmp/chessism-canonical-a3-activity-20261118-01/monitor.py.
+Original DB/checkpoint/services are untouched; Stage A remains incomplete/unaccepted.
+
+Chart/activity gate launched: supervisor PID 986288; startup confirmed.
+Tracking writes completed before release of launch-ready.
+Monitor: `python3 /tmp/chessism-canonical-a3-activity-20261118-01/monitor.py`. Returning control without polling.
+Review results, source hashes and owned cleanup before the local commit.
+
+### Chart/activity gate 1 — passed PostgreSQL; existing test debt detected
+
+All 63 PostgreSQL checks passed, including the 19 new regressions. The 25-check
+workflow suite reported zero failures/skips and eight errors across three existing
+time-result-filter methods (six error reports are subtests of one method). Its mock
+supplies four execute results while the unchanged explorer makes three SET calls
+plus summary/page queries. The fourth method and other 21 workflow tests passed.
+P1 was not started. Supervisor exited in 31.26 seconds; all four owned containers
+removed, independently confirmed by exact-label Docker inspection. All 1,765 frozen
+inputs match. No application, test or schema edits are needed for this failure.
+
+The exact eight error identities already appear in the approved API baseline.
+Historical /tmp traces are no longer available after restart, so four tests were
+reproduced against unchanged HEAD 479a062 using read-only committed-file overlays,
+the same cached Python 3.10 image, no network and no services. The 1.24-second probe
+reproduced all eight traceback details byte-for-byte, with no other failures/skips.
+Its one labelled container was removed. Raw result/command/overlays/comparison are
+saved under activity launch 1 / unchanged-baseline. Existing tests remain untouched.
+
+The ephemeral continuation gate requires that exact error list/details and raw
+exit code 1 only for the workflow suite; every other check requires zero errors.
+This applies the already-approved baseline exception, not a new allowance or skip.
+Unresolved debt remains for the later explorer conversion/A4; the 19 real PostgreSQL
+checks meaningfully verify this chunk independently of those obsolete mock counts.
+Reuse the 63 passed PostgreSQL checks only with all frozen hashes and result digest
+unchanged; run the remaining 25 workflow + 68 P1 checks. The 156-check focused gate
+will retain eight existing error reports across three methods, not claim all passed.
+Continuation: /tmp/chessism-canonical-a3-activity-20261118-02/monitor.py.
+No full-suite repetition, application changes, skipped tests or live resource access.
+
+Chart/activity continuation launched: supervisor PID 1015643; startup confirmed.
+63 passed PostgreSQL checks reused by exact frozen-source comparison; 93 checks run,
+with only the eight exact approved workflow error reports allowed.
+Monitor: `python3 /tmp/chessism-canonical-a3-activity-20261118-02/monitor.py`. Returning control without polling.
+Tracking writes complete before releasing launch-ready.
+
+### Chart/activity verification complete — 2026-11-18
+
+Continuation finished in 8.94 seconds. All 68 P1 checks pass; the 25-method workflow
+suite has exactly the eight approved error details across three existing methods,
+22 passes, zero failures and zero skips. Reused all 63 passed PostgreSQL checks after
+exact source and result-digest validation. Combined: 156 methods, 153 passing, three
+existing erroring methods; eight error reports, no additional errors/failures/skips.
+All 19 new regressions pass. Raw/structured results agree on Python 3.10.22. Every
+one of the 1,765 frozen hashes still matches. Supervisor exited; all three owned
+containers removed and independently confirmed absent by exact-label inspection.
+
+Both launches and the unchanged-HEAD baseline probe were archived, read back and
+byte-checked in docs/architecture/evidence/stage-a-activity-2026-11-18.tar.gz.
+No application/test edits after the passing comparison. Local checkpoint follows.
+Original DB/checkpoint/services remain untouched. No push/merge/deploy. Stage A
+incomplete/unaccepted; remaining engine/FEN chart consumers are next.

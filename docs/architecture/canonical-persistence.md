@@ -770,3 +770,44 @@ standard eligibility and self-play, deletion/recreation, Redis errors, snapshot
 consistency, read-only rejection, actual database timeouts, repeated cancellation,
 real routes and prior cached visibility after expensive source loss. Broader explorer,
 hero, score-based and CUDA conversion/acceptance remain subsequent Stage A work.
+
+## Chart drill-down and behavioural activity reads
+
+`player_activity_reads.py` now reads canonical game/player/mode relationships for
+rating/outcome/opponent/opening drill-down, activity histograms, daily ratings and
+day observations. One fixed game-side projection replaces dynamic field selection
+and storage-profile query rewriting. Self-play retains two sides; standard/nonempty
+eligibility matches the catalog and metadata publisher. All-mode activity and day
+views include daily and unknown modes, while charts/rating series use the three
+supported clock modes. Canonical timestamps are required, so no year-one null-date
+cursor sentinel is needed. Opponent names are joined only for the selected page.
+
+Operations own a guarded read-only REPEATABLE READ transaction covering profile,
+snapshot selection and live data. Adapters require that transaction; five-second
+statement and one-second lock limits bound database waits. Database exceptions
+and cancellation propagate after guarded cleanup. The shared profile/timezone
+lookup is already canonical; its other engine-based consumers remain for their
+own conversion. This chunk adds no schema, compatibility alias or service layer.
+
+Existing calculation/response code is retained, including single/mean-zone local
+calendar handling, snapshot staleness/manual ownership, sparse saved ratings and
+dense live ratings. Chart pagination retains timestamp/link/color ordering and
+filter-bound cursors. Day observations now resolve equal timestamp/link ties as
+white then black, matching the last-rating winner. No account or public route
+contract changes are introduced. The legacy cross-profile scripts' activity and
+rating assertions are mapped to fresh canonical PostgreSQL records rather than
+running obsolete schemas; their remaining unrelated assertions stay pending A4.
+
+Nineteen new PostgreSQL cases cover independent record-based values, local midnight,
+DST gaps/repeated hours and mean-zone windows, saved/live consistency, manual and
+stale snapshots, eligibility and empty profiles, catalog/chart membership, keyset
+pagination and self-play, invalid cursors/filters, concurrent writes, actual database
+timeouts/readonly rejection, repeated cancellation and real API route responses.
+Focused verification completed: 156 test methods, 153 passed, and the eight approved
+error reports across three existing time-result-filter methods. All 19 new cases
+and 68 P1 checks passed; no new errors, failures or skips. The 63 passed PostgreSQL
+checks were reused only after verifying all 1,765 frozen source hashes and results.
+The exact legacy mock failures were reproduced against unchanged HEAD; tests and
+assertions remain intact. Raw results, baseline reproduction and source/cleanup
+records are archived in `evidence/stage-a-activity-2026-11-18.tar.gz`.
+Stage A remains incomplete and unaccepted.

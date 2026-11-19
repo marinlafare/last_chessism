@@ -5,12 +5,10 @@ import hashlib
 import json
 from datetime import datetime, timezone
 
-from sqlalchemy import text
-
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_reads import player_rows_sql
+from chessism_api.database.postgresql import player_activity_reads as reads
+from chessism_api.database.postgresql.transactions import read_transaction
 from chessism_api.operations.player_hero_analytics import _analytics_scope
-from chessism_api.database.postgresql.player_catalog_reads import OPENING_KEY_SQL
 
 RESULTS = {'win': 1, 'draw': 0.5, 'loss': 0}
 
@@ -24,15 +22,14 @@ def selection_filter(scope_kind, rating_from, result, *, opponent=None, opening=
         if scope_kind == 'opponent':
             if not isinstance(opponent, str) or not 1 <= len(opponent.strip()) <= 128 or opening is not None:
                 raise ValueError('Choose an opponent without an opening filter.')
-            clause, params, label = 'gp.opponent_name=:opponent', {'opponent': opponent.strip().lower()}, f'Games against {opponent.strip()}'
+            params, label = {'opponent': opponent.strip().lower()}, f'Games against {opponent.strip()}'
         else:
             if not isinstance(opening, str) or len(opening) > 2048 or opponent is not None:
                 raise ValueError('Choose an opening without an opponent filter.')
-            clause, params, label = f'{OPENING_KEY_SQL}=:opening', {'opening': opening}, opening or 'Unknown opening'
+            params, label = {'opening': opening}, opening or 'Unknown opening'
         if color:
-            clause += ' AND gp.color=:color'
             params['color'] = color
-        return clause, params, label
+        return params, label
     if opponent is not None or opening is not None or color is not None:
         raise ValueError('Opponent, opening and color filters require a catalog scope.')
     if scope_kind == 'rating':
@@ -40,14 +37,11 @@ def selection_filter(scope_kind, rating_from, result, *, opponent=None, opening=
             raise ValueError('rating_from must be the lower edge of a 10-point rating bin.')
         if result is not None:
             raise ValueError('A rating-bin selection cannot also specify a result.')
-        return ('gp.rating > 0 AND gp.rating >= :rating_from AND gp.rating < :rating_to',
-                {'rating_from': rating_from, 'rating_to': rating_from + 10}, f'Rating {rating_from}–{rating_from + 9}')
+        return ({'rating_from': rating_from, 'rating_to': rating_from + 10}, f'Rating {rating_from}–{rating_from + 9}')
     if scope_kind == 'result':
         if result not in RESULTS or rating_from is not None:
             raise ValueError('Choose win, draw or loss without a rating-bin filter.')
-        # The existing Results chart counts games with a recorded start date.
-        return ('gp.result = :game_result AND gp.played_at IS NOT NULL',
-                {'game_result': RESULTS[result]}, {'win': 'Wins', 'draw': 'Draws', 'loss': 'Losses'}[result])
+        return ({'game_result': RESULTS[result]}, {'win': 'Wins', 'draw': 'Draws', 'loss': 'Losses'}[result])
     raise ValueError('Unsupported chart selection.')
 
 
@@ -67,46 +61,23 @@ def decode_cursor(cursor, fingerprint):
 
 
 async def explore_chart_games(player_name, *, scope_kind, modes, rating_from, result,
-                              timezone_name, limit, cursor, opponent=None, opening=None, color=None):
-    clause, selection_params, label = selection_filter(
+                              timezone_name, limit, cursor, opponent=None, opening=None, color=None,
+                              session_factory=None):
+    selection_params, label = selection_filter(
         scope_kind, rating_from, result, opponent=opponent, opening=opening, color=color)
-    async with AsyncDBSession() as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-        await session.execute(text("SET LOCAL statement_timeout='5s'"))
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        await reads.read_limits(session)
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
         identity = [scope.player, scope_kind, sorted(modes), rating_from, result]
         if scope_kind in ('opponent', 'opening'):
             identity.extend([opponent, opening, color])
         fingerprint = hashlib.sha256(json.dumps(identity).encode()).hexdigest()
         cursor_time, cursor_id, cursor_color = decode_cursor(cursor, fingerprint)
-        fields = ('link', 'color', 'played_at', 'mode', 'rating', 'opponent_rating', 'result')
-        if scope_kind == 'opponent':
-            fields += ('opponent_name',)
-        elif scope_kind == 'opening':
-            fields += ('eco',)
-        query = player_rows_sql(session, f'''
-            WITH selected AS MATERIALIZED (
-                SELECT gp.link AS game_link, gp.color AS player_color, gp.played_at,
-                    gp.mode, gp.rating, gp.opponent_rating, gp.result,
-                    COALESCE(gp.played_at, TIMESTAMPTZ '0001-01-01 00:00:00+00') AS cursor_time
-                FROM game_player gp
-                WHERE gp.player_name=:player AND gp.mode = ANY(CAST(:modes AS text[]))
-                  AND ({clause})
-                  AND (CAST(:cursor_time AS timestamptz) IS NULL OR
-                       (COALESCE(gp.played_at, TIMESTAMPTZ '0001-01-01 00:00:00+00'), gp.link, gp.color) <
-                       (CAST(:cursor_time AS timestamptz), CAST(:cursor_id AS bigint), CAST(:cursor_color AS text)))
-                ORDER BY cursor_time DESC, gp.link DESC, gp.color DESC
-                LIMIT :limit
-            )
-            SELECT selected.*, CASE WHEN selected.player_color='white' THEN g.black ELSE g.white END AS opponent_name
-            FROM selected LEFT JOIN game g ON g.link=selected.game_link
-            ORDER BY selected.cursor_time DESC, selected.game_link DESC, selected.player_color DESC
-        ''', fields)
-        rows = (await session.execute(query, {
+        rows = await reads.chart_games(session, scope_kind, {
             'player': scope.player, 'modes': modes, **selection_params,
             'cursor_time': cursor_time, 'cursor_id': cursor_id, 'cursor_color': cursor_color,
             'limit': limit + 1,
-        })).mappings().all()
+        })
     has_more = len(rows) > limit
     selected = rows[:limit]
     games = []

@@ -12,6 +12,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql import player_activity_reads as activity_reads
+from chessism_api.database.postgresql.transactions import read_transaction
 from chessism_api.accuracy import lichess_winning_chances
 from chessism_api.operations.player_game_scores import refresh_game_player_engine_summaries
 from chessism_api.operations.player_timezone import (
@@ -144,30 +146,13 @@ async def get_player_behavioural_activity(
     mode: str = "all",
     date_from: date | None = None,
     date_to: date | None = None,
+    *, session_factory=None,
 ) -> dict[str, Any]:
-    query = text(f"""
-        SELECT
-            gp.mode,
-            EXTRACT(ISODOW FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS weekday,
-            EXTRACT(HOUR FROM {PLAYER_LOCAL_TIMESTAMP_SQL})::int AS hour,
-            COUNT(*)::bigint AS games,
-            COUNT(*) FILTER (WHERE gp.result = 1)::bigint AS wins,
-            COUNT(*) FILTER (WHERE gp.result = 0.5)::bigint AS draws,
-            COUNT(*) FILTER (WHERE gp.result = 0)::bigint AS losses
-        FROM game_player gp
-        WHERE gp.player_name = :player
-          AND (:mode = 'all' OR gp.mode = :mode)
-          AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
-          AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-          AND gp.played_at IS NOT NULL
-        GROUP BY gp.mode, weekday, hour
-        ORDER BY gp.mode, weekday, hour
-    """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        await activity_reads.read_limits(session)
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
-        from chessism_api.database.postgresql.relational_reads import player_rows_sql
         from .player_analytics_summary import read_snapshot
         mode = scope.mode
         saved = await read_snapshot(session, scope.player, 'activity_daily' if date_from or date_to else 'activity')
@@ -178,8 +163,7 @@ async def get_player_behavioural_activity(
                     and (not date_from or row['date'] >= date_from.isoformat())
                     and (not date_to or row['date'] <= date_to.isoformat())]
         else:
-            result = await session.execute(player_rows_sql(session,query,('mode','played_at','result')), scope.params())
-            rows = result.mappings().all()
+            rows = await activity_reads.activity(session, scope.params())
 
     aggregate = _summarize_activity_rows(rows)
     by_mode = {
@@ -202,33 +186,10 @@ async def get_player_behavioural_ratings(
     mode: str = "all",
     date_from: date | None = None,
     date_to: date | None = None,
+    *, session_factory=None,
 ) -> dict[str, Any]:
-    query = text(f"""
-        WITH ranked AS (
-            SELECT
-                gp.mode,
-                gp.rating,
-                gp.link,
-                gp.played_at,
-                ({PLAYER_LOCAL_TIMESTAMP_SQL})::date AS local_date,
-                ROW_NUMBER() OVER (
-                    PARTITION BY gp.mode, ({PLAYER_LOCAL_TIMESTAMP_SQL})::date
-                    ORDER BY gp.played_at DESC, gp.link DESC, gp.color ASC
-                ) AS day_rank
-            FROM game_player gp
-            WHERE gp.player_name = :player
-              AND (:mode = 'all' OR gp.mode = :mode)
-              AND gp.mode IN ('bullet', 'blitz', 'rapid')
-              AND (CAST(:date_from_utc AS timestamptz) IS NULL OR gp.played_at >= CAST(:date_from_utc AS timestamptz))
-              AND (CAST(:date_to_utc AS timestamptz) IS NULL OR gp.played_at < CAST(:date_to_utc AS timestamptz))
-              AND gp.played_at IS NOT NULL
-        )
-        SELECT mode, rating, link, played_at, local_date
-        FROM ranked
-        WHERE day_rank = 1
-        ORDER BY mode, local_date
-    """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        await activity_reads.read_limits(session)
         scope = await _analytics_scope(
             session, player_name, mode, date_from, date_to
         )
@@ -252,12 +213,7 @@ async def get_player_behavioural_ratings(
                      'played_at_utc': row['played_at'], 'played_at_local': row['played_at_local']}
                     for row in rows if row['mode'] == selected]}
                     for selected in ([mode] if mode != 'all' else CHART_MODES)]}
-        from chessism_api.database.postgresql.relational_reads import player_ratings_sql
-        result = await session.execute(
-            player_ratings_sql(session, query, local_timestamp_sql=player_local_timestamp_sql('g')),
-            scope.params(),
-        )
-        rows = result.mappings().all()
+        rows = await activity_reads.ratings(session, scope.params())
 
     modes = [mode] if mode != "all" else list(CHART_MODES)
     observed_dates = [row["local_date"] for row in rows]
@@ -293,21 +249,14 @@ async def get_player_behavioural_day(
     player_name: str,
     target_date: date,
     mode: str = "all",
+    *, session_factory=None,
 ) -> dict[str, Any]:
-    async with AsyncDBSession() as session:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        await activity_reads.read_limits(session)
         scope = await _analytics_scope(
             session, player_name, mode, target_date, target_date
         )
-        result = await session.execute(text("""
-            SELECT gp.link, gp.mode, gp.rating, gp.result, gp.played_at
-            FROM game_player gp
-            WHERE gp.player_name = :player
-              AND (:mode = 'all' OR gp.mode = :mode)
-              AND gp.played_at >= CAST(:date_from_utc AS timestamptz)
-              AND gp.played_at < CAST(:date_to_utc AS timestamptz)
-            ORDER BY gp.played_at, gp.link
-        """), scope.params())
-        rows = result.mappings().all()
+        rows = await activity_reads.day(session, scope.params())
 
     hours = [_activity_bucket(hour=hour) | {"ratings": [], "last_rating": None} for hour in range(24)]
     for row in rows:

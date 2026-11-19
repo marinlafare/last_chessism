@@ -190,6 +190,39 @@ minimums, metadata eligibility and rating ties, identity/cache/error/cancellatio
 paths, real routes, prior metadata tests and relevant P1 checks. No full suite.
 Explorer/hero/score-based analytics remain subsequent consumer conversions.
 
+## Completed logical change — canonical chart and behavioural reads (156 checks; existing baseline debt)
+
+Entry: catalogs/rating distribution passed 138 checks; local commit `479a062`.
+Convert chart metadata drill-down plus behavioural activity, daily ratings and day
+observations to one concrete canonical game-side reader. Keep public response shapes,
+filter validation, opening normalization, two self-play sides, chart keyset ordering,
+local calendar/DST policy, saved/manual snapshot semantics and dense live-rating gaps.
+All-mode activity/day includes daily and unknown modes; chart/rating series includes
+only bullet/blitz/rapid. Preserve standard/nonempty eligibility. Make same-instant
+day-observation ties deterministic (white then black, consistent with last rating).
+
+Files: operations/player_chart_games.py; first three behavioural readers in
+operations/player_hero_analytics.py; database/postgresql/player_activity_reads.py;
+tests/check_canonical_activity_postgres.py; tracking and canonical persistence docs.
+No schema changes or new generic abstraction. Operations own the shared guarded read
+transaction, including profile resolution and saved/live selection. Leave the shared
+already-canonical profile lookup and remaining engine-dependent hero consumers for
+their conversion; do not expand this chunk to rewrite unrelated measures.
+
+Focused gate: independent PostgreSQL records for filters, pagination/ties, chart
+membership, timezone windows/DST, sparse saved and dense live ratings, empty/missing
+profiles, manual/stale snapshots, consistent reads under concurrent writes, database
+errors/timeouts, repeated cancellation, and actual HTTP routes. Keep prior catalog,
+metadata and applicable pure/timezone/P1 checks. No broad suite or live services.
+
+Chart/activity verification note: the first run passed all 63 PostgreSQL checks.
+Its workflow group includes three existing erroring time-filter methods (eight
+error reports). Unchanged HEAD reproduces identical tracebacks and historical
+approved identities. Keep those tests and require the exact exception details;
+require all new checks and P1 checks to pass. Reuse the 63 passed checks only while
+all source hashes match, then complete the remaining 93 checks. Do not repair the
+legacy explorer mock in this chart/behavioural conversion.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.
