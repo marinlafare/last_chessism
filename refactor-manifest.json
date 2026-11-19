@@ -6345,72 +6345,45 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical chart and behavioural reads \u2014 verified, local commit pending",
+      "current_gate": "canonical bounded FEN popups \u2014 passed, local commit pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
-        "status": "passed_with_existing_baseline_debt",
-        "attempt": 2,
-        "entry_commit": "479a062bd4b15fa4cbfa734f299d54d40f3e4d3d",
-        "evidence_directory": "/tmp/chessism-canonical-a3-activity-20261118-02",
-        "previous_evidence_directory": "/tmp/chessism-canonical-a3-activity-20261118-01",
+        "status": "passed",
+        "attempt": 1,
+        "entry_commit": "f8ddc099e8708bd4dc33d98c1d620a242941147e",
+        "evidence_directory": "/tmp/chessism-canonical-a3-fen-popups-20261118-01",
         "expected_checks": {
-          "foundation": 63,
-          "workflow": 25,
+          "foundation": 56,
+          "workflow": 35,
           "p1": 68
         },
-        "total_checks": 156,
-        "executed_checks": 93,
-        "reused_passed_checks": 63,
-        "expected_existing_error_reports": 8,
-        "expected_existing_errored_methods": 3,
-        "frozen_source_files": 1765,
-        "protected_baseline_files": 1615,
-        "correction_scope": "Ephemeral gate recognizes the exact existing baseline; application/tests/schema unchanged",
-        "supervisor_pid": 1015643,
+        "total_checks": 159,
+        "frozen_source_files": 1767,
+        "protected_baseline_files": 1610,
+        "supervisor_pid": 1063122,
         "results": {
+          "foundation": {
+            "suite": "foundation",
+            "tests": 56,
+            "failures": 0,
+            "errors": 0,
+            "skips": 0,
+            "elapsed_seconds": 24.428008556365967,
+            "failure_details": [],
+            "error_details": [],
+            "skip_details": [],
+            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+          },
           "workflow": {
             "suite": "workflow",
-            "tests": 25,
+            "tests": 35,
             "failures": 0,
-            "errors": 8,
+            "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.19447779655456543,
+            "elapsed_seconds": 1.1040372848510742,
             "failure_details": [],
-            "error_details": [
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_clearing_result_returns_unfiltered_time_bin",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 73, in test_clearing_result_returns_unfiltered_time_bin\n    payload = await self.explore(result=None)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='win')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='draw')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='loss')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='win')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='draw')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='loss')",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              },
-              {
-                "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_pagination_keeps_result_and_descending_cursor",
-                "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 84, in test_pagination_keeps_result_and_descending_cursor\n    first = await self.explore(result='loss', limit=1)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
-              }
-            ],
+            "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           },
@@ -6420,57 +6393,41 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 3.688143491744995,
+            "elapsed_seconds": 3.7128231525421143,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "reused_results": {
-          "foundation": {
-            "suite": "foundation",
-            "tests": 63,
-            "failures": 0,
-            "errors": 0,
-            "skips": 0,
-            "elapsed_seconds": 25.203892707824707,
-            "failure_details": [],
-            "error_details": [],
-            "skip_details": [],
-            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
-          }
-        },
-        "total_passed": 153,
-        "existing_error_reports": 8,
-        "existing_errored_methods": 3,
-        "new_errors": 0,
-        "skips": 0,
-        "elapsed_seconds": 8.935027360916138,
-        "source_integrity": "All 1765 frozen hashes match",
+        "total_passed": 159,
+        "elapsed_seconds": 37.15370202064514,
+        "source_integrity": "All 1767 frozen hashes match",
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-activity-877d518179-p1",
+            "container": "chessism-canonical-a3-fen-popups-ae5b4b7b5a-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-activity-877d518179-workflow",
+            "container": "chessism-canonical-a3-fen-popups-ae5b4b7b5a-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-activity-877d518179-redis",
+            "container": "chessism-canonical-a3-fen-popups-ae5b4b7b5a-foundation",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-fen-popups-ae5b4b7b5a-redis",
+            "removed": true
+          },
+          {
+            "container": "chessism-canonical-a3-fen-popups-ae5b4b7b5a-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "baseline_comparison": {
-          "exact_error_details_match": true,
-          "errors": 8,
-          "raw_test_exit_code": 1,
-          "unresolved_test_methods": 3
-        },
-        "evidence_archive": "docs/architecture/evidence/stage-a-activity-2026-11-18.tar.gz",
-        "evidence_archive_sha256": "81ff4c657bc2306ed7812a235f5a9aeebdc1c664b81841fcb48a564ca428298b",
+        "evidence_archive": "docs/architecture/evidence/stage-a-fen-popups-2026-11-18.tar.gz",
+        "evidence_archive_sha256": "01027fd01d01a9459c91ad806117a79860e0a1173eaa72c11ccfd1e44253d13c",
         "commit_pending": true
       },
       "verification_attempts": [
@@ -7520,6 +7477,132 @@
           "evidence_archive_sha256": "b8e1c507777e2442080fbda01be1f8a9f132b0a6d2e7f09d4c67146c045a8980",
           "commit_pending": false,
           "commit": "479a062bd4b15fa4cbfa734f299d54d40f3e4d3d"
+        },
+        {
+          "status": "passed_with_existing_baseline_debt",
+          "attempt": 2,
+          "entry_commit": "479a062bd4b15fa4cbfa734f299d54d40f3e4d3d",
+          "evidence_directory": "/tmp/chessism-canonical-a3-activity-20261118-02",
+          "previous_evidence_directory": "/tmp/chessism-canonical-a3-activity-20261118-01",
+          "expected_checks": {
+            "foundation": 63,
+            "workflow": 25,
+            "p1": 68
+          },
+          "total_checks": 156,
+          "executed_checks": 93,
+          "reused_passed_checks": 63,
+          "expected_existing_error_reports": 8,
+          "expected_existing_errored_methods": 3,
+          "frozen_source_files": 1765,
+          "protected_baseline_files": 1615,
+          "correction_scope": "Ephemeral gate recognizes the exact existing baseline; application/tests/schema unchanged",
+          "supervisor_pid": 1015643,
+          "results": {
+            "workflow": {
+              "suite": "workflow",
+              "tests": 25,
+              "failures": 0,
+              "errors": 8,
+              "skips": 0,
+              "elapsed_seconds": 0.19447779655456543,
+              "failure_details": [],
+              "error_details": [
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_clearing_result_returns_unfiltered_time_bin",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 73, in test_clearing_result_returns_unfiltered_time_bin\n    payload = await self.explore(result=None)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='win')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='draw')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='hour', result='loss')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='win')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='draw')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_every_result_applies_to_both_summary_and_pagination (scope='weekday_hour', result='loss')",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 51, in test_every_result_applies_to_both_summary_and_pagination\n    payload = await self.explore(scope_kind=scope, result=result)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                },
+                {
+                  "test": "tests.test_player_time_result_filters.TimeResultFilterTests.test_pagination_keeps_result_and_descending_cursor",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2237, in _execute_mock_call\n    result = next(effect)\nStopIteration\n\nDuring handling of the above exception, another exception occurred:\n\nTraceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 84, in test_pagination_keeps_result_and_descending_cursor\n    first = await self.explore(result='loss', limit=1)\n  File \"/workspace/tests/test_player_time_result_filters.py\", line 41, in explore\n    return await explorer.explore_player_games('fixture', **{\n  File \"/workspace/chessism_api/operations/player_game_explorer.py\", line 303, in explore_player_games\n    games_result = await session.execute(text(candidates + f\"\"\"\n  File \"/usr/local/lib/python3.10/unittest/mock.py\", line 2241, in _execute_mock_call\n    raise StopAsyncIteration\nStopAsyncIteration\n"
+                }
+              ],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.688143491744995,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "reused_results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 63,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 25.203892707824707,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "total_passed": 153,
+          "existing_error_reports": 8,
+          "existing_errored_methods": 3,
+          "new_errors": 0,
+          "skips": 0,
+          "elapsed_seconds": 8.935027360916138,
+          "source_integrity": "All 1765 frozen hashes match",
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-activity-877d518179-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-activity-877d518179-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-activity-877d518179-redis",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "baseline_comparison": {
+            "exact_error_details_match": true,
+            "errors": 8,
+            "raw_test_exit_code": 1,
+            "unresolved_test_methods": 3
+          },
+          "evidence_archive": "docs/architecture/evidence/stage-a-activity-2026-11-18.tar.gz",
+          "evidence_archive_sha256": "81ff4c657bc2306ed7812a235f5a9aeebdc1c664b81841fcb48a564ca428298b",
+          "commit_pending": false,
+          "commit": "f8ddc099e8708bd4dc33d98c1d620a242941147e"
         }
       ]
     }

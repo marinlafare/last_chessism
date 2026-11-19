@@ -811,3 +811,46 @@ The exact legacy mock failures were reproduced against unchanged HEAD; tests and
 assertions remain intact. Raw results, baseline reproduction and source/cleanup
 records are archived in `evidence/stage-a-activity-2026-11-18.tar.gz`.
 Stage A remains incomplete and unaccepted.
+
+## Bounded FEN popups
+
+`player_position_reads.py` contains the canonical queries for selected-FEN game
+pages and bounded score-matching examples. The former keeps rare/common occurrence
+strategies, distinct games, player-side/mode filtering and descending date/link
+pagination. Direct game ownership replaces a redundant legacy side-membership
+check. Required timestamps eliminate the null-date/year-one cursor path. No new
+index or schema version is introduced; large historical workloads remain unmeasured.
+
+Matching examples seek the actual `(game_link,n_move,is_white)` association key.
+The opaque cursor now carries the owner side, move number and occurrence ply side;
+version 5 is distinct from the saved-frequency cursor's version 4. Null move/ply
+means a completed game; move zero remains a real position. Old example cursors are
+rejected with the existing reopen-list error. This replaces a removed synthetic
+occurrence ID without a compatibility encoder or another stored identity.
+
+Keep 32 owner-sides per batch, 512 inspected occurrences, ten displayed examples,
+lazy board-text fetching and per-page FEN/owner-side deduplication. Empty/sparse
+pages can carry continuation cursors; these are matching examples, not globally
+ranked or globally deduplicated results. Score intervals, player perspective,
+mate/tablebase exclusions and zero scores retain their meaning. Both public
+operations own guarded readonly snapshots and bounded SQL waits; the low-level
+example reader borrows that transaction.
+
+All eleven popup unit cases remain, using canonical SQL and natural-key cursor
+fixtures. Two existing score-distribution cases now use the new cursor and explicit
+session ownership, with additional begin/commit/close assertions. The unrelated
+blunder query test is unchanged. Fifteen new PostgreSQL tests exercise actual routes,
+rare/common membership, self-play/repetition, same-move and move-zero continuations,
+512-occurrence and empty-game boundaries, score kinds, invalid cursors, snapshot
+consistency, readonly errors, timeouts, constraints and repeated cancellation.
+The old `check_position_games_postgres.py` profile fixture is superseded by these
+contracts; mutable side deletion and null game timestamps are rejected by canonical
+constraints instead of emulated. All 159 focused checks passed with no errors,
+failures or skips, including 15 new PostgreSQL cases and all 68 P1 checks. Source
+hashes match. The results and cleanup evidence are archived in
+`evidence/stage-a-fen-popups-2026-11-18.tar.gz`.
+
+Accuracy/blunder charts require CUDA publication state; they must convert with the
+A3.2 publisher tables. Saved-frequency selection remains unchanged until that same
+conversion. The canonical CPU engine table must not be used as a replacement for
+the GPU-only blunder-count contract. No feature is removed by this sequencing change.

@@ -223,6 +223,43 @@ require all new checks and P1 checks to pass. Reuse the 63 passed checks only wh
 all source hashes match, then complete the remaining 93 checks. Do not repair the
 legacy explorer mock in this chart/behavioural conversion.
 
+## Completed logical change — canonical bounded FEN popups (159 checks passed)
+
+Entry: chart/activity gate verified with exact baseline debt, commit `f8ddc09`.
+Convert selected-FEN game pages and bounded score-matching examples to canonical
+relationships. SQL belongs in database/postgresql/player_position_reads.py; retain
+operations/player_position_games.py and player_score_position_page.py for validation,
+cursors and output. The get_positions boundary in player_score_distribution.py owns
+guarded read cleanup; other histogram/frequency/CUDA paths are unchanged.
+
+Remove the redundant separately stored game-side membership check and nullable-date
+cursor workaround: canonical games own both sides and require timestamps. Preserve
+rare/common FEN strategies, selected player color/modes, distinct game membership,
+date/link pagination and 30-game cap. Examples use native (game_link, n_move, is_white)
+occurrence keys, never an invented sequence ID. Version the opaque example cursor
+and distinguish a completed game from an actual move-zero association explicitly.
+Retain 32-game/512-occurrence scan limits, 10 displayed examples, per-page FEN/owner-
+side deduplication, score bounds/perspective and lazy board fetching. No new DDL.
+
+Files: the two operation modules, get_positions boundary, new concrete adapter,
+tests/test_chart_popup_queries.py, the two affected cases in
+tests/test_player_score_distribution.py, tests/check_canonical_position_popups_postgres.py,
+and tracking/docs. Map existing structural unit tests to the canonical adapter and
+natural key while retaining every behavior/assertion; the unrelated GPU-query test
+is unchanged. Map the legacy isolated position-game script's meaningful assertions
+to canonical fixtures; nullable timestamps/missing sides cannot exist canonically.
+
+Verification: rare/common page equality, self-play, repeated occurrences, structural
+eligibility and FK constraints, scope-bound cursors, same-move plies and move zero,
+sparse/empty batches, score categories/boundaries, cancellation/readonly/timeouts,
+snapshot consistency and actual routes. Include prior FEN-view and chart/P1 checks.
+
+Dependency discovered: accuracy/blunder charts consume CUDA-owned publication tables
+and active-model state, not just CPU engine summaries. Keep those readers with their
+A3.2 publisher conversion; do not replace unknown GPU counts with CPU counts or add
+a compatibility layer merely to finish A3.1 first. Saved frequency publication has
+the same dependency. No feature removal or new stage authorization is needed.
+
 ## Active authorization — Complete Stage A (A2–A4)
 
 Source: `/home/jon/.codex/attachments/babb4ae9-7339-4464-b0fa-baf24184c1f2/Pasted text.txt`.

@@ -1932,3 +1932,52 @@ byte-checked in docs/architecture/evidence/stage-a-activity-2026-11-18.tar.gz.
 No application/test edits after the passing comparison. Local checkpoint follows.
 Original DB/checkpoint/services remain untouched. No push/merge/deploy. Stage A
 incomplete/unaccepted; remaining engine/FEN chart consumers are next.
+
+### Canonical bounded FEN popups — started 2026-11-18
+
+Chart/activity conversion committed as f8ddc09; clean tree confirmed. Next: selected-
+FEN game lists and bounded score-matching examples, with native occurrence keys and
+guarded caller-owned reads. No schema changes. Record the CUDA dependency accurately:
+accuracy/blunder and saved-frequency readers must move with their A3.2 publishers;
+using CPU counts as a fallback would violate the existing GPU-only count contract.
+No public feature is removed. Existing tests retain coverage with natural-key fixture
+updates; real canonical PostgreSQL will replace the old miniature profile schema.
+
+FEN popup conversion prepared. Canonical ownership and native move/ply keys replace
+stored-side/profile checks and synthetic occurrence IDs. Version-5 example cursors
+preserve move zero and distinguish finished games; version-2 position-game scope
+uses numeric profile identity. Public payloads, scan/page limits, score formulas and
+rare/common membership strategies remain. The two request boundaries own guarded
+read transactions. No DDL change or source-data modification.
+
+All eleven popup cases remain; fixture/query assertions now describe native keys
+and the canonical adapter. Two score-distribution cases update cursor/session setup
+and add begin/commit/close assertions. Every other distribution definition and the
+GPU query test are AST-identical. The old miniature-schema position script is mapped
+to 15 real canonical PostgreSQL cases, including schema rejection of null dates and
+mutable side rows. No legacy test was silently skipped or assertion relaxed.
+
+Changed Python parses and git diff --check pass. Prepared 56 foundation + 35 workflow
++ 68 P1 = 159 checks, requiring zero failures/errors/skips. The earlier time-filter
+baseline debt remains recorded; that unchanged unrelated test module is not part
+of this focused FEN gate. Evidence/monitor directory:
+/tmp/chessism-canonical-a3-fen-popups-20261118-01.
+No broad run, production access, push or deployment. Stage A is incomplete/unaccepted.
+
+FEN popup gate launched: supervisor PID 1063122; startup confirmed.
+159 focused checks; frozen source verified. Tracking writes completed before release.
+Monitor: `python3 /tmp/chessism-canonical-a3-fen-popups-20261118-01/monitor.py`. Returning control without polling.
+Review results and owned cleanup before a local checkpoint.
+
+### Bounded FEN popup verification passed — 2026-11-18
+
+56 foundation + 35 workflow + 68 P1 = 159 checks passed, zero failures/errors/skips,
+in 37.15 seconds on Python 3.10.22. All 15 new PostgreSQL regressions pass, including
+both same-move plies and move-zero continuation. Raw and structured results agree.
+All 1,767 frozen hashes match. Supervisor exited; all five owned containers were
+removed, independently confirmed by exact-label Docker inspection.
+
+Evidence archived, read back and byte-checked at
+ docs/architecture/evidence/stage-a-fen-popups-2026-11-18.tar.gz.
+No application/test changes after passing verification. Local checkpoint follows.
+Original database/checkpoint/services remain untouched. Stage A incomplete/unaccepted.

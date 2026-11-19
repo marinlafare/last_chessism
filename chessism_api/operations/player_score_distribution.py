@@ -16,6 +16,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.database.postgresql import player_position_reads as position_reads
 from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_score_histogram import BATCH_SELECTION, read_histogram_batches
 from chessism_api.operations.player_score_position_page import read_position_page
@@ -353,20 +355,15 @@ async def calculate_distribution(player, modes, redis):
         return payload
 
 
-async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=None, color=None):
+async def get_positions(player_name, redis, *, bin_id, modes, snapshot, cursor=None, color=None, session_factory=None):
     player, modes = normalize(player_name, modes)
     if type(bin_id) is not int or not 0 <= bin_id <= 12:
         raise ValueError('Choose one of the thirteen score intervals.')
     # Live examples do not require rebuilding or validating a corpus snapshot.
     # Bound the source BEFORE score filtering; no shielded long-running task.
     async with read_slot(wait_seconds=2, slots=POSITION_READ_SLOTS):
-        async with AsyncDBSession() as session:
-            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
-            await session.execute(text("SET LOCAL statement_timeout='3s'"))
-            await session.execute(text("SET LOCAL lock_timeout='1s'"))
-            await session.execute(text("SET LOCAL work_mem='8MB'"))
-            await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
-            await session.execute(text('SET LOCAL jit=off'))
+        async with read_transaction(session_factory or AsyncDBSession) as session:
+            await position_reads.read_limits(session, '3s')
             from .player_frequency_position_page import read_ranked_page, FrequencySnapshotChanged
             try:
                 ranked = await read_ranked_page(session, player, modes, bins()[bin_id], cursor, color=color)

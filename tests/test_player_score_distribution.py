@@ -32,8 +32,8 @@ class QueryTests(unittest.TestCase):
         self.assertTrue(bins[6]['lower_inclusive'])
         self.assertTrue(bins[6]['upper_inclusive'])
         from chessism_api.operations.player_score_position_page import encode_cursor, decode_cursor
-        cursor = encode_cursor('selection', 54321, True, 120)
-        self.assertEqual(decode_cursor(cursor, 'selection'), (54321, True, 120))
+        cursor = encode_cursor('selection', 54321, True, 120, False)
+        self.assertEqual(decode_cursor(cursor, 'selection'), (54321, True, 120, False))
         with self.assertRaises(ValueError):
             decode_cursor(cursor, 'other-selection')
 
@@ -316,7 +316,8 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_popup_does_not_rebuild_rankings_or_check_global_revisions(self):
         chunk = {'rows': [], 'next_cursor': 'bounded-next'}
-        with patch.object(scores, 'AsyncDBSession', return_value=self.context), \
+        self.session.in_transaction = MagicMock(return_value=True)
+        with patch.object(scores, 'AsyncDBSession', return_value=self.session), \
                 patch.object(scores, 'source_state', AsyncMock()) as revision, \
                 patch.object(scores, 'shared_calculation', AsyncMock()) as calculation, \
                 patch.object(scores, 'read_position_page', AsyncMock(return_value=chunk)) as reader:
@@ -327,7 +328,13 @@ class SnapshotTests(unittest.IsolatedAsyncioTestCase):
         calculation.assert_not_awaited()
         reader.assert_awaited_once_with(self.session, 'player', ('bullet',), scores.bins()[6], 'seek', color=None)
         statements = [str(c.args[0]) for c in self.session.execute.call_args_list]
-        self.assertIn("SET LOCAL statement_timeout='3s'", statements)
+        timeout_calls = [c for c in self.session.execute.call_args_list if "set_config('statement_timeout'" in str(c.args[0])]
+        self.assertEqual(len(timeout_calls), 1)
+        self.assertEqual(timeout_calls[0].args[1], {'timeout': '3s'})
+        self.assertIn('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY', statements)
+        self.session.begin.assert_awaited_once()
+        self.session.commit.assert_awaited_once()
+        self.session.close.assert_awaited_once()
         self.assertIn('SET LOCAL max_parallel_workers_per_gather=0', statements)
 
 

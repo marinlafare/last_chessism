@@ -3,6 +3,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations import player_score_position_page as pages
+from chessism_api.database.postgresql import player_position_reads as reads
 from chessism_api.operations.player_blunder_page import blunder_rows_sql
 
 
@@ -18,30 +19,28 @@ class QueryTests(unittest.TestCase):
         self.session = SimpleNamespace(info={SESSION_KEY: RelationalStorage('core', 'archive', 'reads')})
 
     def test_bound_occurrences_before_scores_no_frequency_ranking(self):
-        sql = str(pages.occurrences_sql(self.session))
+        sql = reads.EXAMPLE_OCCURRENCES
         self.assertIn('source AS MATERIALIZED', sql)
         self.assertEqual(sql.count('LIMIT :scan_limit'), 2)
         self.assertNotIn('GROUP BY', sql)
         self.assertNotIn('COUNT(', sql)
         self.assertNotIn('f.fen,', sql)
-        self.assertLess(sql.index('LIMIT :scan_limit'), sql.index('JOIN "core"."fen"'))
+        self.assertLess(sql.index('LIMIT :scan_limit'), sql.index('JOIN public.fen'))
 
     def test_cursor_scope_and_large_integer_id(self):
-        cursor = pages.encode_cursor('scope', 2**62, False, 2**60)
-        self.assertEqual(pages.decode_cursor(cursor, 'scope'), (2**62, False, 2**60))
+        cursor = pages.encode_cursor('scope', 2**62, False, 2**31-1, True)
+        self.assertEqual(pages.decode_cursor(cursor, 'scope'), (2**62, False, 2**31-1, True))
         with self.assertRaises(ValueError):
             pages.decode_cursor(cursor, 'another-bin')
         with self.assertRaises(ValueError):
             pages.decode_cursor('bad', 'scope')
 
     def test_color_filter_precedes_game_limit_and_scopes_cursor(self):
-        for session, predicate in [(self.session, "gp.is_white=(:color='white')"),
-                                   (SimpleNamespace(info={}), 'color=:color')]:
-            sql = str(pages.candidate_games_sql(session))
-            self.assertLess(sql.index(predicate), sql.index('LIMIT :game_limit'))
+        sql = reads.EXAMPLE_GAMES
+        self.assertLess(sql.index("gp.is_white=(:color='white')"), sql.index('LIMIT :game_limit'))
         scopes = [pages.scope_key('alice', ['blitz'], 5, color) for color in [None, 'white', 'black']]
         self.assertEqual(len(set(scopes)), 3)
-        cursor = pages.encode_cursor(scopes[1], 10, True, 20)
+        cursor = pages.encode_cursor(scopes[1], 10, True, 20, False)
         with self.assertRaises(ValueError):
             pages.decode_cursor(cursor, scopes[2])
 
@@ -59,13 +58,13 @@ class QueryTests(unittest.TestCase):
 
 class PageTests(unittest.IsolatedAsyncioTestCase):
     def session(self, records, games=None):
-        session = SimpleNamespace(info={}, scalar=AsyncMock(return_value='alice'), execute=AsyncMock())
+        session = SimpleNamespace(in_transaction=lambda: True, scalar=AsyncMock(return_value=1), execute=AsyncMock())
         session.execute.side_effect = [result(games or [{'game_link': 10, 'is_white': True}]), result(records),
             result([(r['fen_id'], 'board '+str(r['fen_id'])) for r in records])]
         return session
 
     def row(self, id, score=0, white=True, source='stockfish'):
-        return dict(game_link=10, is_white=white, occurrence_id=10000-id, fen_id=id,
+        return dict(game_link=10, is_white=white, n_move=10000-id, ply_is_white=True, fen_id=id,
                     score=score, analysis_source=source)
 
     async def test_returns_ten_and_seeks_after_last_matching_occurrence(self):
@@ -73,7 +72,7 @@ class PageTests(unittest.IsolatedAsyncioTestCase):
         page = await pages.read_position_page(session, 'alice', ['blitz'],
             dict(id=6,lower=-50,upper=50,lower_inclusive=True,upper_inclusive=True))
         self.assertEqual(len(page['rows']), 10)
-        self.assertEqual(pages.decode_cursor(page['next_cursor'], page['snapshot']), (10, True, 9990))
+        self.assertEqual(pages.decode_cursor(page['next_cursor'], page['snapshot']), (10, True, 9990, True))
         self.assertNotIn('appearances', page['rows'][0])
         self.assertEqual(session.execute.call_args.args[1]['ids'], list(range(1,11)))
 
@@ -94,7 +93,7 @@ class PageTests(unittest.IsolatedAsyncioTestCase):
             dict(id=6,lower=-50,upper=50,lower_inclusive=True,upper_inclusive=True))
         self.assertEqual(page['rows'], [])
         self.assertEqual(page['scanned_positions'],512)
-        self.assertEqual(pages.decode_cursor(page['next_cursor'],page['snapshot']), (10,True,9488))
+        self.assertEqual(pages.decode_cursor(page['next_cursor'],page['snapshot']), (10,True,9488,True))
         self.assertEqual(session.execute.await_count,2)
 
     async def test_negative_interval_is_player_relative_for_both_colors(self):
@@ -126,7 +125,7 @@ class PageTests(unittest.IsolatedAsyncioTestCase):
         session = self.session([], games)
         page = await pages.read_position_page(session,'alice',['blitz'],
             dict(id=6,lower=-50,upper=50,lower_inclusive=True,upper_inclusive=True))
-        self.assertEqual(pages.decode_cursor(page['next_cursor'],page['snapshot']), (69,True,0))
+        self.assertEqual(pages.decode_cursor(page['next_cursor'],page['snapshot']), (69,True,None,None))
 
 
 if __name__ == '__main__':
