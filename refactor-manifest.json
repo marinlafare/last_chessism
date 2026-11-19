@@ -4342,7 +4342,7 @@
           },
           "checkpoint_note": "Saved in the local WIP commit containing docs/architecture/stage-a-resume.md; Stage A remains incomplete."
         },
-        "commit_sha": null,
+        "commit_sha": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326",
         "started_at": "2026-11-11T02:37:22.966641+00:00",
         "active_subgate": "canonical dashboard counts and mode rankings",
         "subgates": [
@@ -6292,23 +6292,26 @@
             "checkpoint_note": "Saved in the local WIP commit containing docs/architecture/stage-a-resume.md; Stage A remains incomplete."
           }
         ],
-        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence.",
+        "commit_note": "Final integrated implementation tip; individual feature commits and evidence retained in fast_track and Git history."
       },
       {
         "id": "A3.2",
         "name": "Feature consumers and synthetic performance",
         "status": "completed_pending_stage_acceptance",
         "verification": null,
-        "commit_sha": null,
-        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
+        "commit_sha": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326",
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence.",
+        "commit_note": "Final integrated implementation tip; individual feature commits and evidence retained in fast_track and Git history."
       },
       {
         "id": "A4",
         "name": "Retirement and final integration",
         "status": "completed_pending_stage_acceptance",
         "verification": null,
-        "commit_sha": null,
-        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence."
+        "commit_sha": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326",
+        "verification_summary": "Focused canonical gates plus final broad comparison; see fast_track.stage_boundary_verification and linked evidence.",
+        "commit_note": "Final integrated implementation tip; individual feature commits and evidence retained in fast_track and Git history."
       }
     ],
     "pending_process": null,
@@ -8291,7 +8294,8 @@
         "test_dispositions": "docs/architecture/storage-retirement-tests.json",
         "legacy_archive_validator_ast_unchanged": true,
         "missing_module_or_model_imports": 0,
-        "accepted": false
+        "accepted": false,
+        "local_commit": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326"
       },
       "stage_boundary_verification": {
         "status": "verified_with_preexisting_debt",
@@ -8347,8 +8351,11 @@
         "baseline_debt_independently_reproduced": true,
         "production_access": false,
         "all_owned_containers_removed": true,
-        "accepted": false
+        "accepted": false,
+        "implementation_commit": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326"
       }
-    }
+    },
+    "implementation_tip": "782d1f2ea7e0fdd8d77fa54e6e6c346d89aba326",
+    "implementation_completed_at": "2026-11-19T04:37:29.146330+00:00"
   }
 }

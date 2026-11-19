@@ -1,6 +1,7 @@
 # Stage A implementation handoff — independent acceptance pending
 
 Branch: `refactor/p1-analysis-failure-propagation`.
+Implementation checkpoint: `782d1f2` (all Stage A changes and final evidence).
 Scope: authorized Stage A only; no push, merge, deployment or live database cutover.
 
 ## Result
