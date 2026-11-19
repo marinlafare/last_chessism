@@ -1,6 +1,10 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './main-characters/mainCharacters.css'
+import { useTrackedGameJob } from '../services/useTrackedGameJob.js'
+import { DOWNLOAD_JOB_STORAGE_KEY, UPDATE_JOB_STORAGE_KEY } from '../services/gameJobService.js'
+import { jobPhase, jobStatusMessage } from '../services/jobOutcome.js'
+import { fetchGameJobStatus } from './download-new-games/downloadNewGamesApi'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
 import PlayerAvatar from '../components/players/PlayerAvatar'
@@ -58,22 +62,6 @@ const getPrimaryDisplayName = (player) => String(player?.player_name || '').trim
 const getSecondaryDisplayName = (player) => {
   const fullName = String(player?.full_name || '').trim()
   return fullName || 'Name unavailable'
-}
-
-const classifyUpdateMessage = (message) => {
-  const text = String(message || '').toLowerCase()
-  if (
-    text.includes('no new games') ||
-    text.includes('already up to date') ||
-    text.includes('all months in db already') ||
-    text.includes('all games already at db')
-  ) {
-    return 'all_ready'
-  }
-  if (text.includes('error') || text.includes('failed')) {
-    return 'error'
-  }
-  return 'updated'
 }
 
 const getRankColor = (rank, totalPlayers) => {
@@ -337,60 +325,75 @@ function MainCharacters() {
   const [topError, setTopError] = useState('')
   const [hoveredPlayerName, setHoveredPlayerName] = useState('')
   const [topPlayersOffset, setTopPlayersOffset] = useState(0)
-  const [updatingPlayers, setUpdatingPlayers] = useState({})
   const [updateStateByPlayer, setUpdateStateByPlayer] = useState({})
   const [updateMessage, setUpdateMessage] = useState('')
-  const [addingPlayer, setAddingPlayer] = useState(false)
+  const [submitting, setSubmitting] = useState(null)
+  const submittingRef = useRef(false)
+  const listRequest = useRef(null)
+  const countsRequest = useRef(null)
+  const mounted = useRef(true)
   const [showAddPlayerForm, setShowAddPlayerForm] = useState(false)
   const [addPlayerName, setAddPlayerName] = useState('')
-
+  const completed = (status, job) => {
+    if (jobPhase(status) !== 'complete') {
+      setUpdateMessage(jobStatusMessage(status))
+      setUpdateStateByPlayer(previous => ({ ...previous, [job.playerName]: 'error' }))
+      return
+    }
+    setUpdateMessage(jobStatusMessage(status))
+    const result = status.result.result
+    setUpdateStateByPlayer(previous => ({ ...previous, [job.playerName]: result?.committed_games === 0 ? 'all_ready' : 'updated' }))
+    if (selectedMode) loadTop(selectedMode)
+    refreshCounts()
+  }
+  const update = useTrackedGameJob(UPDATE_JOB_STORAGE_KEY, fetchGameJobStatus, completed)
+  const download = useTrackedGameJob(DOWNLOAD_JOB_STORAGE_KEY, fetchGameJobStatus, completed)
+  const isPipelineBusy = Boolean(submitting || update.job || download.job)
+  const addingPlayer = submitting === 'download' || Boolean(download.job)
+  const jobMessage = download.job ? download.message : update.job ? update.message : ''
+  const loadTop = async mode => {
+    listRequest.current?.abort()
+    const controller = new AbortController()
+    listRequest.current = controller
+    setTopLoading(true)
+    setTopError('')
+    try {
+      const payload = await fetchTopMainCharacters(mode, MAIN_CHARACTER_LIMIT, { signal: controller.signal })
+      if (!controller.signal.aborted) setTopPayload(payload)
+    } catch (error) {
+      if (!controller.signal.aborted) setTopError(error.message || 'Failed to load main characters.')
+    } finally {
+      if (!controller.signal.aborted) setTopLoading(false)
+    }
+  }
+  const refreshCounts = async () => {
+    countsRequest.current?.abort()
+    const controller = new AbortController()
+    countsRequest.current = controller
+    setCountsError('')
+    try {
+      const payload = await fetchMainCharacterTimeControls({ signal: controller.signal })
+      if (controller.signal.aborted) return
+      const counts = { bullet: Number(payload?.bullet || 0), blitz: Number(payload?.blitz || 0), rapid: Number(payload?.rapid || 0) }
+      setTimeControlCounts(counts)
+      writeCachedCounts(counts)
+    } catch (error) {
+      if (!controller.signal.aborted) setCountsError(error.message || 'Failed to refresh time controls.')
+    } finally {
+      if (!controller.signal.aborted) setCountsLoading(false)
+    }
+  }
   useEffect(() => {
-    let alive = true
-
+    mounted.current = true
     const cached = readCachedCounts()
-    if (cached) {
-      setTimeControlCounts(cached)
-      setCountsLoading(false)
-      return () => {
-        alive = false
-      }
-    }
-
-    const loadCounts = async () => {
-      setCountsLoading(true)
-      setCountsError('')
-      try {
-        const payload = await fetchMainCharacterTimeControls()
-        if (!alive) return
-        const counts = {
-          bullet: Number(payload?.bullet || 0),
-          blitz: Number(payload?.blitz || 0),
-          rapid: Number(payload?.rapid || 0)
-        }
-        setTimeControlCounts(counts)
-        writeCachedCounts(counts)
-      } catch (error) {
-        if (!alive) return
-        setTimeControlCounts(EMPTY_COUNTS)
-        setCountsError(error instanceof Error ? error.message : 'Failed to load time controls.')
-      } finally {
-        if (alive) {
-          setCountsLoading(false)
-        }
-      }
-    }
-
-    loadCounts()
+    if (cached) { setTimeControlCounts(cached); setCountsLoading(false) }
+    else refreshCounts()
     return () => {
-      alive = false
+      mounted.current = false
+      listRequest.current?.abort()
+      countsRequest.current?.abort()
     }
   }, [])
-
-  const isGlobalUpdateBusy = useMemo(
-    () => Object.values(updatingPlayers).some(Boolean),
-    [updatingPlayers]
-  )
-  const isPipelineBusy = addingPlayer || isGlobalUpdateBusy
 
   const handleBadgeHoverMove = (event) => {
     const target = event.currentTarget
@@ -418,80 +421,36 @@ function MainCharacters() {
     setShowAddPlayerForm(false)
     setAddPlayerName('')
 
-    try {
-      const payload = await fetchTopMainCharacters(mode, MAIN_CHARACTER_LIMIT)
-      setTopPayload(payload)
-    } catch (error) {
-      setTopPayload(null)
-      setTopError(error instanceof Error ? error.message : 'Failed to load main characters.')
-    } finally {
-      setTopLoading(false)
-    }
+    await loadTop(mode)
   }
 
-  const handleUpdatePlayer = async (playerName) => {
+  const enqueuePlayer = async (type, playerName) => {
     const normalized = String(playerName || '').trim().toLowerCase()
-    if (!normalized) return
-    if (updateStateByPlayer[normalized] === 'all_ready') return
-    if (isPipelineBusy) return
-
+    if (!normalized || isPipelineBusy || submittingRef.current) return
+    submittingRef.current = true
+    setSubmitting(type)
     setUpdateMessage('')
-    setUpdateStateByPlayer((previous) => ({ ...previous, [normalized]: '' }))
-    setUpdatingPlayers((previous) => ({ ...previous, [normalized]: true }))
-
+    setUpdateStateByPlayer(previous => ({ ...previous, [normalized]: '' }))
     try {
-      const payload = await updatePlayerGames(normalized)
-      const message = payload?.message || `${normalized}: update started.`
-      const resultState = classifyUpdateMessage(message)
-      setUpdateStateByPlayer((previous) => ({ ...previous, [normalized]: resultState }))
-      setUpdateMessage(resultState === 'all_ready' ? 'all games ready' : message)
-
-      if (resultState === 'updated' && selectedMode) {
-        setTopLoading(true)
-        const refreshed = await fetchTopMainCharacters(selectedMode, MAIN_CHARACTER_LIMIT)
-        setTopPayload(refreshed)
+      const payload = await (type === 'download' ? createPlayerGames : updatePlayerGames)(normalized)
+      const tracker = type === 'download' ? download : update
+      tracker.track({ jobId: payload.job_id, playerName: payload.player_name || normalized })
+      if (!mounted.current) return
+      if (type === 'download') {
+        setAddPlayerName('')
+        setShowAddPlayerForm(false)
       }
     } catch (error) {
-      setUpdateStateByPlayer((previous) => ({ ...previous, [normalized]: 'error' }))
-      setUpdateMessage(error instanceof Error ? error.message : 'Failed to update games.')
+      if (!mounted.current) return
+      setUpdateStateByPlayer(previous => ({ ...previous, [normalized]: 'error' }))
+      setUpdateMessage(error.message || 'Unable to queue games.')
     } finally {
-      setUpdatingPlayers((previous) => ({ ...previous, [normalized]: false }))
-      setTopLoading(false)
+      submittingRef.current = false
+      if (mounted.current) setSubmitting(null)
     }
   }
-
-  const handleAddPlayer = async () => {
-    if (isPipelineBusy) return
-    const normalized = String(addPlayerName || '').trim().toLowerCase()
-    if (!normalized) return
-
-    setAddingPlayer(true)
-    setUpdateMessage('')
-    try {
-      const payload = await createPlayerGames(normalized)
-      setUpdateMessage(payload?.message || `Download started for ${normalized}.`)
-      setAddPlayerName('')
-      setShowAddPlayerForm(false)
-      if (selectedMode) {
-        setTopLoading(true)
-        const refreshed = await fetchTopMainCharacters(selectedMode, MAIN_CHARACTER_LIMIT)
-        setTopPayload(refreshed)
-      }
-      const countsPayload = await fetchMainCharacterTimeControls()
-      const counts = {
-        bullet: Number(countsPayload?.bullet || 0),
-        blitz: Number(countsPayload?.blitz || 0),
-        rapid: Number(countsPayload?.rapid || 0)
-      }
-      setTimeControlCounts(counts)
-      writeCachedCounts(counts)
-    } catch (error) {
-      setUpdateMessage(error instanceof Error ? error.message : 'Failed to add player.')
-    } finally {
-      setAddingPlayer(false)
-      setTopLoading(false)
-    }
-  }
+  const handleUpdatePlayer = playerName => enqueuePlayer('update', playerName)
+  const handleAddPlayer = () => enqueuePlayer('download', addPlayerName)
 
   const topPlayers = useMemo(() => {
     if (!topPayload || !Array.isArray(topPayload.players)) {
@@ -637,6 +596,8 @@ function MainCharacters() {
             </section>
           </div>
 
+          {updateMessage || jobMessage ? <p {...pageStyleTarget('text')} className="result-line" role="status">{updateMessage || jobMessage}</p> : null}
+
           {selectedMode ? (
             <section {...pageStyleTarget('ratings.panel')} className="games-mode-detail" aria-label={`${selectedMode} players bubble chart`}>
               <div className="section-head analytics-section-head">
@@ -706,7 +667,6 @@ function MainCharacters() {
                             totalPlayers={sortedByRating.length}
                             onUpdate={handleUpdatePlayer}
                             updating={Boolean(
-                              updatingPlayers[String(hoveredPlayer.player_name || '').toLowerCase()] ||
                               isPipelineBusy
                             )}
                             updateState={
@@ -726,7 +686,7 @@ function MainCharacters() {
                         <p {...pageStyleTarget('text')} className="result-line">Hover a point to inspect that player.</p>
                       )}
                     </div>
-                    {updateMessage ? <p {...pageStyleTarget('text')} className="result-line">{updateMessage}</p> : null}
+
                   </>
                 ) : (
                   <p {...pageStyleTarget('text')} className="result-line">No main characters found for this time control.</p>
@@ -758,7 +718,7 @@ function MainCharacters() {
                     totalPlayers={sortedByRating.length}
                     onUpdate={handleUpdatePlayer}
                     updating={Boolean(
-                      updatingPlayers[String(player.player_name || '').toLowerCase()] || isPipelineBusy
+                      isPipelineBusy
                       )}
                       updateState={updateStateByPlayer[String(player.player_name || '').toLowerCase()] || ''}
                     />

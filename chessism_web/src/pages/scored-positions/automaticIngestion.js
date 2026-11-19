@@ -1,3 +1,6 @@
+import { isMissingJobResponse } from '../../services/gameJobPolling.js'
+import { jobPhase, jobFailureDetail } from '../../services/jobOutcome.js'
+import { obsoletePositionStatus } from '../positions/positionStatusFreshness.js'
 import { getPositionJobKey, isTrackedJobActive, parseTimestampSeconds } from '../positions/positionPageSupport.js'
 
 const PIPELINE_KEYS = new Set(['gameParsing', 'fen', 'tablebase'])
@@ -10,13 +13,9 @@ const FUNCTION_KEYS = {
 }
 
 function trackedJob(job) {
-  const failed = job.result?.success === false || job.result?.result?.success === false
-  const status = failed ? { ...job, status: 'failed', progress: { ...job.progress, phase: 'failed' } } : job
-  const phase = status.progress?.phase || status.status
   return {
-    jobId: job.job_id, status,
-    error: ['failed', 'unavailable'].includes(phase)
-      ? status.progress?.detail || 'Automatic pipeline stage failed.' : '',
+    jobId: job.job_id, status: job,
+    error: ['failed', 'unavailable', 'cancelled'].includes(jobPhase(job)) ? jobFailureDetail(job) : '',
   }
 }
 
@@ -34,6 +33,7 @@ export async function readAutomaticIngestion(previous, { fetchActive, fetchJob, 
     const key = getPositionJobKey(job) || FUNCTION_KEYS[job.info?.function]
     if (!job.job_id || !PIPELINE_KEYS.has(key)) continue
     currentIds.add(job.job_id)
+    if (obsoletePositionStatus(next[key], job)) continue
     for (const [oldKey, state] of Object.entries(next)) {
       if (oldKey !== key && state.jobId === job.job_id) delete next[oldKey]
     }
@@ -46,7 +46,7 @@ export async function readAutomaticIngestion(previous, { fetchActive, fetchJob, 
       next[key] = trackedJob({ ...job, job_id: state.jobId })
       if (job.status === 'not_found') delete next[key]
     } catch (error) {
-      if (error.status === 404) delete next[key]
+      if (isMissingJobResponse(error, state.jobId)) delete next[key]
       else throw error
     }
   }))

@@ -14,11 +14,12 @@ import { playerHomeHref } from '../../services/navigation'
 import {
   PLAYER_DELETE_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
-  formatStatusMessage,
   isTerminalJobStatus,
   loadStoredJob,
   storeJob
 } from '../../services/gameJobService'
+import { watchGameJob } from '../../services/gameJobPolling.js'
+import { jobPhase, jobStatusMessage } from '../../services/jobOutcome.js'
 import {
   deletePlayer,
   fetchPlayerDeletionPreview,
@@ -45,7 +46,7 @@ function GameUpdateProgress({ status, message }) {
     return message ? <p {...pageStyleTarget('text')} className="result-line players-update-message">{message}</p> : null
   }
 
-  const phase = progress.phase || status?.status || 'working'
+  const phase = jobPhase(status)
   const total = Math.max(1, Number(progress.total || 1))
   const processed = Math.min(total, Number(progress.processed || 0))
   const percent = phase === 'complete'
@@ -64,7 +65,7 @@ function GameUpdateProgress({ status, message }) {
           style={{ width: `${percent}%` }}
         />
       </div>
-      <p {...pageStyleTarget('text')} className="result-line">{progress.detail || message || `${processed} of ${total}`}</p>
+      <p {...pageStyleTarget('text')} className="result-line">{message || jobStatusMessage(status)}</p>
     </div>
   )
 }
@@ -308,98 +309,45 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   useEffect(() => {
     const job = gamesUpdateJob
     if (!job?.jobId) return undefined
-
-    let cancelled = false
-    let timerId
-
-    const poll = async () => {
-      try {
-        const status = await fetchPlayerJobStatus(job.jobId)
-        if (cancelled) return
+    return watchGameJob({
+      jobId: job.jobId, fetchStatus: fetchPlayerJobStatus,
+      onStatus(status) {
         setGamesUpdateStatus(status)
-
-        if (isTerminalJobStatus(status)) {
-          const failed = status.progress?.phase === 'failed' || status.result?.success === false
-          const resultMessage = formatStatusMessage(
-            status.progress?.result || status.progress?.detail || status.result?.result
-          )
-          setGamesUpdateMessage(resultMessage || (failed ? 'Games update failed.' : 'Games update finished.'))
-          storeJob(UPDATE_JOB_STORAGE_KEY, null)
-          setGamesUpdateJob(null)
-
-          if (!failed && activePlayer.toLowerCase() === String(job.playerName || '').toLowerCase()) {
-            await loadPlayer(job.playerName)
-          }
-          return
-        }
-
-        timerId = window.setTimeout(poll, 1500)
-      } catch (pollError) {
-        if (cancelled) return
-        const detail = pollError instanceof Error ? pollError.message : 'Unable to read update status.'
-        setGamesUpdateStatus({ status: 'not_found', progress: { phase: 'failed', detail } })
-        setGamesUpdateMessage(detail)
+        setGamesUpdateMessage(jobStatusMessage(status, 'Games update'))
+        if (!isTerminalJobStatus(status)) return
         storeJob(UPDATE_JOB_STORAGE_KEY, null)
         setGamesUpdateJob(null)
-      }
-    }
-
-    poll()
-    return () => {
-      cancelled = true
-      window.clearTimeout(timerId)
-    }
-  }, [gamesUpdateJob?.jobId, activePlayer])
+        if (jobPhase(status) === 'complete' && activePlayer.toLowerCase() === String(job.playerName || '').toLowerCase()) {
+          loadPlayer(job.playerName)
+        }
+      },
+      onUnavailable: () => setGamesUpdateMessage('Status connection interrupted; reconnecting automatically…'),
+    })
+  }, [gamesUpdateJob?.jobId, activePlayer, loadPlayer])
 
   useEffect(() => {
     const job = deleteJob
     if (!job?.jobId) return undefined
-
-    let cancelled = false
-    let timerId
-
-    const poll = async () => {
-      try {
-        const status = await fetchPlayerJobStatus(job.jobId)
-        if (cancelled) return
+    return watchGameJob({
+      jobId: job.jobId, fetchStatus: fetchPlayerJobStatus,
+      onStatus(status) {
         setDeleteStatus(status)
-        if (isTerminalJobStatus(status)) {
-          const failed = status.progress?.phase === 'failed' || status.result?.success === false
-          const resultMessage = formatStatusMessage(
-            status.progress?.result || status.progress?.detail || status.result?.result
-          )
-          setDeleteMessage(resultMessage || (failed ? 'Player deletion failed.' : 'Player deletion finished.'))
-          storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null)
-          setDeleteJob(null)
-          if (!failed) {
-            if (job.redirectPlayer) {
-              navigateToPlayer(job.redirectPlayer)
-            } else if (onSelectPlayer) {
-              onSelectPlayer('')
-            } else {
-              window.history.pushState(null, '', '/main_characters')
-              window.dispatchEvent(new PopStateEvent('popstate'))
-            }
-          }
-          return
-        }
-        timerId = window.setTimeout(poll, 1500)
-      } catch (pollError) {
-        if (cancelled) return
-        const detail = pollError instanceof Error ? pollError.message : 'Unable to read deletion status.'
-        setDeleteStatus({ status: 'not_found', progress: { phase: 'failed', detail } })
-        setDeleteMessage(detail)
+        setDeleteMessage(jobStatusMessage(status, 'Player deletion'))
+        if (!isTerminalJobStatus(status)) return
         storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null)
         setDeleteJob(null)
-      }
-    }
-
-    poll()
-    return () => {
-      cancelled = true
-      window.clearTimeout(timerId)
-    }
-  }, [deleteJob?.jobId])
+        if (jobPhase(status) !== 'complete'
+          || activePlayer.toLowerCase() !== String(job.playerName || '').toLowerCase()) return
+        if (job.redirectPlayer) navigateToPlayer(job.redirectPlayer)
+        else if (onSelectPlayer) onSelectPlayer('')
+        else {
+          window.history.pushState(null, '', '/main_characters')
+          window.dispatchEvent(new PopStateEvent('popstate'))
+        }
+      },
+      onUnavailable: () => setDeleteMessage('Status connection interrupted; reconnecting automatically…'),
+    })
+  }, [deleteJob?.jobId, activePlayer])
 
   if (!loading && !profile && error) {
     return <div className="games-main players-starting-point">

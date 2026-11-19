@@ -1,3 +1,4 @@
+import { jobPhase, jobFailureDetail, isTerminalJobStatus } from '../../services/jobOutcome.js'
 import { formatNumber } from '../../utils/formatters.js'
 
 const DEFAULT_ANALYSIS_NODES = 100_000
@@ -67,8 +68,7 @@ const clampAnalysisBatchInput = (value, maximum = MAX_ANALYSIS_BATCH_SIZE) => {
 
 const isTrackedJobActive = (state) => {
   if (!state?.jobId) return false
-  const phase = getTrackedJobPhase(state)
-  return phase !== 'complete' && phase !== 'failed' && phase !== 'unavailable' && phase !== 'not_found'
+  return !isTerminalJobStatus(state.status)
 }
 
 const isTrackedJobComplete = (state) => {
@@ -80,27 +80,8 @@ const pageHasAttention = () => {
   return document.visibilityState === 'visible' && document.hasFocus()
 }
 
-const getTrackedJobPhase = (state) => {
-  const status = state?.status || {}
-  if (status.result?.success === false) return 'failed'
-  if (status.result?.success === true) return 'complete'
-  const queueStatus = status.status
-  if (queueStatus === 'not_found' || queueStatus === 'failed' || queueStatus === 'unavailable') return queueStatus
-  if (queueStatus === 'queued' || queueStatus === 'deferred') return queueStatus
-  // ARQ complete means a result is available; progress cannot prove its outcome.
-  const progressPhase = status.progress?.phase
-  if (progressPhase && !TERMINAL_PROGRESS_PHASES.has(progressPhase)) return progressPhase
-  return queueStatus === 'complete' ? 'in_progress' : queueStatus || 'queued'
-}
-
-const getTrackedJobFailureDetail = (status) => {
-  if (status?.result?.success === false) {
-    const failure = status.result.result
-    if (failure?.type === 'CancelledError') return 'Job was cancelled.'
-    return failure?.message || 'Job failed.'
-  }
-  return status?.progress?.detail || 'Job failed.'
-}
+const getTrackedJobPhase = state => jobPhase(state?.status)
+const getTrackedJobFailureDetail = jobFailureDetail
 
 const getAnalysisButtonLabel = (state) => {
   if (state?.loading) return 'Queueing'

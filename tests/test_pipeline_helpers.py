@@ -255,7 +255,7 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
 
         insert_game_bundle.assert_not_awaited()
         self.assertIn("moves_data", formatted_game)
-        self.assertIn("No new data", result)
+        self.assertIn("No new data", result["message"])
 
     async def test_successful_empty_archives_are_recorded(self):
         progress = AsyncMock()
@@ -279,7 +279,7 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
                 no_games_message="no games",
             )
 
-        self.assertEqual(result, "no games")
+        self.assertEqual(result, {"committed_games": 0, "zero_move_games": 0, "message": "no games"})
         sync_months.assert_awaited_once_with("hikaru", {(2026, 1)})
 
     async def test_import_progress_finishes_at_total_after_persistence(self):
@@ -301,7 +301,7 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
                 games,
                 "insert_games_months_moves_and_players",
                 new_callable=AsyncMock,
-                return_value="saved",
+                return_value={"committed_games": 1, "zero_move_games": 0, "message": "saved"},
             ),
             patch.object(
                 games,
@@ -317,10 +317,10 @@ class GameFormattingTests(unittest.IsolatedAsyncioTestCase):
             )
 
         progress.assert_awaited_with(
-            "complete",
+            "saved",
             3,
             3,
-            "Saved 1 games and queued position extraction.",
+            "Saved 1 new games. Preparing position extraction.",
         )
 
 
@@ -1089,7 +1089,7 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
         redis.enqueue_job.assert_not_awaited()
 
     async def test_game_ingestion_automatically_starts_fen_extraction(self):
-        operation = AsyncMock(return_value="DATA UPDATED FOR hikaru")
+        operation = AsyncMock(return_value={"committed_games": 2, "zero_move_games": 0, "message": "DATA UPDATED FOR hikaru"})
         redis = MagicMock()
         redis.hget = AsyncMock(return_value=None)
         redis.hset = AsyncMock()
@@ -1130,7 +1130,10 @@ class AutomaticFenPipelineTests(unittest.IsolatedAsyncioTestCase):
             player_name="hikaru",
             trigger="automatic",
         )
-        self.assertIn("Automatic FEN extraction queued for 12 games", result)
+        self.assertIn("Automatic FEN extraction queued for 12 games", result["message"])
+        self.assertEqual(result["committed_games"], 2)
+        self.assertEqual(result["ingestion_run_id"], "ingestion-run")
+        self.assertEqual(result["fen_extraction"]["status"], "queued")
 
     async def test_finished_pass_queues_follow_up_for_games_arriving_mid_run(self):
         redis = MagicMock()

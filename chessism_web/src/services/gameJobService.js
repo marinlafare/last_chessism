@@ -22,15 +22,4 @@ export function storeJob(storageKey, job) {
   window.localStorage.setItem(storageKey, JSON.stringify(job))
 }
 
-export function isTerminalJobStatus(status) {
-  const phase = status?.progress?.phase
-  return status?.status === 'complete'
-    || status?.status === 'not_found'
-    || phase === 'complete'
-    || phase === 'failed'
-}
-
-export function formatStatusMessage(value) {
-  if (!value) return ''
-  return typeof value === 'string' ? value : JSON.stringify(value)
-}
+export { isTerminalJobStatus } from './jobOutcome.js'

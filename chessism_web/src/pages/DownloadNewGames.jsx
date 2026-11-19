@@ -7,11 +7,12 @@ import AutomaticIngestionPanel from './scored-positions/AutomaticIngestionPanel'
 import {
   DOWNLOAD_JOB_STORAGE_KEY,
   UPDATE_JOB_STORAGE_KEY,
-  formatStatusMessage,
   isTerminalJobStatus,
   loadStoredJob,
   storeJob
 } from '../services/gameJobService'
+import { watchStatus } from '../services/statusPolling.js'
+import { jobStatusMessage } from '../services/jobOutcome.js'
 import { recoverableGameJobs, watchGameJob } from '../services/gameJobPolling'
 import {
   downloadPlayerGames,
@@ -34,46 +35,35 @@ function DownloadNewGames() {
   const actionBusy = recoveringJobs || downloadLoading || downloadJobActive || updateJobActive
 
   useEffect(() => {
-    let cancelled = false
-    let timer
-    let controller
-    const recover = async () => {
-      controller = new AbortController()
-      const timeout = window.setTimeout(() => controller.abort(), 10000)
-      try {
-        const payload = await fetchActiveGameJobs({ signal: controller.signal })
-        if (cancelled) return
+    return watchStatus({
+      fetcher: fetchActiveGameJobs, requestTimeoutMs: 10000, intervalMs: 2500, maxBackoffMs: 15000,
+      onData(payload) {
         const recovered = recoverableGameJobs(payload.jobs)
         if (recovered.download) {
           const { job, status } = recovered.download
-          setDownloadJob(job)
-          storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
+          setDownloadJob(current => {
+            if (current?.jobId) return current
+            storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
+            setDownloadJobStatus(status)
+            return job
+          })
           setDownloadPlayer(current => current || job.playerName)
-          setDownloadJobStatus(status)
-          setDownloadResult(`Reconnected to the download for ${job.playerName}.`)
         }
         if (recovered.update) {
           const { job, status } = recovered.update
-          setUpdateJob(job)
-          storeJob(UPDATE_JOB_STORAGE_KEY, job)
-          setUpdateJobStatus(status)
+          setUpdateJob(current => {
+            if (current?.jobId) return current
+            storeJob(UPDATE_JOB_STORAGE_KEY, job)
+            setUpdateJobStatus(status)
+            return job
+          })
         }
         setRecoveringJobs(false)
         setRecoveryMessage('')
-      } catch {
-        if (cancelled) return
-        setRecoveryMessage('Unable to check active downloads right now. Retrying automatically…')
-        timer = window.setTimeout(recover, 5000)
-      } finally {
-        window.clearTimeout(timeout)
-      }
-    }
-    recover()
-    return () => {
-      cancelled = true
-      window.clearTimeout(timer)
-      controller?.abort()
-    }
+        return false
+      },
+      onError: () => setRecoveryMessage('Unable to check active downloads right now. Retrying automatically…'),
+    })
   }, [])
 
   useEffect(() => {
@@ -87,13 +77,11 @@ function DownloadNewGames() {
           storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
           setDownloadJob(null)
         } else if (isTerminalJobStatus(status)) {
-          const failed = status.progress?.phase === 'failed' || status.result?.success === false
-          const resultMessage = formatStatusMessage(status.progress?.result || status.progress?.detail || status.result?.result)
-          setDownloadResult(resultMessage || (failed ? 'Games download failed.' : 'Games download finished.'))
+          setDownloadResult(jobStatusMessage(status, 'Games download'))
           storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
           setDownloadJob(null)
         } else {
-          setDownloadResult(status.progress?.detail || `Download for ${downloadJob.playerName} is ${status.status}.`)
+          setDownloadResult(jobStatusMessage(status, 'Games download'))
         }
       },
       onUnavailable: () => setDownloadResult('Status connection interrupted. The download may still be running; reconnecting automatically…'),

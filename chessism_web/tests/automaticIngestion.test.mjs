@@ -37,7 +37,7 @@ test('reads disappearing jobs to distinguish completion from failure', async () 
 
 test('clears expired jobs but surfaces network failures without changing previous state', async () => {
   const initial = await read({}, [job('fen')])
-  assert.deepEqual(await read(initial, [], async () => { throw Object.assign(new Error('Expired'), { status: 404 }) }), {})
+  assert.deepEqual(await read(initial, [], async () => { throw Object.assign(new Error('Expired'), { status: 404, payload: { job_id: 'fen', status: 'not_found' } }) }), {})
   assert.deepEqual(await read(initial, [], async () => ({ status: 'not_found' })), {})
   await assert.rejects(read(initial, [], async () => { throw new Error('Offline') }), /Offline/)
   assert.equal(initial.fen.status.progress.phase, 'saving_fens')
@@ -58,4 +58,14 @@ test('passes cancellation to all status reads and rejects invalid active-job res
     fetchJob: async (id, options) => { assert.equal(options.signal, signal); return { status: 'complete' } },
   })
   await assert.rejects(readAutomaticIngestion({}, { fetchActive: async () => ({}) }), /unavailable/)
+})
+
+
+test('an unrelated HTTP 404 keeps the automatic job and a terminal outcome resists stale discovery', async () => {
+  const initial = await read({}, [job('fen')])
+  await assert.rejects(read(initial, [], async () => { throw Object.assign(new Error('proxy missing'), { status: 404 }) }), /proxy missing/)
+  assert.equal(initial.fen.jobId, 'fen')
+  const failed = await read(initial, [], async () => ({ status: 'complete', result: { success: false } }))
+  const stale = await read(failed, [job('fen', 'fen_extraction', 'complete', 99)])
+  assert.equal(stale.fen.status.result.success, false)
 })

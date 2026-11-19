@@ -95,13 +95,13 @@ async def sync_player_months(player_name: str, months: set[tuple[int, int]]) -> 
 
 async def insert_games_months_moves_and_players(
     formatted_games: list[dict[str, Any]], player_name: str, *, fetched_months=None,
-) -> str:
+) -> dict[str, Any]:
     """Commit games, month ledger and projection invalidation as one operation."""
     started = time.monotonic()
     bundle = _prepare_game_bundle(formatted_games)
     months = bundle['affected_months'] | set(fetched_months or ())
     if not bundle['games'] and not months:
-        return f'No new data to insert for {player_name}.'
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': f'No new data to insert for {player_name}.'}
     async with write_transaction(AsyncDBSession) as session:
         connection = await driver_connection(session)
         result = await game_imports.ingest_games(connection, bundle['games'], bundle['moves'], bundle['game_openings'])
@@ -113,8 +113,9 @@ async def insert_games_months_moves_and_players(
     print(f'Persisted {inserted_games} games and {zero_moves} zero-move games '
           f'in {time.monotonic() - started:.2f}s.', flush=True)
     if bundle['games'] and not result['inserted_links']:
-        return 'All games already at DB'
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': 'All games already at DB'}
     if not bundle['games']:
-        return f'No new data to insert for {player_name}.'
-    return (f'Successfully processed and inserted {inserted_games} games '
-            f'and recorded {zero_moves} zero-move games for {player_name}.')
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': f'No new data to insert for {player_name}.'}
+    return {'committed_games': len(result['inserted_links']), 'zero_move_games': zero_moves,
+            'message': (f'Successfully processed and inserted {inserted_games} games '
+                        f'and recorded {zero_moves} zero-move games for {player_name}.')}

@@ -126,7 +126,7 @@ test('recovery discovers only live download/update jobs without resubmitting wor
   })
   const recovered = recoverableGameJobs([
     job('cloud', 'run_analysis_job'),
-    job('old', 'run_create_player_games_job', 'complete'),
+    { ...job('old', 'run_create_player_games_job', 'complete'), result: { success: true } },
     job('download', 'run_create_player_games_job'),
     job('update', 'run_update_player_games_job'),
     job('delete', 'run_delete_player_job'),

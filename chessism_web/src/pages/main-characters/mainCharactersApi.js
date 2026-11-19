@@ -1,11 +1,11 @@
 import { getJson, postJson } from '../../services/apiClient'
 
-export const fetchMainCharacterTimeControls = () => (
-  getJson('/players/main_characters/time_controls')
+export const fetchMainCharacterTimeControls = (options) => (
+  getJson('/players/main_characters/time_controls', options)
 )
 
-export const fetchTopMainCharacters = (timeControl, limit) => (
-  getJson(`/players/main_characters/top?time_control=${encodeURIComponent(timeControl)}&limit=${limit}`)
+export const fetchTopMainCharacters = (timeControl, limit, options) => (
+  getJson(`/players/main_characters/top?time_control=${encodeURIComponent(timeControl)}&limit=${limit}`, options)
 )
 
 export const updatePlayerGames = (playerName) => (

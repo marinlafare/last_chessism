@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useJobCompletionPresentation } from './useJobCompletionPresentation.js'
+import { usePlayerPositionInspection } from './usePlayerPositionInspection.js'
+import { usePlayerGameSelection } from './usePlayerGameSelection.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  COMPLETED_JOB_FADE_MS, COMPLETED_JOB_VISIBLE_MS, DEFAULT_ANALYSIS_NODES,
+  DEFAULT_ANALYSIS_NODES,
   ETA_RATE_SMOOTHING, MAX_ANALYSIS_BATCH_SIZE,
   formatNumber, getAnalysisJobProgress, getAnalysisProcessView, getPositionJobKey,
   getProgressSnapshot, getTrackedJobPhase, getTrackedJobFailureDetail, isAnalysisJobKey, isTrackedJobActive,
-  isTrackedJobComplete, loadStoredJobState, pageHasAttention, parseTimestampSeconds,
+  loadStoredJobState, parseTimestampSeconds,
   storeJobState,
 } from './positionPageSupport'
-import { playCompletionSound, unlockCompletionAudio } from '../../utils/completionAudio'
+import { unlockCompletionAudio } from '../../utils/completionAudio'
 import { usePositionJobPolling, usePositionStatusFeed } from './usePositionStatusPolling.js'
 import { obsoletePositionStatus } from './positionStatusFreshness.js'
 import {
@@ -18,9 +21,6 @@ import {
   fetchCoverage,
   fetchGameAnalysisOverview,
   fetchLatestIngestionTiming,
-  fetchPlayerAnalysisCounts,
-  inspectPlayerGameScope,
-  previewPlayerGameAnalysis,
   queueAnalysisLoop,
   queueGlobalAnalysis,
   queuePlayerAnalysis,
@@ -36,11 +36,8 @@ export function usePositionsPage() {
   const [analysisCounts, setAnalysisCounts] = useState(null)
   const [ingestionTiming, setIngestionTiming] = useState(null)
   const [globalJob, setGlobalJob] = useState({ totalFens: 100, batchSize: MAX_ANALYSIS_BATCH_SIZE })
-  const [playerJob, setPlayerJob] = useState({
-    playerName: '',
-    totalFens: 100,
-    batchSize: MAX_ANALYSIS_BATCH_SIZE
-  })
+  const { playerJob, setPlayerJob, playerInspection, setPlayerInspection,
+    handleInspectPlayer } = usePlayerPositionInspection()
   const [loopJob, setLoopJob] = useState({
     scope: 'all',
     playerName: '',
@@ -49,38 +46,21 @@ export function usePositionsPage() {
     batchSize: MAX_ANALYSIS_BATCH_SIZE,
     coolOff: 300
   })
-  const [playerGameAnalysis, setPlayerGameAnalysis] = useState({
-    playerName: '',
-    selectionMode: 'latest',
-    dateFrom: '',
-    dateTo: '',
-    gameLimit: 200,
-    useAll: true,
-    rangeOrder: 'latest',
-    batchSize: 500,
-    coolOff: 120,
-    scope: null,
-    preview: null,
-    loadingScope: false,
-    loadingPreview: false,
-    error: ''
-  })
-  const [playerInspection, setPlayerInspection] = useState({ loading: false, error: '', data: null })
+  const { playerGameAnalysis, setPlayerGameAnalysis, handleInspectPlayerGameScope,
+    handlePreviewPlayerGameAnalysis, takePlan } = usePlayerGameSelection()
   const [jobState, setJobState] = useState(loadStoredJobState)
+  const latestJobs = useRef(jobState)
+  latestJobs.current = jobState
+  const discoverJobs = useCallback(async options => {
+    const observed = latestJobs.current
+    const payload = await fetchActiveJobs(options)
+    return { payload, observed }
+  }, [])
   const [analysisProcesses, setAnalysisProcesses] = useState([])
   const [analysisProcessesError, setAnalysisProcessesError] = useState('')
   const [deletingAnalysisJobIds, setDeletingAnalysisJobIds] = useState(() => new Set())
   const [etaClockMs, setEtaClockMs] = useState(Date.now())
   const [, setEtaRevision] = useState(0)
-  const audioContextRef = useRef(null)
-  const completedSoundJobsRef = useRef(new Set())
-  const ingestionSoundStateRef = useRef({ initialized: false, runId: null, status: null })
-  const completionTimersRef = useRef(new Map())
-  const fadeTimersRef = useRef(new Map())
-  const jobStateRef = useRef(jobState)
-  const jobCardNodesRef = useRef(new Map())
-  const jobCardVisibilityRef = useRef(new Map())
-  const jobCardObserverRef = useRef(null)
   const etaEstimatesRef = useRef(new Map())
 
   const scoredPositions = Number(analysisCounts?.analyzed_fens || 0)
@@ -278,7 +258,7 @@ export function usePositionsPage() {
       setAnalysisProcessesError(err instanceof Error ? err.message : 'Unable to load analysis processes.')
     })
 
-  usePositionStatusFeed(fetchActiveJobs, payload => {
+  usePositionStatusFeed(discoverJobs, ({ payload, observed }) => {
     const jobs = Array.isArray(payload.jobs) ? payload.jobs : []
     jobs.forEach((job) => {
       const progress = job.progress || {}
@@ -286,6 +266,10 @@ export function usePositionsPage() {
       if (!key) return
 
       setJobState((current) => {
+        // A discovery read begun before replacement/dismissal cannot restore
+        // that previous selection, even after the new job has finished.
+        if (current[key]?.jobId !== observed[key]?.jobId) return current
+        if (current[key]?.jobId && !isTrackedJobActive(current[key]) && isTrackedJobActive(observed[key])) return current
         if (current[key]?.loading || obsoletePositionStatus(current[key], job)) return current
         const next = { ...current }
         Object.entries(next).forEach(([trackedKey, trackedState]) => {
@@ -368,29 +352,6 @@ export function usePositionsPage() {
     })
   }
 
-  const cancelJobDismissTimers = (key) => {
-    const completionTimerState = completionTimersRef.current.get(key)
-    if (completionTimerState?.timer) {
-      window.clearTimeout(completionTimerState.timer)
-    }
-    completionTimersRef.current.delete(key)
-
-    const fadeTimer = fadeTimersRef.current.get(key)
-    if (fadeTimer) {
-      window.clearTimeout(fadeTimer)
-      fadeTimersRef.current.delete(key)
-    }
-  }
-
-  const clearAllJobDismissTimers = () => {
-    completionTimersRef.current.forEach((timerState) => {
-      if (timerState?.timer) window.clearTimeout(timerState.timer)
-    })
-    completionTimersRef.current.clear()
-    fadeTimersRef.current.forEach((timer) => window.clearTimeout(timer))
-    fadeTimersRef.current.clear()
-  }
-
   const clearJobState = (key, expectedJobId) => {
     setJobState((current) => {
       if (!current[key]) return current
@@ -402,198 +363,8 @@ export function usePositionsPage() {
     })
   }
 
-  const canRunJobDismissCountdown = (key) => {
-    const state = jobStateRef.current[key]
-    return (
-      isTrackedJobComplete(state) &&
-      !state?.fading &&
-      pageHasAttention() &&
-      jobCardVisibilityRef.current.get(key) === true
-    )
-  }
-
-  const pauseJobDismissCountdown = (key) => {
-    const timerState = completionTimersRef.current.get(key)
-    if (!timerState?.timer) return
-
-    window.clearTimeout(timerState.timer)
-    const elapsedMs = Date.now() - Number(timerState.startedAt || Date.now())
-    completionTimersRef.current.set(key, {
-      timer: null,
-      startedAt: null,
-      remainingMs: Math.max(0, Number(timerState.remainingMs || 0) - elapsedMs)
-    })
-  }
-
-  const startJobDismissCountdown = (key) => {
-    if (!canRunJobDismissCountdown(key)) return
-
-    const timerState = completionTimersRef.current.get(key) || {
-      timer: null,
-      startedAt: null,
-      remainingMs: COMPLETED_JOB_VISIBLE_MS
-    }
-    if (timerState.timer) return
-
-    const remainingMs = Math.max(0, Number(timerState.remainingMs ?? COMPLETED_JOB_VISIBLE_MS))
-    const timer = window.setTimeout(() => {
-      completionTimersRef.current.delete(key)
-      updateJobState(key, { fading: true })
-
-      const fadeTimer = window.setTimeout(() => {
-        fadeTimersRef.current.delete(key)
-        clearJobState(key)
-      }, COMPLETED_JOB_FADE_MS)
-
-      fadeTimersRef.current.set(key, fadeTimer)
-    }, remainingMs)
-
-    completionTimersRef.current.set(key, {
-      timer,
-      startedAt: Date.now(),
-      remainingMs
-    })
-  }
-
-  const syncJobDismissCountdown = (key) => {
-    if (canRunJobDismissCountdown(key)) {
-      startJobDismissCountdown(key)
-    } else {
-      pauseJobDismissCountdown(key)
-    }
-  }
-
-  const syncAllJobDismissCountdowns = () => {
-    Object.keys(jobStateRef.current).forEach(syncJobDismissCountdown)
-  }
-
-  const setJobCardRef = (key) => (node) => {
-    const previousNode = jobCardNodesRef.current.get(key)
-    const observer = jobCardObserverRef.current
-
-    if (previousNode && previousNode !== node && observer) {
-      observer.unobserve(previousNode)
-    }
-
-    if (!node) {
-      jobCardNodesRef.current.delete(key)
-      jobCardVisibilityRef.current.delete(key)
-      pauseJobDismissCountdown(key)
-      return
-    }
-
-    jobCardNodesRef.current.set(key, node)
-    node.dataset.jobKey = key
-
-    if (observer) {
-      observer.observe(node)
-      return
-    }
-
-    jobCardVisibilityRef.current.set(key, true)
-    syncJobDismissCountdown(key)
-  }
-
-  const handleCompletedJob = (key, state, status, patch) => {
-    const jobId = state.jobId
-    const succeeded = status.result?.success === true
-    patch.completedAt = patch.completedAt || state.completedAt || Date.now()
-    patch.fading = false
-
-    const isAutomaticIngestionStage = AUTOMATIC_PIPELINE_JOB_KEYS.has(key)
-    if (
-      succeeded && !isAutomaticIngestionStage && jobId &&
-      !completedSoundJobsRef.current.has(jobId)
-    ) {
-      completedSoundJobsRef.current.add(jobId)
-      playCompletionSound(audioContextRef)
-    }
-  }
-
-  useEffect(() => {
-    const runId = ingestionTiming?.run_id || null
-    const status = String(ingestionTiming?.status || '').toLowerCase() || null
-    if (!runId) return
-
-    const previous = ingestionSoundStateRef.current
-    if (!previous.initialized) {
-      ingestionSoundStateRef.current = { initialized: true, runId, status }
-      return
-    }
-
-    const completedNow = status === 'complete' && (
-      previous.runId !== runId || previous.status !== 'complete'
-    )
-    const completionKey = `ingestion:${runId}`
-    if (completedNow && !completedSoundJobsRef.current.has(completionKey)) {
-      completedSoundJobsRef.current.add(completionKey)
-      playCompletionSound(audioContextRef)
-    }
-
-    ingestionSoundStateRef.current = { initialized: true, runId, status }
-  }, [ingestionTiming?.run_id, ingestionTiming?.status])
-
-  useEffect(() => {
-    jobStateRef.current = jobState
-
-    Array.from(completionTimersRef.current.keys()).forEach((key) => {
-      const state = jobState[key]
-      if (!state || !isTrackedJobComplete(state)) {
-        cancelJobDismissTimers(key)
-      }
-    })
-
-    Object.entries(jobState).forEach(([key, state]) => {
-      if (!isTrackedJobComplete(state) || state.fading) return
-
-      if (!completionTimersRef.current.has(key)) {
-        completionTimersRef.current.set(key, {
-          timer: null,
-          startedAt: null,
-          remainingMs: COMPLETED_JOB_VISIBLE_MS
-        })
-      }
-      syncJobDismissCountdown(key)
-    })
-  }, [jobState])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && typeof IntersectionObserver !== 'undefined') {
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          const key = entry.target.dataset.jobKey
-          if (!key) return
-          jobCardVisibilityRef.current.set(key, entry.isIntersecting && entry.intersectionRatio > 0)
-          syncJobDismissCountdown(key)
-        })
-      }, { threshold: 0.25 })
-
-      jobCardObserverRef.current = observer
-      jobCardNodesRef.current.forEach((node) => observer.observe(node))
-    } else {
-      jobCardNodesRef.current.forEach((node, key) => {
-        jobCardVisibilityRef.current.set(key, true)
-        syncJobDismissCountdown(key)
-      })
-    }
-
-    const handleAttentionChange = () => {
-      syncAllJobDismissCountdowns()
-    }
-
-    document.addEventListener('visibilitychange', handleAttentionChange)
-    window.addEventListener('focus', handleAttentionChange)
-    window.addEventListener('blur', handleAttentionChange)
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleAttentionChange)
-      window.removeEventListener('focus', handleAttentionChange)
-      window.removeEventListener('blur', handleAttentionChange)
-      jobCardObserverRef.current?.disconnect()
-      jobCardObserverRef.current = null
-      clearAllJobDismissTimers()
-    }
-  }, [])
+  const { audioContextRef, setJobCardRef, cancelJobDismissTimers, handleCompletedJob } =
+    useJobCompletionPresentation(jobState, ingestionTiming, updateJobState, clearJobState)
 
   usePositionJobPolling(jobState, (key, state, status) => {
     const patch = { status, error: '', completedAt: null, fading: false }
@@ -618,7 +389,7 @@ export function usePositionsPage() {
         return
       }
       handleCompletedJob(key, state, status, patch)
-    } else if (phase === 'failed' || phase === 'unavailable') {
+    } else if (phase === 'failed' || phase === 'unavailable' || phase === 'cancelled') {
       patch.error = getTrackedJobFailureDetail(status)
       patch.fading = false
     }
@@ -736,80 +507,18 @@ export function usePositionsPage() {
     })
   }
 
-  const playerGameScopePayload = () => ({
-    player_name: String(playerGameAnalysis.playerName || '').trim().toLowerCase(),
-    selection_mode: playerGameAnalysis.selectionMode,
-    date_from: playerGameAnalysis.selectionMode === 'range' ? playerGameAnalysis.dateFrom || null : null,
-    date_to: playerGameAnalysis.selectionMode === 'range' ? playerGameAnalysis.dateTo || null : null
-  })
-
-  const handleInspectPlayerGameScope = async (event) => {
-    event.preventDefault()
-    const payload = playerGameScopePayload()
-    if (!payload.player_name) {
-      setPlayerGameAnalysis((current) => ({ ...current, error: 'Player name is required.' }))
-      return
-    }
-    if (payload.selection_mode === 'range' && (!payload.date_from || !payload.date_to)) {
-      setPlayerGameAnalysis((current) => ({ ...current, error: 'Choose both dates for the range.' }))
-      return
-    }
-
-    setPlayerGameAnalysis((current) => ({
-      ...current,
-      loadingScope: true,
-      error: '',
-      scope: null,
-      preview: null
-    }))
-    try {
-      const scope = await inspectPlayerGameScope(payload)
-      setPlayerGameAnalysis((current) => ({ ...current, loadingScope: false, scope, error: '' }))
-    } catch (err) {
-      setPlayerGameAnalysis((current) => ({
-        ...current,
-        loadingScope: false,
-        error: err instanceof Error ? err.message : 'Unable to inspect player games.'
-      }))
-    }
-  }
-
-  const handlePreviewPlayerGameAnalysis = async () => {
-    if (!playerGameAnalysis.scope) {
-      setPlayerGameAnalysis((current) => ({ ...current, error: 'Inspect the game selection first.' }))
-      return
-    }
-    const useAll = playerGameAnalysis.selectionMode === 'range' && playerGameAnalysis.useAll
-    const gameLimit = Math.max(1, Number(playerGameAnalysis.gameLimit) || 1)
-    setPlayerGameAnalysis((current) => ({ ...current, loadingPreview: true, preview: null, error: '' }))
-    try {
-      const preview = await previewPlayerGameAnalysis({
-        ...playerGameScopePayload(),
-        game_limit: useAll ? null : gameLimit,
-        use_all: useAll,
-        range_order: playerGameAnalysis.rangeOrder
-      })
-      setPlayerGameAnalysis((current) => ({ ...current, loadingPreview: false, preview, error: '' }))
-    } catch (err) {
-      setPlayerGameAnalysis((current) => ({
-        ...current,
-        loadingPreview: false,
-        error: err instanceof Error ? err.message : 'Unable to calculate the FEN workload.'
-      }))
-    }
-  }
-
   const handleConfirmPlayerGameAnalysis = async () => {
-    const preview = playerGameAnalysis.preview
-    if (!preview?.plan_id) return
+    const plan = takePlan()
+    if (!plan) return
+    const { preview } = plan
     unlockCompletionAudio(audioContextRef)
     const payload = await enqueueJob({
       key: 'gameCompletion',
       request: queuePlayerGameAnalysis,
       body: {
         plan_id: preview.plan_id,
-        batch_size: Number(playerGameAnalysis.batchSize),
-        cool_off: Math.max(0, Number(playerGameAnalysis.coolOff) || 0),
+        batch_size: plan.batchSize,
+        cool_off: plan.coolOff,
         nodes_limit: DEFAULT_ANALYSIS_NODES
       },
       meta: {
@@ -825,28 +534,7 @@ export function usePositionsPage() {
       }
     })
     if (payload) {
-      setPlayerGameAnalysis((current) => ({ ...current, preview: null }))
       await loadAnalysisProcesses()
-    }
-  }
-
-  const handleInspectPlayer = async () => {
-    const playerName = String(playerJob.playerName || '').trim().toLowerCase()
-    if (!playerName) {
-      setPlayerInspection({ loading: false, error: 'Player name is required.', data: null })
-      return
-    }
-
-    setPlayerInspection({ loading: true, error: '', data: null })
-    try {
-      const payload = await fetchPlayerAnalysisCounts(playerName)
-      setPlayerInspection({ loading: false, error: '', data: payload })
-    } catch (err) {
-      setPlayerInspection({
-        loading: false,
-        error: err instanceof Error ? err.message : 'Unable to inspect player positions.',
-        data: null
-      })
     }
   }
 

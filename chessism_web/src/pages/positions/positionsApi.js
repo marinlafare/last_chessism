@@ -15,11 +15,11 @@ export const fetchAnalysisHistory = (backend, offset = 0, options) => getJson(
 export const fetchCloudHistoryUsage = (id, options) => getJson(`/analysis/cloud/${encodeURIComponent(id)}/usage`, options)
 export const fetchActiveJobs = (options) => getJson('/jobs/active', options)
 export const fetchPositionJobStatus = (jobId, options) => getJson(`/jobs/${encodeURIComponent(jobId)}`, options)
-export const fetchPlayerAnalysisCounts = (playerName) => (
-  getJson(`/fens/players/${encodeURIComponent(playerName)}/analysis_counts`)
+export const fetchPlayerAnalysisCounts = (playerName, options) => (
+  getJson(`/fens/players/${encodeURIComponent(playerName)}/analysis_counts`, options)
 )
-export const inspectPlayerGameScope = (payload) => postJson('/analysis/player_games/scope', payload)
-export const previewPlayerGameAnalysis = (payload) => postJson('/analysis/player_games/preview', payload)
+export const inspectPlayerGameScope = (payload, options) => postJson('/analysis/player_games/scope', payload, options)
+export const previewPlayerGameAnalysis = (payload, options) => postJson('/analysis/player_games/preview', payload, options)
 export const queueGlobalAnalysis = (payload) => postJson('/analysis/run_job', payload)
 export const queuePlayerAnalysis = (payload) => postJson('/analysis/run_player_job', payload)
 export const queueAnalysisLoop = (payload) => postJson('/analysis/run_loop_job', payload)

@@ -35,7 +35,7 @@ from chessism_api.operations.ingestion_pipeline.timing import (
 
 GAME_UPDATE_PROGRESS_KIND = "game_update"
 ProgressCallback = Callable[[str, int, int, str | None], Awaitable[None]]
-IngestionOperation = Callable[[dict[str, Any], ProgressCallback | None], Awaitable[str]]
+IngestionOperation = Callable[[dict[str, Any], ProgressCallback | None], Awaitable[dict[str, Any]]]
 
 
 async def _write_game_job_progress(
@@ -87,7 +87,7 @@ async def _download_format_and_insert(
     *,
     no_games_message: str,
     reporter=None,
-) -> str | None:
+) -> dict[str, Any]:
     """Download serially, parse, persist, and record every successful archive."""
     total_steps = max(1, len(months) + 2)
     if progress_callback:
@@ -121,7 +121,7 @@ async def _download_format_and_insert(
     )
     if downloaded_count == 0:
         await sync_player_months(player_name, fetched_months)
-        return no_games_message
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': no_games_message}
 
     if progress_callback:
         await progress_callback(
@@ -144,10 +144,10 @@ async def _download_format_and_insert(
             formatted_games, player_name, fetched_months=fetched_months)
     if progress_callback:
         await progress_callback(
-            "complete",
+            "saved",
             total_steps,
             total_steps,
-            f"Saved {len(formatted_games)} games and queued position extraction.",
+            f"Saved {result['committed_games']} new games. Preparing position extraction.",
         )
     return result
 
@@ -155,11 +155,11 @@ async def _download_format_and_insert(
 async def create_games(
     data: dict[str, Any],
     progress_callback: ProgressCallback | None = None,
-) -> str:
+) -> dict[str, Any]:
     player_name = str(data["player_name"]).strip().lower()
     months = await missing_archive_months(player_name)
     if not months:
-        return "ALL MONTHS IN DB ALREADY"
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': 'ALL MONTHS IN DB ALREADY'}
     result = await _download_format_and_insert(
         player_name,
         months,
@@ -167,13 +167,13 @@ async def create_games(
         no_games_message=f"No games found for {player_name}.",
         reporter=data.get("_step_reporter"),
     )
-    return result or f"DATA READY FOR {player_name}"
+    return result
 
 
 async def update_player_games(
     data: dict[str, Any],
     progress_callback: ProgressCallback | None = None,
-) -> str:
+) -> dict[str, Any]:
     player_name = str(data["player_name"]).strip().lower()
     if progress_callback:
         await progress_callback(
@@ -184,7 +184,7 @@ async def update_player_games(
         )
     months = await update_archive_months(player_name)
     if not months:
-        return f"Player {player_name} is already up to date."
+        return {'committed_games': 0, 'zero_move_games': 0, 'message': f'Player {player_name} is already up to date.'}
     result = await _download_format_and_insert(
         player_name,
         months,
@@ -192,7 +192,7 @@ async def update_player_games(
         no_games_message=f"No new games found for {player_name}.",
         reporter=data.get("_step_reporter"),
     )
-    return result or f"DATA UPDATED FOR {player_name}"
+    return result
 
 
 async def _run_game_job(
@@ -203,7 +203,7 @@ async def _run_game_job(
     fallback_job_id: str,
     queued_detail: str,
     trigger: str = "automatic",
-) -> str:
+) -> dict[str, Any]:
     """Run one import operation with durable timings and transient progress."""
     job_id = str(ctx.get("job_id") or fallback_job_id)
     player_name = str(data.get("player_name", "")).strip().lower()
@@ -252,7 +252,8 @@ async def _run_game_job(
     )
     try:
         async with StepReporter(ctx, ingestion_run_id) as reporter:
-            message = await operation({**data, "_step_reporter": reporter}, progress_callback)
+            imported = await operation({**data, "_step_reporter": reporter}, progress_callback)
+        message = imported["message"]
         await finish_ingestion_stage(
             ingestion_run_id,
             PARSING_GAMES,
@@ -288,7 +289,14 @@ async def _run_game_job(
             result=completion_message,
             ingestion_run_id=ingestion_run_id,
         )
-        return completion_message
+        return {
+            "status": "complete", "player_name": player_name,
+            "committed_games": imported["committed_games"],
+            "zero_move_games": imported["zero_move_games"],
+            "ingestion_run_id": ingestion_run_id,
+            "fen_extraction": fen_pipeline,
+            "message": completion_message,
+        }
     except Exception as error:
         await finish_ingestion_stage(
             ingestion_run_id,
@@ -321,7 +329,7 @@ async def run_create_player_games_job(
     ctx: dict[str, Any],
     data: dict[str, Any],
     **_kwargs: Any,
-) -> str:
+) -> dict[str, Any]:
     return await _run_game_job(
         ctx,
         data,
@@ -336,7 +344,7 @@ async def run_update_player_games_job(
     ctx: dict[str, Any],
     data: dict[str, Any],
     **_kwargs: Any,
-) -> str:
+) -> dict[str, Any]:
     return await _run_game_job(
         ctx,
         data,

@@ -11,7 +11,7 @@ export const fetchPlayerNavigation = (sameGroupAs, options) => getJson(
   `/players/navigation${sameGroupAs ? `?same_group_as=${playerPath(sameGroupAs)}` : ''}`, options
 )
 export const fetchPlayerDeletionPreview = (playerName) => getJson(`/players/${playerPath(playerName)}/deletion-preview`)
-export const fetchPlayerJobStatus = (jobId) => getJson(`/jobs/${encodeURIComponent(jobId)}`)
+export const fetchPlayerJobStatus = (jobId, options) => getJson(`/jobs/${encodeURIComponent(jobId)}`, options)
 export const updatePlayerGames = (playerName) => postJson('/games/update', { player_name: playerName })
 export const deletePlayer = (playerName, confirmation) => (
   deleteJson(`/players/${playerPath(playerName)}`, {
