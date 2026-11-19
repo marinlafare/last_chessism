@@ -145,3 +145,29 @@ class AnalysisExecutionPostgresTests(EvaluationCase):
         handler.assert_not_awaited()
         progress = json.loads(await self.redis.get('chessism:job_progress:'+self.ident))
         self.assertEqual(progress['phase'],'failed')
+
+    async def test_response_completion_cancellation_cannot_commit_the_acquired_batch(self):
+        entered, release = asyncio.Event(), asyncio.Event()
+        calls = 0
+
+        async def handler(request):
+            nonlocal calls
+            calls += 1
+            fen = json.loads(request.content)['fens'][0]
+            entered.set()
+            await release.wait()
+            return httpx.Response(200, json=[{'fen':fen, 'is_valid':True,
+                                             'analysis':{'score':25, 'pv':[]}}])
+
+        with self.http(handler):
+            task = self.start(analysis.run_analysis_job(self.ctx,1,1,100000))
+            await entered.wait()
+            release.set()
+            task.cancel('original')  # Response readiness and cancellation share one turn.
+            with self.assertRaises(asyncio.CancelledError):
+                await task
+        self.assertEqual(calls,1)
+        self.assertEqual(await self.db.fetchval('SELECT count(*) FROM fen WHERE score IS NOT NULL'),0)
+        self.assertEqual(await self.db.fetchval('SELECT analyzed_fens FROM database_summary WHERE id=1'),0)
+        self.assertEqual(self.engine.pool.checkedout(),0)
+        self.assertEqual(len(await self.db.fetch('SELECT fen FROM fen FOR UPDATE NOWAIT')),5)

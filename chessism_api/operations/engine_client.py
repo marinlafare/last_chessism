@@ -3,6 +3,7 @@ import asyncio
 import math
 
 import httpx
+from stockfish_core.deadlines import wait_with_timeout
 from stockfish_core.http_policy import CONNECT_SECONDS, MAX_ATTEMPTS, RETRY_DELAYS, request_seconds
 
 ENGINE_URL = 'http://stockfish-service:9999/analyze'
@@ -78,6 +79,6 @@ async def call_engine_service(client, url, fens, nodes, *, multipv=4,
             await asyncio.sleep(RETRY_DELAYS[attempt])
 
     try:
-        return await asyncio.wait_for(request(), timeout=deadline)
+        return await wait_with_timeout(request(), timeout=deadline)
     except asyncio.TimeoutError as error:
         raise EngineServiceRequestError('Stockfish request deadline exceeded', 504) from error

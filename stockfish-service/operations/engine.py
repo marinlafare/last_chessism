@@ -12,6 +12,7 @@ import chess.engine
 from fastapi import HTTPException
 from stockfish_core import THREADS, HASH_MIB, STALL_SECONDS
 from stockfish_core.analysis import configure, verify_binary
+from stockfish_core.deadlines import wait_with_timeout
 
 # --- CORE CONFIGURATION ---
 
@@ -22,10 +23,9 @@ ANALYSE_TIMEOUT_SEC = STALL_SECONDS
 from stockfish_core.http_policy import ENGINE_START_SECONDS, ENGINE_CLOSE_SECONDS, QUEUE_SECONDS
 
 
-async def finish_engine_cleanup(operation):
+async def finish_engine_cleanup(operation, *, cancellation=None):
     """Drain engine/request cleanup despite repeated cancellation, then propagate it."""
     task = asyncio.ensure_future(operation)
-    cancellation = None
     while not task.done():
         try:
             await asyncio.shield(task)
@@ -124,14 +124,15 @@ async def _start_engine(engine_number: int | None = None) -> tuple[Any, chess.en
         await configure(engine_uci, THREADS, HASH_MB)
 
     try:
-        await asyncio.wait_for(open_engine(), timeout=ENGINE_START_SECONDS)
+        await wait_with_timeout(open_engine(), timeout=ENGINE_START_SECONDS)
         return transport, engine_uci
-    except BaseException:
+    except BaseException as error:
         try:
             await finish_engine_cleanup(EnginePool._shutdown_slot(
-                EngineSlot(engine_number or 0, transport, engine_uci)))
-        except BaseException as error:
-            print(f"Engine startup cleanup failed: {error!r}", flush=True)
+                EngineSlot(engine_number or 0, transport, engine_uci)),
+                cancellation=error if isinstance(error, asyncio.CancelledError) else None)
+        except Exception as cleanup_error:
+            print(f"Engine startup cleanup failed: {cleanup_error!r}", flush=True)
         raise
 
 
@@ -185,9 +186,10 @@ class EnginePool:
                     slots.append(
                         EngineSlot(number=number, transport=transport, engine=engine)
                     )
-            except BaseException:
+            except BaseException as error:
                 await finish_engine_cleanup(asyncio.gather(
-                    *(self._shutdown_slot(slot) for slot in slots), return_exceptions=True))
+                    *(self._shutdown_slot(slot) for slot in slots), return_exceptions=True),
+                    cancellation=error if isinstance(error, asyncio.CancelledError) else None)
                 raise
 
             self._slots = slots
@@ -200,19 +202,29 @@ class EnginePool:
     @asynccontextmanager
     async def acquire(self):
         await self.initialize()
-        slot = await asyncio.wait_for(self._available.get(), timeout=QUEUE_SECONDS)
+        available = self._available
+        acquisition = asyncio.create_task(available.get())
+        try:
+            slot = await wait_with_timeout(acquisition, timeout=QUEUE_SECONDS)
+        except BaseException:
+            # The getter may have removed a slot just as its caller was cancelled.
+            # It is drained now; return any acquired slot exactly once, without use.
+            if not acquisition.cancelled() and acquisition.exception() is None:
+                available.put_nowait(acquisition.result())
+            raise
         slot.busy = True
         try:
             if slot.engine is None:
                 await self.restart(slot, "unavailable")
             yield slot
-        except BaseException:
+        except BaseException as error:
             # A cancelled/timed-out UCI command must never share its process
             # with the next lease, even if python-chess has already sent stop.
             try:
-                await finish_engine_cleanup(self._shutdown_slot(slot))
-            except BaseException as error:
-                print(f"Engine lease cleanup failed: {error!r}", flush=True)
+                await finish_engine_cleanup(self._shutdown_slot(slot),
+                    cancellation=error if isinstance(error, asyncio.CancelledError) else None)
+            except Exception as cleanup_error:
+                print(f"Engine lease cleanup failed: {cleanup_error!r}", flush=True)
             raise
         finally:
             slot.busy = False
@@ -245,7 +257,7 @@ class EnginePool:
     async def _shutdown_slot(slot: EngineSlot) -> None:
         try:
             if slot.engine is not None:
-                await asyncio.wait_for(slot.engine.quit(), timeout=ENGINE_CLOSE_SECONDS)
+                await wait_with_timeout(slot.engine.quit(), timeout=ENGINE_CLOSE_SECONDS)
         except Exception:
             pass
         finally:

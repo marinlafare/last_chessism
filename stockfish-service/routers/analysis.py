@@ -1,5 +1,6 @@
 import asyncio
 import os
+import sys
 import time
 from typing import Any
 
@@ -9,6 +10,7 @@ import redis.asyncio as redis
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
 from stockfish_core.analysis import analyse, board_from_fen
+from stockfish_core.deadlines import wait_with_timeout
 from stockfish_core.http_policy import QUEUE_SECONDS, execution_seconds
 
 from operations.engine import (
@@ -201,7 +203,7 @@ async def _analyze(request: AnalysisRequest) -> list[dict[str, Any]]:
                 continue
 
             try:
-                result = await asyncio.wait_for(
+                result = await wait_with_timeout(
                     analyse(engine, board, request.nodes_limit, request.multipv),
                     timeout=ANALYSE_TIMEOUT_SEC)
             except asyncio.TimeoutError as error:
@@ -251,7 +253,9 @@ async def analyze_fens_endpoint(request: AnalysisRequest, connection: Request = 
             raise HTTPException(status_code=499, detail="Analysis client disconnected")
         raise HTTPException(status_code=504, detail="Stockfish batch deadline exceeded")
     finally:
+        error = sys.exc_info()[1]
         for task in tasks:
             if not task.done():
                 task.cancel()
-        await finish_engine_cleanup(asyncio.gather(*tasks, return_exceptions=True))
+        await finish_engine_cleanup(asyncio.gather(*tasks, return_exceptions=True),
+            cancellation=error if isinstance(error, asyncio.CancelledError) else None)
