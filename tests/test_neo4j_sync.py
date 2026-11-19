@@ -8,7 +8,9 @@ import chess
 from neo4j import AsyncGraphDatabase
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-from chessism_api.database.postgresql.relational_storage import RelationalStorage
+from chessism_api.database.postgresql import canonical
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
+from sqlalchemy.engine import URL
 from chessism_api.database.neo4j import sync_schema, sync_source, sync_graph, sync_worker, sync_manage
 from chessism_api.database.neo4j.sync_backup import publication_barrier
 from chessism_api.database.neo4j.sync_cloud import cloud_progress
@@ -57,33 +59,17 @@ class BackupBarrierTests(unittest.IsolatedAsyncioTestCase):
             session.rollback.assert_awaited_once()
 
 
-@unittest.skipUnless(os.getenv('GRAPH_SYNC_TEST_DB'), 'requires disposable PostgreSQL and Neo4j')
-class IntegrationTests(unittest.IsolatedAsyncioTestCase):
+@unittest.skipUnless(os.getenv('CHESSISM_CANONICAL_TEST_SOCKET') and os.getenv('GRAPH_SYNC_TEST_URI'), 'requires disposable PostgreSQL and Neo4j')
+class IntegrationTests(CanonicalDatabaseTestCase):
     async def test_outbox_paths_replay_scores_updates_deletion_and_backup_barrier(self):
-        engine=create_async_engine(os.environ['GRAPH_SYNC_TEST_DB'])
+        await canonical.initialize(self.db)
+        engine=create_async_engine(URL.create('postgresql+asyncpg',username='test',database=self.name,port=55432,query={'host':self.socket}))
         factory=async_sessionmaker(engine,expire_on_commit=False)
-        layout=RelationalStorage('public','archive','reads','relational_v3')
         driver=AsyncGraphDatabase.driver(os.environ['GRAPH_SYNC_TEST_URI'],auth=None,telemetry_disabled=True)
         config=SimpleNamespace(database='neo4j')
         try:
-            async with engine.begin() as c:
-                raw=(await c.get_raw_connection()).driver_connection
-                await raw.execute('''CREATE TABLE player(id bigint PRIMARY KEY,player_name text,joined bigint,deleted_at timestamptz);
-                    CREATE TABLE game_mode(id smallint PRIMARY KEY,name text);
-                    CREATE TABLE game(link bigint PRIMARY KEY,white_player_id bigint,black_player_id bigint,
-                      mode_id smallint,played_at timestamptz,white_result float,black_result float,
-                      white_str_result text,black_str_result text,n_moves int,fens_done bool);
-                    CREATE TABLE game_player(id bigint GENERATED ALWAYS AS IDENTITY,game_link bigint,player_id bigint,is_white bool);
-                    CREATE TABLE fen(fen_id bigint PRIMARY KEY,fen text,score float,analysis_source text,tablebase_wdl int,tablebase_dtz int);
-                    CREATE TABLE game_fen_association(id bigint GENERATED ALWAYS AS IDENTITY,game_link bigint,fen_id bigint,n_move int,is_white bool);
-                    CREATE TABLE moves(link bigint,n_move int,white_move text,black_move text);
-                    CREATE TABLE cloud_analysis_run(id text PRIMARY KEY,job_id text);
-                    CREATE TABLE cloud_fen_claim(fen text PRIMARY KEY,run_id text);
-                    INSERT INTO player VALUES(1,'lafareto',1,NULL),(2,'opponent',1,NULL);
-                    INSERT INTO game_mode VALUES(1,'blitz');''')
-            async with factory() as s,s.begin():
-                await sync_schema.install(s,layout)
-                await s.execute(text('UPDATE graph_sync.control SET enabled=true'))
+            await self.db.execute("""INSERT INTO player(player_name,joined) VALUES('lafareto',1),('opponent',1);
+                INSERT INTO game_mode(name) VALUES('blitz'); UPDATE graph_sync.control SET enabled=true;""")
             await sync_graph.install(driver,'neo4j')
             # Repeating positions and moves must survive a game path, but share nodes.
             sans=['Nf3','Nf6','Ng1','Ng8','Nf3','Nf6','e4','e5']
@@ -93,17 +79,16 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                 fens.setdefault(fen,len(fens)+1); saved.append(fens[fen])
             async with factory() as s,s.begin():
                 for fen,id in fens.items():
-                    await s.execute(text("INSERT INTO fen VALUES(:id,:fen,35,'stockfish',NULL,NULL)"),{'id':id,'fen':fen})
+                    await s.execute(text("INSERT INTO fen(fen_id,fen,score,analysis_source,analyzed_at) OVERRIDING SYSTEM VALUE VALUES(:id,:fen,35,'stockfish',now())"),{'id':id,'fen':fen})
                 for game in (1,2):
-                    await s.execute(text("INSERT INTO game VALUES(:id,1,2,1,now(),1,0,'win','resigned',4,false)"),{'id':game})
-                    await s.execute(text('INSERT INTO game_player(game_link,player_id,is_white) VALUES(:id,1,true),(:id,2,false)'),{'id':game})
+                    await s.execute(text("INSERT INTO game(link,white_player_id,black_player_id,mode_id,played_at,white_result,black_result,white_str_result,black_str_result,n_moves,fens_done,white_elo,black_elo,time_control,eco,time_elapsed,rules) VALUES(:id,1,2,1,now(),1,0,'win','resigned',4,false,1500,1600,'600','no_eco',60,'chess')"),{'id':game})
                     for i in range(4):
-                        await s.execute(text('INSERT INTO moves VALUES(:id,:n,:w,:b)'),{'id':game,'n':i+1,'w':sans[i*2],'b':sans[i*2+1]})
+                        await s.execute(text('INSERT INTO moves VALUES(:id,:n,:w,:b,1,1,590,590)'),{'id':game,'n':i+1,'w':sans[i*2],'b':sans[i*2+1]})
                     for i,id in enumerate(saved):
                         await s.execute(text('INSERT INTO game_fen_association(game_link,fen_id,n_move,is_white) VALUES(:game,:fen,:n,:white)'),
                             {'game':game,'fen':id,'n':i//2+1,'white':i%2==0})
                 await s.execute(text('UPDATE game SET fens_done=true'))
-            with patch.object(sync_worker,'AsyncDBSession',factory),patch.object(sync_worker,'configured_storage',return_value=layout),patch.object(sync_manage,'configured_storage',return_value=layout):
+            with patch.object(sync_worker,'AsyncDBSession',factory):
                 with patch.object(sync_worker.LOG, 'info') as log:
                     self.assertTrue(await sync_worker.tick(driver,config))
                 metrics = json.loads(log.call_args.args[1])
@@ -149,10 +134,11 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
                 jobs=[SimpleNamespace(id=id,status='complete',imported=1,target=1,created_at=datetime.now(timezone.utc))
                       for id in ('cloud-a','cloud-b')]
                 async with factory() as s,s.begin():
-                    await s.execute(text("INSERT INTO fen VALUES(99,'not-in-graph',NULL,NULL,NULL,NULL)"))
-                    await s.execute(text("INSERT INTO cloud_analysis_run VALUES('run-a','cloud-a'),('run-b','cloud-b')"))
+                    await s.execute(text("INSERT INTO fen(fen_id,fen) OVERRIDING SYSTEM VALUE VALUES(99,'not-in-graph w - -')"))
+                    await s.execute(text("INSERT INTO cloud_analysis_job(id,status,target,imported) VALUES('cloud-a','complete',1,1),('cloud-b','complete',1,1)"))
+                    await s.execute(text("INSERT INTO cloud_analysis_run(id,job_id,status) VALUES('run-a','cloud-a','complete'),('run-b','cloud-b','complete')"))
                     await s.execute(text("INSERT INTO cloud_fen_claim SELECT fen,CASE WHEN fen_id=1 THEN 'run-a' ELSE 'run-b' END FROM fen WHERE fen_id IN (1,99)"))
-                    await s.execute(text("UPDATE fen SET score=12,analysis_source='stockfish' WHERE fen_id IN (1,99)"))
+                    await s.execute(text("UPDATE fen SET score=12,analysis_source='stockfish',analyzed_at=now() WHERE fen_id IN (1,99)"))
                     await s.execute(text('DELETE FROM cloud_fen_claim'))
                 self.assertTrue(await sync_worker.tick(driver,config))
                 async with factory() as s:

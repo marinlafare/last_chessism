@@ -5,7 +5,8 @@ import json
 import os
 import uuid
 from sqlalchemy import text
-from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from .runtime import connect
 from .config import GraphConfig
@@ -15,13 +16,13 @@ from . import sync_schema as schema, sync_graph as graph, sync_source as source
 async def backfill(session, player, limit):
     if not 1 <= limit <= 50000:
         raise ValueError('Backfill must contain between 1 and 50,000 games per request')
-    p = (await session.execute(text(f"SELECT id,player_name FROM {configured_storage().table('player')} WHERE player_name=:name"),
+    p = (await session.execute(text(f"SELECT id,player_name FROM public.player WHERE player_name=:name"),
                               {'name':player.lower()})).mappings().first()
     if not p:
         raise ValueError('Player not found')
-    ids = list((await session.execute(text(f'''SELECT g.link FROM {configured_storage().table('game_player')} gp
-        JOIN {configured_storage().table('game')} g ON g.link=gp.game_link
-        WHERE gp.player_id=:id AND g.fens_done AND g.n_moves>0 ORDER BY g.link LIMIT :limit'''),
+    ids = list((await session.execute(text(f'''SELECT DISTINCT g.link FROM public.game_player gp
+        JOIN public.game g ON g.link=gp.game_link
+        WHERE gp.player_id=:id AND g.is_standard AND g.fens_done AND g.n_moves>0 ORDER BY g.link LIMIT :limit'''),
         {'id':p['id'],'limit':limit})).scalars())
     if len(ids) != limit:
         raise ValueError(f'Only {len(ids)} complete games available; requested {limit}')
@@ -39,7 +40,7 @@ async def verify(session, driver, config, run_id):
     checked = 0
     async with driver.session(database=config.database) as gs:
         for offset in range(0,len(ids),25):
-            games, positions, deleted = await source.read_games(session,ids[offset:offset+25],configured_storage())
+            games, positions, deleted = await source.read_games(session,ids[offset:offset+25])
             actual = await (await gs.run('''MATCH (g:Game) WHERE g.id IN $ids OPTIONAL MATCH (g)-[v:AT_PLY]->(p:Position)
                 RETURN g.id AS id,g.source_hash AS hash,collect({ply:v.ply,key:p.key,uci:v.uci,from_key:v.from_key}) AS steps''', ids=[g['id'] for g in games])).data()
             by_id = {r['id']:r for r in actual}
@@ -83,12 +84,10 @@ async def main(args):
     engine = await bind_runtime_engine(os.environ['DATABASE_URL'])
     try:
         if args.install:
-            async with AsyncDBSession() as session, session.begin():
-                await schema.install(session, configured_storage())
             config = GraphConfig.from_env()
             async with connect(config) as driver:
                 await graph.install(driver, config.database)
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             await session.execute(text("SET LOCAL statement_timeout='30s'"))
             if args.activate:
                 await session.execute(text("UPDATE graph_sync.control SET enabled=true,phase='current' WHERE id"))

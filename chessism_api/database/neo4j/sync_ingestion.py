@@ -1,8 +1,8 @@
 """Read-only ingestion progress from captured changes, not global graph counts."""
 from datetime import datetime, timezone
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.runtime import configured_storage
 from .sync_schema import available
 
 
@@ -38,7 +38,7 @@ def progress_row(run, counts, control, now=None):
             'started_at':started.isoformat() if started else None}
 
 
-def progress_query(layout):
+def progress_query():
     # Resolve score membership ONCE. The former correlated EXISTS walked the
     # materialized game_items again for every score occurrence (quadratic), and
     # its OR also made game/profile events evaluate that expensive subplan.
@@ -47,12 +47,12 @@ def progress_query(layout):
                 SELECT * FROM graph_sync.event WHERE created_at>=:started
                 AND (CAST(:finished AS timestamptz) IS NULL OR created_at<=CAST(:finished AS timestamptz)) AND batch_id IS NULL
             ), player AS MATERIALIZED (
-                SELECT id FROM {layout.table('player')} WHERE player_name=:player
+                SELECT id FROM public.player WHERE player_name=:player
             ), game_items AS MATERIALIZED (
                 SELECT e.kind,item.entity_id,item.ordinality,e.offset_items,e.completed_at,e.error,e.created_at FROM events e
                 CROSS JOIN LATERAL unnest(e.ids) WITH ORDINALITY item(entity_id,ordinality)
                 WHERE e.kind='game' AND EXISTS (
-                    SELECT 1 FROM {layout.table('game_player')} gp,player p
+                    SELECT 1 FROM public.game_player gp,player p
                     WHERE gp.game_link=item.entity_id AND gp.player_id=p.id)
             ), game_keys AS MATERIALIZED (
                 SELECT DISTINCT entity_id FROM game_items
@@ -64,7 +64,7 @@ def progress_query(layout):
                 SELECT DISTINCT entity_id FROM score_items
             ), matching_scores AS MATERIALIZED (
                 SELECT DISTINCT a.fen_id FROM score_keys k
-                JOIN {layout.table('game_fen_association')} a ON a.fen_id=k.entity_id
+                JOIN public.game_fen_association a ON a.fen_id=k.entity_id
                 JOIN game_keys g ON g.entity_id=a.game_link
             ), items AS (
                 SELECT * FROM game_items
@@ -86,10 +86,9 @@ def progress_query(layout):
 
 
 async def ingestion_progress(run):
-    layout = configured_storage()
-    if not layout or not run.player_name:
+    if not run.player_name:
         return None
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET LOCAL statement_timeout='3s'"))
         if not await available(session):
             return None
@@ -99,6 +98,6 @@ async def ingestion_progress(run):
         first = await session.scalar(text('SELECT min(created_at) FROM graph_sync.event'))
         if first and run.finished_at and run.finished_at < first:
             return None  # Do not invent graph history for pre-installation runs.
-        rows = (await session.execute(text(progress_query(layout)),
+        rows = (await session.execute(text(progress_query()),
             {'started':run.started_at,'finished':run.finished_at,'player':run.player_name.lower()})).mappings().all()
         return progress_row(run, rows, control)

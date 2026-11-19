@@ -6345,20 +6345,17 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "CUDA native publication/readers verified; remaining A3 admin/graph/research and A4 retirement",
+      "current_gate": "Graph/admin verified; canonical backup metadata and approved historical-research retirement next",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "checks": 164,
-        "real_cuda_overlapping_checks": 12,
-        "cuda_device": "RTX 4060",
-        "unchanged_kernel_files": 14,
-        "archive": "docs/architecture/evidence/stage-a-cuda-native-2026-11-18.tar.gz",
-        "sha256": "ae546b72500ba315a9d27e3619e271416696c29c8a19abb1ca0f6b166a22e3ea",
-        "production_access": false,
-        "containers_remaining": 0,
-        "notes": "Failed attempts retained; 93/94 in run08, 73/74 in run09, 17/17 in run10; union 164. No source edits after final affected gate."
+        "checks": 78,
+        "real_cuda_map_checks": 2,
+        "real_neo4j": "not run",
+        "archive": "docs/architecture/evidence/stage-a-graph-admin-2026-11-18.tar.gz",
+        "sha256": "1c95fac532644a9ad81df262c1420484c3370cf8a481c5d141ce4239a3e6b459",
+        "production_access": false
       },
       "verification_attempts": [
         {
@@ -8177,7 +8174,18 @@
         "containers_remaining": 0,
         "notes": "Failed attempts retained; 93/94 in run08, 73/74 in run09, 17/17 in run10; union 164. No source edits after final affected gate."
       },
-      "historical_cpu_comparison_retirement": "explicitly approved by user; retain saved reports, model training/evaluation, CUDA publication"
+      "historical_cpu_comparison_retirement": "explicitly approved by user; retain saved reports, model training/evaluation, CUDA publication",
+      "cuda_local_commit": "a2452c3",
+      "graph_admin_verification": {
+        "status": "passed",
+        "checks": 78,
+        "real_cuda_map_checks": 2,
+        "real_neo4j": "not run",
+        "archive": "docs/architecture/evidence/stage-a-graph-admin-2026-11-18.tar.gz",
+        "sha256": "1c95fac532644a9ad81df262c1420484c3370cf8a481c5d141ce4239a3e6b459",
+        "production_access": false
+      },
+      "canonical_backup_metadata_authorization": "User approved manifest v9 with canonical identity/checksums; preserve old-backup validation and archive operations"
     }
   }
 }

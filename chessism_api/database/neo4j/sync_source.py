@@ -4,6 +4,7 @@ import hashlib
 import json
 import chess
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.evaluations import score_kind
 
 START = chess.Board().fen().rsplit(" ", 2)[0]
@@ -67,23 +68,22 @@ def prepare_game(row, associations, moves):
     return result
 
 
-async def read_games(session, ids, layout):
-    t = layout.table
+async def read_games(session, ids):
     rows = (await session.execute(text(f'''SELECT g.link AS id,g.white_player_id AS white_id,
         g.black_player_id AS black_id,g.mode_id,m.name AS mode,g.played_at::text AS played_at,
-        g.white_result,g.black_result,g.white_str_result,g.black_str_result,g.fens_done,g.n_moves,
+        g.white_result,g.black_result,g.white_str_result,g.black_str_result,g.fens_done,g.n_moves,g.is_standard,
         w.player_name AS white_name,b.player_name AS black_name
-        FROM {t('game')} g JOIN {t('player')} w ON w.id=g.white_player_id
-        JOIN {t('player')} b ON b.id=g.black_player_id LEFT JOIN {t('game_mode')} m ON m.id=g.mode_id
+        FROM public.game g JOIN public.player w ON w.id=g.white_player_id
+        JOIN public.player b ON b.id=g.black_player_id LEFT JOIN public.game_mode m ON m.id=g.mode_id
         WHERE g.link=ANY(CAST(:ids AS bigint[])) ORDER BY g.link'''), {"ids": ids})).mappings().all()
-    ready = [dict(r) for r in rows if r['fens_done'] and r['n_moves'] > 0]
+    ready = [{k:v for k,v in r.items() if k!='is_standard'} for r in rows if r['is_standard'] and r['fens_done'] and r['n_moves'] > 0]
     selected = [r['id'] for r in ready]
     associations = (await session.execute(text(f'''SELECT a.game_link,a.n_move,a.is_white,
         f.fen_id,f.fen,f.score,f.analysis_source,f.tablebase_wdl,f.tablebase_dtz
-        FROM {t('game_fen_association')} a JOIN {t('fen')} f USING(fen_id)
-        WHERE a.game_link=ANY(CAST(:ids AS bigint[])) ORDER BY a.game_link,a.n_move,a.is_white DESC'''),
+        FROM public.game_fen_association a JOIN public.fen f USING(fen_id)
+        WHERE a.game_link=ANY(CAST(:ids AS bigint[])) AND a.n_move>0 ORDER BY a.game_link,a.n_move,a.is_white DESC'''),
         {"ids": selected})).mappings().all()
-    moves = (await session.execute(text(f'''SELECT link,n_move,white_move,black_move FROM {t('moves')}
+    moves = (await session.execute(text(f'''SELECT link,n_move,white_move,black_move FROM public.moves
         WHERE link=ANY(CAST(:ids AS bigint[])) ORDER BY link,n_move'''), {"ids": selected})).mappings().all()
     per_game, game_moves, positions = defaultdict(dict), defaultdict(list), {}
     for a in associations:
@@ -97,11 +97,11 @@ async def read_games(session, ids, layout):
     for move in moves:
         game_moves[move['link']].append(dict(move))
     games = [prepare_game(r, per_game[r['id']], game_moves[r['id']]) for r in ready]
-    deleted = sorted(set(ids) - {r['id'] for r in rows if r['n_moves'] > 0})
+    deleted = sorted(set(ids) - {r['id'] for r in rows if r['is_standard'] and r['n_moves'] > 0 and r['fens_done']})
     return games, list(positions.values()), deleted
 
 
-async def read_scores(session, ids, layout):
+async def read_scores(session, ids):
     return [position(r) for r in (await session.execute(text(f'''SELECT fen_id,fen,score,analysis_source,
-        tablebase_wdl,tablebase_dtz FROM {layout.table('fen')} WHERE fen_id=ANY(CAST(:ids AS bigint[]))'''),
+        tablebase_wdl,tablebase_dtz FROM public.fen WHERE fen_id=ANY(CAST(:ids AS bigint[]))'''),
         {"ids": ids})).mappings()]

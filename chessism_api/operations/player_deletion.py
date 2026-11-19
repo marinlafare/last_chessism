@@ -13,7 +13,7 @@ from arq.jobs import Job, JobStatus
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.operations.scored_rating_summary import refresh_scored_rating_summary
 from chessism_api.operations.global_summaries import (
     refresh_database_summary_game_counts,
@@ -113,7 +113,7 @@ async def find_player_deletion_conflict(
 async def get_player_deletion_preview(player_name: str) -> dict[str, Any]:
     """Classify a main player's games by the opponent's current main/shell state."""
     normalized_player = _normalized_player_name(player_name)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         player_result = await session.execute(text("""
             SELECT player_name, joined, deleted_at
             FROM player
@@ -125,11 +125,11 @@ async def get_player_deletion_preview(player_name: str) -> dict[str, Any]:
 
         counts_result = await session.execute(text("""
             SELECT
-                COUNT(*)::bigint AS total_games,
-                COUNT(*) FILTER (
+                COUNT(DISTINCT target.game_link)::bigint AS total_games,
+                COUNT(DISTINCT target.game_link) FILTER (
                     WHERE COALESCE(opponent.joined, 0) = 0
                 )::bigint AS exclusive_games,
-                COUNT(*) FILTER (
+                COUNT(DISTINCT target.game_link) FILTER (
                     WHERE COALESCE(opponent.joined, 0) <> 0
                 )::bigint AS shared_games,
                 COALESCE(SUM(gas.total_positions) FILTER (
@@ -139,14 +139,16 @@ async def get_player_deletion_preview(player_name: str) -> dict[str, Any]:
                     WHERE COALESCE(opponent.joined, 0) = 0
                 ), 0)::bigint AS analyzed_fen_associations
             FROM game_player target
-            JOIN player opponent ON opponent.player_name = target.opponent_name
+            JOIN player owner ON owner.id=target.player_id
+            JOIN game g ON g.link=target.game_link
+            JOIN player opponent ON opponent.id=CASE WHEN target.is_white THEN g.black_player_id ELSE g.white_player_id END
             LEFT JOIN LATERAL (
                 SELECT total_positions, analyzed_positions
-                FROM game_analysis_summary
-                WHERE link = target.link
+                FROM game_analysis_coverage
+                WHERE link = target.game_link
                 OFFSET 0
             ) gas ON TRUE
-            WHERE target.player_name = :player;
+            WHERE owner.player_name = :player;
         """), {"player": normalized_player})
         counts = counts_result.mappings().first() or {}
 
@@ -220,19 +222,21 @@ async def _write_deletion_manifest(
                 "preserves_fen_rows": True,
                 "preserves_fen_analysis": True,
             }, sort_keys=True) + "\n")
-            async with AsyncDBSession() as session:
+            async with read_transaction(AsyncDBSession) as session:
                 rows = await session.stream(text("""
-                    SELECT
-                        target.link,
-                        target.opponent_name,
+                    SELECT DISTINCT
+                        target.game_link AS link,
+                        opponent.player_name AS opponent_name,
                         CASE
                             WHEN COALESCE(opponent.joined, 0) = 0 THEN 'delete'
                             ELSE 'preserve_shared'
                         END AS disposition
                     FROM game_player target
-                    JOIN player opponent ON opponent.player_name = target.opponent_name
-                    WHERE target.player_name = :player
-                    ORDER BY target.link;
+            JOIN player owner ON owner.id=target.player_id
+            JOIN game g ON g.link=target.game_link
+            JOIN player opponent ON opponent.id=CASE WHEN target.is_white THEN g.black_player_id ELSE g.white_player_id END
+                    WHERE owner.player_name = :player
+                    ORDER BY target.game_link;
                 """), {"player": player_name})
                 async for row in rows.mappings():
                     output.write(json.dumps({
@@ -242,7 +246,7 @@ async def _write_deletion_manifest(
                         "disposition": str(row["disposition"]),
                     }, sort_keys=True) + "\n")
         os.replace(temporary, target)
-    except Exception:
+    except BaseException:
         temporary.unlink(missing_ok=True)
         raise
 
@@ -252,137 +256,71 @@ async def _write_deletion_manifest(
 
 async def _get_exclusive_game_links(player_name: str) -> list[int]:
     """Snapshot the current exclusive set once, avoiding a rescan per batch."""
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(text("""
-            SELECT target.link
+            SELECT target.game_link
             FROM game_player target
-            JOIN player opponent ON opponent.player_name = target.opponent_name
-            WHERE target.player_name = :player
+            JOIN player owner ON owner.id=target.player_id
+            JOIN game g ON g.link=target.game_link
+            JOIN player opponent ON opponent.id=CASE WHEN target.is_white THEN g.black_player_id ELSE g.white_player_id END
+            WHERE owner.player_name = :player
               AND COALESCE(opponent.joined, 0) = 0
-            ORDER BY target.link;
+            ORDER BY target.game_link;
         """), {"player": player_name})
         return [int(link) for link in result.scalars().all()]
 
 
-async def _delete_exclusive_game_batch(
-    player_name: str,
-    candidate_links: list[int],
-) -> int:
-    """Delete one revalidated batch while retaining every FEN and analysis row."""
-    async with AsyncDBSession() as session:
-        try:
-            clean_candidates = [int(link) for link in candidate_links if link is not None]
-            if not clean_candidates:
-                return 0
-            if storage_for(session):
-                from .relational_deletion import delete_exclusive_batch
-                deleted = await delete_exclusive_batch(session,player_name,clean_candidates)
-                await session.commit()
-                return deleted
-            links_result = await session.execute(text("""
-                SELECT target.link
-                FROM game_player target
-                JOIN player opponent ON opponent.player_name = target.opponent_name
-                WHERE target.player_name = :player
-                  AND target.link = ANY(CAST(:candidate_links AS BIGINT[]))
-                  AND COALESCE(opponent.joined, 0) = 0
-                ORDER BY target.link
-                FOR UPDATE OF target, opponent SKIP LOCKED;
-            """), {
-                "player": player_name,
-                "candidate_links": clean_candidates,
-            })
-            game_links = [int(link) for link in links_result.scalars().all()]
-            if not game_links:
-                await session.rollback()
-                return 0
-
-            # n_games is corpus metadata, not engine analysis. Decrement it in
-            # the same transaction that removes the associations so a retry can
-            # never double-decrement. Scores, WDL, PVs and continuations remain.
-            await session.execute(text("""
-                WITH removed AS (
-                    SELECT fen_id, COUNT(*)::bigint AS occurrences
-                    FROM game_fen_association
-                    WHERE game_link = ANY(CAST(:game_links AS BIGINT[]))
-                    GROUP BY fen_id
-                )
-                UPDATE fen current_fen
-                SET n_games = GREATEST(0, current_fen.n_games - removed.occurrences)
-                FROM removed
-                WHERE current_fen.fen_id = removed.fen_id;
-            """), {"game_links": game_links})
-            await session.execute(text("""
-                DELETE FROM game_fen_association
-                WHERE game_link = ANY(CAST(:game_links AS BIGINT[]));
-            """), {"game_links": game_links})
-            await session.execute(text("""
-                DELETE FROM moves
-                WHERE link = ANY(CAST(:game_links AS BIGINT[]));
-            """), {"game_links": game_links})
-            deleted = await session.execute(text("""
-                DELETE FROM game
-                WHERE link = ANY(CAST(:game_links AS BIGINT[]));
-            """), {"game_links": game_links})
-            await session.commit()
-            return int(deleted.rowcount or len(game_links))
-        except Exception:
-            await session.rollback()
-            raise
+async def _delete_exclusive_game_batch(player_name: str, candidate_links: list[int]) -> int:
+    """Revalidate and lock a bounded batch; preserve every FEN and evaluation."""
+    candidates = sorted({int(link) for link in candidate_links if link is not None})
+    if not candidates:
+        return 0
+    async with write_transaction(AsyncDBSession) as session:
+        result = await session.execute(text("""
+            SELECT gp.game_link FROM game_player gp
+            JOIN player owner ON owner.id=gp.player_id JOIN game g ON g.link=gp.game_link
+            JOIN player opponent ON opponent.id=CASE WHEN gp.is_white THEN g.black_player_id ELSE g.white_player_id END
+            WHERE owner.player_name=:player AND gp.game_link=ANY(CAST(:links AS bigint[]))
+              AND COALESCE(opponent.joined,0)=0
+            ORDER BY gp.game_link FOR UPDATE OF g,opponent SKIP LOCKED
+        """), {'player':player_name,'links':candidates})
+        links = list(result.scalars())
+        if not links:
+            return 0
+        params = {'links':links}
+        await session.execute(text("""WITH removed AS (
+            SELECT fen_id,count(*)::bigint AS occurrences FROM game_fen_association
+            WHERE game_link=ANY(CAST(:links AS bigint[])) GROUP BY fen_id
+        ) UPDATE fen SET n_games=GREATEST(0,fen.n_games-removed.occurrences)
+          FROM removed WHERE fen.fen_id=removed.fen_id"""),params)
+        # Native foreign keys remove only this game's dependent projections.
+        deleted = await session.execute(text('DELETE FROM game WHERE link=ANY(CAST(:links AS bigint[]))'),params)
+        return int(deleted.rowcount)
 
 
 async def _demote_player(player_name: str) -> None:
-    """Remove profile-owned data while retaining the username for shared games."""
-    async with AsyncDBSession() as session:
-        try:
-            remaining_result = await session.execute(text("""
-                SELECT COUNT(*)
-                FROM game_player target
-                JOIN player opponent ON opponent.player_name = target.opponent_name
-                WHERE target.player_name = :player
-                  AND COALESCE(opponent.joined, 0) = 0;
-            """), {"player": player_name})
-            if int(remaining_result.scalar() or 0) != 0:
-                raise RuntimeError("Exclusive games remain; refusing to demote the player.")
-
-            layout = storage_for(session)
-            for table in ('months', 'player_stats', 'main_character_mode_summary'):
-                query = (f"DELETE FROM {layout.table(table)} WHERE player_id="
-                         f"(SELECT id FROM {layout.table('player')} WHERE player_name=:player)"
-                         if layout and layout.compact else f"DELETE FROM {table} WHERE player_name=:player")
-                await session.execute(text(query), {'player':player_name})
-            if storage_for(session):
-                from .relational_deletion import clear_player_projections
-                await clear_player_projections(session,player_name)
-            else:
-                for table in ('game_player_salience','player_position_frequency',
-                              'player_salience_pending_game','player_salience_summary'):
-                    await session.execute(text(f"DELETE FROM {table} WHERE player_name=:player"),{'player':player_name})
-            updated = await session.execute(text("""
-                UPDATE player
-                SET
-                    name = NULL,
-                    url = NULL,
-                    title = NULL,
-                    avatar = NULL,
-                    followers = NULL,
-                    country = NULL,
-                    location = NULL,
-                    joined = 0,
-                    status = NULL,
-                    is_streamer = NULL,
-                    twitch_url = NULL,
-                    verified = NULL,
-                    league = NULL,
-                    deleted_at = CURRENT_TIMESTAMP
-                WHERE player_name = :player;
-            """), {"player": player_name})
-            if int(updated.rowcount or 0) != 1:
-                raise LookupError(f"Player {player_name} was not found.")
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    """Keep shared-game identity, remove profile-owned state in one transaction."""
+    async with write_transaction(AsyncDBSession) as session:
+        owner = await session.scalar(text('SELECT id FROM player WHERE player_name=:player FOR UPDATE'),{'player':player_name})
+        if owner is None:
+            raise LookupError(f'Player {player_name} was not found.')
+        params = {'owner':owner}
+        remaining = await session.scalar(text("""SELECT EXISTS(
+            SELECT 1 FROM game_player gp JOIN game g ON g.link=gp.game_link
+            JOIN player opponent ON opponent.id=CASE WHEN gp.is_white THEN g.black_player_id ELSE g.white_player_id END
+            WHERE gp.player_id=:owner AND COALESCE(opponent.joined,0)=0)
+        """),params)
+        if remaining:
+            raise RuntimeError('Exclusive games remain; refusing to demote the player.')
+        for table in ('months','player_stats','main_character_mode_summary',
+                      'player_position_frequency','player_salience_summary'):
+            await session.execute(text(f'DELETE FROM {table} WHERE player_id=:owner'),params)
+        for table in ('game_player_salience','player_salience_pending_game'):
+            await session.execute(text(f"""DELETE FROM {table} s USING game_player gp
+                WHERE s.game_link=gp.game_link AND s.is_white=gp.is_white AND gp.player_id=:owner"""),params)
+        await session.execute(text("""UPDATE player SET name=NULL,url=NULL,title=NULL,avatar=NULL,
+            followers=NULL,country=NULL,location=NULL,joined=0,status=NULL,is_streamer=NULL,
+            twitch_url=NULL,verified=NULL,league=NULL,deleted_at=CURRENT_TIMESTAMP WHERE id=:owner"""),params)
 
 
 async def _refresh_after_player_deletion(player_name: str) -> list[str]:

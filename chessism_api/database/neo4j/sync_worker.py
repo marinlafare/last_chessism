@@ -1,13 +1,15 @@
 """One bounded, retryable graph consumer; no Stockfish, CUDA or external API calls."""
 import asyncio
 from contextlib import suppress
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 import json
 import logging
 import os
 import signal
 import time
 from sqlalchemy import text
-from chessism_api.database.postgresql.runtime import bind_runtime_engine, configured_storage
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from .config import GraphConfig
 from .runtime import connect
@@ -22,7 +24,7 @@ async def heartbeat(detail):
     """Visible liveness while a larger transaction has not committed its offset."""
     while True:
         try:
-            async with AsyncDBSession() as session, session.begin():
+            async with write_transaction(AsyncDBSession) as session:
                 await session.execute(text("SET LOCAL lock_timeout='500ms'"))
                 await session.execute(text("SET LOCAL statement_timeout='2s'"))
                 await session.execute(text('''UPDATE graph_sync.control SET heartbeat=clock_timestamp(),
@@ -37,7 +39,7 @@ async def stop_heartbeat(pulse):
     if pulse is not None:
         pulse.cancel()
         with suppress(asyncio.CancelledError):
-            await pulse
+            await finish_analysis_cleanup(pulse)
     return None
 
 
@@ -48,7 +50,7 @@ async def tick(driver, config, policy=None):
     metrics = {}
     started = time.monotonic()
     try:
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             await session.execute(text("SET LOCAL statement_timeout='30s'"))
             if not await session.scalar(text('SELECT enabled FROM graph_sync.control WHERE id')):
                 return False
@@ -85,7 +87,7 @@ async def tick(driver, config, policy=None):
                         events.append(candidate)
                     candidates = sorted({id for item in events for id in item['ids'][item['offset_items']:]})
                     lengths = dict((await session.execute(text(f'''SELECT link,n_moves FROM
-                        {configured_storage().table('game')} WHERE link=ANY(CAST(:ids AS bigint[]))'''),
+                        public.game WHERE link=ANY(CAST(:ids AS bigint[]))'''),
                         {'ids': candidates})).all())
                     # Deletions and shortened/corrected games still load their
                     # previous graph paths for exact counter subtraction.
@@ -99,7 +101,7 @@ async def tick(driver, config, policy=None):
                         policy.limit(attempts=event['attempts']), capacity)
                     pulse = asyncio.create_task(heartbeat(f"Publishing {len(ids):,} games in a memory-bounded batch; saved offsets advance after commit."))
                     before = time.monotonic()
-                    games, positions, deleted = await source.read_games(session, ids, configured_storage())
+                    games, positions, deleted = await source.read_games(session, ids)
                     metrics.update(games=len(ids), plies=sum(len(g['steps']) for g in games),
                                    positions=len(positions), source_seconds=time.monotonic()-before,
                                    capacity_plies=capacity, selected_cost=cost, events=len(updates))
@@ -119,11 +121,11 @@ async def tick(driver, config, policy=None):
                         if matched:
                             return True  # Commit classification; next tick applies it.
                         event = {**event, 'matched_ids': []}  # Nothing to publish; acknowledge now.
-                    rows = await source.read_scores(session, event['matched_ids'], configured_storage())
+                    rows = await source.read_scores(session, event['matched_ids'])
                     await (await gs.run('''UNWIND $rows AS row MATCH (p:Position {fen_id:row.fen_id}) SET p += row''', rows=rows)).consume()
                 else:
                     rows = [dict(r) for r in (await session.execute(text(f'''SELECT id,player_name AS name,
-                        joined>0 AND deleted_at IS NULL AS active FROM {configured_storage().table('player')}
+                        joined>0 AND deleted_at IS NULL AS active FROM public.player
                         WHERE id=ANY(CAST(:ids AS bigint[]))'''), {'ids':ids})).mappings()]
                     await (await gs.run('UNWIND $rows AS row MATCH (p:Player {id:row.id}) SET p += row', rows=rows)).consume()
                     absent = sorted(set(ids)-{r['id'] for r in rows})
@@ -148,7 +150,7 @@ async def tick(driver, config, policy=None):
         if policy and cost:
             policy.shrink(cost)
         LOG.exception('Graph publication failed; PostgreSQL ingestion is unaffected')
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             if event_id:
                 await session.execute(text('''UPDATE graph_sync.event SET attempts=attempts+1,error=:error,
                     retry_at=clock_timestamp()+make_interval(secs=>LEAST(300,5*power(2,LEAST(attempts,6)))::integer)
@@ -189,7 +191,7 @@ async def main():
                     raise
                 except Exception as error:
                     LOG.warning('Neo4j unavailable; retrying: %s', error)
-                    async with AsyncDBSession() as session, session.begin():
+                    async with write_transaction(AsyncDBSession) as session:
                         await session.execute(text("UPDATE graph_sync.control SET heartbeat=clock_timestamp(),phase='retrying',detail=:error WHERE id"),
                             {'error':str(error)[:1500]})
                     with suppress(asyncio.TimeoutError):

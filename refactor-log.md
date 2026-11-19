@@ -2236,3 +2236,41 @@ All 14 computation modules remain byte-identical to HEAD. Real CUDA run06
 passed 12 overlapping checks on RTX 4060; later edits concern readers/CPU persistence.
 Evidence: docs/architecture/evidence/stage-a-cuda-native-2026-11-18.tar.gz SHA256 ae546b72500ba315a9d27e3619e271416696c29c8a19abb1ca0f6b166a22e3ea.
 All owned containers independently absent. Stage A incomplete, no push or live changes.
+
+Next coordinated A3 unit: graph PostgreSQL source/outbox and player administration.
+Initializer version 14 owns graph_sync and graph_map derived namespaces; these are
+functional outbox/snapshot namespaces under one canonical contract, never competing
+storage profiles. Catalog validation now includes these objects and internal FK
+trigger enablement. Native deletion retains FEN/evaluation rows and locks actual
+game/opponent rows, not the UNION ALL game_player view. Self-play deletion preview
+counts unique games; both analysis-side identities remain intact.
+
+Gate11 stopped on missing SQL terminator plus a harness spawn/import problem and
+two opt-in GPU skips (retained evidence, not accepted). Gate12: all 56 pass, zero
+failures/errors/skips, including both actual RTX4060 map checks. The harness main
+guard fixes subprocess bootstrapping; GPU tests run on the selected CUDA image.
+Additional original map publication scenarios and cloud-attributed chunk checks
+are now prepared. No actual Neo4j server was contacted.
+
+User approved new canonical backup metadata format version 9 while retaining old
+backup validation, archive commands/locations and isolated restore behavior. This
+is code/test work only; existing checkpoint and source database remain untouched.
+
+Graph follow-up gates: 13 stopped at trailing blank-line preflight (no resources).
+14 ran ten checks, one error revealed a removed installed() guard still referenced
+by map status. Removed that obsolete check; map pending/capture now requires explicit
+graph activation, so ordinary CUDA requests do not acquire a Neo4j dependency merely
+because tables exist. 15: all 22 graph/CUDA/CPU-salience checks pass. 16: all ten
+admin/graph checks pass, including original mixed-event offset/retry semantics and
+30,000-row no-op trigger/lock regression. Canonical checks replace historical
+function-upgrade/fake-profile setups; obsolete upgrade assertions are retired,
+not bypassed. The old 1.75M-row profile benchmark is deferred performance evidence,
+not claimed executed. The real Neo4j integration fixture is ported but unexecuted;
+its opt-in skip remains, and no Neo4j server was started. Current source/PG triggers
+and actual map kernels are verified independently.
+
+Graph/admin gate17: all 16 pass, including cancelled synthetic graph transport
+against real PostgreSQL and unchanged codec/backup-barrier units. Across gate12,
+15,16,17: 78 distinct checks pass; no remaining failures/errors/skips in these gates.
+No post-gate application edits. Existing live Neo4j/Redis/PostgreSQL and backup
+unchanged; all ephemeral test resources are removed. Stage A remains incomplete.

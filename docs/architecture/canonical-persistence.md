@@ -1008,3 +1008,33 @@ salience parity and cancellation scenarios. An additional real RTX 4060 run of 1
 overlapping checks executes existing CuPy kernels against synthetic PostgreSQL.
 This does not certify production data volumes, GCP, live Stockfish, or the remaining
 Stage A consumers. Failed runs and corrections are retained in the evidence archive.
+
+### Graph sources and administration (canonical version 14)
+
+One canonical contract owns public application tables plus graph_sync (outbox) and
+graph_map (immutable derived snapshots). These namespaces separate responsibilities;
+they are not selectable storage layouts. Only the initializer creates them. Graph
+activation remains explicit and defaults off; map capture requires activation,
+so installing the canonical schema does not require a running Neo4j server.
+Native standard/nonempty game paths and FEN scores drive the existing projection;
+no Cypher publication or CUDA map calculation is redesigned. Backfills deduplicate
+self-play game identities. Outbox events and topology revisions roll back with the
+source transaction. Cloud ownership is captured before claims are deleted.
+
+Catalog validation covers both graph namespaces and internal foreign-key trigger
+enablement. Internal trigger identity uses constraint names/types rather than
+server-generated trigger OIDs, allowing a restored catalog to be compared.
+
+Player deletion locks native games and opponents, rechecks shared ownership, and
+removes dependent game records by their foreign keys. It retains all FEN identities,
+evaluations, and shared games. Preview/manifest counts use unique games for self-play;
+analysis continues to preserve both sides. Profile demotion is one guarded unit.
+The obsolete relational deletion adapter is removed.
+
+78 distinct focused checks passed, including native deletion/locks, disabled-FK
+rejection, mixed progress events, 30,000-row no-op capture with claim/outbox locks,
+2,300-row cloud attribution/chunking, retained map generations, graph-request
+cancellation and the affected CUDA/CPU readers. Two existing map checks ran on the
+RTX 4060. No Neo4j server was contacted; the ported full Neo4j integration remains
+unexecuted. Historical function-upgrade tests now target initializer-owned triggers;
+the old giant profile-specific progress benchmark is deferred, not claimed passing.

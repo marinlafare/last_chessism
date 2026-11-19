@@ -3,9 +3,9 @@ from hashlib import sha256
 import json
 from pathlib import Path
 
-VERSION = 13
+VERSION = 14
 CONTRACT = 'chessism_canonical_foundation'
-SQL_FILES = ('core.sql', 'support.sql', 'projections.sql', 'recovery.sql', 'home.sql', 'player_analytics.sql', 'fen_appearances.sql', 'exports.sql', 'research.sql', 'cuda.sql')
+SQL_FILES = ('core.sql', 'support.sql', 'projections.sql', 'recovery.sql', 'home.sql', 'player_analytics.sql', 'fen_appearances.sql', 'exports.sql', 'research.sql', 'cuda.sql', 'graph.sql')
 INIT_LOCK = 6975310201
 
 
@@ -24,34 +24,39 @@ def schema_digest():
 async def catalog_digest(connection):
     """Ignore data/sequence positions; detect changed columns, keys, indexes or code."""
     queries = (
-        """SELECT c.relname, c.relkind::text, c.relrowsecurity, c.relforcerowsecurity
+        """SELECT n.nspname,c.relname, c.relkind::text, c.relrowsecurity, c.relforcerowsecurity
            FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-           WHERE n.nspname='public' ORDER BY c.relname""",
-        """SELECT c.relname, a.attname, pg_catalog.format_type(a.atttypid,a.atttypmod) AS type,
+           WHERE n.nspname IN ('public','graph_sync','graph_map') ORDER BY n.nspname,c.relname""",
+        """SELECT n.nspname,c.relname, a.attname, pg_catalog.format_type(a.atttypid,a.atttypmod) AS type,
            a.attnotnull, a.attidentity::text, a.attgenerated::text,
            pg_catalog.pg_get_expr(d.adbin,d.adrelid) AS default_value
            FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_class c ON c.oid=a.attrelid
            JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
            LEFT JOIN pg_catalog.pg_attrdef d ON d.adrelid=c.oid AND d.adnum=a.attnum
-           WHERE n.nspname='public' AND a.attnum>0 AND NOT a.attisdropped
-           ORDER BY c.relname,a.attnum""",
-        """SELECT c.relname,k.conname,k.convalidated,pg_catalog.pg_get_constraintdef(k.oid) AS definition
+           WHERE n.nspname IN ('public','graph_sync','graph_map') AND a.attnum>0 AND NOT a.attisdropped
+           ORDER BY n.nspname,c.relname,a.attnum""",
+        """SELECT n.nspname,c.relname,k.conname,k.convalidated,pg_catalog.pg_get_constraintdef(k.oid) AS definition
            FROM pg_catalog.pg_constraint k JOIN pg_catalog.pg_class c ON c.oid=k.conrelid
            JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-           WHERE n.nspname='public' ORDER BY c.relname,k.conname""",
-        "SELECT indexname,indexdef FROM pg_catalog.pg_indexes WHERE schemaname='public' ORDER BY indexname",
-        "SELECT viewname,definition FROM pg_catalog.pg_views WHERE schemaname='public' ORDER BY viewname",
-        """SELECT c.relname,t.tgname,t.tgenabled::text,pg_catalog.pg_get_triggerdef(t.oid) AS definition
+           WHERE n.nspname IN ('public','graph_sync','graph_map') ORDER BY n.nspname,c.relname,k.conname""",
+        "SELECT schemaname,indexname,indexdef FROM pg_catalog.pg_indexes WHERE schemaname IN ('public','graph_sync','graph_map') ORDER BY schemaname,indexname",
+        "SELECT schemaname,viewname,definition FROM pg_catalog.pg_views WHERE schemaname IN ('public','graph_sync','graph_map') ORDER BY schemaname,viewname",
+        """SELECT n.nspname,c.relname,t.tgisinternal,t.tgtype,t.tgenabled::text,
+           CASE WHEN t.tgisinternal THEN k.conname ELSE t.tgname END AS name,
+           CASE WHEN t.tgisinternal THEN pg_catalog.pg_get_constraintdef(k.oid)
+                ELSE pg_catalog.pg_get_triggerdef(t.oid) END AS definition
            FROM pg_catalog.pg_trigger t JOIN pg_catalog.pg_class c ON c.oid=t.tgrelid
            JOIN pg_catalog.pg_namespace n ON n.oid=c.relnamespace
-           WHERE n.nspname='public' AND NOT t.tgisinternal ORDER BY c.relname,t.tgname""",
-        """SELECT p.proname,pg_catalog.pg_get_functiondef(p.oid) AS definition
+           LEFT JOIN pg_catalog.pg_constraint k ON k.oid=t.tgconstraint
+           WHERE n.nspname IN ('public','graph_sync','graph_map')
+           ORDER BY n.nspname,c.relname,name,t.tgtype""",
+        """SELECT n.nspname,p.proname,pg_catalog.pg_get_functiondef(p.oid) AS definition
            FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-           WHERE n.nspname='public' ORDER BY p.proname,p.oid""",
-        """SELECT t.typname,e.enumlabel FROM pg_catalog.pg_type t
+           WHERE n.nspname IN ('public','graph_sync','graph_map') ORDER BY n.nspname,p.proname,p.oid""",
+        """SELECT n.nspname,t.typname,e.enumlabel FROM pg_catalog.pg_type t
            JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace
-           JOIN pg_catalog.pg_enum e ON e.enumtypid=t.oid WHERE n.nspname='public'
-           ORDER BY t.typname,e.enumsortorder""",
+           JOIN pg_catalog.pg_enum e ON e.enumtypid=t.oid WHERE n.nspname IN ('public','graph_sync','graph_map')
+           ORDER BY n.nspname,t.typname,e.enumsortorder""",
     )
     rows = [[dict(row) for row in await connection.fetch(query)] for query in queries]
     return sha256(json.dumps(rows, sort_keys=True).encode()).hexdigest()
@@ -94,10 +99,10 @@ async def initialize(connection):
                 AND n.nspname NOT LIKE 'pg_temp%'
             UNION ALL
             SELECT 1 FROM pg_catalog.pg_type t JOIN pg_catalog.pg_namespace n ON n.oid=t.typnamespace
-            WHERE n.nspname='public' AND t.typtype IN ('e','d')
+            WHERE n.nspname IN ('public','graph_sync','graph_map') AND t.typtype IN ('e','d')
             UNION ALL
             SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid=p.pronamespace
-            WHERE n.nspname='public')""")
+            WHERE n.nspname IN ('public','graph_sync','graph_map'))""")
         if occupied:
             raise SchemaMismatch('Initializer requires an empty database; existing objects preserved')
         await connection.execute(schema_sql())

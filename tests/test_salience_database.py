@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from chessism_api.operations.player_salience_calculation import _full_rebuild, _incremental_update
 
 
+@unittest.skipUnless(os.environ.get("CHESSISM_CANONICAL_TEST_SOCKET"), "requires isolated canonical PostgreSQL")
 class SalienceDatabaseTests(CanonicalDatabaseTestCase):
     async def asyncSetUp(self):
         await super().asyncSetUp()
