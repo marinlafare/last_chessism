@@ -1135,3 +1135,13 @@ player/game/side keys and guarded read snapshots. Missing engine refresh starts
 after read closure. Self-play windows partition by both game and side. Four
 private-PG scenarios and 40 existing checks pass; scoring formulas and response
 shapes remain unchanged. Coefficient and salience snapshot construction remain.
+
+### Remaining research consumers
+Schema17 includes the existing coefficient experiment contract missed by the
+earlier inventory. Coefficient overview/extraction use canonical mode/coverage
+and derived average rating, preserving fitting formulas and equal-game weights.
+API and worker transactions are explicit. Salience report construction joins
+native participants and closes snapshots/streams before local reference compute.
+The existing single-side report format still rejects self-play; saved reports
+and their formulas are unchanged. Supported CUDA comparison/status/rollback
+commands use native keys. Fifty distinct focused checks pass.

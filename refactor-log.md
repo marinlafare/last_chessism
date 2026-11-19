@@ -2387,3 +2387,20 @@ Gate33 failures were fixture setup: manual CUDA prevented intended CPU refresh,
 new initializer already supplies metadata columns, and score cast SQL assertion.
 Gate34 passes without assertion removal. Inputs unchanged and owned resources removed.
 Evidence: docs/architecture/evidence/stage-a-native-quality-2026-11-18.tar.gz SHA256 5cb7c5a9d9d435e999fa8c5380a79fdcff3b18a162e7edf92e2e195ba5ce9080.
+
+Native coefficient/salience research and supported administration verified: 50
+distinct checks (29 schema, 11 existing formula/report tests, six research lifecycle,
+four admin-tool checks). Schema17 adds the omitted existing coefficient experiment
+table with unchanged states/decisions/account reference. Coefficient formulas,
+weights, stable splits, artifact/payload contracts unchanged; native joins and
+guarded read/write transactions replace implicit ownership. Salience SQLite
+format/calculation unchanged; its preexisting one-side-per-game limitation now
+rejects self-play explicitly before report publication. A separate API/format
+design would be needed to support both sides; not expanded here.
+Gate35: 48 pass, two synthetic tests hit the production 5GB storage guard because
+the isolated container has a smaller tmpfs. Gate36 reruns all six new research
+cases with explicit synthetic free-space readings, also asserting low-space
+rejection; all pass. Reuse other 44 unchanged checks. Native rerun comparison
+counts all four sides, detects one real statistic change, and model rollback
+requires its existing explicit acknowledgement. No live data/Redis/GCP accessed.
+Evidence: docs/architecture/evidence/stage-a-native-research-tools-2026-11-18.tar.gz SHA256 4dc207b4e3f014dfff5c90fea79a4c3f473caf3ff638478da4042e530431ab60.

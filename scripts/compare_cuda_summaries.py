@@ -9,6 +9,8 @@ from pathlib import Path
 from sqlalchemy import text
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.operations.cuda_summaries.accuracy_compute import FIELDS
 
 
@@ -53,7 +55,7 @@ async def compare(session,run_id):
             OR (b.accuracy IS NULL)<>(a.accuracy IS NULL)
             OR abs(b.accuracy-a.accuracy)>greatest(1e-9,1e-10*abs(b.accuracy))) AS mismatches,
         max(abs(b.accuracy-a.accuracy)) AS max_absolute_difference
-        FROM {namespace}.accuracy_game b FULL JOIN public.cuda_accuracy_game a USING(player_name,game_link)
+        FROM {namespace}.accuracy_game b FULL JOIN public.cuda_accuracy_game a USING(game_link,is_white)
         WHERE COALESCE(b.player_name,a.player_name) IN(SELECT player_name FROM {namespace}.players)''')
     await check('daily_accuracy',f'''SELECT count(*) AS compared,
         count(*) FILTER(WHERE b.player_name IS NULL OR a.player_name IS NULL) AS missing,
@@ -71,22 +73,16 @@ async def compare(session,run_id):
             else f'b.{field} IS DISTINCT FROM a.{field}')
     await check('engine_statistics',f'''WITH current AS (
         SELECT gp.player_id,gp.game_link,gp.is_white,{','.join('s.'+f for f in FIELDS)}
-        FROM public.game_player_engine_summary s JOIN public.game_player gp ON gp.id=s.game_player_id
+        FROM public.game_player_engine_summary s JOIN public.game_player gp ON gp.game_link=s.game_link AND gp.is_white=s.is_white
         JOIN {namespace}.players p ON p.id=gp.player_id)
         SELECT count(*) AS compared,count(*) FILTER(WHERE {' OR '.join(changed)}) AS mismatches
         FROM {namespace}.engine_summary b FULL JOIN current a USING(player_id,game_link,is_white)''')
-    # A reviewed zero-move exclusion correction intentionally changed only
-    # cached unassessed counters, not inference. Compare to its retained input.
-    rows=(await session.execute(text(f'''SELECT b.player_name,b.payload AS before,a.payload AS after,
-        r.before_snapshots->b.player_name AS correction_before
-        FROM {namespace}.blunder_snapshot b LEFT JOIN public.canonical_blunder_snapshot a USING(model_id,player_name)
-        LEFT JOIN public.cuda_selection_correction r ON r.model_id=b.model_id
-            AND r.policy='exclude_no_move_player_sides_v1' '''))).mappings()
-    bad=[]; corrected=0
-    for r in rows:
-        if r['correction_before'] is not None: corrected+=1
-        if r['before'] != (r['correction_before'] if r['correction_before'] is not None else r['after']): bad.append(r['player_name'])
-    report['checks']['blunder_histograms']={'mismatches':len(bad),'players':bad,'reviewed_zero_move_corrections':corrected}
+    rows=(await session.execute(text(f'''SELECT b.player_name,b.payload AS before,a.payload AS after
+        FROM {namespace}.blunder_snapshot b FULL JOIN public.canonical_blunder_snapshot a USING(model_id,player_name)
+        WHERE COALESCE(b.model_id,a.model_id)=:model AND COALESCE(b.player_name,a.player_name)
+            IN(SELECT player_name FROM {namespace}.players)'''), {'model': run['model_id']})).mappings()
+    bad=[r['player_name'] for r in rows if r['before'] != r['after']]
+    report['checks']['blunder_histograms']={'mismatches':len(bad),'players':bad}
     report['passed']=all(v.get('mismatches',0)==0 and v.get('missing',0)==0 for v in report['checks'].values())
     return report
 
@@ -94,11 +90,11 @@ async def compare(session,run_id):
 async def main(args):
     engine=await bind_runtime_engine(os.environ['DATABASE_URL'])
     try:
-        async with AsyncDBSession() as s: result=await compare(s,args.run)
+        async with read_transaction(AsyncDBSession) as s: result=await compare(s,args.run)
         print(json.dumps(result,indent=2),flush=True)
         if args.output:
             with Path(args.output).open('x') as stream: json.dump(result,stream,indent=2)
-    finally: await engine.dispose()
+    finally: await finish_analysis_cleanup(engine.dispose())
 
 
 if __name__=='__main__':

@@ -13,6 +13,7 @@ from typing import Any, Iterable
 from sqlalchemy import select, text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.models import CoefficientResearchExperiment
 
 
@@ -41,14 +42,14 @@ RATING_BINS = (
 BIN_BY_KEY = {item["key"]: item for item in RATING_BINS}
 RATING_BIN_SQL = """
 CASE
-    WHEN game.avg_elo < 1200 THEN 'under-1200'
-    WHEN game.avg_elo < 1400 THEN '1200-1399'
-    WHEN game.avg_elo < 1600 THEN '1400-1599'
-    WHEN game.avg_elo < 1800 THEN '1600-1799'
-    WHEN game.avg_elo < 2000 THEN '1800-1999'
-    WHEN game.avg_elo < 2200 THEN '2000-2199'
-    WHEN game.avg_elo < 2400 THEN '2200-2399'
-    WHEN game.avg_elo < 2600 THEN '2400-2599'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 1200 THEN 'under-1200'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 1400 THEN '1200-1399'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 1600 THEN '1400-1599'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 1800 THEN '1600-1799'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 2000 THEN '1800-1999'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 2200 THEN '2000-2199'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 2400 THEN '2200-2399'
+    WHEN ((game.white_elo::double precision + game.black_elo) / 2.0) < 2600 THEN '2400-2599'
     ELSE '2600-plus'
 END
 """
@@ -85,16 +86,17 @@ def normalized_config(config: dict[str, Any] | None) -> dict[str, Any]:
 
 def _common_game_filters() -> str:
     return """
-        coverage.is_fully_analyzed
+        game.is_standard
+        AND coverage.is_fully_analyzed
         AND coverage.total_positions > 0
-        AND game.avg_elo IS NOT NULL
+        AND ((game.white_elo::double precision + game.black_elo) / 2.0) IS NOT NULL
         AND game.white_elo > 0
         AND game.black_elo > 0
         AND game.white_result IN (0, 0.5, 1)
         AND game.black_result IN (0, 0.5, 1)
         AND game.white_result + game.black_result = 1
-        AND ABS(game.white_elo - game.black_elo) <= :max_rating_gap
-        AND game.mode = ANY(CAST(:modes AS text[]))
+        AND ABS(game.white_elo::bigint - game.black_elo) <= :max_rating_gap
+        AND mode.name = ANY(CAST(:modes AS text[]))
         AND game.n_moves > :opening_moves_excluded
         AND LOWER(game.white_str_result) NOT IN ('timeout', 'abandoned', 'timevsinsufficient')
         AND LOWER(game.black_str_result) NOT IN ('timeout', 'abandoned', 'timevsinsufficient')
@@ -119,16 +121,17 @@ async def get_coefficient_research_overview(
     sql = text(f"""
         SELECT
             {RATING_BIN_SQL} AS rating_bin,
-            game.mode,
+            mode.name AS mode,
             COUNT(*)::bigint AS games,
             COALESCE(SUM(coverage.total_positions), 0)::bigint AS candidate_positions
-        FROM game
-        JOIN game_analysis_summary coverage ON coverage.link = game.link
+        FROM public.game game
+        JOIN public.game_mode mode ON mode.id=game.mode_id
+            JOIN public.game_analysis_coverage coverage ON coverage.link = game.link
         WHERE {_common_game_filters()}
         GROUP BY 1, 2
-        ORDER BY MIN(game.avg_elo), game.mode
+        ORDER BY MIN(((game.white_elo::double precision + game.black_elo) / 2.0)), mode.name
     """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(sql, query_params(safe_config))
         rows = result.mappings().all()
 
@@ -341,7 +344,7 @@ async def _load_aggregated_observations(
             SELECT
                 game.link AS game_link,
                 {RATING_BIN_SQL} AS rating_bin,
-                game.mode,
+                mode.name AS mode,
                 CASE
                     WHEN game.white_result = 1 THEN 1
                     WHEN game.white_result = 0.5 THEN 0
@@ -360,14 +363,15 @@ async def _load_aggregated_observations(
                 END AS split,
                 ((hashtextextended(game.link::text, :fold_seed) & 9223372036854775807) % 20)::int AS fold,
                 COUNT(*) OVER (PARTITION BY game.link)::double precision AS eligible_positions_in_game
-            FROM game
-            JOIN game_analysis_summary coverage ON coverage.link = game.link
-            JOIN game_fen_association association ON association.game_link = game.link
-            JOIN fen ON fen.fen_id = association.fen_id
+            FROM public.game game
+            JOIN public.game_mode mode ON mode.id=game.mode_id
+            JOIN public.game_analysis_coverage coverage ON coverage.link = game.link
+            JOIN public.game_fen_association association ON association.game_link = game.link
+            JOIN public.fen ON fen.fen_id = association.fen_id
             WHERE {_common_game_filters()}
               AND association.n_move > :opening_moves_excluded
               AND fen.score IS NOT NULL
-              AND ABS(fen.score) < 9000
+              AND ABS(fen.score::bigint) < 9000
               AND COALESCE(fen.analysis_source, '') LIKE 'stockfish%'
         )
         SELECT
@@ -383,7 +387,7 @@ async def _load_aggregated_observations(
         GROUP BY rating_bin, mode, outcome, cp, split, fold
         ORDER BY rating_bin, mode, split, fold, cp, outcome
     """)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 1"))
         result = await session.execute(sql, query_params(config))
         return [dict(row) for row in result.mappings().all()]
@@ -433,14 +437,13 @@ async def run_chessism_coefficient_experiment(
     **_job_options: Any,
 ) -> dict[str, Any]:
     """Extract equal-game-weighted observations, fit candidates, and persist results."""
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         experiment = await session.get(CoefficientResearchExperiment, experiment_id)
         if experiment is None:
             raise ValueError(f"Unknown coefficient experiment {experiment_id}")
         experiment.status = "running"
         experiment.started_at = utc_now()
         experiment.error = None
-        await session.commit()
         config = normalized_config(experiment.config)
 
     try:
@@ -476,7 +479,7 @@ async def run_chessism_coefficient_experiment(
         artifact_path = _write_artifact(experiment_id, artifact_payload)
         result["artifact_path"] = artifact_path
 
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             experiment = await session.get(CoefficientResearchExperiment, experiment_id)
             if experiment is None:
                 raise ValueError(f"Experiment {experiment_id} disappeared while running")
@@ -484,7 +487,6 @@ async def run_chessism_coefficient_experiment(
             experiment.dataset_summary = dataset
             experiment.result = result
             experiment.finished_at = utc_now()
-            await session.commit()
 
         await _write_progress(
             ctx, experiment_id, phase="complete", processed=3, total=3,
@@ -492,13 +494,12 @@ async def run_chessism_coefficient_experiment(
         )
         return {"experiment_id": experiment_id, "dataset": dataset, "fits": len(fits)}
     except Exception as error:
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             experiment = await session.get(CoefficientResearchExperiment, experiment_id)
             if experiment is not None:
                 experiment.status = "failed"
                 experiment.error = str(error)
                 experiment.finished_at = utc_now()
-                await session.commit()
         await _write_progress(
             ctx, experiment_id, phase="failed", processed=0, total=3,
             detail=str(error),
@@ -526,7 +527,7 @@ def experiment_payload(experiment: CoefficientResearchExperiment) -> dict[str, A
 
 
 async def list_coefficient_experiments(limit: int = 20) -> list[dict[str, Any]]:
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(
             select(CoefficientResearchExperiment)
             .order_by(CoefficientResearchExperiment.created_at.desc())

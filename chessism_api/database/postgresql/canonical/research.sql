@@ -48,3 +48,17 @@ CREATE TABLE opening_book_move (
     PRIMARY KEY(position_key,move_uci)
 );
 COMMENT ON TABLE opening_book_move IS 'Lichess CC0 opening catalogue: recognized position/move transitions, not engine assessments or frequency counts';
+
+-- Existing coefficient-research API storage; no changes to production scoring.
+CREATE TABLE coefficient_research_experiment (
+    id varchar(36) PRIMARY KEY,
+    status varchar(16) NOT NULL CHECK(status IN ('queued','running','complete','failed')),
+    job_id varchar(64), created_by varchar(36) REFERENCES account(id) ON DELETE SET NULL,
+    config json NOT NULL, dataset_summary json, result json, error varchar,
+    decision varchar(32) CHECK(decision IS NULL OR decision IN ('keep_lichess','alongside','replace')),
+    decision_config json, decision_notes varchar,
+    created_at timestamptz NOT NULL DEFAULT now(), started_at timestamptz,
+    finished_at timestamptz, decided_at timestamptz
+);
+CREATE INDEX ix_coefficient_research_experiment_status ON coefficient_research_experiment(status);
+CREATE INDEX ix_coefficient_research_experiment_job_id ON coefficient_research_experiment(job_id);

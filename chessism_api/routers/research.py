@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from chessism_api.auth import get_current_account
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.models import Account, CoefficientResearchExperiment
 from chessism_api.operations.coefficient_research import (
     experiment_payload,
@@ -146,7 +147,7 @@ async def coefficient_experiment(
     experiment_id: str,
     redis: ArqRedis = Depends(get_redis_pool),
 ) -> dict:
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         experiment = await session.get(CoefficientResearchExperiment, experiment_id)
         if experiment is None:
             raise HTTPException(status_code=404, detail="Coefficient experiment not found")
@@ -169,7 +170,7 @@ async def create_coefficient_experiment(
 
     safe_config = normalized_config(config.model_dump())
     experiment_id = str(uuid.uuid4())
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         active = await session.execute(
             CoefficientResearchExperiment.__table__.select()
             .where(CoefficientResearchExperiment.status.in_(("queued", "running")))
@@ -184,7 +185,6 @@ async def create_coefficient_experiment(
             config=safe_config,
         )
         session.add(experiment)
-        await session.commit()
 
     try:
         job = await redis.enqueue_job(
@@ -194,19 +194,17 @@ async def create_coefficient_experiment(
             _job_id=f"coefficient-research-{experiment_id}",
         )
         job_id = str(getattr(job, "job_id", job))
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             experiment = await session.get(CoefficientResearchExperiment, experiment_id)
             if experiment is not None:
                 experiment.job_id = job_id
-                await session.commit()
     except Exception as error:
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             experiment = await session.get(CoefficientResearchExperiment, experiment_id)
             if experiment is not None:
                 experiment.status = "failed"
                 experiment.error = str(error)
                 experiment.finished_at = utc_now()
-                await session.commit()
         raise
 
     return {
@@ -222,7 +220,7 @@ async def decide_coefficient_experiment(
     experiment_id: str,
     decision: CoefficientDecisionRequest,
 ) -> dict:
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         experiment = await session.get(CoefficientResearchExperiment, experiment_id)
         if experiment is None:
             raise HTTPException(status_code=404, detail="Coefficient experiment not found")
@@ -235,7 +233,6 @@ async def decide_coefficient_experiment(
         }
         experiment.decision_notes = decision.notes.strip() or None
         experiment.decided_at = utc_now()
-        await session.commit()
         payload = experiment_payload(experiment)
     payload["message"] = "Decision recorded for research only; production accuracy was not changed."
     return payload

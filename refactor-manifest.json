@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "Native quality and matrix readers verified; remaining coefficient/salience research consumers and A4 retirement in progress",
+      "current_gate": "Native research and administration verified; A4 removal and final consumer/import audit in progress",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -8256,11 +8256,7 @@
         "source_gate": "/tmp/chessism-canonical-a3-cuda-20261118-32",
         "scope": "All ten matrix row types, every catalog column, native sides and scores, dynamic completeness, filters, estimates/previews and guarded transactions; affected fixtures on Python3.10."
       },
-      "remaining_runtime_consumers": [
-        "coefficient_research.py",
-        "salience_comparison/build.py",
-        "scripts/compare_cuda_summaries.py (edited, verification pending)"
-      ],
+      "remaining_runtime_consumers": [],
       "native_quality": {
         "status": "passed",
         "checks": 44,
@@ -8270,6 +8266,23 @@
         "archive": "docs/architecture/evidence/stage-a-native-quality-2026-11-18.tar.gz",
         "sha256": "5cb7c5a9d9d435e999fa8c5380a79fdcff3b18a162e7edf92e2e195ba5ce9080",
         "source_gate": "/tmp/chessism-canonical-a3-cuda-20261118-34"
+      },
+      "native_auxiliary_research": {
+        "status": "passed",
+        "distinct_checks": 50,
+        "final_failures": 0,
+        "final_errors": 0,
+        "skips": 0,
+        "archive": "docs/architecture/evidence/stage-a-native-research-tools-2026-11-18.tar.gz",
+        "sha256": "4dc207b4e3f014dfff5c90fea79a4c3f473caf3ff638478da4042e530431ab60",
+        "source_gates": [
+          "/tmp/chessism-canonical-a3-cuda-20261118-35",
+          "/tmp/chessism-canonical-a3-cuda-20261118-36"
+        ],
+        "reuse": "44 unaffected checks from gate35; all six research cases rerun gate36",
+        "limitations": [
+          "Existing salience SQLite reports accept only one player side per game; self-play is rejected before publication."
+        ]
       }
     }
   }

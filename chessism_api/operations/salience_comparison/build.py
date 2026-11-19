@@ -19,6 +19,8 @@ import chess
 from sqlalchemy import text
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from .artifacts import root
 from .compute import VERSION,initialize,metadata,compute
 
@@ -34,26 +36,38 @@ async def build(player):
     db.execute('PRAGMA temp_store=FILE')
     initialize(db)
     digest=hashlib.sha256()
-    engine=await bind_runtime_engine(os.environ['DATABASE_URL'])
+    engine=None
     try:
-        async with AsyncDBSession() as session:
-            await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
+        engine=await bind_runtime_engine(os.environ['DATABASE_URL'])
+        async with read_transaction(AsyncDBSession) as session:
             await session.execute(text("SET LOCAL statement_timeout='180s'"))
             tracked=await session.scalar(text('''SELECT EXISTS(SELECT 1 FROM player
                 WHERE player_name=:player AND joined>0 AND deleted_at IS NULL)'''),{'player':player})
             if not tracked:
                 raise ValueError('Tracked player not found')
             snapshot=await session.scalar(text('SELECT pg_current_snapshot()::text'))
-            source_state=await session.scalar(text('SELECT status FROM player_salience_summary WHERE player_name=:player'),{'player':player})
-            query=text('''SELECT gp.link,gp.color,gp.opponent_name,gp.result,g.mode,g.played_at,
-                g.white,g.black,g.white_elo,g.black_elo,g.white_result,g.black_result,
+            source_state=await session.scalar(text('''SELECT s.status FROM public.player_salience_summary s
+                JOIN public.player p ON p.id=s.player_id WHERE p.player_name=:player'''),{'player':player})
+            query=text('''SELECT g.link,CASE WHEN gp.is_white THEN 'white' ELSE 'black' END AS color,
+                CASE WHEN gp.is_white THEN b.player_name ELSE w.player_name END AS opponent_name,
+                CASE WHEN gp.is_white THEN g.white_result ELSE g.black_result END AS result,
+                mode.name AS mode,g.played_at,
+                w.player_name AS white,b.player_name AS black,g.white_elo,g.black_elo,g.white_result,g.black_result,
                 g.white_str_result,g.black_str_result,g.time_control,g.initial_setup,s.salience
-                FROM game_player gp JOIN game g ON g.link=gp.link
-                LEFT JOIN game_player_salience s ON s.game_link=gp.link AND s.player_name=gp.player_name AND s.player_color=gp.color
-                WHERE gp.player_name=:player AND g.fens_done AND g.n_moves>0 ORDER BY gp.link''')
+                FROM public.player p JOIN public.game_player gp ON gp.player_id=p.id
+                JOIN public.game g ON g.link=gp.game_link
+                JOIN public.player w ON w.id=g.white_player_id
+                JOIN public.player b ON b.id=g.black_player_id
+                LEFT JOIN public.game_mode mode ON mode.id=g.mode_id
+                LEFT JOIN public.game_player_salience s ON s.game_link=g.link AND s.is_white=gp.is_white
+                WHERE p.player_name=:player AND g.is_standard AND g.fens_done AND g.n_moves>0
+                ORDER BY g.link,gp.is_white DESC''')
             rows=(await session.execute(query,{'player':player})).mappings().all()
             if not rows:
                 raise ValueError('No extracted games available')
+            if len({r['link'] for r in rows})!=len(rows):
+                # The existing report format and detail API have one row per game.
+                raise ValueError('Comparison snapshots do not support self-play games')
             game_ids=set()
             for r in rows:
                 played=r['played_at'].isoformat() if r['played_at'] else None
@@ -70,42 +84,49 @@ async def build(player):
                 game_ids.add(r['link'])
             print(f'Snapshot: {len(rows):,} games; reading positions',flush=True)
             # Indexed per-game association reads; no global FEN grouping on the live DB.
-            stream=await session.stream(text('''SELECT gp.link,a.fen_id,a.n_move,a.move_color
-                FROM game_player gp JOIN game g ON g.link=gp.link
-                CROSS JOIN LATERAL (SELECT fen_id,n_move,move_color FROM game_fen_association
-                    WHERE game_link=gp.link OFFSET 0) a
-                WHERE gp.player_name=:player AND g.fens_done AND g.n_moves>0
-                ORDER BY gp.link,a.n_move,CASE WHEN a.move_color='white' THEN 0 ELSE 1 END'''),{'player':player})
+            stream=await session.stream(text('''SELECT g.link,a.fen_id,a.n_move,a.is_white
+                FROM public.player p JOIN public.game_player gp ON gp.player_id=p.id
+                JOIN public.game g ON g.link=gp.game_link
+                CROSS JOIN LATERAL (SELECT fen_id,n_move,is_white FROM public.game_fen_association
+                    WHERE game_link=g.link OFFSET 0) a
+                WHERE p.player_name=:player AND g.is_standard AND g.fens_done AND g.n_moves>0
+                ORDER BY g.link,a.n_move,a.is_white DESC'''),{'player':player})
             previous=None;repetitions=Counter();count=0
-            async for batch in stream.partitions(10000):
-                records=[]
-                for link,fen_id,n_move,color in batch:
-                    if link!=previous:
-                        previous=link;repetitions.clear()
-                    repetitions[fen_id]+=1
-                    records.append((link,n_move*2-(color=='white'),fen_id,repetitions[fen_id]))
-                db.executemany('INSERT INTO positions VALUES(?,?,?,?)',records)
-                digest.update(json.dumps(records,separators=(',',':')).encode())
-                count+=len(records)
-                if count%250000==0:
-                    print(f'Snapshot: {count:,} position occurrences read',flush=True)
-            stream=await session.stream(text('''SELECT gp.link,m.n_move,m.white_move,m.black_move
-                FROM game_player gp JOIN game g ON g.link=gp.link
-                CROSS JOIN LATERAL (SELECT n_move,white_move,black_move FROM moves WHERE link=gp.link OFFSET 0) m
-                WHERE gp.player_name=:player AND g.fens_done AND g.n_moves>0 ORDER BY gp.link,m.n_move'''),{'player':player})
+            try:
+                async for batch in stream.partitions(10000):
+                    records=[]
+                    for link,fen_id,n_move,is_white in batch:
+                        if link!=previous:
+                            previous=link;repetitions.clear()
+                        repetitions[fen_id]+=1
+                        records.append((link,n_move*2-is_white,fen_id,repetitions[fen_id]))
+                    db.executemany('INSERT INTO positions VALUES(?,?,?,?)',records)
+                    digest.update(json.dumps(records,separators=(',',':')).encode())
+                    count+=len(records)
+                    if count%250000==0:
+                        print(f'Snapshot: {count:,} position occurrences read',flush=True)
+            finally:
+                await finish_analysis_cleanup(stream.close())
+            stream=await session.stream(text('''SELECT g.link,m.n_move,m.white_move,m.black_move
+                FROM public.player p JOIN public.game_player gp ON gp.player_id=p.id
+                JOIN public.game g ON g.link=gp.game_link
+                CROSS JOIN LATERAL (SELECT n_move,white_move,black_move FROM public.moves WHERE link=g.link OFFSET 0) m
+                WHERE p.player_name=:player AND g.is_standard AND g.fens_done AND g.n_moves>0 ORDER BY g.link,m.n_move'''),{'player':player})
             previous=None;recorded=[]
             def save_moves(link,moves):
                 if link is not None:
                     encoded=json.dumps(moves,separators=(',',':'))
                     digest.update(f'{link}:{encoded}'.encode())
                     db.execute('UPDATE games SET moves=? WHERE game_link=?',(encoded,link))
-            async for link,n_move,white,black in stream:
-                if link!=previous:
-                    save_moves(previous,recorded);previous=link;recorded=[]
-                recorded.append((n_move,white,black))
+            try:
+                async for link,n_move,white,black in stream:
+                    if link!=previous:
+                        save_moves(previous,recorded);previous=link;recorded=[]
+                    recorded.append((n_move,white,black))
+            finally:
+                await finish_analysis_cleanup(stream.close())
             save_moves(previous,recorded)
         # Close the database snapshot before running the local reference formulas.
-        await engine.dispose()
         if db.execute('SELECT count(*) FROM games WHERE moves IS NULL').fetchone()[0]:
             raise ValueError('Missing snapshot move records')
         for key,value in dict(id=identifier,player=player,version=VERSION,
@@ -124,12 +145,11 @@ async def build(player):
         temporary.rename(folder/f'{identifier}.sqlite')
         print(json.dumps({'status':'complete','id':identifier,'player':player,'games':len(game_ids),'positions':count}),flush=True)
         return identifier
-    except BaseException:
+    finally:
         db.close()
         # Preserve incomplete inputs for diagnosis, but readers never list them.
-        raise
-    finally:
-        await engine.dispose()
+        if engine is not None:
+            await finish_analysis_cleanup(engine.dispose())
 
 
 if __name__=='__main__':

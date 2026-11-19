@@ -1,10 +1,13 @@
 """Supported admin tools use native identities; no real jobs or cloud clients."""
 from sqlalchemy import text
+from types import SimpleNamespace
+from unittest.mock import patch, AsyncMock
 
 from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.operations.cloud_analysis import input_validation
 from tests import check_canonical_cuda_postgres as fixture
 from scripts import rerun_cuda_summaries as launcher, benchmark_all_score_distributions as benchmark
+from scripts import compare_cuda_summaries as comparison, manage_canonical_blunders as administration
 
 
 class RuntimeToolsTests(fixture.CanonicalCudaTests):
@@ -45,3 +48,36 @@ class RuntimeToolsTests(fixture.CanonicalCudaTests):
             await input_validation.claim(session, 'copy-run', fens)
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM cloud_fen_claim'), 2)
         self.assertEqual(self.engine.pool.checkedout(), 0)
+
+    async def test_rerun_comparison_uses_native_sides_and_detects_real_differences(self):
+        await self.test_full_cohort_launcher_preserves_snapshots_and_native_sides()
+        identifier=await self.db.fetchval("SELECT id FROM cuda_summary_run WHERE status='queued'")
+        async with write_transaction(self.factory) as session:
+            run=await launcher.runs.progress(session,identifier)
+            while await fixture.score_runs.plan(session,run):pass
+            run=await launcher.runs.next_batch(session)
+        await self.stage(run)
+        for _ in range(3):await fixture.score_publication.finalize(self.factory,run,fixture.DEVICE)
+        async with read_transaction(self.factory) as session:result=await comparison.compare(session,identifier)
+        self.assertTrue(result['passed'],result)
+        self.assertEqual(result['checks']['accuracy_games']['compared'],4)
+        self.assertEqual(result['checks']['engine_statistics']['compared'],4)
+        await self.db.execute('UPDATE game_player_engine_summary SET own_move_cp_gain=own_move_cp_gain+1 WHERE game_link=1 AND is_white')
+        async with read_transaction(self.factory) as session:result=await comparison.compare(session,identifier)
+        self.assertFalse(result['passed']);self.assertEqual(result['checks']['engine_statistics']['mismatches'],1)
+        self.assertEqual(self.engine.pool.checkedout(),0)
+
+    async def test_model_status_and_rollback_keep_explicit_transaction_boundary(self):
+        args=SimpleNamespace(adopt_run=None,rollback_to=None,acknowledgement='')
+        with patch.object(administration,'bind_runtime_engine',AsyncMock(return_value=self.engine)), \
+             patch.object(administration,'AsyncDBSession',self.factory), \
+             patch.dict('os.environ',{'DATABASE_URL':'postgresql://unused'}):
+            await administration.main(args)
+            args.rollback_to=self.model
+            with self.assertRaisesRegex(ValueError,'acknowledgement'):await administration.main(args)
+            args.acknowledgement='explicit_canonical_rollback'
+            await administration.main(args)
+            self.assertEqual(await self.db.fetchval('SELECT target_model FROM canonical_blunder_control'),self.model)
+            args.rollback_to='legacy_cpu'
+            with self.assertRaisesRegex(ValueError,'retired'):await administration.main(args)
+        self.assertEqual(self.engine.pool.checkedout(),0)
