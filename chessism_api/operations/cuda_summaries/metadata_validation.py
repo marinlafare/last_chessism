@@ -2,8 +2,6 @@
 import json
 import math
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.player_analytics_schema import analytics_table
 
 BASELINE='public.cuda_metadata_baseline'
 IDENTITY=('mode','date','weekday','hour','kind','color','key','rating','link')
@@ -23,15 +21,14 @@ def equivalent(a,b):
 
 async def validate_and_retain(session,run,scopes,snapshots):
     """Initial CPU→CUDA migration gate; changed/stale baselines are not evidence."""
-    table=lambda n:analytics_table(storage_for(session),n)
     checked=[];skipped=[]
     for row in scopes:
         if not row['behavior'] or row['player_name'] not in snapshots:continue
-        player=row['player_name'];params={'p':player,'id':run['id']}
-        revisions=(await session.execute(text(f'SELECT revision,published_revision FROM {table("state")} WHERE player_name=:p'),params)).one()
+        player=row['player_name'];params={'p':player,'owner':row['player_id'],'id':run['id']}
+        revisions=(await session.execute(text(f'SELECT revision,published_revision FROM public.player_analytics_state WHERE player_id=:owner'),params)).one()
         if revisions[0]!=row['behavior_revision'] or revisions[1]!=row['behavior_revision']:
             skipped.append(player);continue
-        old=(await session.execute(text(f'SELECT section,payload FROM {table("snapshot")} WHERE player_name=:p'),params)).all()
+        old=(await session.execute(text(f'SELECT section,payload FROM public.player_analytics_snapshot WHERE player_id=:owner'),params)).all()
         if not old:skipped.append(player);continue
         new=json.loads(json.dumps(snapshots[player]))
         for section,payload in old:

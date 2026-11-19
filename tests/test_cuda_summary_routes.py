@@ -27,15 +27,12 @@ class CudaSummaryRoutes(unittest.IsolatedAsyncioTestCase):
     async def test_status_never_enqueues_and_empty_work_is_a_conflict(self):
         session = AsyncMock()
         factory = MagicMock()
-        factory.return_value.__aenter__.return_value = session
+        factory.return_value = session
         async with httpx.AsyncClient(transport=httpx.ASGITransport(app=self.app(True)), base_url='http://test') as client:
             with patch.object(routes,'AsyncDBSession',factory), patch.object(routes.runs,'status',AsyncMock(return_value={'manual':True})), patch.object(routes,'schedule',AsyncMock()) as wake:
                 self.assertEqual((await client.get('/analysis/cuda-summaries')).json(), {'manual':True})
                 wake.assert_not_awaited()
-                self.assertEqual(str(session.execute.call_args_list[0].args[0]), 'SET TRANSACTION READ ONLY')
-            session.begin = MagicMock()
-            session.begin.return_value.__aenter__ = AsyncMock()
-            session.begin.return_value.__aexit__ = AsyncMock(return_value=False)
+                self.assertEqual(str(session.execute.call_args_list[0].args[0]), 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
             with patch.object(routes,'AsyncDBSession',factory), patch.object(routes.runs,'request_run',AsyncMock(side_effect=ValueError('No pending work'))), patch.object(routes,'schedule',AsyncMock()) as wake:
                 self.assertEqual((await client.post('/analysis/cuda-summaries/run')).status_code,409)
                 wake.assert_not_awaited()

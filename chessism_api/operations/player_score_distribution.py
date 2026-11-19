@@ -18,7 +18,6 @@ from sqlalchemy.exc import DBAPIError
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.transactions import read_transaction
 from chessism_api.database.postgresql import player_position_reads as position_reads
-from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_score_histogram import BATCH_SELECTION, read_histogram_batches
 from chessism_api.operations.player_score_position_page import read_position_page
 
@@ -77,35 +76,29 @@ def normalize(player_name, modes=MODES):
 
 
 def games_sql(session):
-    layout = storage_for(session)
-    if layout is None:
-        return """SELECT gp.link AS game_link, gp.color='white' AS is_white,
-            gp.mode, g.n_moves, g.white_result, g.black_result,
-            g.white_str_result, g.black_str_result
-            FROM game_player gp JOIN game g ON g.link=gp.link
-            WHERE gp.player_name=:player AND gp.mode=ANY(CAST(:modes AS text[]))"""
+
     return f"""SELECT gp.game_link, gp.is_white, m.name AS mode,
         g.n_moves, g.white_result, g.black_result, g.white_str_result, g.black_str_result
-        FROM {layout.table('game_player')} gp
-        JOIN {layout.table('game')} g ON g.link=gp.game_link
-        JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
-        WHERE gp.player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player)
+        FROM public.game_player gp
+        JOIN public.game g ON g.link=gp.game_link
+        JOIN public.game_mode m ON m.id=g.mode_id
+        WHERE g.is_standard AND g.n_moves>0 AND gp.player_id=(SELECT id FROM public.player WHERE player_name=:player)
           AND m.name=ANY(CAST(:modes AS text[]))"""
 
 
 def positions_sql(session, *, selected_games=None):
-    layout = storage_for(session)
-    association = layout.table('game_fen_association') if layout else 'game_fen_association'
-    fen = layout.table('fen') if layout else 'fen'
+
+    association = 'public.game_fen_association'
+    fen = 'public.fen'
     return f"""WITH selected_games AS MATERIALIZED ({selected_games or games_sql(session)}),
         occurrences AS (
             SELECT g.mode, g.is_white, a.fen_id
-            FROM selected_games g JOIN {association} a ON a.game_link=g.game_link
+            FROM selected_games g JOIN {association} a ON a.game_link=g.game_link AND a.n_move>0
         ), scored AS (
-            SELECT o.*, f.analysis_source, CASE WHEN o.is_white THEN f.score ELSE -f.score END AS player_score,
+            SELECT o.*, f.analysis_source, CASE WHEN o.is_white THEN f.score::bigint ELSE -f.score::bigint END AS player_score,
                 CASE WHEN f.score IS NULL THEN 'unscored'
                      WHEN f.analysis_source='tablebase' THEN 'tablebase'
-                     WHEN ABS(f.score)>=9000 THEN 'mate' ELSE 'cp' END AS score_kind
+                     WHEN ABS(f.score::bigint)>=9000 THEN 'mate' ELSE 'cp' END AS score_kind
             FROM occurrences o JOIN {fen} f ON f.fen_id=o.fen_id
         ), classified AS (
             SELECT *, CASE WHEN score_kind='cp' THEN {bin_sql('player_score')} END AS bin_id
@@ -114,8 +107,8 @@ def positions_sql(session, *, selected_games=None):
 
 
 def endings_sql(session):
-    layout = storage_for(session)
-    moves = layout.table('moves') if layout else 'moves'
+
+    moves = 'public.moves'
     # Only recorded stalemates need a move lookup. The final full-move number
     # must match the game; '--' is the ingestion pipeline's absent black ply.
     return text(f"""WITH selected_games AS MATERIALIZED ({games_sql(session)}),
@@ -163,10 +156,10 @@ async def source_state(session, player):
     # A totals refresh changes refreshed_at even when no data changed. Do not
     # throw away expensive analytics (or reject an open list) for that event.
     counts = (await session.execute(text('''SELECT n_games_in_db, n_positions,
-        analyzed_fens, unscored_fens, nonzero_scored_fens
+        analyzed_fens, unscored_fens, scored_fens AS nonzero_scored_fens
         FROM database_summary WHERE id=1'''))).first()
-    layout = storage_for(session)
-    fen = layout.table('fen') if layout else 'fen'
+
+    fen = 'public.fen'
     # Uses the existing partial (analyzed_at, fen_id) backup index. This also
     # detects re-analysis where the number of scored positions stays constant.
     stamp = await session.scalar(text(f'''SELECT analyzed_at FROM {fen}
@@ -277,10 +270,10 @@ async def get_distribution(player_name, redis, *, refresh=False):
     player, modes = normalize(player_name)
     from .player_stockfish_summary import enabled, read_saved
     from .cuda_summaries.schema import enabled as manual_summaries
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         manual = await manual_summaries(session)
     if enabled() or manual:
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
             await session.execute(text("SET LOCAL statement_timeout='5s'"))
             if not await session.scalar(text('SELECT 1 FROM player WHERE player_name=:player AND joined>0 AND deleted_at IS NULL'), {'player': player}):
@@ -294,7 +287,7 @@ async def get_distribution(player_name, redis, *, refresh=False):
                 return {**cached, 'summary_managed': True, 'summary_pending': False,
                         'stale': True, 'mate_distances_pending': True}
         return saved
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await prepare(session)
         snapshot = await source_state(session, player)
     key = key_for('histogram', player)
@@ -315,11 +308,11 @@ async def get_distribution(player_name, redis, *, refresh=False):
 async def calculate_distribution(player, modes, redis):
     from .cuda_summaries.schema import enabled as manual_summaries
     from .player_stockfish_summary import read_saved
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         if await manual_summaries(session):
             return await read_saved(session, player)
     async with read_slot(wait_seconds=120):
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             await prepare(session)
             snapshot = await source_state(session, player)
             key = key_for('histogram', player)

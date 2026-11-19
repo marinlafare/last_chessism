@@ -30,7 +30,7 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
 
     async def test_empty_initialization_and_exact_repeat_preserve_data(self):
         self.assertTrue(await canonical.initialize(self.db))
-        self.assertEqual(await canonical.validate(self.db),12)
+        self.assertEqual(await canonical.validate(self.db),canonical.VERSION)
         self.assertEqual(await self.db.fetchval('SELECT count(*) FROM public.account'),0)
         self.assertEqual(await self.db.fetch(SELECT_PENDING,10),[])
         await seed(self.db)
@@ -80,7 +80,7 @@ class CanonicalPostgresTests(CanonicalDatabaseTestCase):
     async def test_validation_works_in_read_only_transaction(self):
         await canonical.initialize(self.db)
         async with self.db.transaction(readonly=True):
-            self.assertEqual(await canonical.validate(self.db),12)
+            self.assertEqual(await canonical.validate(self.db),canonical.VERSION)
 
     async def test_previous_versions_are_not_silently_reinterpreted(self):
         await canonical.initialize(self.db)

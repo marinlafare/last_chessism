@@ -1,11 +1,12 @@
 """Bounded binary COPY transport; all temporary rows belong to the transaction."""
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import driver_connection, identifier
+from chessism_api.database.postgresql.transactions import driver_connection
+from sqlalchemy.dialects.postgresql import dialect
 from ..matrix_constructor.artifact_files import file_operation
 
 
 async def temp_rows(session, name, definition, columns, rows):
-    name_sql = identifier(name)
+    name_sql = dialect().identifier_preparer.quote_identifier(name)
     await session.execute(text(f'CREATE TEMP TABLE {name_sql} ({definition}) ON COMMIT DROP'))
     driver = await driver_connection(session)
     await driver.copy_records_to_table(name, schema_name='pg_temp', columns=columns, records=rows, timeout=120)

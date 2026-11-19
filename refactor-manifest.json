@@ -6345,97 +6345,20 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical export lifecycle verified and committed; next canonical CUDA publication and dependent readers",
+      "current_gate": "CUDA native publication/readers verified; remaining A3 admin/graph/research and A4 retirement",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "entry_commit": "17d91de64a233b99d2baa954fd60be562dbad5d5",
-        "scope": "canonical export metadata, lifecycle and analytical reader",
-        "evidence_directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-02",
-        "planned_tests": {
-          "foundation": 8,
-          "workflow": 30,
-          "p1": 68
-        },
-        "planned_total": 106,
-        "source_input_count": 1777,
-        "protected_baseline_count": 1576,
-        "process_policy": "Run directly; expected under five minutes",
-        "results": {
-          "foundation": {
-            "suite": "foundation",
-            "tests": 8,
-            "failures": 0,
-            "errors": 0,
-            "skips": 0,
-            "elapsed_seconds": 2.7357215881347656,
-            "failure_details": [],
-            "error_details": [],
-            "skip_details": [],
-            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
-          },
-          "workflow": {
-            "suite": "workflow",
-            "tests": 30,
-            "failures": 0,
-            "errors": 0,
-            "skips": 0,
-            "elapsed_seconds": 0.25774550437927246,
-            "failure_details": [],
-            "error_details": [],
-            "skip_details": [],
-            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
-          },
-          "p1": {
-            "suite": "p1",
-            "tests": 68,
-            "failures": 0,
-            "errors": 0,
-            "skips": 0,
-            "elapsed_seconds": 2.7908775806427,
-            "failure_details": [],
-            "error_details": [],
-            "skip_details": [],
-            "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
-          }
-        },
-        "cleanup": [
-          {
-            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-p1",
-            "removed": true
-          },
-          {
-            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-workflow",
-            "removed": true
-          },
-          {
-            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-foundation",
-            "removed": true
-          },
-          {
-            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-redis",
-            "removed": true
-          },
-          {
-            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-postgres",
-            "removed": true
-          }
-        ],
-        "cleanup_independently_confirmed": true,
-        "diagnosis": "Canonical fixture gives formerly undated game 106 a valid 2019 timestamp. Expected search-year list omitted 2019; all other 98 checks passed.",
-        "correction": "Exact expected year order includes 2019. No application change; rerun all 8 matrix selection checks, then the 30 workflow and 68 P1 not yet run.",
-        "retained_evidence": {
-          "directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-01",
-          "passed_tests": 91,
-          "scope": "All initial tests outside tests.test_move_matrix_selection; application and all their inputs unchanged"
-        },
-        "elapsed_seconds": 12.068000316619873,
-        "verified_total": 197,
-        "source_integrity": "All 1777 frozen hashes match. After first run only the matrix selection expected-year oracle changed. 91 unaffected passing checks retained; all 8 affected plus 30 workflow and 68 P1 rerun/pass.",
-        "evidence_archive": "docs/architecture/evidence/stage-a-export-lifecycle-2026-11-18.tar.gz",
-        "evidence_sha256": "bc83141c9c3194551ecc510d33c93b0b848bb86285d119d0926787a8408d4075",
-        "commit": "a5db4bc32c77ba5afc06a15e0f10a8e9a5549b65"
+        "checks": 164,
+        "real_cuda_overlapping_checks": 12,
+        "cuda_device": "RTX 4060",
+        "unchanged_kernel_files": 14,
+        "archive": "docs/architecture/evidence/stage-a-cuda-native-2026-11-18.tar.gz",
+        "sha256": "ae546b72500ba315a9d27e3619e271416696c29c8a19abb1ca0f6b166a22e3ea",
+        "production_access": false,
+        "containers_remaining": 0,
+        "notes": "Failed attempts retained; 93/94 in run08, 73/74 in run09, 17/17 in run10; union 164. No source edits after final affected gate."
       },
       "verification_attempts": [
         {
@@ -8138,6 +8061,95 @@
           "evidence_archive": "docs/architecture/evidence/stage-a-export-sources-2026-11-18.tar.gz",
           "evidence_sha256": "e61a98419f40ded95065e3737525eda40ff47f26bf6e1c1a13ea386968c6a788",
           "commit": "17d91de64a233b99d2baa954fd60be562dbad5d5"
+        },
+        {
+          "status": "passed",
+          "entry_commit": "17d91de64a233b99d2baa954fd60be562dbad5d5",
+          "scope": "canonical export metadata, lifecycle and analytical reader",
+          "evidence_directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-02",
+          "planned_tests": {
+            "foundation": 8,
+            "workflow": 30,
+            "p1": 68
+          },
+          "planned_total": 106,
+          "source_input_count": 1777,
+          "protected_baseline_count": 1576,
+          "process_policy": "Run directly; expected under five minutes",
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 8,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 2.7357215881347656,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 30,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.25774550437927246,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 2.7908775806427,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "diagnosis": "Canonical fixture gives formerly undated game 106 a valid 2019 timestamp. Expected search-year list omitted 2019; all other 98 checks passed.",
+          "correction": "Exact expected year order includes 2019. No application change; rerun all 8 matrix selection checks, then the 30 workflow and 68 P1 not yet run.",
+          "retained_evidence": {
+            "directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-01",
+            "passed_tests": 91,
+            "scope": "All initial tests outside tests.test_move_matrix_selection; application and all their inputs unchanged"
+          },
+          "elapsed_seconds": 12.068000316619873,
+          "verified_total": 197,
+          "source_integrity": "All 1777 frozen hashes match. After first run only the matrix selection expected-year oracle changed. 91 unaffected passing checks retained; all 8 affected plus 30 workflow and 68 P1 rerun/pass.",
+          "evidence_archive": "docs/architecture/evidence/stage-a-export-lifecycle-2026-11-18.tar.gz",
+          "evidence_sha256": "bc83141c9c3194551ecc510d33c93b0b848bb86285d119d0926787a8408d4075",
+          "commit": "a5db4bc32c77ba5afc06a15e0f10a8e9a5549b65"
         }
       ],
       "process_handoff_policy": "Run operations expected to take under five minutes directly; provide monitor.py and return control only for operations expected to exceed five minutes (user update 2026-11-18).",
@@ -8151,7 +8163,21 @@
         "source": "User asynchronous reply: Approve these export contract changes",
         "applies_to": "upcoming canonical dataset exports"
       },
-      "next_scope": "Continue A3.2 canonical_blunders/cuda_summaries native schema, publication and dependent chart/research readers. GPU computation formulas remain unchanged; do not substitute CPU counts for unknown GPU results."
+      "next_scope": "Complete coordinated CUDA conversion, then remaining research/admin/graph/backup consumers and A4 retirement.",
+      "continuation_authorization": "/home/jon/.codex/attachments/ec6637db-553b-4054-85c1-c8af30164a85/Pasted text.txt",
+      "cuda_verification": {
+        "status": "passed",
+        "checks": 164,
+        "real_cuda_overlapping_checks": 12,
+        "cuda_device": "RTX 4060",
+        "unchanged_kernel_files": 14,
+        "archive": "docs/architecture/evidence/stage-a-cuda-native-2026-11-18.tar.gz",
+        "sha256": "ae546b72500ba315a9d27e3619e271416696c29c8a19abb1ca0f6b166a22e3ea",
+        "production_access": false,
+        "containers_remaining": 0,
+        "notes": "Failed attempts retained; 93/94 in run08, 73/74 in run09, 17/17 in run10; union 164. No source edits after final affected gate."
+      },
+      "historical_cpu_comparison_retirement": "explicitly approved by user; retain saved reports, model training/evaluation, CUDA publication"
     }
   }
 }

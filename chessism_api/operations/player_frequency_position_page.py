@@ -3,9 +3,6 @@ import base64
 import hashlib
 import json
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.player_analytics_schema import analytics_table
-from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .cuda_summaries import frequency_store as store
 from .cuda_summaries.frequency_compute import VERSION
 from .player_score_position_page import scope_key, PAGE_SIZE
@@ -39,8 +36,8 @@ def decode_cursor(cursor, scope, snapshot):
         raise ValueError('Invalid ranked position cursor. Reopen the list.') from None
 
 
-def ranked_sql(layout, interval):
-    score = 'CASE WHEN n.is_white THEN f.score ELSE -f.score END'
+def ranked_sql(interval):
+    score = 'CASE WHEN n.is_white THEN f.score::bigint ELSE -f.score::bigint END'
     conditions = []
     if interval['lower'] is not None:
         conditions.append(f'({score}) {">=" if interval["lower_inclusive"] else ">"} :lower')
@@ -48,11 +45,11 @@ def ranked_sql(layout, interval):
         conditions.append(f'({score}) {"<=" if interval["upper_inclusive"] else "<"} :upper')
     return text(f'''WITH ranked AS (
         SELECT n.fen_id,n.is_white,SUM(n.appearances)::bigint AS appearances,({score}) AS score
-        FROM {store.TABLE} n JOIN {layout.table('game_mode')} m ON m.id=n.mode_id
-        JOIN {layout.table('fen')} f ON f.fen_id=n.fen_id
+        FROM {store.TABLE} n JOIN public.game_mode m ON m.id=n.mode_id
+        JOIN public.fen f ON f.fen_id=n.fen_id
         WHERE n.player_id=:owner AND m.name=ANY(CAST(:modes AS text[]))
           AND (CAST(:color AS text) IS NULL OR n.is_white=(:color='white'))
-          AND f.score IS NOT NULL AND ABS(f.score)<9000
+          AND f.score IS NOT NULL AND ABS(f.score::bigint)<9000
           AND f.analysis_source IS DISTINCT FROM 'tablebase' AND {' AND '.join(conditions)}
         GROUP BY n.fen_id,n.is_white,f.score HAVING SUM(n.appearances)>1)
         SELECT * FROM ranked WHERE CAST(:after_count AS bigint) IS NULL
@@ -63,13 +60,13 @@ def ranked_sql(layout, interval):
 
 async def read_ranked_page(session, player, modes, interval, cursor=None, *, color=None):
     if not await store.enabled(session): return None
-    layout = storage_for(session)
+
     meta = (await session.execute(text(f'''SELECT p.id,s.frequency_generation,s.frequency_version,
         s.frequency_revision,s.revision,s.frequency_behavior_revision,a.revision AS behavior_revision,
-        c.revision AS score_revision FROM {layout.table('player')} p
+        c.revision AS score_revision FROM public.player p
         LEFT JOIN {store.STATE} s ON s.player_id=p.id
-        LEFT JOIN {analytics_table(layout,'state')} a USING(player_name)
-        LEFT JOIN {summary_table(layout,'state')} c USING(player_name)
+        LEFT JOIN public.player_analytics_state a ON a.player_id=p.id
+        LEFT JOIN public.player_stockfish_state c USING(player_name)
         WHERE p.player_name=:player AND p.joined>0 AND p.deleted_at IS NULL'''),{'player':player})).mappings().first()
     if not meta: raise LookupError(f'Player {player!r} was not found.')
     if meta['frequency_version']!=VERSION or not meta['frequency_generation']:
@@ -79,11 +76,11 @@ async def read_ranked_page(session, player, modes, interval, cursor=None, *, col
     count,fen,white=decode_cursor(cursor,scope,snapshot)
     params=dict(owner=meta['id'],modes=list(modes),color=color,lower=interval['lower'],upper=interval['upper'],
         after_count=count,after_fen=fen,after_white=white,limit=PAGE_SIZE+1)
-    found=(await session.execute(ranked_sql(layout,interval),params)).mappings().all()
+    found=(await session.execute(ranked_sql(interval),params)).mappings().all()
     rows=[dict(fen_id=str(r['fen_id']),player_color='white' if r['is_white'] else 'black',
         appearances=r['appearances'],score_min=r['score'],score_max=r['score']) for r in found[:PAGE_SIZE]]
     if rows:
-        boards=dict((await session.execute(text(f'SELECT fen_id,fen FROM {layout.table("fen")} WHERE fen_id=ANY(CAST(:ids AS bigint[]))'),
+        boards=dict((await session.execute(text(f'SELECT fen_id,fen FROM public.fen WHERE fen_id=ANY(CAST(:ids AS bigint[]))'),
             {'ids':[int(r['fen_id']) for r in rows]})).all())
         for row in rows: row['fen']=boards[int(row['fen_id'])]
     return dict(rows=rows,next_cursor=cursor_value(scope,snapshot,rows[-1]) if len(found)>PAGE_SIZE else None,

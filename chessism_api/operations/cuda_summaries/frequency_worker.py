@@ -1,9 +1,8 @@
 """Manual, restartable full-position frequency stage; no CPU count fallback."""
 import json
 import time
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.player_analytics_schema import analytics_table
 from ..matrix_constructor.artifact_files import file_operation
 from . import frequency_store as store, frequency_source as source, frequency_files as files
 from . import frequency_compute as compute, runs, batch_budget
@@ -17,18 +16,17 @@ async def save(session, run, state, phase):
 
 
 async def publish(session, run, state, owner, rows):
-    layout = storage_for(session); t = layout.table
     p = {'owner':owner['player_id'],'player':owner['player_name']}
     await temp_rows(session,'frequency_upload','player_id bigint,is_white boolean,mode_id integer,fen_id bigint,appearances bigint',
         ('player_id','is_white','mode_id','fen_id','appearances'),rows)
     await session.execute(text("SET LOCAL lock_timeout='2s'"))
-    behavior = await session.scalar(text(f'SELECT revision FROM {analytics_table(layout,"state")} WHERE player_name=:player FOR UPDATE'),p)
-    await session.execute(text(f'SELECT player_id FROM {t("player_salience_summary")} WHERE player_id=:owner FOR UPDATE'),p)
+    behavior = await session.scalar(text(f'SELECT revision FROM public.player_analytics_state WHERE player_id=:owner FOR UPDATE'),p)
+    await session.execute(text(f'SELECT player_id FROM public.player_salience_summary WHERE player_id=:owner FOR UPDATE'),p)
     revision = await session.scalar(text(f'SELECT revision FROM {store.STATE} WHERE player_id=:owner FOR UPDATE'),p)
-    valid = await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {t('player')}
+    valid = await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM public.player
         WHERE id=:owner AND joined>0 AND deleted_at IS NULL) AND NOT EXISTS(
-            SELECT 1 FROM {t('game_player')} gp JOIN {t('game')} g ON g.link=gp.game_link
-            WHERE gp.player_id=:owner AND NOT g.fens_done)'''),p)
+            SELECT 1 FROM public.game_player gp JOIN public.game g ON g.link=gp.game_link
+            WHERE gp.player_id=:owner AND g.is_standard AND g.n_moves>0 AND NOT g.fens_done)'''),p)
     if not valid or (revision or 0) != owner['revision'] or (behavior or 0) != owner['behavior_revision']:
         return False
     await session.execute(text(f'DELETE FROM {store.TABLE} WHERE player_id=:owner'),p)
@@ -45,13 +43,13 @@ async def publish(session, run, state, owner, rows):
 
 async def tick(factory, run, xp):
     if store.METRIC not in run['metrics']: return False
-    async with factory() as session:
+    async with read_transaction(factory) as session:
         state = (await runs.progress(session,run['id']))['timings'][store.METRIC]
     if state.get('complete'): return False
     if state['version'] != compute.VERSION: raise ValueError('Frequency contract changed; start a new manual run.')
     started = time.monotonic()
     if not state['prepared']:
-        async with factory() as session:
+        async with read_transaction(factory) as session:
             result = await source.read(session,[p['player_id'] for p in state['players']],state['cursor'])
         if result is None: state={**state,'prepared':True}
         else:
@@ -59,7 +57,7 @@ async def tick(factory, run, xp):
             chunks = await file_operation(files.save,run['id'],raw,cursor)
             state={**state,'chunks':[*state['chunks'],*chunks],'cursor':cursor,'rows':state['rows']+len(raw)}
         state['input_seconds']=state.get('input_seconds',0)+time.monotonic()-started
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             await save(session,run,state,f'Preparing position frequencies — {state["rows"]:,} occurrences')
         return True
     if state['shards'] < compute.SHARDS:
@@ -68,7 +66,7 @@ async def tick(factory, run, xp):
         shards=files.choose(state['chunks'],state['shards'],budget)
         while True:
             raw=await file_operation(files.load,run['id'],state['chunks'],shards)
-            async with factory() as session,session.begin():
+            async with write_transaction(factory) as session:
                 await runs.phase(session,run['id'],f'Counting repeated positions on RTX 4060 — {len(raw):,} occurrences')
             before=time.monotonic()
             try:
@@ -84,18 +82,18 @@ async def tick(factory, run, xp):
         state={**state,'shards':shards[-1]+1,'outputs':[*state['outputs'],output],
             'batches':state.get('batches',0)+1,'cuda_seconds':state.get('cuda_seconds',0)+duration,
             'stored_rows':state.get('stored_rows',0)+len(result),'last_batch_positions':len(raw)}
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             await save(session,run,state,f'Position frequencies calculated — {state["shards"]} / {compute.SHARDS} groups')
         return True
     if state['published'] < len(state['players']):
         owner=state['players'][state['published']]
         rows=await file_operation(lambda:list(files.player_rows(run['id'],state['outputs'],owner['player_id'])))
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             accepted=await publish(session,run,state,owner,rows)
             state={**state,'published':state['published']+1,'superseded':state.get('superseded',0)+(not accepted),
                 'save_seconds':state.get('save_seconds',0)+time.monotonic()-started}
             await save(session,run,state,f'Publishing position frequencies — {state["published"]} / {len(state["players"])} players')
         return True
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         await save(session,run,{**state,'complete':True},'Position frequencies complete')
     return False

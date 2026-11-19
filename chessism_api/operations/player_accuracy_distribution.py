@@ -13,10 +13,10 @@ from datetime import datetime, timezone
 
 from redis.exceptions import RedisError
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_chart_games import decode_cursor
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 
@@ -67,29 +67,17 @@ def summary_rows_sql(session, metric):
     eligibility = ('engine.blunder_count >= 0 AND engine.analyzed_player_moves > 0'
                    if metric == 'blunders' else 'engine.game_efficiency BETWEEN 0 AND 100')
     accuracy = 'CASE WHEN engine.game_efficiency BETWEEN 0 AND 100 THEN engine.game_efficiency END'
-    layout = storage_for(session)
-    if layout:
-        from .canonical_blunders.readers import engine_table
-        return f"""SELECT gp.game_link, CASE WHEN gp.is_white THEN 'white' ELSE 'black' END AS player_color,
-            g.played_at, m.name AS mode, {accuracy} AS accuracy, engine.blunder_count
-            FROM {layout.table('game_player')} gp
-            JOIN {engine_table(layout)} engine ON engine.game_player_id=gp.id
-            JOIN {layout.table('game')} g ON g.link=gp.game_link
-            JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
-            JOIN {layout.table('game_analysis_coverage')} coverage ON coverage.link=gp.game_link
-            WHERE gp.player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player)
-              AND m.name=ANY(CAST(:modes AS text[]))
-              AND coverage.is_fully_analyzed AND coverage.total_positions>0
-              AND {eligibility}"""
-    # Legacy layouts have no canonical CUDA results. They must never serve old
-    # CPU counts, including through explorer/filter paths.
-    if metric == 'blunders': eligibility = 'false'
-    return f"""SELECT gp.link AS game_link, gp.color AS player_color, gp.played_at, gp.mode,
-        {accuracy} AS accuracy, NULL::integer AS blunder_count
-        FROM game_player gp
-        JOIN game_player_engine_summary engine ON engine.game_link=gp.link AND engine.player_color=gp.color
-        JOIN game_analysis_summary coverage ON coverage.link=gp.link
-        WHERE gp.player_name=:player AND gp.mode=ANY(CAST(:modes AS text[]))
+
+    from .canonical_blunders.readers import engine_table
+    return f"""SELECT gp.game_link, CASE WHEN gp.is_white THEN 'white' ELSE 'black' END AS player_color,
+        g.played_at, m.name AS mode, {accuracy} AS accuracy, engine.blunder_count
+        FROM public.game_player gp
+        JOIN {engine_table()} engine ON engine.game_link=gp.game_link AND engine.is_white=gp.is_white
+        JOIN public.game g ON g.link=gp.game_link
+        JOIN public.game_mode m ON m.id=g.mode_id
+        JOIN public.game_analysis_coverage coverage ON coverage.link=gp.game_link
+        WHERE g.is_standard AND g.n_moves>0 AND gp.player_id=(SELECT id FROM public.player WHERE player_name=:player)
+          AND m.name=ANY(CAST(:modes AS text[]))
           AND coverage.is_fully_analyzed AND coverage.total_positions>0
           AND {eligibility}"""
 
@@ -140,7 +128,7 @@ async def get_blunder_distribution(player_name, redis):
     player=str(player_name or '').strip().lower()
     if not player or len(player)>128:
         raise ValueError('A player name of 1–128 characters is required.')
-    async with read_slot(), AsyncDBSession() as session:
+    async with read_slot(), read_transaction(AsyncDBSession) as session:
         await prepare(session)
         return await readers.saved(session,player)
 
@@ -157,7 +145,7 @@ async def get_summary_distribution(player_name, redis, *, metric):
         raise ValueError('A player name of 1–128 characters is required.')
     async with read_slot():
         # Validate current ownership/existence even when a cached histogram exists.
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             await prepare(session)
             exists = await session.scalar(text('''SELECT player_name FROM player
                 WHERE player_name=:player AND deleted_at IS NULL'''), {'player': player})
@@ -167,7 +155,7 @@ async def get_summary_distribution(player_name, redis, *, metric):
         cached = await cached_distribution(redis, key, metric, len(bins))
         if cached is not None:
             return cached
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             await prepare(session)
             rows = (await session.execute(text(f"""WITH eligible AS ({summary_rows_sql(session, metric)})
                 SELECT mode, {bin_sql} AS bin_id, COUNT(*)::bigint AS games
@@ -198,7 +186,7 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
     clause, bounds = blunder_bin_filter(bin_id) if metric == 'blunders' else accuracy_bin_filter(bin_id)
     if not modes or set(modes) - set(MODES) or not 1 <= limit <= 100:
         raise ValueError('Choose valid game modes and a limit between 1 and 100.')
-    async with read_slot(), AsyncDBSession() as session:
+    async with read_slot(), read_transaction(AsyncDBSession) as session:
         await prepare(session)
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
         from .canonical_blunders.readers import current
@@ -206,12 +194,11 @@ async def explore_summary_games(player_name, *, metric, modes, bin_id, timezone_
         fingerprint = hashlib.sha256(json.dumps([scope.player, metric, sorted(set(modes)), bin_id,
             canonical['active_model'] if canonical else None]).encode()).hexdigest()
         cursor_time, cursor_id, cursor_color = decode_cursor(cursor, fingerprint)
-        layout = storage_for(session)
-        game_table = layout.table('game') if layout else 'game'
-        opponent_join = (f"""LEFT JOIN {layout.table('player')} opponent ON opponent.id=
-            CASE WHEN selected.player_color='white' THEN g.black_player_id ELSE g.white_player_id END"""
-            if layout else '')
-        opponent_name = 'opponent.player_name' if layout else "CASE WHEN selected.player_color='white' THEN g.black ELSE g.white END"
+
+        game_table = lambda name: "public."+name('game')
+        opponent_join = (f"""LEFT JOIN public.player opponent ON opponent.id=
+            CASE WHEN selected.player_color='white' THEN g.black_player_id ELSE g.white_player_id END""")
+        opponent_name = 'opponent.player_name'
         from .player_blunder_page import blunder_rows_sql
         eligible = blunder_rows_sql(session, clause) if metric == 'blunders' else None
         query = f"""WITH eligible AS ({eligible or summary_rows_sql(session, metric)}), selected AS MATERIALIZED (

@@ -8,6 +8,7 @@ from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import chess
+from chessism_api.database.postgresql.transactions import read_transaction
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
@@ -227,7 +228,7 @@ async def explore_player_games(
         selection_sql += ' AND gp.result = :selected_result'
         selection_params['selected_result'] = result_values[result]
     cursor_time, cursor_game_id = _decode_cursor(cursor)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
         # Interactive clicks must not fan out across the host's CPU cores.
@@ -264,14 +265,8 @@ async def explore_player_games(
         salience_where = f'AND {ELIGIBLE} AND {range_sql("salience.salience")}' if salience_filtered else ''
         accuracy_sql = ('SUM(engine.game_efficiency * salience.salience) / NULLIF(SUM(salience.salience), 0)'
                         if salience_filtered else 'AVG(engine.game_efficiency)')
-        candidates = f"""WITH selected_games AS MATERIALIZED (
-            SELECT gp.* FROM game_player gp
-            WHERE gp.player_name=:player AND gp.mode=ANY(CAST(:modes AS text[]))
-              AND gp.played_at IS NOT NULL {date_window}
-              {minimum_moves_filter} AND {selection_sql}
-        ) """
         candidates = normalized_candidates(session, date_window=date_window,
-            selection_sql=selection_sql, minimum_moves_filter=minimum_moves_filter) or candidates
+            selection_sql=selection_sql, minimum_moves_filter=minimum_moves_filter)
         # Probe saved summaries for the selected games, not a join over the
         # whole canonical-summary compatibility view. OFFSET 0 keeps this a
         # parameterized lookup even when planner statistics are stale.
@@ -521,33 +516,39 @@ def _format_moves(rows: list[Any], canonical_flags=None) -> list[dict[str, Any]]
 
 async def get_game_score(game_id: int) -> dict[str, Any]:
     """Return a neutral, complete game record for the interactive board viewer."""
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         game_result = await session.execute(text("""
-            SELECT game.*, coverage.total_positions, coverage.analyzed_positions,
+            SELECT game.*, white.player_name AS white,black.player_name AS black,mode.name AS mode,
+                   coverage.total_positions, coverage.analyzed_positions,
                    coverage.is_fully_analyzed
-            FROM game
-            LEFT JOIN game_analysis_summary coverage ON coverage.link = game.link
-            WHERE game.link = :game_id
+            FROM public.game
+            JOIN public.player white ON white.id=game.white_player_id
+            JOIN public.player black ON black.id=game.black_player_id
+            LEFT JOIN public.game_mode mode ON mode.id=game.mode_id
+            LEFT JOIN public.game_analysis_coverage coverage ON coverage.link = game.link
+            WHERE game.link = :game_id AND game.is_standard AND game.n_moves>0
         """), {"game_id": game_id})
         game = game_result.mappings().first()
         if not game:
             raise LookupError(f"Game {game_id} was not found.")
         summary_result = await session.execute(text("""
-            SELECT * FROM game_player_engine_summary
-            WHERE game_link = :game_id
-            ORDER BY CASE WHEN player_color = 'white' THEN 0 ELSE 1 END
+            SELECT e.*,p.player_name,CASE WHEN e.is_white THEN 'white' ELSE 'black' END AS player_color
+            FROM public.canonical_blunder_engine e JOIN public.game_player gp
+              ON gp.game_link=e.game_link AND gp.is_white=e.is_white
+            JOIN public.player p ON p.id=gp.player_id
+            WHERE e.game_link = :game_id ORDER BY e.is_white DESC
         """), {"game_id": game_id})
         summaries = summary_result.mappings().all()
         move_result = await session.execute(text("""
             SELECT
                 association.n_move,
-                association.move_color,
+                CASE WHEN association.is_white THEN 'white' ELSE 'black' END AS move_color,
                 association.n_move * 2
-                  - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END AS ply,
+                  - CASE WHEN association.is_white THEN 1 ELSE 0 END AS ply,
                 fen.fen, fen.score, fen.next_moves, fen.analysis_source,
                 fen.wdl_win, fen.wdl_draw, fen.wdl_loss,
                 fen.tablebase_wdl, fen.tablebase_dtz,
-                CASE WHEN association.move_color = 'white'
+                CASE WHEN association.is_white
                      THEN moves.white_move ELSE moves.black_move END AS move,
                 moves.white_reaction_time, moves.black_reaction_time,
                 moves.white_time_left, moves.black_time_left
@@ -555,9 +556,9 @@ async def get_game_score(game_id: int) -> dict[str, Any]:
             JOIN fen ON fen.fen_id = association.fen_id
             LEFT JOIN moves
               ON moves.link = association.game_link AND moves.n_move = association.n_move
-            WHERE association.game_link = :game_id
+            WHERE association.game_link = :game_id AND association.n_move>0
             ORDER BY association.n_move,
-                     CASE WHEN association.move_color = 'white' THEN 0 ELSE 1 END
+                     CASE WHEN association.is_white THEN 0 ELSE 1 END
         """), {"game_id": game_id})
         rows = move_result.mappings().all()
         from .canonical_blunders.readers import game_flags

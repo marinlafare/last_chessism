@@ -1,9 +1,8 @@
 """One bounded binary position read for score histograms and canonical blunders."""
 import numpy as np
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for, driver_connection
+from chessism_api.database.postgresql.transactions import driver_connection
 from ..canonical_blunders import source, binary_source as binary, compute
-from ..canonical_blunders.schema import table
 from ..canonical_blunders.eligibility import moving_owners
 from ..matrix_constructor.artifact_files import file_operation
 from .score_runs import OWNER, pending_items
@@ -16,15 +15,14 @@ COPY_STATEMENT_SECONDS = 120
 COPY_CLIENT_SECONDS = COPY_STATEMENT_SECONDS + 15
 
 
-def query(layout):
-    white = 'a.is_white' if layout.compact else "a.move_color='white'"
+def query():
     return f'''SELECT a.game_link::bigint,
-        ((a.n_move-1)*2+CASE WHEN {white} THEN 1 ELSE 2 END)::integer AS ply,
+        ((a.n_move-1)*2+CASE WHEN a.is_white THEN 1 ELSE 2 END)::integer AS ply,
         COALESCE(f.score::float8,'NaN'::float8),
         (CASE WHEN f.score IS NULL THEN 3 WHEN f.analysis_source='tablebase' THEN 2
             WHEN f.analysis_source LIKE 'stockfish%' THEN 1 ELSE 0 END)::smallint
-        FROM {layout.table('game_fen_association')} a LEFT JOIN {layout.table('fen')} f ON f.fen_id=a.fen_id
-        WHERE a.game_link=ANY($1::bigint[]) ORDER BY a.game_link,ply LIMIT $2::bigint'''
+        FROM public.game_fen_association a LEFT JOIN public.fen f ON f.fen_id=a.fen_id
+        WHERE a.n_move>0 AND a.game_link=ANY($1::bigint[]) ORDER BY a.game_link,ply LIMIT $2::bigint'''
 
 
 def unpack(data, games, offset):
@@ -81,34 +79,33 @@ def blunder_inputs(raw, games, items):
     return accepted, unsupported, rows
 
 
-async def metadata(session, layout, links):
+async def metadata(session, links):
     return [dict(r) for r in (await session.execute(text(f'''SELECT g.link AS game_link,m.name AS mode,
         g.played_at,g.white_elo,g.black_elo,g.white_result,g.black_result,g.white_str_result,g.black_str_result,
-        COALESCE(c.total_positions,(SELECT count(*) FROM {layout.table('game_fen_association')} a WHERE a.game_link=g.link))::int AS total_positions,
+        COALESCE(c.total_positions,(SELECT count(*) FROM public.game_fen_association a WHERE a.game_link=g.link))::int AS total_positions,
         COALESCE(c.is_fully_analyzed,false) AS analyzed,
-        CASE WHEN w.joined>0 AND w.deleted_at IS NULL AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
+        CASE WHEN w.joined>0 AND w.deleted_at IS NULL AND EXISTS(SELECT 1 FROM public.game_player gp
             WHERE gp.game_link=g.link AND gp.player_id=w.id AND gp.is_white) THEN w.player_name END AS white_owner,
-        CASE WHEN b.joined>0 AND b.deleted_at IS NULL AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
+        CASE WHEN b.joined>0 AND b.deleted_at IS NULL AND EXISTS(SELECT 1 FROM public.game_player gp
             WHERE gp.game_link=g.link AND gp.player_id=b.id AND NOT gp.is_white) THEN b.player_name END AS black_owner,
         last_move.is_white AS last_white
-        FROM {layout.table('game')} g JOIN {layout.table('game_mode')} m ON m.id=g.mode_id
-        JOIN {layout.table('player')} w ON w.id=g.white_player_id JOIN {layout.table('player')} b ON b.id=g.black_player_id
-        LEFT JOIN {layout.table('game_analysis_coverage')} c ON c.link=g.link
+        FROM public.game g JOIN public.game_mode m ON m.id=g.mode_id
+        JOIN public.player w ON w.id=g.white_player_id JOIN public.player b ON b.id=g.black_player_id
+        LEFT JOIN public.game_analysis_coverage c ON c.link=g.link
         LEFT JOIN LATERAL (SELECT CASE WHEN lower(btrim(m.white_move)) NOT IN ('','--','none','null') THEN
             CASE WHEN lower(btrim(m.black_move)) NOT IN ('','--','none','null') THEN false
                  WHEN btrim(m.black_move)='--' THEN true END END AS is_white
-            FROM {layout.table('moves')} m WHERE m.link=g.link AND m.n_move=g.n_moves AND g.n_moves>0
+            FROM public.moves m WHERE m.link=g.link AND m.n_move=g.n_moves AND g.n_moves>0
             AND (lower(g.white_str_result)='stalemate' OR lower(g.black_str_result)='stalemate') LIMIT 1
-        ) last_move ON true WHERE g.link=ANY(CAST(:links AS bigint[])) ORDER BY g.link'''), {'links': links})).mappings()]
+        ) last_move ON true WHERE g.is_standard AND g.n_moves>0 AND g.link=ANY(CAST(:links AS bigint[])) ORDER BY g.link'''), {'links': links})).mappings()]
 
 
 async def load(session, run):
-    layout = storage_for(session)
-    config = await session.scalar(text(f'SELECT config FROM {table(layout,"model")} WHERE id=:model'), {'model': run['model_id']})
+    config = await session.scalar(text(f'SELECT config FROM public.canonical_blunder_model WHERE id=:model'), {'model': run['model_id']})
     budget = run.get('batch_budget')
     page = run['items']; taken = []; games = []; owners = []; rows = 0
     while page:
-        data = await metadata(session, layout, [i['game_link'] for i in page])
+        data = await metadata(session, [i['game_link'] for i in page])
         by_link = {g['game_link']: g for g in data}; accepted = []
         for item in page:
             game = by_link.get(item['game_link']); count = game['total_positions'] if game else 0
@@ -123,7 +120,7 @@ async def load(session, run):
             if game:
                 games.append(game)
         owners.extend(dict(r) for r in (await session.execute(text(f'''SELECT game_link,player_name,day::text AS day,is_white
-            FROM {OWNER} WHERE run_id=:id AND game_link=ANY(CAST(:links AS bigint[])) ORDER BY game_link,player_name'''),
+            FROM {OWNER} WHERE run_id=:id AND game_link=ANY(CAST(:links AS bigint[])) ORDER BY game_link,player_name,is_white'''),
             {'id': run['id'], 'links': accepted})).mappings())
         if len(accepted) != len(page) or not budget:
             break
@@ -143,7 +140,7 @@ async def load(session, run):
     driver = await driver_connection(session)
     for block in binary.blocks(positive, max_games=8192, max_rows=1048576):
         expected = sum(g['total_positions'] for g in block); sink = binary.Sink(expected)
-        status = await driver.copy_from_query(query(layout), [g['game_link'] for g in block], expected + 1,
+        status = await driver.copy_from_query(query(), [g['game_link'] for g in block], expected + 1,
             output=sink.write, format='binary', timeout=COPY_CLIENT_SECONDS)
         if status != f'COPY {expected}':
             raise ValueError('Shared-input row count disagrees with coverage.')

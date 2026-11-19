@@ -2,6 +2,7 @@
 import logging
 import uuid
 from fastapi import APIRouter, Depends, HTTPException
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from chessism_api.auth import require_superuser
 from chessism_api.database.postgresql.engine import AsyncDBSession
@@ -15,7 +16,7 @@ LOG = logging.getLogger(__name__)
 
 @router.get('')
 async def get_status():
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text('SET TRANSACTION READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
         return await runs.status(session)
@@ -31,7 +32,7 @@ async def wake(redis):
 @router.post('/run', status_code=202)
 async def create_run(account=Depends(require_superuser), redis=Depends(get_redis_pool)):
     try:
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             await session.execute(text("SET LOCAL lock_timeout='3s'"))
             result = await runs.request_run(session, account.id)
     except ValueError as error:
@@ -43,7 +44,7 @@ async def create_run(account=Depends(require_superuser), redis=Depends(get_redis
 @router.post('/{run_id}/retry', status_code=202)
 async def retry(run_id: uuid.UUID, redis=Depends(get_redis_pool)):
     try:
-        async with AsyncDBSession() as session, session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             result = await runs.retry_run(session, run_id)
     except ValueError as error:
         raise HTTPException(status_code=409, detail=str(error)) from error

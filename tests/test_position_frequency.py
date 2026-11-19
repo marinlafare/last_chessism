@@ -9,7 +9,6 @@ import numpy as np
 from chessism_api.operations.cuda_summaries import frequency_compute as compute, frequency_files as files
 from chessism_api.operations.cuda_summaries import input_snapshot
 from chessism_api.operations import player_frequency_position_page as page
-from chessism_api.database.postgresql.relational_storage import RelationalStorage
 
 
 class FrequencyTests(unittest.TestCase):
@@ -39,13 +38,12 @@ class FrequencyTests(unittest.TestCase):
             with self.assertRaises(ValueError): files.read(run,bad)
 
     def test_ranked_sql_never_scans_game_occurrences(self):
-        sql=str(page.ranked_sql(RelationalStorage('core','archive','reads'),
-            dict(lower=-150,upper=-50,lower_inclusive=True,upper_inclusive=False)))
+        sql=str(page.ranked_sql(dict(lower=-150,upper=-50,lower_inclusive=True,upper_inclusive=False)))
         self.assertNotIn('game_fen_association',sql)
         self.assertNotIn('game_player',sql)
         self.assertIn('SUM(n.appearances)>1',sql)
         self.assertIn('appearances DESC,fen_id,is_white DESC',sql)
-        self.assertIn('ELSE -f.score',sql)
+        self.assertIn('ELSE -f.score::bigint',sql)
 
     def test_cursor_validates_filter_snapshot_and_exact_ids(self):
         cursor=page.cursor_value('filter','revision',dict(appearances=8,fen_id=str(2**55),player_color='black'))

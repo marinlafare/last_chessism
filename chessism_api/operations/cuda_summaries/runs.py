@@ -2,8 +2,6 @@
 import json
 import uuid
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from ..canonical_blunders.schema import table as canonical_table
 from ..canonical_blunders.source import MAX_GAMES
 from .schema import CONTROL, PENDING, RUN, ITEM, enabled
 
@@ -23,10 +21,9 @@ async def request_run(session, account_id):
     existing = await session.scalar(text(f'SELECT id FROM {RUN} WHERE status IN {ACTIVE}'))
     if existing:
         return await progress(session, existing)
-    layout = storage_for(session)
-    if await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM {layout.table("fen_summary_refresh")})')):
+    if await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM public.fen_summary_refresh)')):
         raise ValueError('Game preparation is still pending. Wait until coverage preparation finishes.')
-    model = await session.scalar(text(f'SELECT target_model FROM {canonical_table(layout,"control")} WHERE id'))
+    model = await session.scalar(text(f'SELECT target_model FROM public.canonical_blunder_control WHERE id'))
     if not model:
         raise ValueError('No canonical CUDA model is selected.')
     from . import score_runs
@@ -38,7 +35,7 @@ async def request_run(session, account_id):
         VALUES(:id,:account,:model,'queued')'''), {'id': run_id, 'account': str(account_id), 'model': model})
     await session.execute(text(f'''INSERT INTO {ITEM}(run_id,game_link,revision)
         SELECT :id,p.game_link,p.revision FROM {PENDING} p
-        JOIN {canonical_table(layout,'dirty')} d ON d.game_link=p.game_link AND d.revision=p.revision
+        JOIN public.canonical_blunder_dirty d ON d.game_link=p.game_link AND d.revision=p.revision
         WHERE p.metric='blunders' ORDER BY p.game_link'''), {'id': run_id})
     total = await session.scalar(text(f'SELECT count(*) FROM {ITEM} WHERE run_id=:id'), {'id': run_id})
     score_work = await score_runs.capture(session, run_id) if scores else 0
@@ -85,12 +82,11 @@ async def retry_run(session, run_id):
 
 
 async def next_batch(session):
-    layout = storage_for(session)
     run = (await session.execute(text(f'''SELECT * FROM {RUN} WHERE status IN {ACTIVE}
         AND (retry_after IS NULL OR retry_after<=clock_timestamp()) ORDER BY created_at LIMIT 1 FOR UPDATE'''))).mappings().first()
     if not run:
         return None
-    model = await session.scalar(text(f'SELECT target_model FROM {canonical_table(layout,"control")} WHERE id'))
+    model = await session.scalar(text(f'SELECT target_model FROM public.canonical_blunder_control WHERE id'))
     if model != run['model_id']:
         await fail(session, run['id'], 'Canonical model changed. Start a new run for the new model.', permanent=True)
         return None
@@ -100,9 +96,9 @@ async def next_batch(session):
     # Newly arrived revisions are never consumed by an earlier manual request.
     await session.execute(text(f'''UPDATE {ITEM} i SET status='superseded'
         WHERE i.run_id=:id AND i.status='pending' AND (
-            NOT EXISTS(SELECT 1 FROM {canonical_table(layout,'dirty')} d
+            NOT EXISTS(SELECT 1 FROM public.canonical_blunder_dirty d
                 WHERE d.game_link=i.game_link AND d.revision=i.revision)
-            OR EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} f WHERE f.game_link=i.game_link))'''), {'id': run['id']})
+            OR EXISTS(SELECT 1 FROM public.fen_summary_refresh f WHERE f.game_link=i.game_link))'''), {'id': run['id']})
     items = [dict(r) for r in (await session.execute(text(f'''SELECT game_link,revision FROM {ITEM}
         WHERE run_id=:id AND status='pending' ORDER BY game_link LIMIT :limit'''),
         {'id': run['id'], 'limit': MAX_GAMES})).mappings()]
@@ -131,13 +127,12 @@ async def update_counts(session, run_id):
 
 
 async def finish_batch(session, run, items, timings):
-    layout = storage_for(session)
     links = [item['game_link'] for item in items]
     # Same transaction as canonical publication, retaining its exact-revision locks.
     await session.execute(text(f'''UPDATE {ITEM} i SET status=CASE WHEN
-        EXISTS(SELECT 1 FROM {canonical_table(layout,'game')} g WHERE g.model_id=:model
+        EXISTS(SELECT 1 FROM public.canonical_blunder_game g WHERE g.model_id=:model
             AND g.game_link=i.game_link AND g.revision=i.revision)
-        AND NOT EXISTS(SELECT 1 FROM {canonical_table(layout,'dirty')} d WHERE d.game_link=i.game_link)
+        AND NOT EXISTS(SELECT 1 FROM public.canonical_blunder_dirty d WHERE d.game_link=i.game_link)
         THEN 'published' ELSE 'superseded' END
         WHERE run_id=:id AND status='pending' AND game_link=ANY(CAST(:links AS bigint[]))'''),
         {'id': run['id'], 'model': run['model_id'], 'links': links})
@@ -165,7 +160,6 @@ async def fail(session, run_id, error, *, permanent=False):
 async def status(session, *, player=None):
     if not await enabled(session):
         return {'manual': False, 'available_metrics': AVAILABLE, 'deferred_metrics': DEFERRED}
-    layout = storage_for(session)
     params = {'player': player}
     from . import score_runs
     scores = await score_runs.enabled(session)
@@ -181,7 +175,7 @@ async def status(session, *, player=None):
         available = [*available, *metadata_store.METRICS]
     from . import salience_store
     salience = await salience_store.enabled(session)
-    salience_players = (await session.execute(text(f'SELECT player_name FROM ({salience_store.needed(layout)}) q'))).scalars().all() if salience else []
+    salience_players = (await session.execute(text(f'SELECT player_name FROM ({salience_store.needed()}) q'))).scalars().all() if salience else []
     if salience:
         available = [*available, 'salience']
     from . import frequency_store
@@ -189,26 +183,25 @@ async def status(session, *, player=None):
     frequencies = await frequency_store.enabled(session)
     if frequencies:
         available = [*available, frequency_store.METRIC]
-    owner_filter = f'''AND EXISTS(SELECT 1 FROM {layout.table('game_player')} gp
-        JOIN {layout.table('player')} p ON p.id=gp.player_id
+    owner_filter = f'''AND EXISTS(SELECT 1 FROM public.game_player gp
+        JOIN public.player p ON p.id=gp.player_id
         WHERE gp.game_link=q.game_link AND p.player_name=:player)''' if player else ''
     counts = dict((await session.execute(text(f'''SELECT metric,count(*) FROM {PENDING} q
         WHERE true {owner_filter} GROUP BY metric'''), params)).all())
     if player:
-        preparing = await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} q
+        preparing = await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM public.fen_summary_refresh q
             WHERE true {owner_filter})'''), params)
-        from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
-        score_stale = scores and await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {summary_table(layout,'state')}
+        score_stale = scores and await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM public.player_stockfish_state
             WHERE player_name=:player AND revision<>published_revision)'''), params)
-        accuracy_stale = accuracy and await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM ({accuracy_store.needs_work(layout)}) q WHERE player_name=:player)'), params)
+        accuracy_stale = accuracy and await session.scalar(text(f'SELECT EXISTS(SELECT 1 FROM ({accuracy_store.needs_work()}) q WHERE player_name=:player)'), params)
         metadata_metrics = [name for name,key in zip(metadata_store.METRICS,('behavior','endings')) if any(r[key] for r in metadata)]
         return {'manual': True, 'pending_metrics': [m for m in ['blunders',*DEFERRED]
                 if counts.get(m) or preparing or (m == 'score_distribution' and score_stale) or (m == 'accuracy' and accuracy_stale)]+metadata_metrics+(['salience'] if player in salience_players else [])+(['position_frequency'] if player in frequency_players else []),
                 'pending_games': counts, 'deferred_metrics': deferred}
     players = await session.scalar(text(f'''SELECT count(DISTINCT gp.player_id) FROM {PENDING} q
-        JOIN {layout.table('game_player')} gp ON gp.game_link=q.game_link
-        JOIN {layout.table('player')} p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL'''))
-    preparing = await session.scalar(text(f'SELECT count(*) FROM {layout.table("fen_summary_refresh")}'))
+        JOIN public.game_player gp ON gp.game_link=q.game_link
+        JOIN public.player p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL'''))
+    preparing = await session.scalar(text(f'SELECT count(*) FROM public.fen_summary_refresh'))
     # Do not send potentially large internal frequency checkpoint manifests on
     # every five-second UI poll. The worker still reads the full run record.
     history = [dict(r) for r in (await session.execute(text(f'''SELECT id,requested_by,model_id,metrics,status,
@@ -216,18 +209,17 @@ async def status(session, *, player=None):
         attempts,retry_after,error,timings #- '{{position_frequency,chunks}}' #- '{{position_frequency,outputs}}' AS timings
         FROM {RUN} ORDER BY created_at DESC LIMIT 20'''))).mappings()]
     active = next((r for r in history if r['status'] in ('queued','running','retrying')), None)
-    from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
-    score_players = await session.scalar(text(f'SELECT count(*) FROM {summary_table(layout,"state")} WHERE revision<>published_revision')) if scores else 0
-    accuracy_players = await session.scalar(text(f'SELECT count(*) FROM ({accuracy_store.needs_work(layout)}) q')) if accuracy else 0
+    score_players = await session.scalar(text(f'SELECT count(*) FROM public.player_stockfish_state WHERE revision<>published_revision')) if scores else 0
+    accuracy_players = await session.scalar(text(f'SELECT count(*) FROM ({accuracy_store.needs_work()}) q')) if accuracy else 0
     if scores:
-        accuracy_union = f'UNION SELECT player_name FROM ({accuracy_store.needs_work(layout)}) a' if accuracy else ''
-        metadata_union = f'UNION SELECT player_name FROM ({metadata_store.needed(layout)}) md' if await metadata_store.enabled(session) else ''
-        salience_union = f'UNION SELECT player_name FROM ({salience_store.needed(layout)}) sa' if salience else ''
-        frequency_union = f'UNION SELECT player_name FROM ({frequency_store.needed(layout)}) pf' if frequencies else ''
+        accuracy_union = f'UNION SELECT player_name FROM ({accuracy_store.needs_work()}) a' if accuracy else ''
+        metadata_union = f'UNION SELECT player_name FROM ({metadata_store.needed()}) md' if await metadata_store.enabled(session) else ''
+        salience_union = f'UNION SELECT player_name FROM ({salience_store.needed()}) sa' if salience else ''
+        frequency_union = f'UNION SELECT player_name FROM ({frequency_store.needed()}) pf' if frequencies else ''
         players = await session.scalar(text(f'''SELECT count(*) FROM (
-            SELECT p.player_name FROM {PENDING} q JOIN {layout.table('game_player')} gp ON gp.game_link=q.game_link
-            JOIN {layout.table('player')} p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL
-            UNION SELECT player_name FROM {summary_table(layout,'state')} WHERE revision<>published_revision
+            SELECT p.player_name FROM {PENDING} q JOIN public.game_player gp ON gp.game_link=q.game_link
+            JOIN public.player p ON p.id=gp.player_id WHERE p.joined>0 AND p.deleted_at IS NULL
+            UNION SELECT player_name FROM public.player_stockfish_state WHERE revision<>published_revision
             {accuracy_union}
             {metadata_union}
             {salience_union}

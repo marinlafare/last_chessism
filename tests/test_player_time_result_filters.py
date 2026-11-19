@@ -16,7 +16,7 @@ class TimeResultFilterTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.session = AsyncMock()
         self.factory = MagicMock()
-        self.factory.return_value.__aenter__.return_value = self.session
+        self.factory.return_value = self.session
         scope = AnalyticsScope('fixture', 'all', None, None,
                                ResolvedPlayerTimezone(('UTC',), 'request_override'))
         self.patch_session = patch.object(explorer, 'AsyncDBSession', self.factory)
@@ -35,7 +35,10 @@ class TimeResultFilterTests(unittest.IsolatedAsyncioTestCase):
         }
         games = MagicMock()
         games.mappings.return_value.all.return_value = list(rows)
-        self.session.execute.side_effect = [None, None, summary, games]
+        responses = iter([summary, games])
+        def execute(statement, *args):
+            return None if str(statement).startswith('SET ') else next(responses)
+        self.session.execute.side_effect = execute
 
     async def explore(self, **changes):
         return await explorer.explore_player_games('fixture', **{
@@ -49,7 +52,7 @@ class TimeResultFilterTests(unittest.IsolatedAsyncioTestCase):
                 with self.subTest(scope=scope, result=result):
                     self.prepare()
                     payload = await self.explore(scope_kind=scope, result=result)
-                    queries = self.session.execute.call_args_list[2:]
+                    queries = [c for c in self.session.execute.call_args_list if not str(c.args[0]).startswith('SET ')]
                     self.assertEqual(len(queries), 2)
                     for call in queries:
                         sql, params = str(call.args[0]), call.args[1]
@@ -72,7 +75,7 @@ class TimeResultFilterTests(unittest.IsolatedAsyncioTestCase):
         self.prepare()
         payload = await self.explore(result=None)
         self.assertIsNone(payload['selection']['result'])
-        for call in self.session.execute.call_args_list[2:]:
+        for call in [c for c in self.session.execute.call_args_list if not str(c.args[0]).startswith('SET ')]:
             self.assertNotIn(':selected_result', str(call.args[0]))
             self.assertNotIn('selected_result', call.args[1])
 

@@ -5,12 +5,11 @@ import time
 from collections import Counter
 from pathlib import Path
 import numpy as np
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from . import source
-from .schema import table
 from .benchmark_compute import FIELDS
 
 
@@ -27,12 +26,11 @@ def read(folder,index):
 async def guard(session):
     if await session.scalar(text("SELECT EXISTS(SELECT 1 FROM cloud_analysis_job WHERE status NOT IN ('complete','cancelled','limit_reached','failed'))")):
         raise ValueError('An active cloud job takes priority; benchmark refused.')
-    layout=storage_for(session)
-    row=(await session.execute(text(f'SELECT * FROM {table(layout,"control")}'))).mappings().one()
+    row=(await session.execute(text(f'SELECT * FROM public.canonical_blunder_control'))).mappings().one()
     if row['status']!='ready' or not row['active_model'] or row['active_model']!=row['target_model']:
         raise ValueError('Wait for canonical summary publication before benchmarking.')
-    if await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {table(layout,"dirty")}) OR
-        EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')})''')):
+    if await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM public.canonical_blunder_dirty) OR
+        EXISTS(SELECT 1 FROM public.fen_summary_refresh)''')):
         raise ValueError('Canonical updates are pending; benchmark refused.')
     return row
 
@@ -40,10 +38,10 @@ async def guard(session):
 async def freeze(config,reporter,folder,*,factory=None):
     factory=factory or AsyncDBSession; timings={}; counts=Counter(); owners=set(); all_items=[]
     rows_count=0; count=0; batches=0; digest=hashlib.sha256(); comparisons=[]
-    async with factory() as session:
+    async with read_transaction(factory) as session:
         await source.prepare(session)
         await session.execute(text("SET LOCAL idle_in_transaction_session_timeout='60s'"))
-        control=await guard(session); layout=storage_for(session)
+        control=await guard(session)
         taken_at=str(await session.scalar(text('SELECT transaction_timestamp()')))
         if control['active_model']!=config['model_id']:raise ValueError('Selected canonical model changed.')
         start=time.perf_counter()
@@ -53,12 +51,12 @@ async def freeze(config,reporter,folder,*,factory=None):
             SELECT game_link,revision,mode,COALESCE(white_owner,black_owner) AS owner,
                 ROW_NUMBER() OVER(PARTITION BY mode,COALESCE(white_owner,black_owner)
                     ORDER BY md5(game_link::text||:seed),game_link) AS n
-            FROM {table(layout,'game')} WHERE model_id=:model AND status='assessed')
+            FROM public.canonical_blunder_game WHERE model_id=:model AND status='assessed')
             SELECT game_link,revision FROM candidates ORDER BY n,mode,owner,game_link LIMIT :limit'''),
             {'model':config['model_id'],'limit':config['games'],'seed':':canonical-timing-v1'})).mappings()]
         timings['selection_seconds']=time.perf_counter()-start
         if len(selected)!=config['games']:raise ValueError('Insufficient assessed games for the exact requested benchmark; no silent smaller sample.')
-        players=(await session.execute(text(f'SELECT player_name FROM {layout.table("player")} WHERE joined>0 AND deleted_at IS NULL ORDER BY player_name'))).scalars().all()
+        players=(await session.execute(text(f'SELECT player_name FROM public.player WHERE joined>0 AND deleted_at IS NULL ORDER BY player_name'))).scalars().all()
         while count<len(selected):
             await reporter.check()
             if config.get('reader_comparison'):
@@ -80,7 +78,7 @@ async def freeze(config,reporter,folder,*,factory=None):
             if rows_count+len(rows)>config['max_rows']:raise ValueError('Benchmark input exceeds its reserved row budget; no truncation allowed.')
             start=time.perf_counter()
             expected=[dict(r) for r in (await session.execute(text(f'''SELECT game_link,{','.join(FIELDS)}
-                FROM {table(layout,'game')} WHERE model_id=:model AND game_link=ANY(CAST(:links AS bigint[]))'''),
+                FROM public.canonical_blunder_game WHERE model_id=:model AND game_link=ANY(CAST(:links AS bigint[]))'''),
                 {'model':model,'links':[r['game_link'] for r in items]})).mappings()]
             timings['reference_read_seconds']=timings.get('reference_read_seconds',0.)+time.perf_counter()-start
             start=time.perf_counter()
@@ -101,7 +99,7 @@ async def freeze(config,reporter,folder,*,factory=None):
             'legacy_seconds':old,'binary_seconds':new,'speedup':old/new if new else None,
             'input_byte_agreement':True,'batches':comparisons,
             'implementation_sha256':hashlib.sha256(Path(binary_source.__file__).read_bytes()).hexdigest()}
-    return info,timings,all_items,players,layout
+    return info,timings,all_items,players
 
 
 async def compare_readers(session,items,index,reporter):

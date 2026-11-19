@@ -1,35 +1,30 @@
 """Read published CUDA results only. Missing/unassessed is never zero."""
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from .schema import table, installed
 from .assessment import POLICY, empty_mode
 
 
-def engine_table(layout):
+def engine_table():
     # CUDA is the production contract, not an optional CPU/GPU rollout toggle.
-    return table(layout,'engine')
+    return 'public.canonical_blunder_engine'
 
 
 async def current(session):
-    layout=storage_for(session)
-    if not layout or not await installed(session,layout): return None
-    return (await session.execute(text(f'SELECT * FROM {table(layout,"control")}'))).mappings().one_or_none()
+    return (await session.execute(text(f'SELECT * FROM public.canonical_blunder_control'))).mappings().one_or_none()
 
 
 async def saved(session,player):
-    layout=storage_for(session); t=lambda name:table(layout,name)
     control=await current(session)
-    players=layout.table('player') if layout else 'player'
+    players='public.player'
     if not await session.scalar(text(f'SELECT 1 FROM {players} WHERE player_name=:player AND joined>0 AND deleted_at IS NULL'),{'player':player}):
         raise LookupError('Player was not found.')
     row=None; pending=True
     if control and control['active_model']:
-        row=(await session.execute(text(f'SELECT payload,updated_at FROM {t("snapshot")} WHERE model_id=:model AND player_name=:player'),
+        row=(await session.execute(text(f'SELECT payload,updated_at FROM public.canonical_blunder_snapshot WHERE model_id=:model AND player_name=:player'),
             {'model':control['active_model'],'player':player})).mappings().first()
         pending=await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM (
-            SELECT game_link FROM {t('dirty')} UNION SELECT game_link FROM {layout.table('fen_summary_refresh')}) d
-            JOIN {layout.table('game_player')} gp ON gp.game_link=d.game_link
-            WHERE gp.player_id=(SELECT id FROM {layout.table('player')} WHERE player_name=:player))'''),{'player':player})
+            SELECT game_link FROM public.canonical_blunder_dirty UNION SELECT game_link FROM public.fen_summary_refresh) d
+            JOIN public.game_player gp ON gp.game_link=d.game_link
+            WHERE gp.player_id=(SELECT id FROM public.player WHERE player_name=:player))'''),{'player':player})
     if row and any(row['payload'].get(mode, {}).get('assessment_policy') != POLICY for mode in ('bullet','blitz','rapid')):
         row = None  # Never label a pre-migration partial histogram as complete.
     from ..player_accuracy_distribution import blunder_bins,MODES
@@ -46,13 +41,11 @@ async def saved(session,player):
 async def game_flags(session,game_id):
     control=await current(session)
     if not control or not control['active_model']: return None
-    t=lambda name:table(storage_for(session),name)
-    layout=storage_for(session)
     row=(await session.execute(text(f'''SELECT flags,status,white_assessed,black_assessed,
         white_unassessed,black_unassessed,white_complete,black_complete,white_count,black_count,
-        (EXISTS(SELECT 1 FROM {t('dirty')} WHERE game_link=:game) OR
-         EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} WHERE game_link=:game)) AS pending
-        FROM {t('assessment')} WHERE model_id=:model AND game_link=:game'''),{'model':control['active_model'],'game':game_id})).mappings().first()
+        (EXISTS(SELECT 1 FROM public.canonical_blunder_dirty WHERE game_link=:game) OR
+         EXISTS(SELECT 1 FROM public.fen_summary_refresh WHERE game_link=:game)) AS pending
+        FROM public.canonical_blunder_assessment WHERE model_id=:model AND game_link=:game'''),{'model':control['active_model'],'game':game_id})).mappings().first()
     return {'model_id':control['active_model'],'pending':not row or row['pending'],
         'supported':bool(row and row['status']=='assessed'),
         'coverage':{side:{'assessed_moves':row[side+'_assessed'],'unassessed_moves':row[side+'_unassessed'],

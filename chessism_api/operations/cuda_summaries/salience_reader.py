@@ -1,6 +1,5 @@
 """Read independent saved daily salience; never compute or enqueue on GET."""
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
 from . import salience_store as store,salience_daily as daily
 
 
@@ -11,9 +10,8 @@ async def saved(session, scope, modes):
         'scale':'absolute_0_100','version':daily.VERSION}
     if not await session.scalar(text('SELECT to_regclass(:t) IS NOT NULL'),{'t':store.DAILY}):
         return {**base,'status':'pending'}
-    layout=storage_for(session)
     state=(await session.execute(text(f'''SELECT s.* FROM {store.STATE} s
-        JOIN {layout.table('player')} p ON p.id=s.player_id WHERE p.player_name=:player'''),
+        JOIN public.player p ON p.id=s.player_id WHERE p.player_name=:player'''),
         {'player':scope.player})).mappings().first()
     if not state or state['daily_version']!=daily.VERSION:
         return {**base,'status':'pending'}

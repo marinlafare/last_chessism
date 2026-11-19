@@ -4,8 +4,6 @@ import json
 import math
 
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from .schema import table, installed
 from .compute import implementation_hash
 
 ACK = 'adopt_latest_rating_aware_despite_rapid_and_unrun_quality_gates'
@@ -43,14 +41,13 @@ def freeze(report, acknowledgement):
 
 
 async def adopt(session, run_id, account_id, acknowledgement):
-    layout = storage_for(session); t = lambda name: table(layout, name)
     if not await session.scalar(text("SELECT 1 FROM account WHERE id=:id AND is_active AND role='admin'"), {'id':account_id}):
         raise ValueError('An active administrator is required for explicit adoption.')
     row = (await session.execute(text('SELECT status,result FROM algorithm_run WHERE id=:id'), {'id':run_id})).mappings().one()
     if row['status'] != 'complete': raise ValueError('Source run is not complete.')
     model_id, config, evidence = freeze(row['result'], acknowledgement)
-    await session.execute(text(f'SELECT id FROM {t("control")} WHERE id FOR UPDATE'))
-    await session.execute(text(f'''INSERT INTO {t('model')}(id,source_run,config,evidence,approved_by,approval)
+    await session.execute(text(f'SELECT id FROM public.canonical_blunder_control WHERE id FOR UPDATE'))
+    await session.execute(text(f'''INSERT INTO public.canonical_blunder_model(id,source_run,config,evidence,approved_by,approval)
         VALUES(:id,:run,CAST(:config AS jsonb),CAST(:evidence AS jsonb),:account,'provisional_user_approved') ON CONFLICT DO NOTHING'''),
         {'id':model_id,'run':run_id,'config':json.dumps(config),'evidence':json.dumps(evidence),'account':str(account_id)})
     await select_target(session, model_id)
@@ -59,29 +56,25 @@ async def adopt(session, run_id, account_id, acknowledgement):
 
 async def select_target(session, model_id):
     """Also the explicit rollback path: choose a retained version and rebuild it."""
-    layout = storage_for(session); t = lambda name: table(layout, name)
-    if not await session.scalar(text(f'SELECT 1 FROM {t("model")} WHERE id=:id'), {'id':model_id}):
+    if not await session.scalar(text(f'SELECT 1 FROM public.canonical_blunder_model WHERE id=:id'), {'id':model_id}):
         raise ValueError('Unknown immutable model version.')
-    await session.execute(text(f'''UPDATE {t('control')} SET target_model=:id,status='building',error=NULL,
+    await session.execute(text(f'''UPDATE public.canonical_blunder_control SET target_model=:id,status='building',error=NULL,
         progress='{{}}'::jsonb,updated_at=now() WHERE id'''), {'id':model_id})
-    await session.execute(text(f'''INSERT INTO {t('dirty')}(game_link)
-        SELECT g.link FROM {layout.table('game')} g JOIN {layout.table('game_analysis_coverage')} c ON c.link=g.link
-        WHERE c.is_fully_analyzed AND c.total_positions>0 AND EXISTS(SELECT 1 FROM {layout.table('player')} p
+    await session.execute(text(f'''INSERT INTO public.canonical_blunder_dirty(game_link)
+        SELECT g.link FROM public.game g JOIN public.game_analysis_coverage c ON c.link=g.link
+        WHERE c.is_fully_analyzed AND c.total_positions>0 AND EXISTS(SELECT 1 FROM public.player p
             WHERE p.id IN(g.white_player_id,g.black_player_id) AND p.joined>0 AND p.deleted_at IS NULL)
-        UNION SELECT game_link FROM {t('game')} WHERE model_id=:id
+        UNION SELECT game_link FROM public.canonical_blunder_game WHERE model_id=:id
         ORDER BY 1 ON CONFLICT(game_link) DO UPDATE SET revision=EXCLUDED.revision'''), {'id':model_id})
 
 
 async def status(session):
-    layout = storage_for(session)
-    if not await installed(session, layout): return {'installed': False}
-    t = lambda name: table(layout,name)
     row = dict((await session.execute(text(f'''SELECT c.*,m.source_run,m.config,m.evidence,m.approval,
-        (SELECT COUNT(*) FROM (SELECT game_link FROM {t('dirty')}
-            UNION SELECT game_link FROM {layout.table('fen_summary_refresh')}) pending) AS pending_games,
-        (SELECT COUNT(*) FROM {layout.table('fen_summary_refresh')}) AS pending_input_refresh_games,
-        (SELECT COUNT(*) FROM {layout.table('fen_summary_refresh')} WHERE error IS NOT NULL) AS input_refresh_errors
-        FROM {t('control')} c LEFT JOIN {t('model')} m ON m.id=c.target_model'''))).mappings().one())
+        (SELECT COUNT(*) FROM (SELECT game_link FROM public.canonical_blunder_dirty
+            UNION SELECT game_link FROM public.fen_summary_refresh) pending) AS pending_games,
+        (SELECT COUNT(*) FROM public.fen_summary_refresh) AS pending_input_refresh_games,
+        (SELECT COUNT(*) FROM public.fen_summary_refresh WHERE error IS NOT NULL) AS input_refresh_errors
+        FROM public.canonical_blunder_control c LEFT JOIN public.canonical_blunder_model m ON m.id=c.target_model'''))).mappings().one())
     row['installed'] = True
     from ..cuda_summaries.runs import status as manual_status
     row['manual_summaries'] = await manual_status(session)

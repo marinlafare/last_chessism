@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 from . import input_snapshot as files,behavior_compute as behavior,ending_compute as endings
 
-VERSION='metadata_inputs_v1'
+VERSION='metadata_inputs_v2'
 
 
 def save(run_id,rows,profiles):

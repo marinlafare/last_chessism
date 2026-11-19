@@ -1,8 +1,6 @@
 """Reduce saved per-game CUDA results once per player, on CUDA as well."""
 import json
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from ..canonical_blunders.schema import table
 from ..canonical_blunders.assessment import empty_mode
 from ..matrix_constructor.artifact_files import file_operation
 from .score_compute import check_device, host, MODES
@@ -37,7 +35,7 @@ def reduce(xp, rows, *, require_cuda=True):
 
 
 async def prepare(session, run, player, xp):
-    t = table(storage_for(session),'assessment')
+    t = 'public.canonical_blunder_assessment'
     pieces = [f'''SELECT mode,status,{side}_count AS n,{side}_assessed AS assessed,
         {side}_unassessed AS unassessed,{side}_complete AS complete FROM {t}
         WHERE model_id=:model AND {side}_owner=:player AND mode IN ('bullet','blitz','rapid')
@@ -48,7 +46,7 @@ async def prepare(session, run, player, xp):
 
 
 async def publish(session, run, player, payload):
-    await session.execute(text(f'''INSERT INTO {table(storage_for(session),'snapshot')}(model_id,player_name,payload)
+    await session.execute(text(f'''INSERT INTO public.canonical_blunder_snapshot(model_id,player_name,payload)
         VALUES(:model,:player,CAST(:payload AS jsonb)) ON CONFLICT(model_id,player_name)
         DO UPDATE SET payload=EXCLUDED.payload,updated_at=clock_timestamp()'''),
         {'model':run['model_id'],'player':player,'payload':json.dumps(payload)})

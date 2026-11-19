@@ -13,10 +13,10 @@ from datetime import datetime, timezone
 
 from redis.exceptions import RedisError
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction
 from sqlalchemy.exc import DBAPIError
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
 from chessism_api.operations.player_chart_games import decode_cursor
 from chessism_api.operations.player_hero_analytics import _analytics_scope
 
@@ -87,22 +87,14 @@ def ending_rows_sql(session):
     An absent/ambiguous association, incomplete move record or missing score is
     missing coverage, not a balanced position. Mate/tablebase remain separate.
     """
-    layout = storage_for(session)
-    table = layout.table if layout else lambda name: name
-    if layout:
-        identities = f"""SELECT gp.game_link, gp.is_white, g.played_at, m.name AS mode,
-            g.n_moves, g.white_result, g.black_result, g.white_str_result, g.black_str_result
-            FROM {table('game_player')} gp JOIN {table('game')} g ON g.link=gp.game_link
-            JOIN {table('game_mode')} m ON m.id=g.mode_id
-            WHERE gp.player_id=(SELECT id FROM {table('player')} WHERE player_name=:player)
-              AND m.name=ANY(CAST(:modes AS text[]))"""
-    else:
-        identities = """SELECT gp.link AS game_link, gp.color='white' AS is_white,
-            g.played_at, gp.mode, g.n_moves, g.white_result, g.black_result,
-            g.white_str_result, g.black_str_result
-            FROM game_player gp JOIN game g ON g.link=gp.link
-            WHERE gp.player_name=:player AND gp.mode=ANY(CAST(:modes AS text[]))"""
-    side = 'a.is_white' if layout and layout.compact else "(a.move_color='white')"
+
+    identities = f"""SELECT gp.game_link, gp.is_white, g.played_at, m.name AS mode,
+        g.n_moves, g.white_result, g.black_result, g.white_str_result, g.black_str_result
+        FROM public.game_player gp JOIN public.game g ON g.link=gp.game_link
+        JOIN public.game_mode m ON m.id=g.mode_id
+        WHERE g.is_standard AND g.n_moves>0 AND gp.player_id=(SELECT id FROM public.player WHERE player_name=:player)
+          AND m.name=ANY(CAST(:modes AS text[]))"""
+    side = 'a.is_white'
     return f"""WITH identities AS ({identities}), outcomes AS (
         SELECT *, CASE WHEN is_white THEN white_result ELSE black_result END AS result,
             CASE WHEN is_white THEN black_result ELSE white_result END AS opponent_result,
@@ -123,11 +115,11 @@ def ending_rows_sql(session):
     ), evaluated AS (
         SELECT c.game_link, CASE WHEN c.is_white THEN 'white' ELSE 'black' END AS player_color,
             c.played_at, c.mode, c.result, c.ending,
-            CASE WHEN c.is_white THEN f.score ELSE -f.score END AS player_cp,
+            CASE WHEN c.is_white THEN f.score::bigint ELSE -f.score::bigint END AS player_cp,
             CASE WHEN f.fen_id IS NULL THEN 'missing_final_position'
                 WHEN f.analysis_source='tablebase' OR f.tablebase_wdl IS NOT NULL THEN 'tablebase'
                 WHEN f.score IS NULL THEN 'missing_final_score'
-                WHEN ABS(f.score)>=9000 THEN 'mate' ELSE 'cp' END AS score_kind
+                WHEN ABS(f.score::bigint)>=9000 THEN 'mate' ELSE 'cp' END AS score_kind
         FROM candidates c
         LEFT JOIN LATERAL (
             SELECT m.n_move, CASE
@@ -135,14 +127,14 @@ def ending_rows_sql(session):
                     CASE WHEN LOWER(BTRIM(m.black_move)) NOT IN ('','--','none','null') THEN FALSE
                          WHEN BTRIM(m.black_move)='--' THEN TRUE END
                 END AS is_white
-            FROM {table('moves')} m WHERE m.link=c.game_link ORDER BY m.n_move DESC LIMIT 1
+            FROM public.moves m WHERE m.link=c.game_link ORDER BY m.n_move DESC LIMIT 1
         ) last_move ON last_move.n_move=c.n_moves AND c.n_moves>0
         LEFT JOIN LATERAL (
-            SELECT MAX(a.fen_id) AS fen_id FROM {table('game_fen_association')} a
+            SELECT MAX(a.fen_id) AS fen_id FROM public.game_fen_association a
             WHERE a.game_link=c.game_link AND a.n_move=last_move.n_move AND {side}=last_move.is_white
             HAVING COUNT(*)=1
         ) final_position ON TRUE
-        LEFT JOIN {table('fen')} f ON f.fen_id=final_position.fen_id
+        LEFT JOIN public.fen f ON f.fen_id=final_position.fen_id
     ), classified AS (
         SELECT *, CASE WHEN score_kind='cp' THEN
             CASE WHEN player_cp>:threshold_cp THEN 'ahead'
@@ -154,7 +146,7 @@ def ending_rows_sql(session):
 
 async def get_unexpected_endings(player_name, redis, *, threshold_cp=200):
     validate_threshold(threshold_cp)
-    async with read_slot(), AsyncDBSession() as session:
+    async with read_slot(), read_transaction(AsyncDBSession) as session:
         await prepare(session)
         scope = await _analytics_scope(session, player_name)
         from .cuda_summaries.metadata_reader import saved_endings
@@ -224,18 +216,17 @@ async def explore_unexpected_endings(player_name, *, modes, ending, threshold_cp
         raise ValueError('Choose a supported ending, game modes and limit between 1 and 100.')
     if score_band not in SCORE_BANDS:
         raise ValueError('Choose ahead, balanced or behind for score_band.')
-    async with read_slot(), AsyncDBSession() as session:
+    async with read_slot(), read_transaction(AsyncDBSession) as session:
         await prepare(session)
         scope = await _analytics_scope(session, player_name, timezone_name=timezone_name)
         fingerprint = hashlib.sha256(json.dumps([
             scope.player, 'unexpected_endings:v2', sorted(set(modes)), ending, score_band, threshold_cp]).encode()).hexdigest()
         cursor_time, cursor_id, cursor_color = decode_cursor(cursor, fingerprint)
-        layout = storage_for(session)
-        game = layout.table('game') if layout else 'game'
-        opponent_join = (f"""LEFT JOIN {layout.table('player')} opponent ON opponent.id=
-            CASE WHEN selected.player_color='white' THEN g.black_player_id ELSE g.white_player_id END"""
-            if layout else '')
-        opponent_name = 'opponent.player_name' if layout else "CASE WHEN selected.player_color='white' THEN g.black ELSE g.white END"
+
+        game = 'public.game'
+        opponent_join = (f"""LEFT JOIN public.player opponent ON opponent.id=
+            CASE WHEN selected.player_color='white' THEN g.black_player_id ELSE g.white_player_id END""")
+        opponent_name = 'opponent.player_name'
         query = ending_rows_sql(session) + f""", selected AS MATERIALIZED (
             SELECT *, COALESCE(played_at, TIMESTAMPTZ '0001-01-01 00:00:00+00') AS cursor_time
             FROM classified WHERE score_band=:score_band AND (CAST(:cursor_time AS timestamptz) IS NULL OR

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import text
+from chessism_api.database.postgresql.transactions import read_transaction
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 
@@ -15,30 +16,32 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
     if not player:
         raise ValueError("A player name is required.")
 
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
         state = (await session.execute(text("""
             SELECT
-                gp.link,
-                gp.color AS player_color,
-                gp.played_at,
-                gp.mode,
-                gp.result,
-                gp.opponent_name,
+                gp.game_link AS link,
+                CASE WHEN gp.is_white THEN 'white' ELSE 'black' END AS player_color,
+                g.played_at,
+                mode.name AS mode,
+                CASE WHEN gp.is_white THEN g.white_result ELSE g.black_result END AS result,
+                opponent.player_name AS opponent_name,
                 summary.status,
                 game_salience.salience,
                 game_salience.position_occurrence_count,
                 game_salience.unique_position_count,
                 game_salience.repeated_position_count
-            FROM game_player gp
+            FROM public.game_player gp JOIN public.game g ON g.link=gp.game_link
+            LEFT JOIN public.game_mode mode ON mode.id=g.mode_id
+            JOIN public.player owner ON owner.id=gp.player_id
+            JOIN public.player opponent ON opponent.id=CASE WHEN gp.is_white THEN g.black_player_id ELSE g.white_player_id END
             LEFT JOIN player_salience_summary summary
-              ON summary.player_name = gp.player_name
+              ON summary.player_id = gp.player_id
             LEFT JOIN game_player_salience game_salience
-              ON game_salience.game_link = gp.link
-             AND game_salience.player_color = gp.color
-             AND game_salience.player_name = gp.player_name
-            WHERE gp.player_name = :player
-              AND gp.link = :game_id
+              ON game_salience.game_link = gp.game_link
+             AND game_salience.is_white = gp.is_white
+            WHERE owner.player_name = :player AND g.is_standard AND g.n_moves>0
+              AND gp.game_link = :game_id ORDER BY gp.is_white DESC
         """), {"player": player, "game_id": int(game_id)})).mappings().first()
         if state is None:
             raise LookupError(f"Game {game_id} does not belong to {player}.")
@@ -52,23 +55,23 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
             WITH ordered_occurrences AS (
                 SELECT
                     association.n_move,
-                    association.move_color,
+                    CASE WHEN association.is_white THEN 'white' ELSE 'black' END AS move_color,
                     association.fen_id,
                     (
                         association.n_move * 2
-                        - CASE WHEN association.move_color = 'white' THEN 1 ELSE 0 END
+                        - CASE WHEN association.is_white THEN 1 ELSE 0 END
                     )::integer AS ply,
                     ROW_NUMBER() OVER (
                         PARTITION BY association.fen_id
                         ORDER BY
                             association.n_move,
-                            CASE WHEN association.move_color = 'white' THEN 1 ELSE 2 END
+                            CASE WHEN association.is_white THEN 1 ELSE 2 END
                     )::integer AS occurrence_index,
                     COUNT(*) OVER (
                         PARTITION BY association.fen_id
                     )::integer AS game_occurrence_count
                 FROM game_fen_association association
-                WHERE association.game_link = :game_id
+                WHERE association.game_link = :game_id AND association.n_move>0
                   AND (NOT :opening OR association.n_move BETWEEN 1 AND 15)
             )
             SELECT
@@ -112,8 +115,8 @@ async def get_player_game_salience(player_name: str, game_id: int) -> dict[str, 
             FROM ordered_occurrences occurrence
             JOIN fen position ON position.fen_id = occurrence.fen_id
             LEFT JOIN player_position_frequency frequency
-              ON frequency.player_name = :player
-             AND frequency.player_color = :player_color
+              ON frequency.player_id = (SELECT id FROM public.player WHERE player_name=:player)
+             AND frequency.is_white = (:player_color='white')
              AND frequency.fen_id = occurrence.fen_id
             LEFT JOIN moves
               ON moves.link = :game_id

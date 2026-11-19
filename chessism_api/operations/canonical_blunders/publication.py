@@ -1,16 +1,23 @@
 """Idempotent game writes and atomic histogram/model publication."""
 import json
+import re
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from .schema import table
 from .assessment import empty_mode
 
 MODES=('bullet','blitz','rapid')
 
 
-async def summaries(session, model_id, players=None):
-    layout=storage_for(session); t=lambda name:table(layout,name)
-    owners=(await session.execute(text(f'''SELECT player_name FROM {layout.table('player')}
+def publication_namespace(name):
+    # The timing benchmark exercises the same publisher in its owned scratch
+    # schema. This is not an alternative runtime storage layout.
+    if name != 'public' and not re.fullmatch(r'cbbench_[0-9a-f]{32}', name):
+        raise ValueError('Invalid canonical publication namespace')
+    return name
+
+
+async def summaries(session, model_id, players=None, *, namespace='public'):
+    namespace = publication_namespace(namespace)
+    owners=(await session.execute(text(f'''SELECT player_name FROM {namespace}.player
         WHERE joined>0 AND deleted_at IS NULL AND (:all_players OR player_name=ANY(CAST(:players AS text[])))'''),
         {'all_players':players is None,'players':list(players or [])})).scalars().all()
     payloads={p:{m:empty_mode() for m in MODES} for p in owners}
@@ -19,9 +26,9 @@ async def summaries(session, model_id, players=None):
     query=f'''WITH sides AS (
         SELECT white_owner AS player,mode,white_count AS n,status,white_complete AS complete,
             white_assessed AS assessed,white_unassessed AS unassessed
-        FROM {t('assessment')} WHERE model_id=:model AND white_owner=ANY(CAST(:players AS text[]))
+        FROM {namespace}.canonical_blunder_assessment WHERE model_id=:model AND white_owner=ANY(CAST(:players AS text[]))
         UNION ALL SELECT black_owner,mode,black_count,status,black_complete,black_assessed,black_unassessed
-        FROM {t('assessment')} WHERE model_id=:model AND black_owner=ANY(CAST(:players AS text[])))
+        FROM {namespace}.canonical_blunder_assessment WHERE model_id=:model AND black_owner=ANY(CAST(:players AS text[])))
         SELECT player,mode,CASE WHEN complete THEN LEAST(6,n) END AS bin,
             count(*) FILTER(WHERE complete) AS games,
             count(*) FILTER(WHERE status='assessed' AND assessed>0 AND NOT complete) AS partial_games,
@@ -37,26 +44,26 @@ async def summaries(session, model_id, players=None):
         mode['games_count']+=int(row['games'])
         for key in ('partial_games','unassessed_games','ineligible_games','assessed_moves','unassessed_moves'):
             mode[key]+=int(row[key])
-    await session.execute(text(f'''INSERT INTO {t('snapshot')}(model_id,player_name,payload)
+    await session.execute(text(f'''INSERT INTO {namespace}.canonical_blunder_snapshot(model_id,player_name,payload)
         SELECT :model,r.player,r.payload FROM jsonb_to_recordset(CAST(:rows AS jsonb)) AS r(player text,payload jsonb)
         ON CONFLICT(model_id,player_name) DO UPDATE SET payload=EXCLUDED.payload,updated_at=clock_timestamp()'''),
         {'model':model_id,'rows':json.dumps([{'player':p,'payload':v} for p,v in payloads.items()])})
 
 
-async def publish(session, model_id, items, records, info, *, refresh_snapshots=True):
-    layout=storage_for(session); t=lambda name:table(layout,name)
+async def publish(session, model_id, items, records, info, *, refresh_snapshots=True, namespace='public'):
+    namespace = publication_namespace(namespace)
     await session.execute(text("SET LOCAL lock_timeout='2s'")); await session.execute(text("SET LOCAL statement_timeout='30s'"))
-    control=(await session.execute(text(f'SELECT * FROM {t("control")} WHERE id FOR UPDATE'))).mappings().one()
+    control=(await session.execute(text(f'SELECT * FROM {namespace}.canonical_blunder_control WHERE id FOR UPDATE'))).mappings().one()
     if control['target_model']!=model_id: return {'status':'model_changed','written':0}
     versions={r['game_link']:r['revision'] for r in items}
-    current=dict((await session.execute(text(f'''SELECT d.game_link,d.revision FROM {t('dirty')} d
+    current=dict((await session.execute(text(f'''SELECT d.game_link,d.revision FROM {namespace}.canonical_blunder_dirty d
         WHERE d.game_link=ANY(CAST(:links AS bigint[]))
-          AND NOT EXISTS(SELECT 1 FROM {layout.table('fen_summary_refresh')} r WHERE r.game_link=d.game_link)
+          AND NOT EXISTS(SELECT 1 FROM {namespace}.fen_summary_refresh r WHERE r.game_link=d.game_link)
         ORDER BY d.game_link FOR UPDATE OF d'''),{'links':sorted(versions)})).all())
     accepted={link for link,rev in current.items() if versions.get(link)==rev}
     if len(records)!=len(items) or {r['game_link'] for r in records}!=set(versions) or len(versions)!=len(items):
         raise ValueError('Missing or duplicate canonical output; no partial batch published.')
-    old=(await session.execute(text(f'''SELECT white_owner,black_owner FROM {t('game')}
+    old=(await session.execute(text(f'''SELECT white_owner,black_owner FROM {namespace}.canonical_blunder_game
         WHERE model_id=:model AND game_link=ANY(CAST(:links AS bigint[]))'''),{'model':model_id,'links':sorted(accepted)})).all()
     owners={name for row in old for name in row if name}
     fields=('game_link','revision','mode','played_at','white_owner','black_owner','status','white_count','black_count','white_assessed','black_assessed','flags','source_sha256')
@@ -69,21 +76,21 @@ async def publish(session, model_id, items, records, info, *, refresh_snapshots=
         await temp_rows(session, 'cuda_blunders_upload', '''game_link bigint,revision bigint,mode text,played_at timestamptz,
             white_owner text,black_owner text,status text,white_count int,black_count int,
             white_assessed int,black_assessed int,flags jsonb,source_sha256 text''', fields, values)
-        await session.execute(text(f'''INSERT INTO {t('game')}(model_id,{','.join(fields)})
+        await session.execute(text(f'''INSERT INTO {namespace}.canonical_blunder_game(model_id,{','.join(fields)})
             SELECT :model,{','.join('r.'+k for k in fields)} FROM pg_temp.cuda_blunders_upload r
             ON CONFLICT(model_id,game_link) DO UPDATE SET {','.join(k+'=EXCLUDED.'+k for k in fields if k!='game_link')}'''),
             {'model':model_id})
-        await session.execute(text(f'DELETE FROM {t("dirty")} WHERE game_link=ANY(CAST(:links AS bigint[]))'),{'links':sorted(accepted)})
+        await session.execute(text(f'DELETE FROM {namespace}.canonical_blunder_dirty WHERE game_link=ANY(CAST(:links AS bigint[]))'),{'links':sorted(accepted)})
     remaining=await session.scalar(text(f'''SELECT COUNT(*) FROM (
-        SELECT game_link FROM {t('dirty')} UNION
-        SELECT game_link FROM {layout.table('fen_summary_refresh')}) pending'''))
+        SELECT game_link FROM {namespace}.canonical_blunder_dirty UNION
+        SELECT game_link FROM {namespace}.fen_summary_refresh) pending'''))
     activating=not remaining and control['active_model']!=model_id
-    if activating: await summaries(session,model_id)
-    elif refresh_snapshots and control['active_model']==model_id and owners: await summaries(session,model_id,owners)
+    if activating: await summaries(session,model_id,namespace=namespace)
+    elif refresh_snapshots and control['active_model']==model_id and owners: await summaries(session,model_id,owners,namespace=namespace)
     total=(control['progress'] or {}).get('processed_games',0)+len(kept)
     progress={**info,'processed_games':total,'remaining_games':remaining,'batch_written':len(kept),
         'stale_inputs_requeued':len(items)-len(kept),'phase':'ready' if not remaining else 'building'}
-    await session.execute(text(f'''UPDATE {t('control')} SET
+    await session.execute(text(f'''UPDATE {namespace}.canonical_blunder_control SET
         previous_model=CASE WHEN :activate THEN active_model ELSE previous_model END,
         active_model=CASE WHEN :activate THEN :model ELSE active_model END,status=:status,
         progress=CAST(:progress AS jsonb),error=NULL,updated_at=clock_timestamp() WHERE id'''),

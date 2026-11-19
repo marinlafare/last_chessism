@@ -26,9 +26,9 @@ async def stage_game_positions(session, *, incremental: bool) -> None:
                 ) AS occurrence_index
             FROM {corpus} corpus
             CROSS JOIN LATERAL (
-                SELECT fen_id, n_move, move_color
+                SELECT fen_id, n_move, CASE WHEN is_white THEN 'white' ELSE 'black' END AS move_color
                 FROM game_fen_association
-                WHERE game_link = corpus.game_link
+                WHERE game_link = corpus.game_link AND n_move>0
                 OFFSET 0
             ) association
         )

@@ -1,6 +1,7 @@
 """Manual graph stage: checkpoint input, bulk GPU counting, atomic publication."""
 import json
 import time
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from chessism_api.database.neo4j import ply_map_store as store, ply_map_compute as compute
 from . import runs, batch_budget, ply_map_process
@@ -15,13 +16,13 @@ async def save(session, run, state, phase):
 
 async def tick(factory, run, xp):
     if store.METRIC not in run['metrics']: return False
-    async with factory() as session:
+    async with read_transaction(factory) as session:
         state = (await runs.progress(session,run['id']))['timings'][store.METRIC]
     if state['complete']: return False
     if state['version'] != compute.VERSION:
         raise ValueError('Ply-map contract changed. Start a new manual summary run.')
     started = time.monotonic()
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         if not await store.current(session,state['revision']):
             await session.execute(text('DELETE FROM graph_map.input WHERE run_id=:id'),{'id':run['id']})
             await save(session,run,{**state,'complete':True,'superseded':True},
@@ -30,7 +31,7 @@ async def tick(factory, run, xp):
     if not state['prepared']:
         from chessism_api.database.neo4j.ply_map_source import read
         rows = await read(state['cursor'])
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             if rows:
                 await temp_rows(session,'ply_map_input','run_id uuid,game_id bigint,payload jsonb',
                     ('run_id','game_id','payload'),((run['id'],g['id'],json.dumps(g)) for g in rows))
@@ -46,7 +47,7 @@ async def tick(factory, run, xp):
     estimate=state['captured_games']*(compute.MAX_PLY+2)*1024
     if estimate > min(budget.host_bytes,budget.device_bytes):
         raise ValueError('Captured ply map exceeds this batch memory budget. Keep the previous snapshot; partitioned map preparation is required.')
-    async with factory() as session:
+    async with read_transaction(factory) as session:
         games=(await session.execute(text('SELECT payload FROM graph_map.input WHERE run_id=:id ORDER BY game_id'),{'id':run['id']})).scalars().all()
     if len(games)!=state['captured_games']:
         raise ValueError('Ply-map input checkpoint is incomplete.')
@@ -56,17 +57,17 @@ async def tick(factory, run, xp):
                if stage=='compressing' else
                f'Grouping ply map memberships on RTX 4060 — {event["input_pairs"]:,} pairs'
                if stage=='grouping' else 'Preparing saved ply map layout')
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             await runs.phase(session,run['id'],phase)
 
     await progress(dict(stage='compressing',games=0,total_games=len(games)))
     result,metrics=await ply_map_process.execute(games,budget.device_bytes,progress)
     state={**state,**metrics,'build_seconds':time.monotonic()-started,'nodes':len(result['nodes']),
            'connections':len(result['connections']),'complete':True}
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         await runs.phase(session,run['id'],'Publishing collapsed ply map')
     publication_started=time.monotonic()
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         await session.execute(text("SET LOCAL lock_timeout='2s'"))
         accepted=await store.publish(session,run['id'],state['revision'],result)
         if not accepted:

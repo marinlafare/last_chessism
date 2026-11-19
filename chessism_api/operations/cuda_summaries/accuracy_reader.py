@@ -1,8 +1,7 @@
 """Saved daily bands. No FEN reads, accuracy evaluation or implicit GPU jobs."""
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from ..player_hero_analytics import _analytics_scope
 from ..player_hero_efficiency import normalize_efficiency_modes
 from ..player_timezone import player_local_timestamp_sql
@@ -22,13 +21,12 @@ async def custom_timezone(session, scope, modes):
 Normal hero requests use the CUDA-produced daily cache directly. An explicit
 different timezone must not silently receive days grouped in the default zone.
 """
-    layout = storage_for(session)
     cases = 'CASE ' + ' '.join(f'WHEN a.accuracy<={value} THEN {i}' for i,value in enumerate((50,60,70,80,90))) + ' ELSE 5 END'
     rows = (await session.execute(text(f'''WITH selected AS (
         SELECT ({player_local_timestamp_sql('a')})::date AS day,{cases} AS band,s.salience
-        FROM {GAME} a JOIN {layout.table('player')} p ON p.player_name=a.player_name
-        LEFT JOIN {layout.table('game_player')} gp ON gp.game_link=a.game_link AND gp.player_id=p.id
-        LEFT JOIN {layout.table('game_player_salience')} s ON s.game_player_id=gp.id
+        FROM {GAME} a JOIN public.player p ON p.player_name=a.player_name
+        LEFT JOIN public.game_player gp ON gp.game_link=a.game_link AND gp.player_id=p.id AND gp.is_white=a.is_white
+        LEFT JOIN public.game_player_salience s ON s.game_link=gp.game_link AND s.is_white=gp.is_white
         WHERE a.player_name=:player AND a.mode=ANY(CAST(:modes AS text[]))
         AND a.moves>10 AND a.accuracy BETWEEN 0 AND 100 AND a.played_at IS NOT NULL
         AND (CAST(:date_from_utc AS timestamptz) IS NULL OR a.played_at>=CAST(:date_from_utc AS timestamptz))
@@ -42,7 +40,7 @@ different timezone must not silently receive days grouped in the default zone.
 
 async def daily_chart(player, mode='all', date_from=None, date_to=None, timezone_name=None):
     modes = normalize_efficiency_modes(mode); mask = sum({'bullet':1,'blitz':2,'rapid':4}[m] for m in modes)
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
         await session.execute(text("SET LOCAL statement_timeout='5s'"))
         scope = await _analytics_scope(session, player, 'all', date_from, date_to, timezone_name)
@@ -52,10 +50,8 @@ async def daily_chart(player, mode='all', date_from=None, date_to=None, timezone
         from .salience_reader import saved as saved_salience
         salience_bands = await saved_salience(session,scope,modes)
         if salience_bands is not None:base['salience']=salience_bands
-        if not await session.scalar(text('SELECT to_regclass(:table) IS NOT NULL'), {'table': STATE}):
-            return {**base,'summary_pending':True,'points':[]}
         state = (await session.execute(text(f'''SELECT a.*,s.revision AS current_revision FROM {STATE} a
-            LEFT JOIN {summary_table(storage_for(session),'state')} s USING(player_name)
+            LEFT JOIN public.player_stockfish_state s USING(player_name)
             WHERE a.player_name=:player'''), {'player':scope.player})).mappings().first()
         if not state:
             return {**base,'summary_pending':True,'points':[]}

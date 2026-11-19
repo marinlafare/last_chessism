@@ -1,10 +1,10 @@
 """Bounded binary extraction of early positions, without scores/FEN text."""
 import numpy as np
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for, driver_connection
+from chessism_api.database.postgresql.transactions import driver_connection
 from ..canonical_blunders.binary_source import HEADER
 from ..matrix_constructor.artifact_files import file_operation
-from .salience_store import SCOPE
+from .salience_store import SCOPE, INPUT
 
 WIRE = np.dtype([('fields','>i2'), *[(n,t) for i in range(4) for n,t in ((f'l{i}','>i4'),(f'v{i}','>i8'))]])
 
@@ -27,12 +27,13 @@ def decode(data, expected):
 async def read(session, run_id, after, limit=32768):
     await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY'))
     await session.execute(text("SET LOCAL statement_timeout='60s'"))
-    t = storage_for(session).table
-    ids = (await session.execute(text(f'''SELECT gp.id FROM {t('game_player')} gp
-        JOIN {SCOPE} s ON s.run_id=:id AND s.player_id=gp.player_id
-        JOIN {t('game')} g ON g.link=gp.game_link
-        WHERE gp.id>:after AND g.fens_done AND s.status='pending'
-        ORDER BY gp.id LIMIT :limit'''), {'id':run_id,'after':after,'limit':limit})).scalars().all()
+    ids = (await session.execute(text(f'''SELECT i.input_index FROM {INPUT} i
+        JOIN public.game_player gp ON gp.game_link=i.game_link AND gp.is_white=i.is_white
+        JOIN {SCOPE} s ON s.run_id=i.run_id AND s.player_id=gp.player_id
+        JOIN public.game g ON g.link=gp.game_link
+        WHERE i.run_id=:id AND i.input_index>:after AND g.is_standard AND g.n_moves>0
+            AND g.fens_done AND s.status='pending'
+        ORDER BY i.input_index LIMIT :limit'''), {'id':run_id,'after':after,'limit':limit})).scalars().all()
     if not ids:
         return None
     data = bytearray()
@@ -42,11 +43,11 @@ async def read(session, run_id, after, limit=32768):
         data.extend(chunk)
     driver = await driver_connection(session)
     status = await driver.copy_from_query(f'''SELECT (gp.player_id*2+gp.is_white::int)::bigint,
-        gp.id::bigint,a.fen_id::bigint,(a.n_move*2-a.is_white::int)::bigint
-        FROM {t('game_player')} gp JOIN LATERAL (
-            SELECT fen_id,n_move,is_white FROM {t('game_fen_association')}
+        i.input_index::bigint,a.fen_id::bigint,(a.n_move*2-a.is_white::int)::bigint
+        FROM {INPUT} i JOIN public.game_player gp ON gp.game_link=i.game_link AND gp.is_white=i.is_white JOIN LATERAL (
+            SELECT fen_id,n_move,is_white FROM public.game_fen_association
             WHERE game_link=gp.game_link AND n_move BETWEEN 1 AND 15 OFFSET 0
-        ) a ON true WHERE gp.id=ANY($1::bigint[]) ORDER BY gp.id,a.n_move,a.is_white DESC''',
-        ids,output=write,format='binary',timeout=60)
+        ) a ON true WHERE i.run_id=$2::uuid AND i.input_index=ANY($1::bigint[]) ORDER BY i.input_index,a.n_move,a.is_white DESC''',
+        ids,run_id,output=write,format='binary',timeout=60)
     raw = await file_operation(decode,data,int(status.split()[-1]))
     return raw,ids[-1],len(ids)

@@ -1,7 +1,5 @@
 """Read-only saved metadata. No rebuild, FEN scan or GPU work on page load."""
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
-from chessism_api.database.postgresql.stockfish_summary_schema import summary_table
 from .metadata_store import STATE,enabled
 from .ending_compute import blank,VERSION
 
@@ -10,7 +8,7 @@ async def saved_endings(session,player):
     if not await enabled(session):return None
     from ..player_unexpected_endings import ending_payload
     row=(await session.execute(text(f'''SELECT c.*,s.revision AS current_revision FROM {STATE} c
-        JOIN {summary_table(storage_for(session),'state')} s USING(player_name)
+        JOIN public.player_stockfish_state s USING(player_name)
         WHERE c.player_name=:p'''),{'p':player})).mappings().first()
     if not row:
         return {**ending_payload(player,blank()['by_mode']),'summary_pending':True,'stale':True,'backend':'pending_cuda'}

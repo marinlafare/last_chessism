@@ -2190,3 +2190,49 @@ Stage A remains incomplete/unaccepted. Next implementation scope is canonical CU
 publication and its dependent chart/research readers, followed by remaining graph/
 admin consumers and A4 retirement. Read existing plan and source inventory; do not
 repeat the completed export gates. Full Stage A comparison remains at its boundary.
+
+### 2026-11-18 — Continue coordinated CUDA conversion
+
+Verified repository, expected branch, clean HEAD 3f03ac3 and all 1,777 frozen
+export inputs. User requests coordinated publication/read conversion and continued
+A3/A4 work, with informational 60–90 minute checkpoint. No new export suite.
+Tracing reveals native game-side identity changes in accuracy/salience, numeric
+player metadata state, and initializer-owned CUDA tables/triggers are required
+together. Computation formulas remain protected. Concrete remaining inventory
+recorded in plan; no feature removal or external resource changes authorized.
+
+CUDA interim verification (implementation remains in progress): isolated runs
+/tmp/chessism-canonical-a3-cuda-20261118-01 through -06 retain full inputs/results.
+01 stopped at whitespace preflight, before resources. 02 exposed an incorrect new
+view reference to engine_summary; corrected to game_player_engine_summary. 03:
+28 foundation checks passed. 04: eight errors exposed file_operation returning
+None after using the void cleanup helper; restored the thread's return/error
+contract while shielding repeated cancellation. 05: eight PostgreSQL publication
+and four cleanup checks passed. 06: the same 12 passed with actual CuPy on the
+RTX 4060 (15.484 seconds), including maximum bigint game identity and self-play.
+All owned verification containers independently confirmed removed. No changes to
+live services, source data or recovery checkpoint. Later dependent-reader/schema
+edits require their focused gate; these interim results do not accept the unit.
+
+CUDA gate 07: 62 checks reached (three new CPU reader errors); stopped after an
+old cancellation mock omitted session.begin(), leaving its event wait stuck.
+Graceful SIGINT did not release that mock wait; supervisor termination ran owned
+container cleanup. All containers independently absent. Corrected native CPU
+joins and explicit mock begin; bounded its event wait. Gate 08: 94 tests,
+93 passed and one outdated frequency reader test signature error. All three new
+CPU/reader/cancellation checks pass. Port remaining frequency fixture and original
+full/incremental salience reference scenario to isolated canonical fixtures, then
+run those with P1 regression evidence; no change to scoring formulas.
+
+User explicitly approved retirement of historical saved-CPU comparison workflows,
+retaining saved reports, current model training/evaluation and CUDA publication.
+This resolves the material feature decision in the remaining A3/A4 inventory.
+
+CUDA coordinated unit verified: 164 distinct focused checks, including all 68 P1.
+Run09 had one assertion exposing the frequency reader integer-negation/ABS overflow
+risk; cast to bigint and added real PostgreSQL extreme-score regression. Run10 all
+17 affected checks pass. Original CPU full/incremental reference also passes.
+All 14 computation modules remain byte-identical to HEAD. Real CUDA run06
+passed 12 overlapping checks on RTX 4060; later edits concern readers/CPU persistence.
+Evidence: docs/architecture/evidence/stage-a-cuda-native-2026-11-18.tar.gz SHA256 ae546b72500ba315a9d27e3619e271416696c29c8a19abb1ca0f6b166a22e3ea.
+All owned containers independently absent. Stage A incomplete, no push or live changes.

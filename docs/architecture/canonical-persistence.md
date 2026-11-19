@@ -972,3 +972,39 @@ NULL dates/results and NULL average ratings become concrete canonical fixtures;
 explicit constraint tests reject missing dates/results, while missing evaluations,
 NULL output handling and empty typed datasets remain covered. No scenario is skipped
 to accommodate the schema. One-time old fixture DDL/profile wiring is removed.
+
+### CUDA publication and native salience (canonical version 13)
+
+The initializer owns CUDA run, staging, revision and publication tables, canonical
+blunder model/assessment tables, and the research/opening-book metadata required by
+model adoption and game-detail reads. These tables are no longer installed by CUDA
+workers. Manual activation flags retain their existing meaning and defaults.
+
+Published accuracy and salience use `(game_link,is_white)`, preserving both sides
+of self-play. Metadata state uses numeric player ownership. Captured display names
+in revision caches remain snapshot values, not an alternative ownership relation.
+A salience run assigns dense, bounded temporary matrix indexes to native sides;
+the map is persisted with the run and checked before publication. No game bigint is
+cast to a floating GPU identity. Frequency and metadata paging use composite keys.
+CUDA kernels, encodings, float64 arithmetic and eligibility meanings are unchanged.
+
+Application operations own guarded read/write units. Revision guards reject stale
+outputs before acknowledging newer work. Publication output and acknowledgments
+commit together; failed/cancelled work preserves earlier commits. The existing P1
+cleanup helper drains file/device tasks and connection cleanup despite repeated
+cancellation. Benchmarks retain one validated, owned scratch namespace, with no
+storage-profile substitution or public publication writes.
+
+Game-detail, explorer, score/accuracy/blunder, salience and frequency readers share
+these native keys. Missing/partial blunder assessments remain unknown. Existing CPU
+salience when manual mode is off retains its full/incremental formulas and locking;
+its obsolete relational adapter is folded into the calculation owner. Historical
+saved-CPU research comparisons are separately approved for retirement; current
+training/evaluation and existing saved reports are to remain available.
+
+Verification: 164 distinct focused checks across retained runs, including 68 P1
+checks, 28 initializer checks, native PostgreSQL publication/readers, original CPU
+salience parity and cancellation scenarios. An additional real RTX 4060 run of 12
+overlapping checks executes existing CuPy kernels against synthetic PostgreSQL.
+This does not certify production data volumes, GCP, live Stockfish, or the remaining
+Stage A consumers. Failed runs and corrections are retained in the evidence archive.

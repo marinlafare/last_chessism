@@ -17,7 +17,6 @@ from ..research_algorithms.blunder_full_compute import memory_plan
 from ..research_algorithms.storage import workspace,ensure_capacity
 from . import compute,benchmark_compute as measured,benchmark_source as source
 from .benchmark_store import Scratch,OPERATION
-from .schema import table
 from .assessment import POLICY, empty_mode, add_record
 
 GAMES=100000
@@ -34,11 +33,10 @@ def configuration(model_id,model,*,reader_comparison=False):
 
 
 async def current_configuration():
-    async with AsyncDBSession() as s:
+    async with read_transaction(AsyncDBSession) as s:
         await source.source.prepare(s)
         control=await source.guard(s)
-        from chessism_api.database.postgresql.relational_storage import storage_for
-        model=await s.scalar(text(f'SELECT config FROM {table(storage_for(s),"model")} WHERE id=:id'),
+        model=await s.scalar(text(f'SELECT config FROM public.canonical_blunder_model WHERE id=:id'),
             {'id':control['active_model']})
         return configuration(control['active_model'],model,reader_comparison=True)
 
@@ -78,11 +76,11 @@ async def execute(config,reporter,*,factory=None):
         if hardware['name']!=config['model']['device']:raise RuntimeError('Benchmark requires the canonical RTX 4060.')
         plan=memory_plan(*xp.cuda.runtime.memGetInfo()); xp.get_default_memory_pool().set_limit(size=plan['pool_limit_bytes'])
         with workspace(reporter.run_id) as folder:
-            info,timings,items,players,layout=await source.freeze(config,reporter,folder,factory=factory)
+            info,timings,items,players=await source.freeze(config,reporter,folder,factory=factory)
             totals.update(timings)
             await reporter.check()
             await reporter.progress('preparing_scratch',0,info['games'],'Preparing private WAL-logged tables; live publication is not used.')
-            scratch=Scratch(reporter.run_id,layout,factory=factory)
+            scratch=Scratch(reporter.run_id,factory=factory)
             start=time.perf_counter(); await scratch.create(config['model_id'],items,players)
             totals['scratch_setup_seconds']=time.perf_counter()-start
             del items

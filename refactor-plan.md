@@ -5,6 +5,41 @@
 matches all 1,744 application/test inputs plus the documented handoff-only change.
 Stage A remains incomplete and unaccepted.
 
+## Active coordinated conversion — CUDA publication and dependent readers
+
+Continuation authorization: `/home/jon/.codex/attachments/ec6637db-553b-4054-85c1-c8af30164a85/Pasted text.txt`.
+Entry is clean `3f03ac3`; all 1,777 frozen export inputs match. Reuse its 197
+verified checks, not another export gate. Trace: queued revisions -> immutable
+bounded input snapshots -> existing CUDA kernels -> revision-checked staged
+publication -> saved chart/research readers. Convert these paths together.
+
+Add required CUDA/blunder/score/salience tables and invalidation to the empty
+canonical initializer. Remove runtime schema installation/profile selection from
+these consumers. Use native `(game_link,is_white)` persisted identities; any
+salience GPU matrix index is run-local, mapped to that key, never a replacement
+application identity. Preserve kernels, float64 arithmetic, unknown-vs-zero output,
+manual-run policy, revision guards and atomic publication. Use existing guarded
+transaction/cleanup boundaries; test rollback, cancellation and changed inputs.
+
+Updated inventory (bounded scan, not another assessment):
+- Converted: ingestion, analysis/receipts/recovery, canonical FEN/coverage, core
+  analytics, homepage/player metadata/stats, appearance caches, structured export
+  sources/lifecycle and restricted analytical reads. No runtime ask_db imports remain.
+- Essential A3: coordinated CUDA publication/readers; remaining research/admin
+  registry and deletion consumers; graph outbox/PostgreSQL sources; backup-source
+  reads preserving the external recovery contract. Resolve actual saved CPU-baseline
+  semantics before converting research comparisons; never relabel GPU counts as CPU.
+- Removable A4: now-unreferenced ask_db implementation, obsolete profile adapters,
+  DBInterface after its ingestion stragglers, historical installers/repair tooling,
+  duplicate query branches and runtime DDL. Validate disabled FK triggers at startup.
+- Defer: kernel/GPU redesign, optional query tuning, cloud-controller redesign and
+  other Stage B/C work. No evidence justifies removing a user-visible feature.
+
+Focused gate: fresh canonical PostgreSQL, revision/supersession and two-side
+publication/read parity, invalidation, rollback/cleanup, existing pure calculations
+and P1 cases. Short real-CUDA smoke only if locally available and isolated. Reserve
+broad suite comparison and independent acceptance for the Stage A boundary.
+
 ## Fast-track remaining-work inventory and next interval
 
 Authorization: `/home/jon/.codex/attachments/62531b35-6e44-4a9c-9888-8cb307dd2400/Pasted text.txt`.

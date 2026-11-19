@@ -1,30 +1,15 @@
 """One independent reference table, transactional import and bounded lookups."""
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import driver_connection
+from chessism_api.database.postgresql.transactions import driver_connection
 
 TABLE = 'public.opening_book_move'
 COLUMNS = 'position_key,move_uci,result_position_key,opening_labels,source_revision,importer_version'
-
-
-async def install(session):
-    await session.execute(text("SET LOCAL lock_timeout='2s'"))
-    await session.execute(text(f'''CREATE TABLE IF NOT EXISTS {TABLE} (
-        position_key text NOT NULL,
-        move_uci text NOT NULL CHECK(move_uci ~ '^[a-h][1-8][a-h][1-8][qrbn]?$'),
-        result_position_key text NOT NULL,
-        opening_labels jsonb NOT NULL CHECK(jsonb_typeof(opening_labels)='array'),
-        source_revision text NOT NULL CHECK(source_revision ~ '^[0-9a-f]{{40}}$'),
-        importer_version text NOT NULL,
-        imported_at timestamptz NOT NULL DEFAULT now(),
-        PRIMARY KEY(position_key,move_uci))'''))
-    await session.execute(text(f"COMMENT ON TABLE {TABLE} IS 'Lichess CC0 opening catalogue: recognized position/move transitions, not engine assessments or frequency counts'"))
 
 
 async def publish(session, catalog):
     """Install a new catalogue, or verify the same one; never overwrite another."""
     await session.execute(text("SET LOCAL lock_timeout='2s'"))
     await session.execute(text("SET LOCAL statement_timeout='30s'"))
-    await install(session)
     # Readers remain available; concurrent imports cannot interleave.
     await session.execute(text(f'LOCK TABLE {TABLE} IN SHARE ROW EXCLUSIVE MODE'))
     await session.execute(text(f'''CREATE TEMP TABLE opening_book_import ON COMMIT DROP

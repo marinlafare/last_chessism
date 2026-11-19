@@ -1,8 +1,10 @@
 """Short, independently checkpointed input preparation; no CUDA allocations."""
 import asyncio
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 import json
 import logging
 import time
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from ..canonical_blunders import source
 from ..matrix_constructor.artifact_files import file_operation
@@ -12,17 +14,13 @@ LOG = logging.getLogger(__name__)
 
 
 async def _finish_session(session, *, invalidate=False):
-    closing = asyncio.create_task(session.invalidate() if invalidate else session.close())
-    try:
-        await asyncio.shield(closing)
-    except asyncio.CancelledError:
-        await closing
-        raise
+    await finish_analysis_cleanup(session.invalidate() if invalidate else session.close())
 
 
 async def read_chunk(factory, run, after):
     session = factory()
     try:
+        await session.begin()
         await source.prepare(session)
         items = await score_runs.pending_items(session, run, after=after)
         # Extraction checkpoints are small; several compose one large GPU batch.
@@ -66,7 +64,7 @@ async def prepare(factory, run):
             del data
         phase = (f"CUDA inputs ready — {state['positions']:,} positions" if state['ready'] else
                  f"Preparing CUDA inputs — {state['games']:,} / {run['total_games']:,} games · {state['positions']:,} positions")
-        async with factory() as session, session.begin():
+        async with write_transaction(factory) as session:
             await session.execute(text(f'''UPDATE {runs.RUN} SET phase=:phase,updated_at=clock_timestamp(),
                 attempts=0,error=NULL,retry_after=NULL,timings=timings || jsonb_build_object(
                 'input_snapshot',CAST(:state AS jsonb),'pipeline','snapshot_v2',

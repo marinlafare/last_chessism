@@ -1,7 +1,9 @@
 """Verified, non-overwriting copies of immutable matrix directories."""
 
 import asyncio
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 import hashlib
+import logging
 import json
 import os
 from pathlib import Path
@@ -150,5 +152,8 @@ async def file_operation(function, *args, **kwargs):
     try:
         return await asyncio.shield(task)
     except asyncio.CancelledError:
-        await task
+        try:
+            await finish_analysis_cleanup(task)
+        except BaseException:
+            logging.getLogger(__name__).exception('File/device task cleanup failed; preserving cancellation.')
         raise

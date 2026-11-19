@@ -1,12 +1,11 @@
 import unittest
 from types import SimpleNamespace
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 from chessism_api.operations.player_game_explorer_query import normalized_candidates, engine_lookup
 
 
 class ExplorerQueryTests(unittest.TestCase):
     def setUp(self):
-        self.session = SimpleNamespace(info={SESSION_KEY: RelationalStorage('core', 'archive', 'reads')})
+        self.session = SimpleNamespace()
 
     def test_date_and_owner_are_filtered_before_summary_lookups(self):
         query = normalized_candidates(self.session,
@@ -21,7 +20,7 @@ class ExplorerQueryTests(unittest.TestCase):
 
     def test_saved_gpu_blunders_are_keyed_by_game_not_full_canonical_engine_scan(self):
         query = engine_lookup(self.session)
-        self.assertIn('saved.game_player_id=gp.game_player_id', query)
+        self.assertIn('saved.game_link=gp.link AND saved.is_white=gp.is_white', query)
         self.assertIn('assessment.game_link=gp.link', query)
         self.assertIn('assessment.model_id=(', query)
         self.assertIn('white_complete', query)
@@ -29,7 +28,7 @@ class ExplorerQueryTests(unittest.TestCase):
         self.assertNotIn('canonical_blunder_engine', query)
         self.assertIn('OFFSET 0', query)
 
-    def test_legacy_fallback_remains_parameterized(self):
+    def test_canonical_selection_does_not_depend_on_session_profile(self):
         session = SimpleNamespace(info={})
-        self.assertIsNone(normalized_candidates(session, date_window='',selection_sql='true',minimum_moves_filter=''))
+        self.assertIn('public.game', normalized_candidates(session, date_window='',selection_sql='true',minimum_moves_filter=''))
         self.assertIn('saved.game_link=gp.link',engine_lookup(session))

@@ -44,7 +44,7 @@ def save(run_id, raw, cursor):
     bounds = np.searchsorted(bucket[order],np.arange(SHARDS+1))
     segments=[dict(start=int(bounds[i]),end=int(bounds[i+1]),
         sha256=hashlib.sha256(data[bounds[i]:bounds[i+1]]).hexdigest()) for i in range(SHARDS)]
-    name=f'frequency-input-{cursor[0]}-{cursor[1]}.npy'
+    name='frequency-input-'+'-'.join(str(int(value)) for value in cursor)+'.npy'
     fd,temporary=tempfile.mkstemp(prefix='.writing-',suffix='.npy',dir=path)
     try:
         with os.fdopen(fd,'wb') as stream:

@@ -2,10 +2,9 @@
 import asyncio
 import json
 import time
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
-from chessism_api.database.postgresql.relational_storage import storage_for
 from ..canonical_blunders import publication
-from ..canonical_blunders.schema import table
 from ..matrix_constructor.artifact_files import file_operation
 from ..research_algorithms.cuda_runtime import cuda_backend
 from . import runs, score_runs, shared_source, score_compute, score_publication
@@ -16,7 +15,7 @@ from . import snapshot_flow, input_snapshot, device_inputs
 async def may_continue(session, run):
     return bool(await session.scalar(text(f'''SELECT EXISTS(SELECT 1 FROM {runs.RUN} r
         WHERE r.id=:id AND r.status IN ('queued','running') AND r.model_id=:model
-        AND (SELECT target_model FROM {table(storage_for(session),'control')} WHERE id)=r.model_id
+        AND (SELECT target_model FROM public.canonical_blunder_control WHERE id)=r.model_id
         AND NOT EXISTS(SELECT 1 FROM cloud_analysis_job
             WHERE status NOT IN ('complete','cancelled','limit_reached','failed')))'''),
         {'id':run['id'],'model':run['model_id']}))
@@ -47,7 +46,7 @@ async def process_batch(factory, run, xp, hardware, budget, state):
         started = time.monotonic()
         data = await file_operation(input_snapshot.load,run['id'],selected)
         read_seconds += time.monotonic()-started
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             if not await may_continue(session,run): return {'status':'building','remaining':1}
             await runs.phase(session,run['id'],f'Calculating on RTX 4060 — {len(data[4]):,} prepared positions')
         started = time.monotonic()
@@ -65,10 +64,10 @@ async def process_batch(factory, run, xp, hardware, budget, state):
     last = {**budget.describe(),'positions':len(data[4]),'games':len(data[1]),'input_chunks':len(selected),
             'position_upload_bytes':info['position_upload_bytes'],
             'pool_reserved_bytes':getattr(xp.get_default_memory_pool(),'total_bytes',lambda:0)()}
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         await runs.phase(session,run['id'],f'Publishing CUDA results — {len(data[1]):,} games')
     started = time.monotonic()
-    async with factory() as session,session.begin():
+    async with write_transaction(factory) as session:
         if not await may_continue(session,run): return {'status':'building','remaining':1}
         blunder_items = [i for i in data[1] if i['blunders']]
         if blunder_items:
@@ -87,7 +86,7 @@ async def process_batch(factory, run, xp, hardware, budget, state):
 
 async def tick(factory, run):
     if run.get('planning'):
-        async with factory() as session,session.begin():
+        async with write_transaction(factory) as session:
             for _ in range(8):
                 if not await score_runs.plan(session,run): break
         return {'status':'building','remaining':1,'run_id':str(run['id'])}
@@ -107,7 +106,7 @@ async def tick(factory, run):
             for _ in range(8):
                 result = await score_publication.finalize(factory,run,xp)
                 if result['status']=='ready': break
-            async with factory() as session,session.begin():
+            async with write_transaction(factory) as session:
                 await session.execute(text(f'''UPDATE {runs.RUN} SET timings=jsonb_set(timings,'{{finalization_seconds}}',
                     to_jsonb(COALESCE((timings->>'finalization_seconds')::float8,0)+CAST(:seconds AS float8))) WHERE id=:id'''),
                     {'id':run['id'],'seconds':time.monotonic()-started})

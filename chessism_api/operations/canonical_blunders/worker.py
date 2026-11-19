@@ -1,17 +1,17 @@
 """Serialized with research in the existing single-job RTX 4060 worker."""
 import asyncio
 import logging
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 import time
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
 from ..matrix_constructor.artifact_files import file_operation
 from ..research_algorithms.cuda_runtime import cuda_backend
 from ..research_algorithms.blunder_full_compute import memory_plan
 from ..fen_summary_recovery import recover_batch
 from . import source,compute,publication
 from .binary_source import VERSION as INPUT_READER
-from .schema import table,installed
 from ..cuda_summaries.schema import enabled as manual_summaries
 from ..cuda_summaries import runs
 
@@ -19,12 +19,10 @@ LOG=logging.getLogger(__name__)
 
 
 async def canonical_tick(ctx):
-    started=time.monotonic(); layout=None; request=None
-    async with AsyncDBSession() as session:
-        layout=storage_for(session)
-        if not layout or not await installed(session,layout): return {'status':'not_installed'}
-        t=lambda name:table(layout,name)
-        control=(await session.execute(text(f'SELECT * FROM {t("control")}'))).mappings().one()
+    started=time.monotonic(); request=None
+    async with write_transaction(AsyncDBSession) as session:
+
+        control=(await session.execute(text(f'SELECT * FROM public.canonical_blunder_control'))).mappings().one()
         manual = await manual_summaries(session)
         if not manual and control['error'] and (await session.scalar(text('SELECT now()'))-control['updated_at']).total_seconds()<60:
             return {'status':'retry_backoff'}
@@ -32,7 +30,6 @@ async def canonical_tick(ctx):
             if manual:
                 await session.execute(text(f'''UPDATE {runs.RUN} SET phase='Waiting for active cloud analysis',
                     updated_at=clock_timestamp() WHERE status IN {runs.ACTIVE}'''))
-                await session.commit()
             return {'status':'waiting_cloud'}
     xp=None
     try:
@@ -40,7 +37,7 @@ async def canonical_tick(ctx):
         recovery=await recover_batch(factory=AsyncDBSession)
         stages={'input_refresh_seconds':time.monotonic()-stage_started}
         if manual:
-            async with AsyncDBSession() as session, session.begin():
+            async with write_transaction(AsyncDBSession) as session:
                 request = await runs.next_batch(session)
             if request is None:
                 return {'status': 'building' if recovery['processed'] and recovery['pending'] else 'awaiting_user',
@@ -52,7 +49,7 @@ async def canonical_tick(ctx):
             return {'status':'building' if recovery['processed'] and recovery['pending'] else 'not_selected',
                 'remaining':recovery['pending'],'input_recovery':recovery}
         stage_started=time.monotonic()
-        async with AsyncDBSession() as session:
+        async with read_transaction(AsyncDBSession) as session:
             await source.prepare(session)
             source_timings={}
             data=await source.load(session,position_reader=INPUT_READER,timings=source_timings,
@@ -64,7 +61,7 @@ async def canonical_tick(ctx):
             raise ValueError('Canonical model changed after the run was captured.')
         if items:
             if request:
-                async with AsyncDBSession() as session, session.begin():
+                async with write_transaction(AsyncDBSession) as session:
                     await runs.phase(session, request['id'], 'Calculating blunders on RTX 4060')
             xp,hardware=await file_operation(cuda_backend,0)
             if hardware['name']!=config['device']: raise RuntimeError('Canonical model requires the RTX 4060.')
@@ -84,10 +81,10 @@ async def canonical_tick(ctx):
                 return {'status':'idle','input_reader':INPUT_READER}
         info.update(input_reader=INPUT_READER,source_timings=source_timings,input_recovery=recovery,stage_timings=stages)
         if request:
-            async with AsyncDBSession() as session, session.begin():
+            async with write_transaction(AsyncDBSession) as session:
                 await runs.phase(session, request['id'], 'Publishing summaries')
         stage_started=time.monotonic()
-        async with AsyncDBSession() as session,session.begin():
+        async with write_transaction(AsyncDBSession) as session:
             result=await publication.publish(session,model_id,items,records,info)
             if request:
                 stages['publication_seconds'] = time.monotonic()-stage_started
@@ -102,16 +99,17 @@ async def canonical_tick(ctx):
     except asyncio.CancelledError:
         if request:
             async def mark_interrupted():
-                async with AsyncDBSession() as session,session.begin():
+                async with write_transaction(AsyncDBSession) as session:
                     await runs.fail(session,request['id'],'CUDA worker interrupted or timed out; saved input/result checkpoints retained.')
-            task = asyncio.create_task(mark_interrupted())
-            try: await asyncio.shield(task)
-            except asyncio.CancelledError: await task
+            try:
+                await finish_analysis_cleanup(mark_interrupted())
+            except BaseException:
+                LOG.exception('CUDA interruption record failed; preserving cancellation.')
         raise
     except Exception as error:
         LOG.exception('Canonical GPU refresh failed; previous published results retained.')
-        async with AsyncDBSession() as session,session.begin():
-            await session.execute(text(f'''UPDATE {table(layout,'control')} SET status='retrying',
+        async with write_transaction(AsyncDBSession) as session:
+            await session.execute(text(f'''UPDATE public.canonical_blunder_control SET status='retrying',
                 error=:error,updated_at=now() WHERE id'''),{'error':(type(error).__name__+': '+str(error))[:1000]})
             if request:
                 await runs.fail(session,request['id'],type(error).__name__+': '+str(error))

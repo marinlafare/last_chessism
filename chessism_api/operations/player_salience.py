@@ -5,16 +5,20 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+import logging
 from collections.abc import Iterable
 from datetime import date
 from typing import Any
 
 from arq.connections import ArqRedis
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+
+logger = logging.getLogger(__name__)
 from chessism_api.operations.player_salience_calculation import calculate_player_salience
 from chessism_api.operations.player_hero_analytics import CHART_MODES, _analytics_scope
 from chessism_api.operations.player_timezone import player_local_timestamp_sql
@@ -68,76 +72,43 @@ async def mark_player_salience_stale(
     normalized = _normalized_player_names(player_names)
     if not normalized:
         return 0
-    statement = text("""
-        INSERT INTO player_salience_summary (
-            player_name, status, source_game_count,
-            source_position_count, effective_game_count, error
-        )
-        SELECT
-            player.player_name, 'stale', 0, 0, 0, NULL
-        FROM player
-        WHERE player.player_name = ANY(CAST(:players AS text[]))
-          AND COALESCE(player.joined, 0) > 0
-          AND player.deleted_at IS NULL
-        ON CONFLICT (player_name) DO UPDATE SET
-            status = 'stale',
-            error = NULL
-        RETURNING player_name
-    """)
     links = sorted({int(link) for link in game_links})
 
-    async def execute(working_session: AsyncSession) -> int:
-        if storage_for(working_session):
-            from chessism_api.operations.ingestion_pipeline.relational_repository import mark_stale
-            return await mark_stale(working_session, normalized, links)
-        result = await working_session.execute(statement, {"players": normalized})
-        rows = result.fetchall()
+    async def execute(working_session):
+        rows = (await working_session.execute(text("""
+            INSERT INTO player_salience_summary(player_id,status)
+            SELECT id,'stale' FROM player
+            WHERE player_name=ANY(CAST(:players AS text[]))
+              AND joined>0 AND deleted_at IS NULL
+            ON CONFLICT(player_id) DO UPDATE SET status='stale',error=NULL
+            RETURNING player_id
+        """), {'players':normalized})).all()
         if links:
             await working_session.execute(text("""
-                INSERT INTO player_salience_pending_game (
-                    player_name, game_link, player_color
-                )
-                SELECT gp.player_name, gp.link, gp.color
-                FROM game_player gp
-                JOIN player
-                  ON player.player_name = gp.player_name
-                WHERE gp.link = ANY(CAST(:game_links AS bigint[]))
-                  AND gp.player_name = ANY(CAST(:players AS text[]))
-                  AND COALESCE(player.joined, 0) > 0
-                  AND player.deleted_at IS NULL
+                INSERT INTO player_salience_pending_game(game_link,is_white)
+                SELECT gp.game_link,gp.is_white FROM game_player gp
+                JOIN player p ON p.id=gp.player_id JOIN game g ON g.link=gp.game_link
+                WHERE gp.game_link=ANY(CAST(:links AS bigint[]))
+                  AND p.player_name=ANY(CAST(:players AS text[]))
+                  AND p.joined>0 AND p.deleted_at IS NULL AND g.is_standard AND g.n_moves>0
                 ON CONFLICT DO NOTHING
-            """), {"game_links": links, "players": normalized})
+            """), {'links':links,'players':normalized})
         return len(rows)
 
     if session is not None:
         return await execute(session)
-    async with AsyncDBSession() as owned_session:
-        affected = await execute(owned_session)
-        await owned_session.commit()
-        return affected
+    async with write_transaction(AsyncDBSession) as owned_session:
+        return await execute(owned_session)
 
 
 async def seed_player_salience_summaries() -> int:
     """Create stale projection rows for every tracked, non-deleted player."""
-    async with AsyncDBSession() as session:
-        layout = storage_for(session)
-        target = layout.table('player_salience_summary') if layout else 'player_salience_summary'
-        owner_column = 'player_id' if layout else 'player_name'
-        source_column = 'id' if layout else 'player_name'
-        result = await session.execute(text(f"""
-            INSERT INTO {target} (
-                {owner_column}, status, source_game_count,
-                source_position_count, effective_game_count, error
-            )
-            SELECT {source_column}, 'stale', 0, 0, 0, NULL
-            FROM player
-            WHERE COALESCE(joined, 0) > 0
-              AND deleted_at IS NULL
-            ON CONFLICT ({owner_column}) DO NOTHING
-            RETURNING {owner_column}
-        """))
-        rows = result.fetchall()
-        await session.commit()
+    async with write_transaction(AsyncDBSession) as session:
+        rows = (await session.execute(text("""
+            INSERT INTO player_salience_summary(player_id,status)
+            SELECT id,'stale' FROM player WHERE joined>0 AND deleted_at IS NULL
+            ON CONFLICT(player_id) DO NOTHING RETURNING player_id
+        """))).all()
         return len(rows)
 
 
@@ -177,7 +148,7 @@ async def enqueue_player_salience(
 ) -> dict[str, Any]:
     """Queue one corpus refresh while preventing duplicate player jobs."""
     player = str(player_name).strip().lower()
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         from .cuda_summaries.salience_store import enabled
         if await enabled(session):
             return {'status':'pending_cuda','player_name':player,'job_id':None}
@@ -191,10 +162,9 @@ async def enqueue_player_salience(
         """), {"player": player})
         if not exists:
             raise ValueError(f"Tracked player {player!r} was not found.")
-        layout = storage_for(session)
-        target = layout.table('player_salience_summary') if layout else 'player_salience_summary'
-        owner_column = 'player_id' if layout else 'player_name'
-        owner = f"(SELECT id FROM {layout.table('player')} WHERE player_name=:player)" if layout else ':player'
+        target = 'player_salience_summary'
+        owner_column = 'player_id'
+        owner = '(SELECT id FROM player WHERE player_name=:player)'
         await session.execute(text(f"""
             INSERT INTO {target} (
                 {owner_column}, status, source_game_count,
@@ -209,17 +179,14 @@ async def enqueue_player_salience(
             FOR UPDATE
         """), {"player": player})
         if current_status in ("queued", "running"):
-            await session.commit()
             return {"status": "already_active", "player_name": player, "job_id": None}
         if current_status == "ready" and not force:
-            await session.commit()
             return {"status": "up_to_date", "player_name": player, "job_id": None}
         await session.execute(text(f"""
             UPDATE {target}
             SET status = 'queued', error = NULL
             WHERE {owner_column} = {owner}
         """), {"player": player})
-        await session.commit()
 
     try:
         job = await redis.enqueue_job(
@@ -241,13 +208,12 @@ async def enqueue_player_salience(
         )
         return {"status": "queued", "player_name": player, "job_id": job_id}
     except Exception:
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             await session.execute(text(f"""
                 UPDATE {target}
                 SET status = 'stale'
                 WHERE {owner_column} = {owner} AND status = 'queued'
             """), {"player": player})
-            await session.commit()
         raise
 
 
@@ -257,11 +223,11 @@ async def enqueue_stale_player_salience_jobs(
     limit: int = 100,
 ) -> list[dict[str, Any]]:
     """Queue bounded stale projections after the FEN/tablebase pipeline drains."""
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(text("""
-            SELECT player_name
-            FROM player_salience_summary
-            WHERE status IN ('stale', 'failed')
+            SELECT p.player_name
+            FROM player_salience_summary s JOIN player p ON p.id=s.player_id
+            WHERE s.status IN ('stale', 'failed')
             ORDER BY player_name
             LIMIT :limit
         """), {"limit": max(1, min(int(limit), 1_000))})
@@ -277,15 +243,14 @@ async def run_player_salience_job(
     redis: ArqRedis = ctx["redis"]
     job_id = str(ctx.get("job_id") or f"player-salience-{player_name}")
     player = str(player_name).strip().lower()
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         from .cuda_summaries.salience_store import enabled
         if await enabled(session):
             # Older producers may still send a queue wake-up. It must never
             # become a CPU calculation or an implicit manual CUDA request.
-            await session.execute(text(f"""UPDATE {storage_for(session).table('player_salience_summary')}
+            await session.execute(text("""UPDATE player_salience_summary
                 SET status='stale' WHERE player_id=(SELECT id FROM player WHERE player_name=:player)
                 AND status IN ('queued','running')"""), {'player':player})
-            await session.commit()
             await _write_progress(redis,job_id,player_name=player,phase='complete',total=1,processed=1,
                 detail='Salience is pending the next manual Run CUDA summaries request.')
             return {'status':'pending_cuda','player_name':player,'job_id':None}
@@ -350,7 +315,7 @@ def _summary_payload(row: Any | None, player_name: str) -> dict[str, Any]:
 
 
 async def get_salience_overview(limit: int = 100) -> dict[str, Any]:
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         result = await session.execute(text("""
             SELECT
                 player.player_name,
@@ -361,7 +326,7 @@ async def get_salience_overview(limit: int = 100) -> dict[str, Any]:
                 summary.error
             FROM player
             LEFT JOIN player_salience_summary summary
-              ON summary.player_name = player.player_name
+              ON summary.player_id = player.id
             WHERE COALESCE(player.joined, 0) > 0
               AND player.deleted_at IS NULL
             ORDER BY
@@ -388,7 +353,7 @@ async def get_player_salience_report(
 ) -> dict[str, Any]:
     player = str(player_name).strip().lower()
     safe_limit = max(1, min(int(game_limit), 50))
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY"))
         player_exists = await session.scalar(
             text("SELECT EXISTS (SELECT 1 FROM player WHERE player_name = :player)"),
@@ -398,10 +363,10 @@ async def get_player_salience_report(
             raise ValueError(f"Player {player!r} was not found.")
         summary = (await session.execute(text("""
             SELECT
-                player_name, status, source_game_count,
-                source_position_count, effective_game_count, error
-            FROM player_salience_summary
-            WHERE player_name = :player
+                p.player_name,s.status,s.source_game_count,
+                s.source_position_count,s.effective_game_count,s.error
+            FROM public.player_salience_summary s JOIN public.player p ON p.id=s.player_id
+            WHERE p.player_name = :player
         """), {"player": player})).mappings().first()
         distribution = (await session.execute(text("""
             SELECT
@@ -412,17 +377,19 @@ async def get_player_salience_report(
                 PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY salience)::double precision AS median,
                 PERCENTILE_CONT(0.75) WITHIN GROUP (ORDER BY salience)::double precision AS p75,
                 MAX(salience)::double precision AS maximum
-            FROM game_player_salience
-            WHERE player_name = :player
+            FROM public.game_player_salience s JOIN public.game_player gp
+                ON gp.game_link=s.game_link AND gp.is_white=s.is_white
+            JOIN public.player p ON p.id=gp.player_id WHERE p.player_name=:player
         """), {"player": player})).mappings().one()
         colors = (await session.execute(text("""
             SELECT
-                player_color,
+                CASE WHEN s.is_white THEN 'white' ELSE 'black' END AS player_color,
                 COUNT(*)::bigint AS games,
                 SUM(salience)::double precision AS effective_games,
                 AVG(salience)::double precision AS mean_salience
-            FROM game_player_salience
-            WHERE player_name = :player
+            FROM public.game_player_salience s JOIN public.game_player gp
+                ON gp.game_link=s.game_link AND gp.is_white=s.is_white
+            JOIN public.player p ON p.id=gp.player_id WHERE p.player_name=:player
             GROUP BY player_color
             ORDER BY player_color
         """), {"player": player})).mappings().all()
@@ -432,22 +399,24 @@ async def get_player_salience_report(
             rows = (await session.execute(text(f"""
                 SELECT
                     salience.game_link,
-                    salience.player_color,
+                    CASE WHEN salience.is_white THEN 'white' ELSE 'black' END AS player_color,
                     salience.salience,
                     salience.position_occurrence_count,
                     salience.unique_position_count,
                     salience.repeated_position_count,
-                    gp.played_at,
-                    gp.mode,
-                    gp.n_moves,
-                    gp.result,
-                    gp.opponent_name
+                    g.played_at,
+                    mode.name AS mode,
+                    g.n_moves,
+                    CASE WHEN gp.is_white THEN g.white_result ELSE g.black_result END AS result,
+                    opponent.player_name AS opponent_name
                 FROM game_player_salience salience
-                JOIN game_player gp
-                  ON gp.link = salience.game_link
-                 AND gp.color = salience.player_color
-                WHERE salience.player_name = :player
-                ORDER BY salience.salience {order}, salience.game_link
+                JOIN public.game_player gp ON gp.game_link=salience.game_link AND gp.is_white=salience.is_white
+                JOIN public.player p ON p.id=gp.player_id
+                JOIN public.game g ON g.link=gp.game_link
+                LEFT JOIN public.game_mode mode ON mode.id=g.mode_id
+                JOIN public.player opponent ON opponent.id=CASE WHEN gp.is_white THEN g.black_player_id ELSE g.white_player_id END
+                WHERE p.player_name=:player
+                ORDER BY salience.salience {order}, salience.game_link,salience.is_white DESC
                 LIMIT :limit
             """), {"player": player, "limit": safe_limit})).mappings().all()
             return [
