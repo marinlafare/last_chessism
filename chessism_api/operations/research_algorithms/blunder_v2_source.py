@@ -8,51 +8,13 @@ import numpy as np
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql import research_reads as reads
+from chessism_api.database.postgresql.transactions import read_transaction
 from ..matrix_constructor.artifact_files import file_operation
 from .blunder_training import game_blocks
 from .blunder_v2_model import DTYPE, MODES
 
 MAX_ROWS = 3_000_000
-
-
-def eligible_sql(session, *, owners=False):
-    layout = storage_for(session)
-    table = layout.table if layout else lambda name: name
-    if layout:
-        mode = 'm.name'
-        joins = f'''JOIN {table('game_mode')} m ON m.id=g.mode_id
-            JOIN {table('player')} w ON w.id=g.white_player_id JOIN {table('player')} b ON b.id=g.black_player_id'''
-        standard = 'TRUE'  # Non-standard games are archived outside the native core.
-    else:
-        mode = 'g.mode'
-        standard = """g.rules='chess' AND (g.initial_setup IS NULL OR g.initial_setup IN
-            ('','startpos','rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1'))"""
-        joins = 'JOIN player w ON w.player_name=g.white JOIN player b ON b.player_name=g.black'
-    coverage = table('game_analysis_coverage') if layout else 'game_analysis_summary'
-    owner_columns = '(w.joined>0 AND w.deleted_at IS NULL) AS white_complete,(b.joined>0 AND b.deleted_at IS NULL) AS black_complete,' if owners else ''
-    return f'''WITH eligible AS (
-        SELECT {owner_columns}g.link,{mode} AS mode,g.played_at,g.white_elo,g.black_elo,g.white_result,
-            w.player_name AS white_name,b.player_name AS black_name,c.total_positions,
-            LOWER(g.white_str_result) AS white_end,LOWER(g.black_str_result) AS black_end,
-            LEAST(8,GREATEST(0,FLOOR(((g.white_elo+g.black_elo)/2.0-1000)/200)))::int AS rating_band,
-            hashtextextended(g.link::text,20261028) AS sample_order
-        FROM {table('game')} g {joins} JOIN {coverage} c ON c.link=g.link
-        WHERE {standard} AND c.is_fully_analyzed AND c.total_positions>0 AND g.played_at IS NOT NULL
-          AND {mode} IN ('bullet','blitz','rapid') AND g.white_elo BETWEEN 1 AND 4000 AND g.black_elo BETWEEN 1 AND 4000
-          AND g.white_result IN (0,.5,1) AND g.black_result IN (0,.5,1) AND g.white_result+g.black_result=1
-          AND ((w.joined>0 AND w.deleted_at IS NULL) OR (b.joined>0 AND b.deleted_at IS NULL))
-    )'''
-
-
-def selection_sql(session):
-    return eligible_sql(session) + ''', ranked AS (SELECT *,ROW_NUMBER() OVER(PARTITION BY mode,rating_band ORDER BY sample_order,link) AS rank FROM eligible)
-    SELECT * FROM ranked WHERE rank<=:games_per_group ORDER BY played_at,link'''
-
-
-def positions_sql(session):
-    from .blunder_training import positions_sql as original
-    return original(session).replace('f.score::float8,', 'f.score::float8,a.fen_id,')
 
 
 def held_player(name):
@@ -105,7 +67,7 @@ async def read_positions(session, metadata, reporter, stream=None, *, phase='fre
     total, expected_total = 0, sum(g['total_positions'] for g in metadata)
     for block in game_blocks(metadata):
         await reporter.check()
-        values = (await session.execute(text(positions_sql(session)),
+        values = (await session.execute(text(reads.positions(fen_ids=True)),
             {'links': [g['link'] for g in block], 'row_limit': sum(g['total_positions'] for g in block)+1})).all()
         grouped = {link: [(r[1], r[2], r[3], r[4]) for r in records]
                    for link, records in itertools.groupby(values, lambda r: r[0])}
@@ -127,8 +89,7 @@ async def read_positions(session, metadata, reporter, stream=None, *, phase='fre
 
 async def freeze(config, reporter, stream, *, session_factory=None):
     started = time.perf_counter()
-    async with (session_factory or AsyncDBSession)() as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
+    async with read_transaction(session_factory or AsyncDBSession) as session:
         await session.execute(text("SET LOCAL statement_timeout='60s'"))
         await session.execute(text("SET LOCAL idle_in_transaction_session_timeout='60s'"))
         await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
@@ -142,7 +103,7 @@ async def freeze(config, reporter, stream, *, session_factory=None):
                 from .blunder_development_reuse import select as select_balanced
             metadata, split, audit, query = await select_balanced(session, config, reporter)
         else:
-            query = selection_sql(session)
+            query = reads.v2_selection()
             metadata = [dict(r) for r in (await session.execute(text(query), config)).mappings()]
             split = partitions(metadata)
         if sum(g['total_positions'] for g in metadata) > MAX_ROWS:

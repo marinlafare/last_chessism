@@ -7,6 +7,7 @@ import json
 
 import numpy as np
 from sqlalchemy import text
+from chessism_api.database.postgresql import research_reads as reads
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.relational_storage import storage_for
@@ -97,7 +98,7 @@ async def select(session, config, reporter):
     if history.digest(roles) != config['history_sha256']:
         raise ValueError('Research identity history changed; submit a fresh request.')
     policy = config['sampling_policy']
-    query = source.eligible_sql(session, owners=True) + ''' SELECT link,mode,played_at,white_name,black_name,white_complete,black_complete,
+    query = reads.eligible_games(owners=True) + ''' SELECT link,mode,played_at,white_name,black_name,white_complete,black_complete,
         white_elo,black_elo,rating_band,total_positions,sample_order FROM eligible
         WHERE played_at<CAST(:test_from AS timestamptz) AND NOT(link=ANY(CAST(:excluded AS bigint[])))
           AND (NOT(link=ANY(CAST(:training AS bigint[]))) OR played_at<CAST(:training_before AS timestamptz))
@@ -251,7 +252,7 @@ async def extract(session, selected, folder, frozen, reporter):
             await reporter.check()
             links = [g['link'] for g in block]
             outcomes = dict((await session.execute(text(f'SELECT link,white_result FROM {table} WHERE link=ANY(CAST(:links AS bigint[]))'), {'links': links})).all())
-            records = (await session.execute(text(source.positions_sql(session)),
+            records = (await session.execute(text(reads.positions(fen_ids=True)),
                 {'links': links, 'row_limit': sum(g['total_positions'] for g in block)+1})).all()
             grouped = {link: [(r[1], r[2], r[3], r[4]) for r in rows]
                        for link, rows in itertools.groupby(records, lambda r: r[0])}

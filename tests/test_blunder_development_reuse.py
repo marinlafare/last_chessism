@@ -128,7 +128,7 @@ class HistoryTests(unittest.IsolatedAsyncioTestCase):
         selected = MagicMock(); selected.mappings.return_value = [{'link': 1, 'total_positions': 1, 'split': 0}]
         old_result = session.execute.side_effect
         session.execute.side_effect = [next(old_result), selected]
-        with patch.object(reuse.source, 'selection_sql', return_value='SELECT 1'), \
+        with patch.object(reuse.reads, 'v2_selection', return_value='SELECT 1'), \
              patch.object(reuse.source, 'partitions', return_value=value['split']), \
              patch.object(reuse.source, 'read_positions', AsyncMock(return_value=([], 1, 'b'*64))):
             with self.assertRaisesRegex(ValueError, 'Historical source changed'):

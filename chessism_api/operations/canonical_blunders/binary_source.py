@@ -7,7 +7,8 @@ https://www.postgresql.org/docs/current/sql-copy.html#SQL-COPY-BINARY
 """
 import time
 import numpy as np
-from chessism_api.database.postgresql.relational_storage import driver_connection,storage_for
+from chessism_api.database.postgresql.transactions import driver_connection
+from chessism_api.database.postgresql.research_reads import BLUNDER_COPY
 from ..matrix_constructor.artifact_files import file_operation
 from . import compute
 
@@ -19,19 +20,6 @@ HEADER=b'PGCOPY\n\xff\r\n\x00'+b'\x00'*8
 WIRE=np.dtype([('fields','>i2'),('len_link','>i4'),('link','>i8'),
     ('len_ply','>i4'),('ply','>i4'),('len_score','>i4'),('score','>f8'),
     ('len_kind','>i4'),('kind','>i2')])
-
-
-def query(session):
-    from chessism_api.evaluations import kind_sql
-    layout=storage_for(session)
-    if layout is None:raise ValueError('Binary canonical source requires explicit normalized storage.')
-    white='a.is_white' if layout.compact else "a.move_color='white'"
-    return f'''SELECT a.game_link::bigint,
-        ((a.n_move-1)*2+CASE WHEN {white} THEN 1 ELSE 2 END)::integer AS ply,
-        COALESCE(f.score::float8,'NaN'::float8),
-        ({kind_sql('f.score', 'f.analysis_source', codes=True)})::smallint
-        FROM {layout.table('game_fen_association')} a LEFT JOIN {layout.table('fen')} f ON f.fen_id=a.fen_id
-        WHERE a.game_link=ANY($1::bigint[]) ORDER BY a.game_link,ply LIMIT $2::bigint'''
 
 
 def blocks(games, *, max_games=QUERY_GAMES, max_rows=QUERY_ROWS):
@@ -99,7 +87,7 @@ async def load(session,games,*,timings=None,check=None):
         if timings is not None:timings[key]=timings.get(key,0.)+time.perf_counter()-start
     parts=[]; index=0
     if not games:return np.empty(0,compute.DTYPE)
-    start=time.perf_counter(); driver=await driver_connection(session); sql=query(session)
+    start=time.perf_counter(); driver=await driver_connection(session); sql=BLUNDER_COPY
     add('source_queries_seconds',start)
     for block in blocks(games):
         if check:await check()

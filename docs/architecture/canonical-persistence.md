@@ -854,3 +854,21 @@ Accuracy/blunder charts require CUDA publication state; they must convert with t
 A3.2 publisher tables. Saved-frequency selection remains unchanged until that same
 conversion. The canonical CPU engine table must not be used as a replacement for
 the GPU-only blunder-count contract. No feature is removed by this sequencing change.
+
+### Research training and binary inputs
+
+Rating-aware v1/v2 training reads now use canonical game eligibility and native
+FEN occurrences through `research_reads.py`. V1 retains its close-rating, recorded-
+ending and opening restrictions; v2 retains wider gaps, timeouts, chronological and
+player splits. Shared/self-play games enter each whole-game selection only once.
+The schema supplies nonnull dates/results; explicit standard/nonempty eligibility
+replaces the old assumption that the normalized core contained no variants.
+
+Training operations own guarded read-only UTC snapshots, including rollback/close
+under repeated cancellation. Binary COPY borrows the caller's transaction and
+preserves its verified wire format. Scalar and binary classification cast to bigint
+before ABS, preserving valid minimum integer scores. Missing/ambiguous coverage is
+an error; readers do not repair sources, publish models or invoke CUDA. Sampling,
+packing, fitting and inference formulas are unchanged. Research tables/publication,
+saved-CPU-reference comparisons and the remaining CUDA consumers are not converted
+by this source-only step.

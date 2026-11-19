@@ -9,6 +9,7 @@ import json
 from datetime import datetime
 
 from sqlalchemy import text
+from chessism_api.database.postgresql import research_reads as reads
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from ..matrix_constructor.artifact_files import file_operation
@@ -140,7 +141,7 @@ async def history(session, policy, reporter):
             replayed += frozen['positions']
             if replayed > balanced.MAX_REPLAY_ROWS:
                 raise ValueError('Historical verification exceeds its six-million-row budget.')
-            metadata = [dict(r) for r in (await session.execute(text(source.selection_sql(session)), row['config'])).mappings()]
+            metadata = [dict(r) for r in (await session.execute(text(reads.v2_selection()), row['config'])).mappings()]
             boundaries = source.partitions(metadata)
             if any(boundaries[k] != frozen['split'][k] for k in ('training_before', 'test_from')):
                 raise ValueError('Historical chronological boundaries changed.')

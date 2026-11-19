@@ -4,7 +4,8 @@ import time
 import numpy as np
 from sqlalchemy import text
 from chessism_api.database.postgresql.relational_storage import storage_for
-from ..research_algorithms.blunder_training import game_blocks,positions_sql
+from ..research_algorithms.blunder_training import game_blocks
+from chessism_api.database.postgresql import research_reads as reads
 from . import compute
 from .schema import table
 from .eligibility import moving_owners
@@ -76,7 +77,7 @@ async def load(session, report=lambda *a:None, *, selected_items=None, timings=N
     for block in game_blocks(accepted):
         if check: await check()
         started=time.perf_counter()
-        records=(await session.execute(text(positions_sql(session)),{'links':[g['game_link'] for g in block],
+        records=(await session.execute(text(reads.positions()),{'links':[g['game_link'] for g in block],
             'row_limit':sum(g['total_positions'] for g in block)+1})).all()
         add('source_queries_seconds',started); started=time.perf_counter()
         grouped={link:[(r[1],r[2],r[3]) for r in rows] for link,rows in itertools.groupby(records,lambda r:r[0])}

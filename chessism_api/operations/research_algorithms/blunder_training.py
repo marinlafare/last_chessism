@@ -15,7 +15,8 @@ import numpy as np
 from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql import research_reads as reads
+from chessism_api.database.postgresql.transactions import read_transaction
 from ..matrix_constructor.artifact_files import file_operation
 from .blunder_model import (Dataset, GROUPS, MIN_GAMES, TRANSITION, VERSION,
                             compare_transitions, fit_group, group_id)
@@ -37,58 +38,6 @@ def configuration(games_per_group=1000):
         'minimum_games': dict(zip(('training', 'validation', 'test'), MIN_GAMES)),
         'split_seed': 20261026, 'sample_seed': 20261027, 'threshold_expected_points': .15,
         'canonical': False}
-
-
-def selection_sql(session):
-    layout = storage_for(session)
-    if layout:
-        game, coverage, player = (layout.table(key) for key in ('game', 'game_analysis_coverage', 'player'))
-        source = f'{game} g JOIN {layout.table("game_mode")} m ON m.id=g.mode_id'
-        mode = 'm.name'
-        # Native core stores standard chess only; variants/custom starts live
-        # in the archive. Its contract deliberately has no game.rules column.
-        standard_chess = 'TRUE'
-        profile = f'EXISTS(SELECT 1 FROM {player} p WHERE p.id IN (g.white_player_id,g.black_player_id) AND p.joined>0 AND p.deleted_at IS NULL)'
-    else:
-        source, coverage, mode = 'game g', 'game_analysis_summary', 'g.mode'
-        standard_chess = "g.rules='chess'"
-        profile = 'EXISTS(SELECT 1 FROM game_player gp JOIN player p USING(player_name) WHERE gp.link=g.link AND p.joined>0 AND p.deleted_at IS NULL)'
-    # Select whole games from metadata before touching FENs. Stratify so the
-    # largest rating population cannot consume every bounded sample slot.
-    return f'''WITH eligible AS (
-        SELECT g.link,{mode} AS mode,g.white_elo,g.black_elo,g.white_result,
-            LEAST(8,GREATEST(0,FLOOR(((g.white_elo+g.black_elo)/2.0-1000)/200)))::int AS rating_band,
-            c.total_positions,
-            hashtextextended(g.link::text,:sample_seed) AS sample_order
-        FROM {source} JOIN {coverage} c ON c.link=g.link
-        WHERE c.is_fully_analyzed AND c.total_positions>0
-          AND {mode} IN ('bullet','blitz','rapid')
-          AND {standard_chess}
-          AND g.white_elo>0 AND g.black_elo>0 AND ABS(g.white_elo-g.black_elo)<=200
-          AND g.white_result IN (0,.5,1) AND g.black_result IN (0,.5,1)
-          AND g.white_result+g.black_result=1 AND g.n_moves>10
-          AND LOWER(g.white_str_result) NOT IN ('timeout','abandoned','timevsinsufficient')
-          AND LOWER(g.black_str_result) NOT IN ('timeout','abandoned','timevsinsufficient')
-          AND {profile}
-    ), ranked AS (
-        SELECT *,ROW_NUMBER() OVER (PARTITION BY rating_band,mode ORDER BY sample_order,link) AS rank
-        FROM eligible
-    ) SELECT link,mode,white_elo,black_elo,white_result,total_positions
-      FROM ranked WHERE rank<=:games_per_group ORDER BY link'''
-
-
-def positions_sql(session):
-    from chessism_api.evaluations import kind_sql
-    layout = storage_for(session)
-    association = layout.table('game_fen_association') if layout else 'game_fen_association'
-    fen = layout.table('fen') if layout else 'fen'
-    white = 'a.is_white' if layout and layout.compact else "a.move_color='white'"
-    return f'''SELECT a.game_link,(a.n_move-1)*2+CASE WHEN {white} THEN 1 ELSE 2 END AS ply,
-        f.score::float8,
-        {kind_sql('f.score', 'f.analysis_source', codes=True)} AS kind
-        FROM {association} a LEFT JOIN {fen} f ON f.fen_id=a.fen_id
-        WHERE a.game_link=ANY(CAST(:links AS bigint[]))
-        ORDER BY a.game_link,ply LIMIT :row_limit'''
 
 
 def game_blocks(games):
@@ -132,15 +81,14 @@ async def freeze_source(config, reporter, stream, *, session_factory=None):
     dataset = Dataset()
     started = time.perf_counter()
     factory = session_factory or AsyncDBSession
-    async with factory() as session:
-        await session.execute(text('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY'))
+    async with read_transaction(factory) as session:
         await session.execute(text("SET LOCAL statement_timeout='60s'"))
         await session.execute(text('SET LOCAL max_parallel_workers_per_gather=0'))
         await session.execute(text("SET LOCAL idle_in_transaction_session_timeout='60s'"))
         if await session.scalar(text("SELECT EXISTS(SELECT 1 FROM cloud_analysis_job WHERE status NOT IN ('complete','cancelled','limit_reached','failed'))")):
             raise ValueError('Wait for the active cloud workflow to finish before model training.')
         await reporter.progress('selecting_training_games', detail='Selecting a bounded, rating-stratified sample of whole games; source database is read-only.')
-        query = selection_sql(session)
+        query = reads.TRAINING_GAMES
         games = [dict(row) for row in (await session.execute(text(query), config)).mappings()]
         if not games:
             raise ValueError('No fully analyzed eligible games with valid ratings and outcomes.')
@@ -154,7 +102,7 @@ async def freeze_source(config, reporter, stream, *, session_factory=None):
         for selected in game_blocks(games):
             await reporter.check()
             block = {int(game['link']): game for game in selected}
-            records = (await session.execute(text(positions_sql(session)),
+            records = (await session.execute(text(reads.positions()),
                 {'links': list(block), 'row_limit': BATCH_ROWS + 1})).all()
             if len(records) > BATCH_ROWS:
                 raise ValueError('Source exceeded the bounded per-query position limit.')

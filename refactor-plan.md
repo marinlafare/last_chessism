@@ -1165,3 +1165,24 @@ The backend exception and all scope/safety restrictions remain unchanged.
   disposable test services removed and original ignored directory preserved.
 - [x] No production changes, push, merge, deployment, P1 #2 or P1 #3 work.
 - [ ] Formal P1 #1 acceptance: reserved for independent review.
+
+## Completed logical change — canonical research training and binary sources (167 passed)
+
+Entry: bounded FEN popups passed all 159 checks; local commit e4a298a.
+Convert rating-aware v1/v2 training selection and the shared verified-evaluation
+position query to one concrete canonical reader. Convert canonical binary COPY to
+that same native source. Keep whole-game limits, deterministic sampling, date and
+player splits, FEN identities, evaluation classifications and immutable inference
+unchanged. Explicitly filter standard/nonempty games instead of assuming a native
+schema excludes variants. Cast before ABS for valid integer-minimum evaluations.
+Training operations own guarded read-only snapshots; binary extraction borrows its
+caller's transaction. Remove SQL string replacement used to insert FEN identities.
+
+Update the actual source consumers and focused mocks, without changing model logic.
+Verify fresh canonical PostgreSQL selection/extraction, real binary parity, source
+bounds, coverage mismatch, missing predecessors, cloud guard, snapshot consistency,
+read-only operation, database error propagation and repeated cancellation cleanup.
+Retain existing model/packing/sampling checks and accepted P1 regressions. Map the
+old miniature legacy/profile training fixtures to these canonical cases; broader
+research saved-CPU-reference and CUDA publication conversions remain separate.
+No GPU/device execution, source database access or runtime DDL. No feature removal.

@@ -4,6 +4,7 @@ import json
 from datetime import datetime
 
 from sqlalchemy import text
+from chessism_api.database.postgresql import research_reads as reads
 
 from ..matrix_constructor.artifact_files import file_operation
 from . import blunder_balanced_sampling as sampling
@@ -34,7 +35,7 @@ async def reference_plan(session):
 
 
 def candidate_sql(session):
-    return source.eligible_sql(session,owners=True)+''', staged AS (
+    return reads.eligible_games(owners=True)+''', staged AS (
         SELECT *,CASE WHEN played_at<CAST(:training_before AS timestamptz) THEN 0
             WHEN played_at<CAST(:test_from AS timestamptz) THEN 1 ELSE 2 END AS phase,
             CASE WHEN ABS(white_elo-black_elo)<=200 THEN 0 WHEN ABS(white_elo-black_elo)<=400 THEN 1 ELSE 2 END AS gap_band,
@@ -72,7 +73,7 @@ async def exclusions(session, policy, reporter):
             replayed+=frozen['positions']
             if replayed>sampling.MAX_REPLAY_ROWS:
                 raise ValueError('Historical verification exceeds its six-million-row budget.')
-            metadata=[dict(r) for r in (await session.execute(text(source.selection_sql(session)),config)).mappings()]
+            metadata=[dict(r) for r in (await session.execute(text(reads.v2_selection()),config)).mappings()]
             source.partitions(metadata)
             if sum(g['total_positions'] for g in metadata)>source.MAX_ROWS:
                 raise ValueError('Historical reconstruction exceeds its source-row limit.')

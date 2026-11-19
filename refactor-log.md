@@ -1981,3 +1981,52 @@ Evidence archived, read back and byte-checked at
  docs/architecture/evidence/stage-a-fen-popups-2026-11-18.tar.gz.
 No application/test changes after passing verification. Local checkpoint follows.
 Original database/checkpoint/services remain untouched. Stage A incomplete/unaccepted.
+
+### Canonical research source conversion — started 2026-11-18
+
+Clean HEAD e4a298a confirmed; prior 159-check evidence and local commit recorded.
+CUDA engine charts cannot be converted honestly before their GPU publishers.
+First remove the shared training/binary source dependency on storage profiles.
+Old normalized selectors assumed standard games; canonical selectors must check
+is_standard. Model mathematics, immutable inference and saved count meaning stay.
+Only training snapshot ownership and canonical source extraction change in this
+chunk. Remaining research comparisons against retired CPU references require their
+own conversion/feature decision; do not substitute GPU counts under a CPU label.
+
+Research source conversion prepared. Source SQL is in one concrete adapter; v1/v2
+snapshot operations now own guarded reads; COPY requires its caller transaction.
+Native move/ply and integer evaluation semantics replace schema-profile rewriting.
+Model calculations and inference/packing definitions remain AST-identical. Only
+freeze/read wiring changes; two existing mocks target the relocated SQL selection.
+
+15 new real PostgreSQL cases cover distinct v1/v2 eligibility, deterministic samples,
+self-play deduplication, scalar/binary byte parity, integer limits, exact FEN/prior
+identities, coverage/whole-game bounds, cloud guards, empty sources, snapshot races,
+read-only/error propagation, repeated cancellation and rollback-failure closure.
+Legacy miniature-schema training/v2 scripts are mapped to these canonical cases;
+nullable dates/results and unknown provenance are now explicitly constraint-tested.
+Their unrelated broader historical replay fixtures remain stage-boundary mapping
+debt, not a claim that all research workflows have already been converted.
+
+Prepared 20 foundation + 79 existing workflow + 68 P1 = 167 checks, zero failures,
+errors or skips allowed. Python parse and git diff --check pass. Frozen inputs and
+protected baseline checked; no GPU or real DB operation. Monitor/evidence:
+/tmp/chessism-canonical-a3-research-source-20261118-01. Stage A remains incomplete.
+
+Research source gate launched: supervisor PID 1117137; startup confirmed.
+167 focused checks; 1,769 frozen inputs checked before launch. Tracking writes
+completed before launch-ready release.
+Monitor: `python3 /tmp/chessism-canonical-a3-research-source-20261118-01/monitor.py`. Returning control without polling.
+Review results, source integrity and exact-owned cleanup before local commit.
+
+### Canonical research source verification passed — 2026-11-18
+
+20 foundation + 79 workflow + 68 P1 = 167 checks passed, no failures/errors/skips,
+in 21.38 seconds on Python 3.10.22. All 15 new PostgreSQL regressions pass. Raw and
+structured results agree; all 1,769 frozen hashes match. Supervisor exited and
+all five owned containers were removed, independently checked by exact run label.
+Evidence archived, read back and byte-checked at
+ docs/architecture/evidence/stage-a-research-source-2026-11-18.tar.gz.
+Application/test inputs are unchanged after verification; local checkpoint follows.
+Original DB/checkpoint/services untouched. No GPU execution. Stage A remains
+incomplete/unaccepted; CUDA publication and remaining persistence consumers follow.
