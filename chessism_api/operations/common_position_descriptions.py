@@ -12,10 +12,9 @@ TTL_SECONDS = 86_400
 FIELDS = ("n_move", "move_color", "san", "label_occurrences", "example_game_link", "example_line")
 
 
-def description_keys(positions, snapshot, layout):
-    namespace = [layout.core, layout.version] if layout else ["legacy"]
-    return ["fen-commonness-description-v1:" + hashlib.sha256(json.dumps(
-        [namespace, snapshot, row["fen"], row["appearances"]], separators=(",", ":")
+def description_keys(positions, snapshot):
+    return ["fen-commonness-description-v2:" + hashlib.sha256(json.dumps(
+        [snapshot, row["fen_id"], row["fen"], row["appearances"]], separators=(",", ":")
     ).encode()).hexdigest() if snapshot else None for row in positions]
 
 

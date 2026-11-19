@@ -11,10 +11,8 @@ NOW = datetime(2026, 10, 11, 20, tzinfo=timezone.utc)
 
 
 def context(session):
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=session)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
+    session.in_transaction = MagicMock(return_value=True)
+    return session
 
 
 class PendingRepetitionTests(unittest.IsolatedAsyncioTestCase):
@@ -69,18 +67,23 @@ class PendingRepetitionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_worker_publishes_bins_and_timestamp_in_one_snapshot_transaction(self):
         mark, refresh = AsyncMock(), AsyncMock()
+        mark.execute.return_value = MagicMock()
+        mark.execute.return_value.scalar_one.return_value = NOW
         result = MagicMock()
         result.scalar.return_value = NOW
+        result.scalar_one.return_value = NOW
+        result.rowcount = 1
         refresh.execute.return_value = result
         with patch.object(cache, "AsyncDBSession", side_effect=[context(mark), context(refresh)]):
             await cache.run_pending_repetition_refresh({})
         queries = [str(c.args[0]) for c in refresh.execute.call_args_list]
         self.assertIn("REPEATABLE READ", queries[0])
-        aggregate = [q for q in queries if "FROM fen GROUP BY n_games" in q]
+        aggregate = [q for q in queries if "FROM public.fen GROUP BY n_games" in q]
         self.assertEqual(len(aggregate), 1)
         self.assertIn("COUNT(*)::bigint", aggregate[0])
         self.assertIn("COUNT(*) FILTER (WHERE score IS NULL)::bigint", aggregate[0])
-        self.assertTrue(any("statement_timeout = '180s'" in q for q in queries))
+        timeout_call = next(c for c in refresh.execute.call_args_list if 'statement_timeout' in str(c.args[0]))
+        self.assertEqual(timeout_call.args[1], {'timeout': '180s'})
         self.assertIn("last_error = NULL", queries[-1])
         refresh.commit.assert_awaited_once()
 
@@ -98,17 +101,23 @@ class PendingRepetitionTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_lock_contention_never_replaces_existing_snapshot(self):
         mark, refresh = AsyncMock(), AsyncMock()
+        mark.execute.return_value = MagicMock()
+        mark.execute.return_value.scalar_one.return_value = NOW
         result = MagicMock()
         result.scalar.return_value = False
+        result.scalar_one.return_value = False
         refresh.execute.return_value = result
         with patch.object(cache, "AsyncDBSession", side_effect=[context(mark), context(refresh)]):
             result = await cache.run_pending_repetition_refresh({})
         self.assertEqual(result, {"status": "already_refreshing"})
         self.assertFalse(any("DELETE FROM" in str(c.args[0]) for c in refresh.execute.call_args_list))
-        refresh.commit.assert_not_awaited()
+        refresh.commit.assert_awaited_once()
+        refresh.close.assert_awaited_once()
 
     async def test_refresh_failure_does_not_commit_partial_bins(self):
         mark, refresh, failure = AsyncMock(), AsyncMock(), AsyncMock()
+        mark.execute.return_value = MagicMock()
+        mark.execute.return_value.scalar_one.return_value = NOW
         refresh.execute.side_effect = RuntimeError("failure")
         with patch.object(cache, "AsyncDBSession", side_effect=[context(mark), context(refresh), context(failure)]), \
                 self.assertLogs(cache.LOG, level="ERROR"), self.assertRaises(RuntimeError):

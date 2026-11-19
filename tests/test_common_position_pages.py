@@ -54,7 +54,7 @@ class CommonPositionPageTests(unittest.IsolatedAsyncioTestCase):
 
     async def build(self, count):
         session = AsyncMock()
-        session.execute.side_effect = [result() for _ in range(6)] + [result(scalar=NOW),
+        session.execute.side_effect = [result() for _ in range(7)] + [result(scalar=NOW),
             result([{"fen": f"fen-{i}", "appearances": 40-i} for i in range(count)])]
         described = [{"rank": 11+i, "fen": E4, "appearances": 40-i, "n_move": 1,
             "move_color": "white", "san": "e4", "label_occurrences": 2, "example_line": "1. e4"} for i in range(min(10,count))]

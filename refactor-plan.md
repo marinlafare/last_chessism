@@ -1209,3 +1209,22 @@ concurrent requests, rollback/cancellation cleanup, readonly reads and remote ca
 without an open DB transaction. Retain ingestion/account and existing P1 regressions.
 No actual external API call, live DB, push or deploy. Other DBInterface callers and
 old runtime initialization remain for A4 after conversion; do not remove them early.
+
+## Completed logical change — canonical FEN appearance snapshots (147 passed)
+
+Entry: profile/statistics gate passed 144 checks; local commit af6b7ca.
+Add the four existing useful histogram/common-position cache tables and initialized
+singletons to canonical DDL (version 11). Preserve stale complete snapshots rather
+than giving cached FEN/example identities authoritative FKs. Provide the native
+bounded commonness ranking index. Move source/cache SQL into a concrete adapter;
+remove legacy move-ID and profile branches. Keep ten-position pages, deterministic
+modal labels, verified legal examples, histogram meanings, Redis TTL/debounce and
+cursor/public payload contracts. Cache keys use a canonical namespace.
+
+Use guarded read/write transactions, REPEATABLE READ publication, existing advisory
+locks and limits. Missing required singleton rows are errors. Record failures only
+for their own attempt, so older failures cannot mark a newer snapshot failed.
+Verify canonical source values, page ties, legal examples, constraints, missing-row
+failure, consistent snapshots, atomic rollback, cancellation, contention, stale error
+suppression and existing route/cache tests. No actual Redis/Neo4j or source DB use.
+Run this expected-under-five-minute focused gate directly; no user handoff.

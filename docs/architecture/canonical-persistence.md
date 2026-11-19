@@ -893,3 +893,26 @@ instead of becoming a misleading remote-not-found response; the existing stats r
 therefore returns 500 for persistence failure. Authentication/account tables are not
 modified. This removes this consumer's DBInterface/ask_db dependency; their remaining
 callers and old runtime initialization still await A4. No historical migration.
+
+
+### FEN appearance snapshots (canonical version 11)
+
+The initializer owns the two histogram tables and two common-position tables,
+including required singleton rows and the bounded commonness ranking index.
+Cached FEN/example identities intentionally have no source FK: an interrupted
+refresh must leave the previous complete snapshot readable after source deletion.
+Native occurrence and unique move keys replace profile branches and lateral ID
+lookups. No request-time schema repair or compatibility table is introduced.
+
+Operations own guarded read-only snapshots and atomic replacement transactions;
+the concrete fen_appearances adapter owns SQL. Existing advisory locks, time limits,
+refresh debounce, ten-item keyset pagination, legal example checks and public
+payloads remain. Late failures update only their own unpublished attempt. Both
+worker timeout boundaries drain cancelled child operations before returning, using
+the accepted P1 cleanup mechanism. Redis cache namespaces distinguish canonical
+identities; actual Redis data and configuration are unchanged.
+
+Histogram and common-position snapshots remain independently refreshed caches.
+A changed source stamp invalidates pagination; readers retain stale snapshots and
+report their timestamp rather than scanning FENs synchronously. Missing initialized
+metadata is an error, not a successful empty dataset.

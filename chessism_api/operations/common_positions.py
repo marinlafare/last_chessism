@@ -7,10 +7,11 @@ import asyncio
 import logging
 
 import chess
-from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import storage_for
+from chessism_api.database.postgresql import fen_appearances as persistence
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from chessism_api.operations.common_position_descriptions import description_keys, load_descriptions, save_description
 from chessism_api.operations.pending_repetitions import needs_refresh
 
@@ -18,42 +19,16 @@ LOG = logging.getLogger(__name__)
 JOB_ID = "fen-commonness-summary-v1"
 LOCK_ID = 731_946_231
 
-# LATERAL LIMIT avoids duplicate legacy move rows multiplying appearances.
-MODAL_MOVE_SQL = """
-    SELECT a.n_move, a.move_color,
-           CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END AS san,
-           COUNT(*)::bigint AS label_occurrences, MIN(a.game_link) AS example_game_link
-    FROM game_fen_association a
-    JOIN LATERAL (
-        SELECT white_move, black_move FROM moves
-        WHERE link = a.game_link AND n_move = a.n_move ORDER BY id LIMIT 1
-    ) m ON TRUE
-    WHERE a.fen_id = (SELECT fen_id FROM fen WHERE fen = :fen)
-      AND a.n_move > 0 AND a.move_color IN ('white', 'black')
-      AND NULLIF(BTRIM(CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END), '') IS NOT NULL
-      AND CASE WHEN a.move_color = 'white' THEN m.white_move ELSE m.black_move END <> '--'
-    GROUP BY a.n_move, a.move_color, san
-    ORDER BY label_occurrences DESC, a.n_move, a.move_color, san
-    LIMIT 1
-"""
 
-
-def compact_modal_sql(layout):
-    # Use the numeric identity and native boolean, not the compatibility view.
-    # Otherwise the planner badly underestimates common FENs and serializes
-    # tens of thousands of LATERAL lookups. Compact moves have a unique PK.
-    return f"""
-        SELECT a.n_move, CASE WHEN a.is_white THEN 'white' ELSE 'black' END AS move_color,
-               CASE WHEN a.is_white THEN m.white_move ELSE m.black_move END AS san,
-               COUNT(*)::bigint AS label_occurrences, MIN(a.game_link) AS example_game_link
-        FROM {layout.table('game_fen_association')} a
-        JOIN {layout.table('moves')} m ON m.link = a.game_link AND m.n_move = a.n_move
-        WHERE a.fen_id = :fen_id AND a.n_move > 0 AND a.is_white IS NOT NULL
-          AND NULLIF(BTRIM(CASE WHEN a.is_white THEN m.white_move ELSE m.black_move END), '') IS NOT NULL
-          AND CASE WHEN a.is_white THEN m.white_move ELSE m.black_move END <> '--'
-        GROUP BY a.n_move, a.is_white, san
-        ORDER BY label_occurrences DESC, a.n_move, move_color, san LIMIT 1
-    """
+async def await_refresh(operation, *, timeout=540):
+    """Keep the worker alive until its timed/cancelled database work has closed."""
+    task = asyncio.create_task(operation)
+    try:
+        return await asyncio.wait_for(asyncio.shield(task), timeout=timeout)
+    finally:
+        if not task.done():
+            task.cancel()
+            await finish_analysis_cleanup(asyncio.gather(task, return_exceptions=True))
 
 
 def move_label(n_move, color, san):
@@ -86,16 +61,9 @@ def verified_example_line(rows, n_move, color, target_fen):
     return None
 
 
-async def get_common_positions(redis, source_updated_at, total_repeated=None):
-    async with AsyncDBSession() as session:
-        rows = (await session.execute(text("""
-            SELECT m.refreshed_at, m.source_updated_at, m.attempted_at, m.last_error,
-                   p.rank, p.fen, p.appearances, p.n_move, p.move_color, p.san,
-                   p.label_occurrences, p.example_line
-            FROM (SELECT 1 AS id) singleton
-            LEFT JOIN fen_commonness_summary m ON m.id = singleton.id
-            LEFT JOIN fen_commonness_position p ON TRUE ORDER BY p.rank
-        """))).mappings().all()
+async def get_common_positions(redis, source_updated_at, total_repeated=None, *, session_factory=None):
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        rows = await persistence.read_common(session)
     meta = dict(rows[0])
     error = meta.get("last_error")
     if needs_refresh(meta, source_updated_at):
@@ -122,18 +90,7 @@ async def get_common_positions(redis, source_updated_at, total_repeated=None):
 
 
 async def describe_positions(session, top, start_rank=1, *, redis=None, snapshot=None):
-    layout = storage_for(session)
-    compact = layout is not None and layout.compact
-    # Compact moves are unique on (link, n_move); their surrogate id no longer exists.
-    modal_sql = compact_modal_sql(layout) if compact else MODAL_MOVE_SQL
-    example_sql = """
-        SELECT n_move, white_move, black_move FROM moves
-        WHERE link = :link AND n_move <= :n_move ORDER BY n_move LIMIT 100
-    """ if compact else """
-        SELECT DISTINCT ON (n_move) n_move, white_move, black_move FROM moves
-        WHERE link = :link AND n_move <= :n_move ORDER BY n_move, id LIMIT 100
-    """
-    keys = description_keys(top, snapshot, layout)
+    keys = description_keys(top, snapshot)
     cached = await load_descriptions(redis, keys)
     positions = []
     for offset, position in enumerate(top):
@@ -145,13 +102,11 @@ async def describe_positions(session, top, start_rank=1, *, redis=None, snapshot
             row.update(cached[offset])
             positions.append(row)
             continue
-        params = {"fen_id": position["fen_id"]} if compact else {"fen": position["fen"]}
-        modal = (await session.execute(text(modal_sql), params)).mappings().first()
+        modal = await persistence.modal_move(session, position['fen_id'])
         if modal:
             row.update(dict(modal))
             if row["n_move"] <= 100:
-                moves = (await session.execute(text(example_sql),
-                    {"link": row["example_game_link"], "n_move": row["n_move"]})).mappings().all()
+                moves = await persistence.example_moves(session, row['example_game_link'], row['n_move'])
                 row["example_line"] = verified_example_line(moves, row["n_move"], row["move_color"], row["fen"])
         await save_description(redis, keys[offset], row)
         positions.append(row)
@@ -159,56 +114,35 @@ async def describe_positions(session, top, start_rank=1, *, redis=None, snapshot
 
 
 async def rebuild_positions(session, redis=None):
-    source = (await session.execute(text("SELECT refreshed_at FROM database_summary WHERE id = 1"))).scalar()
-    top = (await session.execute(text("""
-        SELECT fen, fen_id, n_games AS appearances FROM fen
-        WHERE n_games > 1 ORDER BY n_games DESC, fen LIMIT 10
-    """))).mappings().all()
+    source = await persistence.source_stamp(session)
+    top = await persistence.top_positions(session)
     positions = await describe_positions(session, top, redis=redis, snapshot=source.isoformat() if source else None)
-    # Publish identities, labels and freshness atomically; never expose a partial ten.
-    await session.execute(text("DELETE FROM fen_commonness_position"))
-    if positions:
-        await session.execute(text("""
-            INSERT INTO fen_commonness_position
-              (rank, fen, appearances, n_move, move_color, san, label_occurrences, example_game_link, example_line)
-            VALUES (:rank, :fen, :appearances, :n_move, :move_color, :san, :label_occurrences, :example_game_link, :example_line)
-        """), positions)
-    await session.execute(text("""
-        UPDATE fen_commonness_summary SET source_updated_at = :source,
-        refreshed_at = clock_timestamp(), last_error = NULL WHERE id = 1
-    """), {"source": source})
+    await persistence.replace_common(session, positions)
+    await persistence.publish_stamp(session, 'commonness', source)
 
 
-async def refresh_snapshot(redis=None):
-    async with AsyncDBSession() as session:
-        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-        await session.execute(text("SET LOCAL statement_timeout = '90s'"))
-        await session.execute(text("SET LOCAL lock_timeout = '5s'"))
-        await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 2"))
-        await session.execute(text("SET LOCAL jit = off"))
-        await session.execute(text("SET LOCAL plan_cache_mode = force_custom_plan"))
-        if not (await session.execute(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_ID})).scalar():
+async def refresh_snapshot(redis=None, *, session_factory=None):
+    async with write_transaction(session_factory or AsyncDBSession) as session:
+        await persistence.execute(session, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+        await persistence.read_limits(session)
+        if not await persistence.try_lock(session, LOCK_ID):
             return {"status": "already_refreshing"}
         await rebuild_positions(session, redis=redis)
-        await session.commit()
     return {"status": "complete"}
 
 
 async def run_commonness_refresh(ctx):
-    async with AsyncDBSession() as session:
-        await session.execute(text("""
-            INSERT INTO fen_commonness_summary (id, attempted_at) VALUES (1, clock_timestamp())
-            ON CONFLICT (id) DO UPDATE SET attempted_at = EXCLUDED.attempted_at
-        """))
-        await session.commit()
+    factory = ctx.get('session_factory') or AsyncDBSession
+    async with write_transaction(factory) as session:
+        attempt = await persistence.mark_attempt(session, 'commonness')
     try:
-        return await asyncio.wait_for(refresh_snapshot(ctx.get("redis")), timeout=540)
+        return await await_refresh(refresh_snapshot(ctx.get("redis"), session_factory=factory))
     except Exception:
         LOG.exception("Common-position refresh failed; retaining previous snapshot")
-        async with AsyncDBSession() as session:
-            await session.execute(text("""
-                UPDATE fen_commonness_summary
-                SET last_error = 'Position refresh failed; the previous snapshot is retained.' WHERE id = 1
-            """))
-            await session.commit()
+        try:
+            async with write_transaction(factory) as session:
+                await persistence.mark_failure(session, 'commonness', attempt,
+                    'Position refresh failed; the previous snapshot is retained.')
+        except Exception:
+            LOG.exception('Could not record common-position failure; preserving the refresh error')
         raise

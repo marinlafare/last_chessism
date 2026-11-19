@@ -7,9 +7,10 @@ identifies the snapshot; concurrent ingestion is picked up on a later refresh.
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
+from chessism_api.database.postgresql import fen_appearances as persistence
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 
 LOG = logging.getLogger(__name__)
 REFRESH_SECONDS = 300
@@ -28,19 +29,10 @@ def needs_refresh(meta, source_updated_at, now=None):
             or meta.get("source_updated_at") != source_updated_at)
 
 
-async def get_fen_appearances(redis):
+async def get_fen_appearances(redis, *, session_factory=None):
     # One statement so bin replacement and its timestamp are always consistent.
-    async with AsyncDBSession() as session:
-        rows = (await session.execute(text("""
-            SELECT m.refreshed_at, m.source_updated_at, m.attempted_at, m.last_error,
-                   d.refreshed_at AS current_source_at,
-                   b.appearances, b.total_fens, b.unscored_fens
-            FROM (SELECT 1 AS id) singleton
-            LEFT JOIN fen_appearance_summary m ON m.id = singleton.id
-            LEFT JOIN database_summary d ON d.id = singleton.id
-            LEFT JOIN fen_appearance_bin b ON TRUE
-            ORDER BY b.appearances
-        """))).mappings().all()
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        rows = await persistence.read_bins(session)
     meta = dict(rows[0])
     refresh_error = meta.get("last_error")
     if needs_refresh(meta, meta.get("current_source_at")):
@@ -53,7 +45,7 @@ async def get_fen_appearances(redis):
     refreshed_at = meta.get("refreshed_at")
     from chessism_api.operations.common_positions import get_common_positions
     commonness = await get_common_positions(redis, meta.get("current_source_at"), total_repeated=sum(
-        int(row["total_fens"]) for row in rows if row["appearances"] is not None and row["appearances"] > 1))
+        int(row["total_fens"]) for row in rows if row["appearances"] is not None and row["appearances"] > 1), session_factory=session_factory)
     return {
         "definition": "all_fens",
         "refreshed_at": refreshed_at.isoformat() if refreshed_at else None,
@@ -66,9 +58,9 @@ async def get_fen_appearances(redis):
     }
 
 
-async def get_pending_repetitions(redis):
+async def get_pending_repetitions(redis, *, session_factory=None):
     """Keep the existing endpoint compatible, backed by the same snapshot."""
-    payload = await get_fen_appearances(redis)
+    payload = await get_fen_appearances(redis, session_factory=session_factory)
     return {**payload, "definition": "score_is_null", "rows": [
         {"repetitions": row["appearances"], "fen_count": row["unscored_fens"]}
         for row in payload["rows"] if row["unscored_fens"] > 0
@@ -76,47 +68,25 @@ async def get_pending_repetitions(redis):
 
 
 async def run_pending_repetition_refresh(ctx):
-    async with AsyncDBSession() as session:
-        await session.execute(text("""
-            INSERT INTO fen_appearance_summary (id, attempted_at)
-            VALUES (1, clock_timestamp()) ON CONFLICT (id)
-            DO UPDATE SET attempted_at = EXCLUDED.attempted_at
-        """))
-        await session.commit()
+    factory = ctx.get('session_factory') or AsyncDBSession
+    async with write_transaction(factory) as session:
+        attempt = await persistence.mark_attempt(session, 'appearance')
     try:
-        async with AsyncDBSession() as session:
-            # A consistent snapshot, and atomic publication of bins + metadata.
-            await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-            await session.execute(text("SET LOCAL statement_timeout = '180s'"))
-            await session.execute(text("SET LOCAL lock_timeout = '5s'"))
-            await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 2"))
-            locked = (await session.execute(text(
-                "SELECT pg_try_advisory_xact_lock(:key)"), {"key": LOCK_ID})).scalar()
-            if not locked:
+        async with write_transaction(factory) as session:
+            await persistence.execute(session, 'SET TRANSACTION ISOLATION LEVEL REPEATABLE READ')
+            await persistence.read_limits(session, 180)
+            if not await persistence.try_lock(session, LOCK_ID):
                 return {"status": "already_refreshing"}
-            source = (await session.execute(text(
-                "SELECT refreshed_at FROM database_summary WHERE id = 1"))).scalar()
-            await session.execute(text("DELETE FROM fen_appearance_bin"))
-            await session.execute(text("""
-                INSERT INTO fen_appearance_bin (appearances, total_fens, unscored_fens)
-                SELECT n_games, COUNT(*)::bigint,
-                       COUNT(*) FILTER (WHERE score IS NULL)::bigint
-                FROM fen GROUP BY n_games
-            """))
-            await session.execute(text("""
-                UPDATE fen_appearance_summary
-                SET source_updated_at = :source, refreshed_at = clock_timestamp(), last_error = NULL
-                WHERE id = 1
-            """), {"source": source})
-            await session.commit()
+            source = await persistence.source_stamp(session)
+            await persistence.replace_bins(session)
+            await persistence.publish_stamp(session, 'appearance', source)
     except Exception:
         LOG.exception("FEN appearance refresh failed; retaining previous snapshot")
-        async with AsyncDBSession() as session:
-            await session.execute(text("""
-                UPDATE fen_appearance_summary
-                SET last_error = 'Summary refresh failed; the previous snapshot is retained.'
-                WHERE id = 1
-            """))
-            await session.commit()
+        try:
+            async with write_transaction(factory) as session:
+                await persistence.mark_failure(session, 'appearance', attempt,
+                    'Summary refresh failed; the previous snapshot is retained.')
+        except Exception:
+            LOG.exception('Could not record histogram failure; preserving the refresh error')
         raise
     return {"status": "complete"}

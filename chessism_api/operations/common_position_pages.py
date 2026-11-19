@@ -4,17 +4,17 @@ Later pages expire from Redis after an hour. Their cursor carries the source
 snapshot plus the last count/FEN, so ties paginate deterministically. Changed
 source data requires starting again instead of silently mixing rankings.
 """
-import asyncio
 import base64
 import hashlib
 import json
 import logging
 from datetime import datetime, timezone
 
-from sqlalchemy import text
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.operations.common_positions import describe_positions, move_label
+from chessism_api.database.postgresql import fen_appearances as persistence
+from chessism_api.database.postgresql.transactions import read_transaction
+from chessism_api.operations.common_positions import await_refresh, describe_positions, move_label
 
 LOG = logging.getLogger(__name__)
 CACHE_SECONDS = 3600
@@ -48,7 +48,7 @@ def parse_cursor(cursor):
 
 
 def cache_key(cursor):
-    return "fen-commonness-page-v1:" + hashlib.sha256(cursor.encode()).hexdigest()
+    return "fen-commonness-page-v2:" + hashlib.sha256(cursor.encode()).hexdigest()
 
 
 def changed_payload():
@@ -56,13 +56,13 @@ def changed_payload():
 
 
 async def current_snapshot(session):
-    stamp = (await session.execute(text("SELECT refreshed_at FROM database_summary WHERE id = 1"))).scalar()
+    stamp = await persistence.source_stamp(session)
     return stamp.isoformat() if stamp else None
 
 
-async def get_common_position_page(redis, cursor, retry=False):
+async def get_common_position_page(redis, cursor, retry=False, *, session_factory=None):
     after = parse_cursor(cursor)
-    async with AsyncDBSession() as session:
+    async with read_transaction(session_factory or AsyncDBSession) as session:
         if await current_snapshot(session) != after["snapshot"]:
             return changed_payload()
     key = cache_key(cursor)
@@ -77,25 +77,13 @@ async def get_common_position_page(redis, cursor, retry=False):
     return {"status": "pending", "start_rank": after["rank"] + 1, "rows": []}
 
 
-async def build_page(cursor, redis=None):
+async def build_page(cursor, redis=None, *, session_factory=None):
     after = parse_cursor(cursor)
-    async with AsyncDBSession() as session:
-        await session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
-        await session.execute(text("SET LOCAL statement_timeout = '90s'"))
-        await session.execute(text("SET LOCAL lock_timeout = '5s'"))
-        await session.execute(text("SET LOCAL max_parallel_workers_per_gather = 2"))
-        await session.execute(text("SET LOCAL jit = off"))
-        # Common and rare FENs need different plans even after prepared queries
-        # have been reused; do not let the generic estimate serialize hot FENs.
-        await session.execute(text("SET LOCAL plan_cache_mode = force_custom_plan"))
+    async with read_transaction(session_factory or AsyncDBSession) as session:
+        await persistence.read_limits(session)
         if await current_snapshot(session) != after["snapshot"]:
             return changed_payload()
-        rows = (await session.execute(text("""
-            SELECT fen, fen_id, n_games AS appearances FROM fen
-            WHERE n_games > 1 AND n_games <= :appearances
-              AND (n_games < :appearances OR (n_games = :appearances AND fen > :fen))
-            ORDER BY n_games DESC, fen LIMIT 11
-        """), {"appearances": after["appearances"], "fen": after["fen"]})).mappings().all()
+        rows = await persistence.top_positions(session, after)
         described = await describe_positions(session, rows[:10], after["rank"] + 1,
                                               redis=redis, snapshot=after["snapshot"])
     output = [{"rank": row["rank"], "fen": row["fen"], "appearances": row["appearances"],
@@ -111,7 +99,7 @@ async def run_commonness_page_refresh(ctx, cursor):
     parse_cursor(cursor)
     key = cache_key(cursor)
     try:
-        payload = await asyncio.wait_for(build_page(cursor, redis=ctx["redis"]), timeout=540)
+        payload = await await_refresh(build_page(cursor, redis=ctx["redis"], session_factory=ctx.get("session_factory")))
         await ctx["redis"].set(key, json.dumps(payload), ex=CACHE_SECONDS)
     except Exception:
         LOG.exception("Common-position page refresh failed")

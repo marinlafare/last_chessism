@@ -2080,3 +2080,38 @@ User process policy supersedes earlier handoff rule: run checks expected under f
 minutes directly. Only supply monitor.py and return control for longer processes.
 This focused gate took 25 seconds; future comparable gates will run directly.
 Original DB/checkpoint/services unchanged. Stage A remains incomplete/unaccepted.
+
+### Canonical FEN appearance snapshots — started 2026-11-18
+
+af6b7ca is clean and verified. Next independent required consumers are the all-FEN/
+unscored appearance histograms and common-position cache/pages. Native move keys
+remove duplicate legacy lookup logic. Initialize required cache tables explicitly,
+preserve prior snapshots on failure/cancellation, and guard late failure metadata.
+No feature or public payload removed. Verification will run directly under the new
+five-minute policy. Original DB/checkpoint and live services remain untouched.
+
+The user explicitly approved the upcoming dataset-export contract changes:
+replace player_game_id with the canonical (game_id,is_white) key; advertise
+elapsed_seconds as float64 and joined as int64. No repository caller selects the
+removed ID. Approval applies to the following export conversion; the current FEN
+cache scope is unchanged. No further permission is needed for these three changes.
+
+Prepared 47 schema/PostgreSQL + 32 existing workflow + 68 P1 = 147 checks.
+All 14 new cache integration cases included; no failures/errors/skips allowed.
+Python syntax and protected baseline match; isolated gate runs directly.
+Evidence: /tmp/chessism-canonical-a3-appearances-20261118-01
+
+Initial cache gate: all 147 passed in 21.64 seconds; all five containers removed.
+Evidence review found unawaited coroutine warnings in two changed unit fixtures: their
+attempt-marker result must be a synchronous SQLAlchemy result, not default AsyncMock.
+Corrected those result mocks without changing assertions or application code. Run only
+the 32 affected workflow checks; retain unchanged PostgreSQL/P1 evidence.
+
+Canonical FEN cache gate complete: 47 foundation + 32 workflow + 68 P1 passed,
+zero failures/errors/skips. The 32-check mock correction rerun passed in 1.93 seconds,
+without coroutine warnings; application/PostgreSQL/P1 inputs remain unchanged.
+All six disposable containers independently confirmed removed across both runs.
+Evidence archived and byte-checked at docs/architecture/evidence/stage-a-appearances-2026-11-18.tar.gz.
+No source database, original services, recovery checkpoint or production access.
+Local checkpoint follows. Stage A remains incomplete/unaccepted. Next: approved
+canonical dataset exports, preserving credential and job ownership boundaries.

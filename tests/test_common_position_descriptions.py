@@ -1,29 +1,28 @@
 import json
 import unittest
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 from test_common_positions import E4, NOW, result
 from chessism_api.operations import common_positions as positions
 from chessism_api.operations import common_position_descriptions as cache
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 TOP = [{'fen': E4, 'fen_id': 123, 'appearances': 42}]
-LAYOUT = RelationalStorage('public', 'chessism_archive', 'chessism_reads', 'relational_v3')
 MODAL = {'n_move': 1, 'move_color': 'white', 'san': 'e4', 'label_occurrences': 40, 'example_game_link': 7}
 
 
 class DescriptionCacheTests(unittest.IsolatedAsyncioTestCase):
-    def test_keys_exclude_page_rank_but_include_source_count_and_schema(self):
-        key = cache.description_keys(TOP, NOW.isoformat(), LAYOUT)
-        self.assertEqual(key, cache.description_keys([{**TOP[0], 'rank': 71}], NOW.isoformat(), LAYOUT))
-        self.assertNotEqual(key, cache.description_keys(TOP, 'new-snapshot', LAYOUT))
-        self.assertNotEqual(key, cache.description_keys([{**TOP[0], 'appearances': 43}], NOW.isoformat(), LAYOUT))
-        self.assertNotEqual(key, cache.description_keys(TOP, NOW.isoformat(), None))
-        self.assertEqual(cache.description_keys(TOP, None, LAYOUT), [None])
+    def test_keys_exclude_page_rank_but_include_source_count_and_identity(self):
+        key = cache.description_keys(TOP, NOW.isoformat())
+        self.assertEqual(key, cache.description_keys([{**TOP[0], 'rank': 71}], NOW.isoformat()))
+        self.assertNotEqual(key, cache.description_keys(TOP, 'new-snapshot'))
+        self.assertNotEqual(key, cache.description_keys([{**TOP[0], 'appearances': 43}], NOW.isoformat()))
+        self.assertNotEqual(key, cache.description_keys([{**TOP[0], 'fen_id': 124}], NOW.isoformat()))
+        self.assertTrue(key[0].startswith('fen-commonness-description-v2:'))
+        self.assertEqual(cache.description_keys(TOP, None), [None])
 
     async def test_completed_descriptions_survive_page_failure_without_requerying(self):
         session, redis = AsyncMock(), AsyncMock()
-        session.info = {SESSION_KEY: LAYOUT}
+        session.in_transaction = MagicMock(return_value=True)
         stored = {}
         async def mget(keys): return [stored.get(key) for key in keys]
         async def save(key, value, **kwargs): stored[key] = value

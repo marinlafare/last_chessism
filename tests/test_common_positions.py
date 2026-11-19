@@ -6,31 +6,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 os.environ.setdefault("DATABASE_URL", "postgresql+asyncpg://test:test@localhost/test")
 import chess
 from chessism_api.operations import common_positions as cache
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
 
 NOW = datetime(2026, 10, 11, tzinfo=timezone.utc)
 E4 = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq -"
 
 
 def context(session):
-    ctx = MagicMock()
-    ctx.__aenter__ = AsyncMock(return_value=session)
-    ctx.__aexit__ = AsyncMock(return_value=False)
-    return ctx
+    session.in_transaction = MagicMock(return_value=True)
+    return session
 
 
 def result(rows=(), scalar=None):
     mock = MagicMock()
     mock.scalar.return_value = scalar
+    mock.scalar_one.return_value = scalar
+    mock.rowcount = 1
     mock.mappings.return_value.all.return_value = rows
     mock.mappings.return_value.first.return_value = rows[0] if rows else None
     return mock
 
 
 class CommonPositionsTests(unittest.IsolatedAsyncioTestCase):
-    async def test_compact_labels_and_example_do_not_reference_removed_move_id(self):
+    async def test_native_labels_and_example_do_not_reference_removed_move_id(self):
         session = AsyncMock()
-        session.info = {SESSION_KEY: RelationalStorage('public', 'chessism_archive', 'chessism_reads', 'relational_v3')}
+        context(session)
         session.execute.side_effect = [
             result([{'n_move': 1, 'move_color': 'white', 'san': 'e4', 'label_occurrences': 40, 'example_game_link': 7}]),
             result([{'n_move': 1, 'white_move': 'e4', 'black_move': 'e5'}]),
@@ -44,7 +43,7 @@ class CommonPositionsTests(unittest.IsolatedAsyncioTestCase):
         sql = str(session.execute.call_args_list[0].args[0])
         self.assertNotIn('LATERAL', sql)
         self.assertIn('a.fen_id = :fen_id', sql)
-        self.assertIn('a.is_white IS NOT NULL', sql)
+        self.assertIn('GROUP BY a.n_move, a.is_white, san', sql)
         self.assertIn('ORDER BY label_occurrences DESC, a.n_move, move_color, san', sql)
         self.assertEqual(session.execute.call_args_list[0].args[1], {'fen_id': 123})
 
@@ -100,23 +99,24 @@ class CommonPositionsTests(unittest.IsolatedAsyncioTestCase):
         redis.enqueue_job.assert_not_awaited()
 
     async def test_rebuild_publishes_labels_only_after_all_top_positions_are_ready(self):
-        session = AsyncMock()
-        session.execute.side_effect = [result(scalar=NOW), result([{"fen": E4, "appearances": 42}]),
+        session = context(AsyncMock())
+        session.execute.side_effect = [result(scalar=NOW), result([{"fen": E4, "fen_id": 123, "appearances": 42}]),
             result([{"n_move": 1, "move_color": "white", "san": "e4", "label_occurrences": 40, "example_game_link": 7}]),
             result([{"n_move": 1, "white_move": "e4", "black_move": "e5"}]), result(), result(), result()]
         await cache.rebuild_positions(session)
         calls = session.execute.call_args_list
         self.assertIn("ORDER BY n_games DESC, fen LIMIT 10", str(calls[1].args[0]))
-        self.assertIn("GROUP BY a.n_move, a.move_color, san", str(calls[2].args[0]))
+        self.assertIn("GROUP BY a.n_move, a.is_white, san", str(calls[2].args[0]))
         self.assertIn("ORDER BY label_occurrences DESC", str(calls[2].args[0]))
-        self.assertIn("ORDER BY id LIMIT 1", str(calls[2].args[0]))
-        self.assertIn("DELETE FROM fen_commonness_position", str(calls[4].args[0]))
+        self.assertNotIn("ORDER BY id", str(calls[2].args[0]))
+        self.assertIn("DELETE FROM public.fen_commonness_position", str(calls[4].args[0]))
         self.assertEqual(calls[5].args[1][0]["example_line"], "1. e4")
         self.assertIn("last_error = NULL", str(calls[-1].args[0]))
 
     async def test_failed_or_contending_refresh_never_publishes_partial_snapshot(self):
         for locked in (True, False):
             mark, refresh, failed = AsyncMock(), AsyncMock(), AsyncMock()
+            mark.execute.return_value = result(scalar=NOW)
             refresh.execute.return_value = result(scalar=locked)
             with patch.object(cache, "AsyncDBSession", side_effect=[context(mark), context(refresh), context(failed)]), \
                     patch.object(cache, "rebuild_positions", AsyncMock(side_effect=RuntimeError("failed"))) as rebuild:
@@ -127,7 +127,12 @@ class CommonPositionsTests(unittest.IsolatedAsyncioTestCase):
                 else:
                     self.assertEqual(await cache.run_commonness_refresh({}), {"status": "already_refreshing"})
                     rebuild.assert_not_awaited()
-            refresh.commit.assert_not_awaited()
+            if locked:
+                refresh.commit.assert_not_awaited()
+                refresh.rollback.assert_awaited_once()
+            else:
+                refresh.commit.assert_awaited_once()
+            refresh.close.assert_awaited_once()
 
 
 if __name__ == "__main__":
