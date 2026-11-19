@@ -6,6 +6,7 @@ from unittest.mock import patch
 import pyarrow.parquet as pq
 from pydantic import ValidationError
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from chessism_api.operations.exports.analytical_preview import preview
 from chessism_api.operations.exports.analytical_spec import (
@@ -63,11 +64,14 @@ class MatrixSelectionDatabaseTests(AnalyticalDatabaseFixture):
         async with self.engine.begin() as conn:
             await conn.execute(text(f'DELETE FROM {SCHEMA}.game'))
             await conn.execute(text(f'''INSERT INTO {SCHEMA}.game
-                (link,played_at,white_player_id,black_player_id,mode_id,white_result,black_result)
-                VALUES (101,'2020-01-01Z',2,1,1,1,0), (105,'2021-01-01Z',1,2,1,0,1),
-                    (102,'2022-01-01Z',2,1,1,0,1), (103,'2022-02-01Z',1,2,1,0.5,0.5),
-                    (104,'2023-01-01Z',2,1,1,1,0), (100,'2024-01-01Z',2,1,1,NULL,NULL),
-                    (106,NULL,2,1,1,1,0)'''))
+                (link,played_at,white_player_id,black_player_id,mode_id,white_result,black_result,
+                 white_elo,black_elo,white_str_result,black_str_result,time_control,eco,time_elapsed,n_moves,rules)
+                SELECT link,played_at::timestamptz,w,b,1,wr,br,1500,1500,'recorded','recorded','600','no_eco',0,0,'chess'
+                FROM (VALUES (101,'2020-01-01Z',2,1,1.,0.), (105,'2021-01-01Z',1,2,0.,1.),
+                    (102,'2022-01-01Z',2,1,0.,1.), (103,'2022-02-01Z',1,2,.5,.5),
+                    (104,'2023-01-01Z',2,1,1.,0.), (100,'2024-01-01Z',2,1,0.,0.),
+                    (106,'2019-01-01Z',2,1,1.,0.)) v(link,played_at,w,b,wr,br)'''))
+
 
     def design(self, **changes):
         return MoveMatrixSpec(**{'player':'hikaru', 'game_mode':'blitz', 'max_games':5,
@@ -80,7 +84,7 @@ class MatrixSelectionDatabaseTests(AnalyticalDatabaseFixture):
             status, directory = await self.run_spec(self.design())
         self.assertEqual(status.status, 'complete', status.error)
         self.assertEqual([row[0] for row in result['rows']], [105,102,103,104,100])
-        self.assertEqual(result['selection']['year_search_order'], [2022,2023,2024,2021,2020])
+        self.assertEqual(result['selection']['year_search_order'], [2022,2023,2024,2021,2020,2019])
         self.assertFalse(result['selection']['insufficient_games'])
         self.assertIsNone(result['selection']['available_games'])
         table = pq.read_table(directory/'data.parquet')
@@ -90,16 +94,16 @@ class MatrixSelectionDatabaseTests(AnalyticalDatabaseFixture):
         self.assertEqual(manifest['selection'], result['selection'])
         self.assertEqual(manifest['columns'], result['columns'])
 
-    async def test_history_exhaustion_reports_shortfall_and_missing_dates_last(self):
+    async def test_history_exhaustion_reports_shortfall_with_canonical_dates(self):
         await self.years_fixture()
         design = self.design().model_copy(update={'max_games': 10})
         result = await preview(AnalyticalPreviewSpec(design=design))
-        self.assertEqual([row[0] for row in result['rows']], [101,105,102,103,104,100,106])
-        self.assertIsNone(result['rows'][-1][3])
+        self.assertEqual([row[0] for row in result['rows']], [106,101,105,102,103,104,100])
+        self.assertEqual(result['rows'][-1][3], '2024-01-01T00:00:00+00:00')
         self.assertTrue(result['selection']['insufficient_games'])
         self.assertEqual(result['selection']['missing_games'], 3)
         self.assertEqual(result['selection']['available_games'], 7)
-        self.assertEqual(result['selection']['undated_games'], 1)
+        self.assertEqual(result['selection']['undated_games'], 0)
         sample = await preview(AnalyticalPreviewSpec(design=design, preview_mode='sample', preview_rows=1))
         self.assertEqual(sample['row_count'], 1)
         self.assertEqual(sample['selection']['sample_game_limit'], 1)
@@ -127,3 +131,9 @@ class MatrixSelectionDatabaseTests(AnalyticalDatabaseFixture):
         self.assertIsNone(result['selection']['start_year'])
         self.assertEqual([col['name'] for col in result['columns']],
                          ['game_id','player_name','color','played_at','move_1','move_2'])
+
+    async def test_canonical_source_rejects_missing_dates_and_results(self):
+        for column in ('played_at','white_result','black_result'):
+            with self.assertRaises(IntegrityError):
+                async with self.engine.begin() as conn:
+                    await conn.execute(text(f'UPDATE public.game SET {column}=NULL WHERE link=10'))

@@ -1,6 +1,7 @@
 """Separate unprivileged connection; caller SQL never reaches the metadata engine."""
 from contextlib import asynccontextmanager
 import json
+import logging
 import os
 from pathlib import Path
 
@@ -9,6 +10,9 @@ import asyncpg
 from .analytical_admin import READER, DEFAULT_CREDENTIAL
 from .analytical_spec import MAX_ANALYTICAL_COLUMNS
 from .sql_policy import SCHEMA
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+
+LOG = logging.getLogger(__name__)
 
 
 class AnalyticalError(Exception):
@@ -38,6 +42,8 @@ async def connection():
     conn = await asyncpg.connect(**credential, timeout=10, command_timeout=60,
         server_settings={'search_path': f'pg_catalog,{SCHEMA}', 'default_transaction_read_only':'on',
                          'statement_timeout':'60000', 'lock_timeout':'2000', 'application_name':'chessism-analytical-export'})
+    transaction = conn.transaction(isolation='repeatable_read', readonly=True)
+    failed = False
     try:
         unsafe = await conn.fetchval('''SELECT rolsuper OR rolcreatedb OR rolcreaterole OR rolinherit OR rolreplication OR rolbypassrls
             OR EXISTS(SELECT 1 FROM pg_auth_members WHERE member=r.oid)
@@ -50,11 +56,26 @@ async def connection():
             FROM pg_roles r WHERE rolname=current_user''', SCHEMA)
         if unsafe:
             raise AnalyticalError('UNSAFE_QUERY_ROLE', 'Reader privileges no longer match the approved read-only boundary.')
-        async with conn.transaction(isolation='repeatable_read', readonly=True):
-            await conn.execute("SET LOCAL TIME ZONE 'UTC'")
-            yield conn
+        await transaction.start()
+        await conn.execute("SET LOCAL TIME ZONE 'UTC'")
+        yield conn
+    except BaseException:
+        failed = True
+        raise
     finally:
-        await conn.close(timeout=5)
+        async def close_reader():
+            try:
+                if conn.is_in_transaction():
+                    await transaction.rollback()
+            finally:
+                await conn.close(timeout=5)
+        try:
+            await finish_analysis_cleanup(close_reader())
+        except BaseException:
+            if not failed:
+                raise
+            LOG.exception('Analytical reader cleanup failed; preserving the query error')
+
 
 
 def output_schema(attributes):

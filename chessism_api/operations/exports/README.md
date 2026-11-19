@@ -184,8 +184,9 @@ download does not delete it, and downloads can be retried before expiry.
 
 ## Installation and credentials (local administrator only)
 
-Build the API image, then explicitly install only the two additive metadata
-tables; no chess table migration or full-database copy is involved:
+Initialize an empty database with the canonical initializer first; it owns both
+export metadata tables. The `install` command validates that schema and performs
+no table creation or repair. Credential/reader setup remains explicit:
 
 ```sh
 docker compose build chessism-api
@@ -227,6 +228,7 @@ Large files still require enough RAM when loaded into a whole DataFrame. Use
 `pyarrow.parquet.ParquetFile(...).iter_batches()` for bounded client processing.
 No GPU, Google Cloud job, or cloud billing service is involved in this API.
 
-Tests: `python -m unittest tests.test_exports`; isolated PostgreSQL lifecycle
-tests in `tests/test_exports_database.py` require `EXPORT_TEST_DATABASE=1` and
-a disposable database named exactly `chessism_export_test`.
+Tests: `python -m unittest tests.test_exports`; canonical PostgreSQL lifecycle
+and analytical tests require `EXPORT_TEST_DATABASE=1` plus the guarded
+`CHESSISM_CANONICAL_TEST_SOCKET` of a disposable server. Each case creates and
+removes only its own randomly named database; application database URLs are unused.

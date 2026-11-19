@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from .models import ExportClient
+from chessism_api.database.postgresql.transactions import read_transaction
 
 bearer = HTTPBearer(auto_error=False, scheme_name='ExportToken')
 
@@ -19,7 +20,7 @@ def token_hash(token):
 async def require_client(credentials: HTTPAuthorizationCredentials | None = Depends(bearer)):
     if not credentials or not credentials.credentials.startswith('chx_') or len(credentials.credentials) > 128:
         raise HTTPException(401, 'An export integration token is required.', headers={'WWW-Authenticate': 'Bearer'})
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         client = await session.scalar(select(ExportClient).where(
             ExportClient.token_hash == token_hash(credentials.credentials),
             ExportClient.revoked_at.is_(None), ExportClient.expires_at > datetime.now(timezone.utc)))

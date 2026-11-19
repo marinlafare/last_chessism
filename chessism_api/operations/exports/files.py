@@ -56,3 +56,15 @@ def sha256(path):
         for chunk in iter(lambda: source.read(1024 * 1024), b''):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+async def disk_work(function, *args):
+    """Finish an in-flight file operation before cancellation permits cleanup."""
+    import asyncio
+    from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+    task = asyncio.create_task(asyncio.to_thread(function, *args))
+    try:
+        return await asyncio.shield(task)
+    except asyncio.CancelledError:
+        await finish_analysis_cleanup(task)
+        raise

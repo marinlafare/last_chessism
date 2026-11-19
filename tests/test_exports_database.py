@@ -1,7 +1,6 @@
-"""Destructive only inside an explicitly named disposable test database.
+"""Canonical lifecycle tests on freshly created databases in an isolated test server.
 
-Run with EXPORT_TEST_DATABASE=1 and DATABASE_URL ending /chessism_export_test.
-Never point this suite at the application database.
+Requires EXPORT_TEST_DATABASE=1 and CHESSISM_CANONICAL_TEST_SOCKET.
 """
 import asyncio
 from datetime import timedelta
@@ -17,77 +16,56 @@ import uuid
 import httpx
 from fastapi import FastAPI, HTTPException
 import pyarrow.parquet as pq
-from sqlalchemy import select, text
+from sqlalchemy import URL, select, text
 from sqlalchemy.ext.asyncio import create_async_engine
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
-from chessism_api.database.postgresql.relational_storage import RelationalStorage, SESSION_KEY
+from chessism_api.database.postgresql import canonical
+from tests.canonical_postgres_case import CanonicalDatabaseTestCase
 from chessism_api.operations.exports import config, files, jobs, service
 from chessism_api.operations.exports.auth import token_hash
 from chessism_api.operations.exports.catalog import SOURCES, TABLES
-from chessism_api.operations.exports.models import Base, ExportClient, ExportJob
+from chessism_api.operations.exports.models import ExportClient, ExportJob
 from chessism_api.operations.exports.query import ExportSpec, compile_query
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.routers.exports import router
 
-SCHEMA = 'export_test_source'
-DDL = [
-    f'CREATE SCHEMA {SCHEMA}',
-    f'''CREATE TABLE {SCHEMA}.player(id bigint PRIMARY KEY,player_name text,name text,title text,
-        joined integer,country text,verified boolean,deleted_at timestamptz)''',
-    f'CREATE TABLE {SCHEMA}.game_mode(id smallint PRIMARY KEY,name text)',
-    f'''CREATE TABLE {SCHEMA}.game(link bigint PRIMARY KEY,played_at timestamptz,white_player_id bigint,
-        black_player_id bigint,white_elo integer,black_elo integer,avg_elo double precision,
-        white_result double precision,black_result double precision,white_str_result text,black_str_result text,
-        mode_id smallint,time_control text,eco text,n_moves integer,time_elapsed integer)''',
-    f'''CREATE TABLE {SCHEMA}.fen(fen_id bigint PRIMARY KEY,fen text,n_games bigint,score integer,
-        wdl_win smallint,wdl_draw smallint,wdl_loss smallint,piece_count smallint,analysis_source text,
-        analyzed_at timestamptz,tablebase_wdl smallint,tablebase_dtz integer)''',
-    f'''CREATE TABLE {SCHEMA}.moves(link bigint,n_move integer,white_move text,black_move text,
-        white_reaction_time double precision,black_reaction_time double precision,
-        white_time_left double precision,black_time_left double precision,PRIMARY KEY(link,n_move))''',
-    f'''CREATE TABLE {SCHEMA}.game_fen_association(game_link bigint,n_move integer,is_white boolean,
-        fen_id bigint,UNIQUE(game_link,n_move,is_white))''',
-    f'''CREATE TABLE {SCHEMA}.game_player(id bigint PRIMARY KEY,game_link bigint,player_id bigint,is_white boolean)''',
-    f"INSERT INTO {SCHEMA}.player(id,player_name,verified,joined) VALUES(1,'alice',NULL,0),(2,'hikaru',TRUE,1),(3,'bob',FALSE,2)",
-    f"INSERT INTO {SCHEMA}.game_mode VALUES(1,'blitz')",
-    f'''INSERT INTO {SCHEMA}.game(link,played_at,white_player_id,black_player_id,mode_id,n_moves,time_elapsed,white_elo)
-        VALUES(10,'2026-01-01T00:00:00.123456Z',1,2,1,1,300,2000),
-              (11,'2026-01-01T00:00:00.123456Z',2,1,1,1,300,2100),
-              (9007199254740993,'2025-01-01T00:00:00Z',2,3,1,1,300,2200)''',
-    f"INSERT INTO {SCHEMA}.fen(fen_id,fen,n_games,score) VALUES(1,'position-one',2,NULL),(2,'position-two',1,-30)",
-    f"INSERT INTO {SCHEMA}.moves(link,n_move,white_move,black_move) VALUES(10,1,'e4','e5'),(11,1,'d4','--')",
-    f'INSERT INTO {SCHEMA}.game_fen_association VALUES(10,1,TRUE,1),(10,1,FALSE,2),(11,1,TRUE,1)',
-    f'INSERT INTO {SCHEMA}.game_player VALUES(1,10,1,TRUE),(2,10,2,FALSE),(3,11,2,TRUE),(4,11,1,FALSE)',
+SCHEMA = 'public'
+FIXTURE = [
+    "INSERT INTO player(id,player_name,verified,joined) OVERRIDING SYSTEM VALUE VALUES(1,'alice',NULL,0),(2,'hikaru',TRUE,1),(3,'bob',FALSE,2)",
+    "INSERT INTO game_mode(id,name) OVERRIDING SYSTEM VALUE VALUES(1,'blitz')",
+    """INSERT INTO game(link,played_at,white_player_id,black_player_id,mode_id,n_moves,time_elapsed,
+        white_elo,black_elo,white_result,black_result,white_str_result,black_str_result,time_control,eco,rules)
+        VALUES(10,'2026-01-01T00:00:00.123456Z',1,2,1,1,300,2000,2000,1,0,'win','resigned','600','no_eco','chess'),
+              (11,'2026-01-01T00:00:00.123456Z',2,1,1,1,300,2100,2100,0,1,'resigned','win','600','no_eco','chess'),
+              (9007199254740993,'2025-01-01T00:00:00Z',2,3,1,1,300,2200,2200,.5,.5,'agreed','agreed','600','no_eco','chess')""",
+    """INSERT INTO fen(fen_id,fen,n_games,score,analysis_source,analyzed_at) OVERRIDING SYSTEM VALUE
+        VALUES(1,'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq -',2,NULL,NULL,NULL),
+              (2,'rnbqkbnr/pppp1ppp/8/4p3/4P3/8/PPPP1PPP/RNBQKBNR w KQkq -',1,-30,'stockfish',now())""",
+    "INSERT INTO moves VALUES(10,1,'e4','e5',1,1,599,599),(11,1,'d4','--',1,0,599,0)",
+    'INSERT INTO game_fen_association VALUES(10,1,1,TRUE),(10,2,1,FALSE),(11,1,1,TRUE)',
 ]
 
 
 @unittest.skipUnless(os.environ.get('EXPORT_TEST_DATABASE') == '1', 'isolated database test only')
-class ExportDatabaseFixture(unittest.IsolatedAsyncioTestCase):
+class ExportDatabaseFixture(CanonicalDatabaseTestCase):
     async def asyncSetUp(self):
-        url=os.environ['DATABASE_URL']
-        if not url.endswith('/chessism_export_test'):
-            raise RuntimeError('Refusing any database other than chessism_export_test')
-        self.engine=create_async_engine(url)
-        async with self.engine.begin() as conn:
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.execute(text(f'DROP SCHEMA IF EXISTS {SCHEMA} CASCADE'))
-            await conn.run_sync(Base.metadata.create_all)
-            for statement in DDL:await conn.execute(text(statement))
+        await super().asyncSetUp()
+        await canonical.initialize(self.db)
+        self.engine=create_async_engine(URL.create('postgresql+asyncpg',username='test',database=self.name,
+            port=55432,query={'host':self.socket}))
+        self.addAsyncCleanup(self.engine.dispose)
+        for statement in FIXTURE:await self.db.execute(statement)
         self.old_bind=AsyncDBSession.kw.get('bind');self.old_info=AsyncDBSession.kw.get('info',{})
-        AsyncDBSession.configure(bind=self.engine,info={SESSION_KEY:RelationalStorage(SCHEMA,'unused_archive','unused_reads','relational_v3')})
-        self.directory=TemporaryDirectory()
+        AsyncDBSession.configure(bind=self.engine,info={})
+        self.addCleanup(AsyncDBSession.configure,bind=self.old_bind,info=self.old_info)
+        self.directory=TemporaryDirectory();self.addCleanup(self.directory.cleanup)
         self.patches=[patch.object(config,'ROOT',Path(self.directory.name)),patch.object(config,'FREE_FLOOR',0)]
-        for item in self.patches:item.start()
+        for item in self.patches:item.start();self.addCleanup(item.stop)
         self.client=ExportClient(id=uuid.uuid4().hex,name='test',token_hash=token_hash('chx_test-secret'),
             allowed_sources=list(SOURCES),max_rows=100000,expires_at=service.now()+timedelta(days=1))
         async with AsyncDBSession() as session:session.add(self.client);await session.commit()
         self.redis=AsyncMock()
-
-    async def asyncTearDown(self):
-        AsyncDBSession.configure(bind=self.old_bind,info=self.old_info)
-        for item in reversed(self.patches):item.stop()
-        self.directory.cleanup();await self.engine.dispose()
 
     async def submit(self, **kwargs):
         spec=ExportSpec(source='games',select=['game_id','played_at','white_player'],**kwargs)
@@ -96,7 +74,7 @@ class ExportDatabaseFixture(unittest.IsolatedAsyncioTestCase):
 
 class ExportDatabaseTests(ExportDatabaseFixture):
     async def test_all_sources_have_exact_row_semantics_and_no_unneeded_fanout(self):
-        expected={'games':3,'players':3,'positions':2,'game_positions':3,'moves':3,'player_games':4}
+        expected={'games':3,'players':3,'positions':2,'game_positions':3,'moves':3,'player_games':6}
         async with AsyncDBSession() as session:
             for name,source in SOURCES.items():
                 spec=ExportSpec(source=name,select=list(source.columns),limit=100)
@@ -131,7 +109,7 @@ class ExportDatabaseTests(ExportDatabaseFixture):
             table=pq.read_table(files.job_dir(identity)/'data.parquet')
             self.assertEqual(table['game_id'].to_pylist(),[10,11])
             self.assertEqual(table['played_at'].to_pylist()[0].microsecond,123456)
-            self.assertEqual(table['average_rating'].to_pylist(),[None,None])
+            self.assertEqual(table['average_rating'].to_pylist(),[2000.0,2100.0])
             other=ExportClient(id=uuid.uuid4().hex,name='other',token_hash=token_hash('chx_other'),
                 allowed_sources=['players'],max_rows=100000,expires_at=service.now()+timedelta(days=1))
             async with AsyncDBSession() as session:session.add(other);await session.commit()

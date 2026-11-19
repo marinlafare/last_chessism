@@ -1,5 +1,6 @@
 """Complete-score eligibility must precede game limits, identically for preview/save."""
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import unittest
 from unittest.mock import patch
@@ -22,6 +23,9 @@ from chessism_api.operations.exports.analytical_preview import preview
 from chessism_api.operations.exports.move_matrix import plan
 from chessism_api.redis_client import get_redis_pool
 from chessism_api.routers.exports import router
+
+
+FIXTURE_DATE = '2026-02-01T00:00:00+00:00'
 
 
 class CompleteScoreContractTests(unittest.TestCase):
@@ -66,14 +70,14 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
         await self.complete_fixture()
         async with self.engine.begin() as conn:
             # Game 12 has a perfect requested prefix, but unscored later Black move.
-            await conn.execute(text(f"INSERT INTO {SCHEMA}.moves(link,n_move,white_move,black_move) VALUES(12,3,'Bb5','a6')"))
-            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association VALUES(12,3,TRUE,4),(12,3,FALSE,1)'))
+            await conn.execute(text(f"INSERT INTO {SCHEMA}.moves VALUES(12,3,'Bb5','a6',1,1,599,599)"))
+            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association(game_link,n_move,is_white,fen_id) VALUES(12,3,TRUE,4),(12,3,FALSE,1)'))
             # Game 13 has a perfect Hikaru prefix but an unscored opponent move.
             await conn.execute(text(f'UPDATE {SCHEMA}.game_fen_association SET fen_id=1 WHERE game_link=13 AND is_white AND n_move=1'))
         spec=self.design(max_games=1)
         for mode in ('sample','design'):
             result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=1,preview_mode=mode))
-            self.assertEqual(result['rows'],[[14,'hikaru','white',None,0,20]])
+            self.assertEqual(result['rows'],[[14,'hikaru','white',FIXTURE_DATE,0,20]])
             self.assertEqual(result['selection']['complete_score_scope'],'whole_game')
             self.assertEqual(result['column_selection']['dropped_columns'],[])
         status,path=await self.run_spec(spec)
@@ -113,11 +117,11 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
     async def test_final_unplayed_black_move_is_not_a_missing_score(self):
         await self.complete_fixture()
         async with self.engine.begin() as conn:
-            await conn.execute(text(f"INSERT INTO {SCHEMA}.moves(link,n_move,white_move,black_move) VALUES(14,3,'Qh5','--')"))
-            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association VALUES(14,3,TRUE,4)'))
+            await conn.execute(text(f"INSERT INTO {SCHEMA}.moves VALUES(14,3,'Qh5','--',1,0,599,0)"))
+            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association(game_link,n_move,is_white,fen_id) VALUES(14,3,TRUE,4)'))
         spec=self.design(first_move=3,last_move=3,max_games=100)
         result=await preview(AnalyticalPreviewSpec(design=spec))
-        self.assertEqual(result['rows'],[[14,'hikaru','white',None,20]])
+        self.assertEqual(result['rows'],[[14,'hikaru','white',FIXTURE_DATE,20]])
         both=await preview(AnalyticalPreviewSpec(design=spec.model_copy(update={'players':'both'})))
         self.assertEqual(both['rows'],[])  # requested Black move 3 never happened
 
@@ -187,12 +191,18 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
         # First qualifying requested-player games are 12 and 13, not 10 and 11.
         async with self.engine.begin() as conn:
             statements=[
-                f"INSERT INTO {SCHEMA}.fen(fen_id,fen,score) VALUES(3,'zero',0),(4,'positive',20)",
-                f"INSERT INTO {SCHEMA}.game_mode VALUES(2,'rapid')",
-                f'''INSERT INTO {SCHEMA}.game(link,white_player_id,black_player_id,mode_id,n_moves) VALUES
+                f"""INSERT INTO {SCHEMA}.fen(fen_id,fen,score,analysis_source,analyzed_at) OVERRIDING SYSTEM VALUE
+                    VALUES(3,'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -',0,'stockfish',now()),
+                          (4,'rnbqkbnr/pppppppp/8/8/8/5N2/PPPPPPPP/RNBQKB1R b KQkq -',20,'stockfish',now())""",
+                f"INSERT INTO {SCHEMA}.game_mode OVERRIDING SYSTEM VALUE VALUES(2,'rapid')",
+                f'''INSERT INTO {SCHEMA}.game(link,white_player_id,black_player_id,mode_id,n_moves,
+                    played_at,white_elo,black_elo,white_result,black_result,white_str_result,black_str_result,time_control,eco,time_elapsed,rules)
+                    SELECT link,w,b,mode,moves,'2026-02-01Z'::timestamptz,1500,1500,1,0,'win','resigned','600','no_eco',0,'chess'
+                    FROM (VALUES
                     (12,2,1,1,2),(13,1,2,1,2),(14,2,3,1,2),(15,2,1,1,2),
-                    (16,2,1,1,2),(17,2,1,1,2),(18,2,1,1,3),(19,2,1,2,2),(20,1,3,1,2)''',
-                f'''INSERT INTO {SCHEMA}.moves(link,n_move,white_move,black_move) VALUES
+                    (16,2,1,1,2),(17,2,1,1,2),(18,2,1,1,3),(19,2,1,2,2),(20,1,3,1,2)) v(link,w,b,mode,moves)''',
+                f'''INSERT INTO {SCHEMA}.moves(link,n_move,white_move,black_move,white_reaction_time,black_reaction_time,white_time_left,black_time_left)
+                    SELECT link,move,w,b,1,1,599,599 FROM (VALUES
                     (12,1,'e4','e5'),(12,2,'Nf3','Nc6'),
                     (13,1,'e4','e5'),(13,2,'Nf3','Nc6'),
                     (14,1,'e4','e5'),(14,2,'Nf3','Nc6'),
@@ -201,8 +211,8 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
                     (17,1,'e4','e5'),(17,2,'--','--'),
                     (18,1,'e4','e5'),(18,3,'Bb5','a6'),
                     (19,1,'e4','e5'),(19,2,'Nf3','Nc6'),
-                    (20,1,'e4','e5'),(20,2,'Nf3','Nc6')''',
-                f'''INSERT INTO {SCHEMA}.game_fen_association VALUES
+                    (20,1,'e4','e5'),(20,2,'Nf3','Nc6')) v(link,move,w,b)''',
+                f'''INSERT INTO {SCHEMA}.game_fen_association(game_link,n_move,is_white,fen_id) VALUES
                     (12,1,TRUE,3),(12,2,TRUE,4),(12,1,FALSE,2),(12,2,FALSE,4),
                     (13,1,TRUE,4),(13,2,TRUE,4),(13,1,FALSE,2),(13,2,FALSE,3),
                     (14,1,TRUE,3),(14,2,TRUE,4),(14,1,FALSE,2),(14,2,FALSE,2),
@@ -229,7 +239,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
         self.assertEqual(executed.limit,1)
         self.assertEqual(spec.model_dump(),before)
         self.assertEqual(result['kind'],'analytical_sample')
-        self.assertEqual(result['rows'],[[12,'hikaru','white',None,0,20]])
+        self.assertEqual(result['rows'],[[12,'hikaru','white',FIXTURE_DATE,0,20]])
         self.assertEqual(result['row_count'],1)
         self.assertEqual(len(result['columns']),6)
         self.assertEqual(result['column_selection']['dropped_columns'],[])
@@ -258,7 +268,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
             result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=3,preview_mode='sample'))
         self.assertEqual(prepared.call_args.args[1].max_games,2)
         self.assertEqual(result['rows'],[
-            [12,'hikaru','white',None,0,20],[12,'alice','black',None,30,-20],[13,'alice','white',None,20,20]])
+            [12,'hikaru','white',FIXTURE_DATE,0,20],[12,'alice','black',FIXTURE_DATE,30,-20],[13,'alice','white',FIXTURE_DATE,20,20]])
         self.assertEqual(result['selection']['returned_games'],2)
         self.assertEqual(result['selection']['returned_participants'],3)
         # A sample never selects beyond the design's max_games either.
@@ -332,7 +342,7 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
         await self.complete_fixture()
         spec=self.design()
         result=await preview(AnalyticalPreviewSpec(design=spec,preview_rows=1))
-        self.assertEqual(result['rows'],[[12,'hikaru','white',None,0,20]])
+        self.assertEqual(result['rows'],[[12,'hikaru','white',FIXTURE_DATE,0,20]])
         self.assertTrue(result['has_more'])
         self.assertEqual(result['selection']['selected_games'],2)
         self.assertTrue(result['selection']['require_complete_scores'])
@@ -343,8 +353,8 @@ class CompleteMatrixDatabaseTests(base.AnalyticalDatabaseFixture):
         table=pq.read_table(path/'data.parquet')
         self.assertEqual(table.column_names,['game_id','player_name','color','played_at','move_1','move_2'])
         self.assertEqual(table.to_pylist(),[
-            {'game_id':12,'player_name':'hikaru','color':'white','played_at':None,'move_1':0,'move_2':20},
-            {'game_id':13,'player_name':'hikaru','color':'black','played_at':None,'move_1':30,'move_2':0}])
+            {'game_id':12,'player_name':'hikaru','color':'white','played_at':datetime(2026,2,1,tzinfo=timezone.utc),'move_1':0,'move_2':20},
+            {'game_id':13,'player_name':'hikaru','color':'black','played_at':datetime(2026,2,1,tzinfo=timezone.utc),'move_1':30,'move_2':0}])
         self.assertFalse(table.schema.field('move_1').nullable)
         manifest=json.loads((path/'manifest.json').read_text())
         self.assertEqual(manifest['columns'],result['columns'])

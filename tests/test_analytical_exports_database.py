@@ -37,15 +37,11 @@ class AnalyticalDatabaseFixture(ExportDatabaseFixture):
         tables=TABLES
         await analytical_admin.install(self.engine,tables,str(self.credential))
         self.reader_env=patch.dict(os.environ,{'CHESSISM_EXPORT_READER_FILE':str(self.credential)})
-        self.reader_env.start()
+        self.reader_env.start();self.addCleanup(self.reader_env.stop)
         async with AsyncDBSession() as session:
             client=await session.get(ExportClient,self.client.id)
             client.allow_analytics=True;await session.commit()
         self.client.allow_analytics=True
-
-    async def asyncTearDown(self):
-        self.reader_env.stop()
-        await super().asyncTearDown()
 
     async def run_spec(self,spec):
         job=await service.submit(self.client,spec,uuid.uuid4().hex,self.redis)
@@ -220,9 +216,9 @@ class AnalyticalDatabaseTests(AnalyticalDatabaseFixture):
 
     async def test_matrix_selects_games_first_keeps_nulls_zeros_side_and_rows(self):
         async with self.engine.begin() as conn:
-            await conn.execute(text(f"INSERT INTO {SCHEMA}.fen(fen_id,fen,score) VALUES(3,'zero-position',0)"))
-            await conn.execute(text(f"INSERT INTO {SCHEMA}.moves(link,n_move,white_move) VALUES(11,2,'Nf3')"))
-            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association VALUES(11,2,TRUE,3)'))
+            await conn.execute(text("INSERT INTO public.fen(fen_id,fen,score,analysis_source,analyzed_at) OVERRIDING SYSTEM VALUE VALUES(3,'rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq -',0,'stockfish',now())"))
+            await conn.execute(text("INSERT INTO public.moves VALUES(11,2,'Nf3','--',1,0,599,0)"))
+            await conn.execute(text(f'INSERT INTO {SCHEMA}.game_fen_association VALUES(11,3,2,TRUE)'))
         spec=MoveMatrixSpec(player='hikaru',game_mode='blitz',max_games=2,
                             first_move=1,last_move=40,score_perspective='player')
         status,path=await self.run_spec(spec)

@@ -8,14 +8,17 @@ from pathlib import Path
 import secrets
 import uuid
 
-from sqlalchemy import select, text
+from sqlalchemy import select
 
 from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from .auth import token_hash
 from .catalog import SOURCES, TABLES
 from .config import MAX_ROWS
-from .models import Base, ExportClient
+from .models import ExportClient
+from chessism_api.database.postgresql import canonical
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from .service import now
 
 
@@ -24,20 +27,18 @@ async def main(args):
     try:
         if args.action == 'install':
             async with engine.begin() as connection:
-                await connection.execute(text("SET LOCAL lock_timeout = '5s'"))
-                await connection.execute(text('SELECT pg_advisory_xact_lock(760140003)'))
-                await connection.run_sync(Base.metadata.create_all)
-            print('Export metadata installed: public.export_client, public.export_job. Chess tables unchanged.')
+                raw = await connection.get_raw_connection()
+                await canonical.validate(raw.driver_connection)
+            print('Canonical export metadata validated. Initialize an empty database with the canonical initializer first.')
         elif args.action == 'install-analytics':
             from .analytical_admin import install
             await install(engine, TABLES, args.output)
             print('Analytical views and isolated reader installed. Chess rows unchanged. Reader credential was saved privately.')
         elif args.action == 'enable-analytics':
-            async with AsyncDBSession() as session:
+            async with write_transaction(AsyncDBSession) as session:
                 client = await session.get(ExportClient, uuid.UUID(args.id).hex)
                 if not client: raise ValueError('Unknown client.')
                 client.allow_analytics = True
-                await session.commit()
             print('Analytical exports enabled for the specified client; existing dataset and row limits remain enforced.')
         elif args.action == 'create-client':
             if not 1 <= args.max_rows <= MAX_ROWS or not 1 <= args.days <= 365:
@@ -52,29 +53,37 @@ async def main(args):
             with os.fdopen(fd, 'w') as output:
                 output.write(token+'\n'); output.flush(); os.fsync(output.fileno())
             try:
-                async with AsyncDBSession() as session:
-                    session.add(client); await session.commit()
+                async with write_transaction(AsyncDBSession) as session:
+                    session.add(client)
             except BaseException:
-                path.unlink()  # Exact new file created by this command only.
+                async def preserve_committed_credential():
+                    async with read_transaction(AsyncDBSession) as session:
+                        persisted = await session.get(ExportClient, client.id)
+                    if persisted is None:
+                        path.unlink()  # Only the exact private file created above.
+                try:
+                    await finish_analysis_cleanup(preserve_committed_credential())
+                except BaseException:
+                    pass  # Uncertain commit keeps its credential; never orphan an active token.
                 raise
             print(json.dumps({'client_id': client.id, 'name': client.name, 'token_file': str(path),
                               'expires_at': client.expires_at.isoformat(), 'sources': client.allowed_sources,
                               'max_rows': client.max_rows}))
         elif args.action == 'revoke-client':
-            async with AsyncDBSession() as session:
+            async with write_transaction(AsyncDBSession) as session:
                 client = await session.get(ExportClient, uuid.UUID(args.id).hex)
                 if not client:
                     raise ValueError('Unknown client.')
-                client.revoked_at = now(); await session.commit()
+                client.revoked_at = now()
             print('Integration token revoked; its active export will stop at the next checkpoint.')
         else:
-            async with AsyncDBSession() as session:
+            async with read_transaction(AsyncDBSession) as session:
                 clients = (await session.scalars(select(ExportClient).order_by(ExportClient.created_at))).all()
                 print(json.dumps([{'id': c.id, 'name': c.name, 'sources': c.allowed_sources,
                     'max_rows': c.max_rows, 'allow_analytics':c.allow_analytics, 'expires_at': c.expires_at.isoformat(),
                     'revoked': c.revoked_at is not None} for c in clients]))
     finally:
-        await engine.dispose()
+        await finish_analysis_cleanup(engine.dispose())
 
 
 if __name__ == '__main__':

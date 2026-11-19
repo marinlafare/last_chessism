@@ -14,7 +14,8 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from chessism_api.database.postgresql.runtime import bind_runtime_engine
 from chessism_api.redis_client import redis_settings
 from . import config, files
-from chessism_api.database.postgresql.transactions import read_transaction
+from .files import disk_work
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
 from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
 from .catalog import CATALOG_VERSION, SOURCES
 from .models import ExportClient, ExportJob
@@ -31,25 +32,14 @@ class ExportCancelled(Exception):
     pass
 
 
-async def disk_work(function, *args):
-    # Cancellation cannot stop a thread; wait for it before closing/deleting files.
-    task = asyncio.create_task(asyncio.to_thread(function, *args))
-    try:
-        return await asyncio.shield(task)
-    except asyncio.CancelledError:
-        await finish_analysis_cleanup(task)
-        raise
-
-
 async def checkpoint(job_id, **values):
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         job = await session.get(ExportJob, job_id, with_for_update=True)
         client = await session.get(ExportClient, job.client_id)
         if job.cancel_requested or not client or client.revoked_at or client.expires_at <= now():
             raise ExportCancelled()
         for name, value in values.items():
             setattr(job, name, value)
-        await session.commit()
 
 
 async def construct(job, *, session_factory=None):
@@ -124,19 +114,24 @@ async def construct(job, *, session_factory=None):
 
 
 async def run_export(ctx, job_id):
-    async with AsyncDBSession() as guard:
+    async with write_transaction(AsyncDBSession) as guard:
         locked = await guard.scalar(text('SELECT pg_try_advisory_xact_lock(:key)'), {'key': WORKER_LOCK})
         if not locked:
             return {'status': 'busy'}  # Durable queued row is retried by maintenance.
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             job = await session.get(ExportJob, job_id, with_for_update=True)
             if not job or job.status != 'queued':
                 return {'status': 'not_queued'}
             job.status, job.phase, job.started_at = 'running', 'starting', now()
-            await session.commit()
         try:
             await checkpoint(job.id)
-            await asyncio.wait_for(construct(job), timeout=config.TIMEOUT)
+            task = asyncio.create_task(construct(job))
+            try:
+                await asyncio.wait_for(asyncio.shield(task), timeout=config.TIMEOUT)
+            finally:
+                if not task.done():
+                    task.cancel()
+                    await finish_analysis_cleanup(asyncio.gather(task, return_exceptions=True))
             return {'status': 'complete'}
         except (Exception, asyncio.CancelledError) as error:
             cancelled = isinstance(error, (ExportCancelled, asyncio.CancelledError))
@@ -149,23 +144,24 @@ async def run_export(ctx, job_id):
             elif isinstance(error, asyncio.TimeoutError):
                 code, detail = 'EXPORT_TIMEOUT', 'Export exceeded its execution deadline; no partial file was published.'
             LOG.warning('Export %s stopped (%s)', job.id, type(error).__name__)
-            await disk_work(files.remove_files, job.id)
-            async with AsyncDBSession() as session:
-                row = await session.get(ExportJob, job.id, with_for_update=True)
-                row.status = row.phase = 'cancelled' if cancelled else 'failed'
-                row.error, row.error_code, row.completed_at = detail[:500], code, now()
-                await session.commit()
+            async def record_stop():
+                await disk_work(files.remove_files, job.id)
+                async with write_transaction(AsyncDBSession) as session:
+                    row = await session.get(ExportJob, job.id, with_for_update=True)
+                    row.status = row.phase = 'cancelled' if cancelled else 'failed'
+                    row.error, row.error_code, row.completed_at = detail[:500], code, now()
+            await finish_analysis_cleanup(record_stop())
             if isinstance(error, asyncio.CancelledError):
                 raise
             return {'status': 'cancelled' if cancelled else 'failed'}
 
 
 async def maintain_exports(ctx):
-    async with AsyncDBSession() as guard:
+    async with write_transaction(AsyncDBSession) as guard:
         if not await guard.scalar(text('SELECT pg_try_advisory_xact_lock(:key)'), {'key': WORKER_LOCK}):
             return
         # This lock proves no live exporter owns a snapshot/files right now.
-        async with AsyncDBSession() as session:
+        async with write_transaction(AsyncDBSession) as session:
             rows = (await session.scalars(select(ExportJob).where(
                 ExportJob.status.in_(('queued', 'running')) |
                 ((ExportJob.expires_at <= now()) & ExportJob.status.not_in(('deleted', 'expired')))
@@ -181,7 +177,6 @@ async def maintain_exports(ctx):
                     job.status = job.phase = 'expired'
                 elif job.status == 'queued':
                     await enqueue(ctx['redis'], job.id)
-            await session.commit()
     # Clean abandoned pre-commit directories only after the retention window;
     # the namespace contains no caller-chosen directory names.
     if config.ROOT.exists():
@@ -194,7 +189,7 @@ async def maintain_exports(ctx):
                 continue
             if path.stat().st_mtime > time.time()-config.RETENTION:
                 continue
-            async with AsyncDBSession() as session:
+            async with write_transaction(AsyncDBSession) as session:
                 row = await session.get(ExportJob, path.name)
                 if row is None:
                     await disk_work(files.remove_files, path.name)

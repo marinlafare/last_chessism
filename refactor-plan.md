@@ -1249,3 +1249,23 @@ rejection, snapshot races, failure and repeated cancellation. Existing credentia
 job lifecycle and restricted analytical-reader conversion will follow together;
 this chunk does not claim those tables have been initialized or tested end to end.
 No live installation, role changes, network, GPU, real database or checkpoint access.
+
+
+## Completed logical change — canonical export lifecycle and analytical reader (197 verified)
+
+Entry: structured-source gate passed 112 checks; local commit 17d91de.
+Initialize existing export_client/export_job columns, native ownership FK and
+idempotency uniqueness in canonical version 12. Keep immutable requests/manifests
+as bounded files, no JSON-table framework. All application metadata units own
+explicit guarded transactions. Drain active construction before releasing the
+worker lock or deleting artifacts, including repeated cancellation and timeout.
+Preserve request admission, credential scopes, revocation, owner-only status/file
+access, individual cancellation and restart/expiry maintenance.
+
+Port existing isolated export and analytical lifecycle fixtures to freshly
+initialized canonical databases. Exercise real restricted roles/queries only on
+the disposable server; retain all meaningful security and SQL/matrix scenarios.
+The role installer owns only its security views/roles, not public-table repairs.
+Guard analytical transaction closure; preserve projection/selection calculations.
+No production backup/restore behavior, actual credentials, deploy or external DB.
+Focused schema, lifecycle, source, security and accepted P1 checks; no broad suite.

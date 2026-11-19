@@ -6345,31 +6345,31 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical structured exports \u2014 verified, local checkpoint pending",
+      "current_gate": "canonical export lifecycle \u2014 verified, local checkpoint pending",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
         "status": "passed",
-        "entry_commit": "7d6d323efd612dce4f36e6fee526ceac5bef2971",
-        "scope": "canonical structured dataset sources and bounded reads",
-        "evidence_directory": "/tmp/chessism-canonical-a3-export-sources-20261118-01",
+        "entry_commit": "17d91de64a233b99d2baa954fd60be562dbad5d5",
+        "scope": "canonical export metadata, lifecycle and analytical reader",
+        "evidence_directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-02",
         "planned_tests": {
-          "foundation": 14,
+          "foundation": 8,
           "workflow": 30,
           "p1": 68
         },
-        "planned_total": 112,
-        "source_input_count": 1775,
-        "protected_baseline_count": 1584,
+        "planned_total": 106,
+        "source_input_count": 1777,
+        "protected_baseline_count": 1576,
         "process_policy": "Run directly; expected under five minutes",
         "results": {
           "foundation": {
             "suite": "foundation",
-            "tests": 14,
+            "tests": 8,
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 4.157581329345703,
+            "elapsed_seconds": 2.7357215881347656,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6381,7 +6381,7 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 0.31432294845581055,
+            "elapsed_seconds": 0.25774550437927246,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
@@ -6393,40 +6393,48 @@
             "failures": 0,
             "errors": 0,
             "skips": 0,
-            "elapsed_seconds": 3.033233642578125,
+            "elapsed_seconds": 2.7908775806427,
             "failure_details": [],
             "error_details": [],
             "skip_details": [],
             "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
           }
         },
-        "elapsed_seconds": 14.983549356460571,
         "cleanup": [
           {
-            "container": "chessism-canonical-a3-export-sources-6cb58fb701-p1",
+            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-p1",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-export-sources-6cb58fb701-workflow",
+            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-workflow",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-export-sources-6cb58fb701-foundation",
+            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-foundation",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-export-sources-6cb58fb701-redis",
+            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-redis",
             "removed": true
           },
           {
-            "container": "chessism-canonical-a3-export-sources-6cb58fb701-postgres",
+            "container": "chessism-canonical-a3-export-lifecycle-4b1ac70f9a-postgres",
             "removed": true
           }
         ],
         "cleanup_independently_confirmed": true,
-        "source_integrity": "All 1775 frozen hashes match, including all application and test files; no post-gate edits.",
-        "evidence_archive": "docs/architecture/evidence/stage-a-export-sources-2026-11-18.tar.gz",
-        "evidence_sha256": "e61a98419f40ded95065e3737525eda40ff47f26bf6e1c1a13ea386968c6a788"
+        "diagnosis": "Canonical fixture gives formerly undated game 106 a valid 2019 timestamp. Expected search-year list omitted 2019; all other 98 checks passed.",
+        "correction": "Exact expected year order includes 2019. No application change; rerun all 8 matrix selection checks, then the 30 workflow and 68 P1 not yet run.",
+        "retained_evidence": {
+          "directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-01",
+          "passed_tests": 91,
+          "scope": "All initial tests outside tests.test_move_matrix_selection; application and all their inputs unchanged"
+        },
+        "elapsed_seconds": 12.068000316619873,
+        "verified_total": 197,
+        "source_integrity": "All 1777 frozen hashes match. After first run only the matrix selection expected-year oracle changed. 91 unaffected passing checks retained; all 8 affected plus 30 workflow and 68 P1 rerun/pass.",
+        "evidence_archive": "docs/architecture/evidence/stage-a-export-lifecycle-2026-11-18.tar.gz",
+        "evidence_sha256": "bc83141c9c3194551ecc510d33c93b0b848bb86285d119d0926787a8408d4075"
       },
       "verification_attempts": [
         {
@@ -6902,6 +6910,57 @@
           "baseline_probe": "/tmp/chessism-canonical-a3-activity-20261118-01/unchanged-baseline",
           "baseline_trace_comparison": "All eight error details exactly match unchanged HEAD; historical approved identities match",
           "correction": "Recognize only exact approved baseline errors in the verification supervisor; no test/application changes"
+        },
+        {
+          "status": "failed",
+          "entry_commit": "17d91de64a233b99d2baa954fd60be562dbad5d5",
+          "scope": "canonical export metadata, lifecycle and analytical reader",
+          "evidence_directory": "/tmp/chessism-canonical-a3-export-lifecycle-20261118-01",
+          "planned_tests": {
+            "foundation": 99,
+            "workflow": 30,
+            "p1": 68
+          },
+          "planned_total": 197,
+          "source_input_count": 1777,
+          "protected_baseline_count": 1576,
+          "process_policy": "Run directly; expected under five minutes",
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 99,
+              "failures": 1,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 30.77256417274475,
+              "failure_details": [
+                {
+                  "test": "tests.test_move_matrix_selection.MatrixSelectionDatabaseTests.test_forward_then_backward_selection_is_finally_date_sorted",
+                  "detail": "Traceback (most recent call last):\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 64, in _callTestMethod\n    self._callMaybeAsync(method)\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 87, in _callMaybeAsync\n    return self._asyncioTestLoop.run_until_complete(fut)\n  File \"/usr/local/lib/python3.10/asyncio/base_events.py\", line 649, in run_until_complete\n    return future.result()\n  File \"/usr/local/lib/python3.10/unittest/async_case.py\", line 101, in _asyncioLoopRunner\n    ret = await awaitable\n  File \"/workspace/tests/test_move_matrix_selection.py\", line 87, in test_forward_then_backward_selection_is_finally_date_sorted\n    self.assertEqual(result['selection']['year_search_order'], [2022,2023,2024,2021,2020])\nAssertionError: Lists differ: [2022, 2023, 2024, 2021, 2020, 2019] != [2022, 2023, 2024, 2021, 2020]\n\nFirst list contains 1 additional elements.\nFirst extra element 5:\n2019\n\n- [2022, 2023, 2024, 2021, 2020, 2019]\n?                              ------\n\n+ [2022, 2023, 2024, 2021, 2020]\n"
+                }
+              ],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-3f7b010229-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-3f7b010229-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-lifecycle-3f7b010229-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "diagnosis": "Canonical fixture gives formerly undated game 106 a valid 2019 timestamp. Expected search-year list omitted 2019; all other 98 checks passed.",
+          "correction": "Exact expected year order includes 2019. No application change; rerun all 8 matrix selection checks, then the 30 workflow and 68 P1 not yet run."
         }
       ],
       "completed_verifications": [
@@ -7997,6 +8056,87 @@
           "evidence_archive": "docs/architecture/evidence/stage-a-appearances-2026-11-18.tar.gz",
           "evidence_sha256": "081a1f2047ca2926d9d33186767cedf2169e822ca6fe51957934521a300caca7",
           "commit": "7d6d323efd612dce4f36e6fee526ceac5bef2971"
+        },
+        {
+          "status": "passed",
+          "entry_commit": "7d6d323efd612dce4f36e6fee526ceac5bef2971",
+          "scope": "canonical structured dataset sources and bounded reads",
+          "evidence_directory": "/tmp/chessism-canonical-a3-export-sources-20261118-01",
+          "planned_tests": {
+            "foundation": 14,
+            "workflow": 30,
+            "p1": 68
+          },
+          "planned_total": 112,
+          "source_input_count": 1775,
+          "protected_baseline_count": 1584,
+          "process_policy": "Run directly; expected under five minutes",
+          "results": {
+            "foundation": {
+              "suite": "foundation",
+              "tests": 14,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 4.157581329345703,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "workflow": {
+              "suite": "workflow",
+              "tests": 30,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 0.31432294845581055,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            },
+            "p1": {
+              "suite": "p1",
+              "tests": 68,
+              "failures": 0,
+              "errors": 0,
+              "skips": 0,
+              "elapsed_seconds": 3.033233642578125,
+              "failure_details": [],
+              "error_details": [],
+              "skip_details": [],
+              "python": "3.10.22 (main, Oct  1 2026, 21:54:35) [GCC 14.2.0]"
+            }
+          },
+          "elapsed_seconds": 14.983549356460571,
+          "cleanup": [
+            {
+              "container": "chessism-canonical-a3-export-sources-6cb58fb701-p1",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-sources-6cb58fb701-workflow",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-sources-6cb58fb701-foundation",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-sources-6cb58fb701-redis",
+              "removed": true
+            },
+            {
+              "container": "chessism-canonical-a3-export-sources-6cb58fb701-postgres",
+              "removed": true
+            }
+          ],
+          "cleanup_independently_confirmed": true,
+          "source_integrity": "All 1775 frozen hashes match, including all application and test files; no post-gate edits.",
+          "evidence_archive": "docs/architecture/evidence/stage-a-export-sources-2026-11-18.tar.gz",
+          "evidence_sha256": "e61a98419f40ded95065e3737525eda40ff47f26bf6e1c1a13ea386968c6a788",
+          "commit": "17d91de64a233b99d2baa954fd60be562dbad5d5"
         }
       ],
       "process_handoff_policy": "Run operations expected to take under five minutes directly; provide monitor.py and return control only for operations expected to exceed five minutes (user update 2026-11-18).",

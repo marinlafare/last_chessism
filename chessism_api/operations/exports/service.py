@@ -1,7 +1,7 @@
 """Durable job admission and owner-scoped lifecycle, separate from chess data."""
-import asyncio
 from datetime import datetime, timezone, timedelta
 import hashlib
+import logging
 import uuid
 
 from fastapi import HTTPException
@@ -11,6 +11,11 @@ from chessism_api.database.postgresql.engine import AsyncDBSession
 from . import config, files
 from .auth import authorize_spec
 from .models import ExportJob
+from .files import disk_work
+from chessism_api.database.postgresql.transactions import read_transaction, write_transaction
+from chessism_api.database.postgresql.analysis_cleanup import finish_analysis_cleanup
+
+LOG = logging.getLogger(__name__)
 
 ADMISSION_LOCK = 760_140_001
 WORKER_LOCK = 760_140_002
@@ -57,34 +62,33 @@ async def submit(client, spec, key, redis):
     fingerprint = hashlib.sha256(encoded).hexdigest()
     created = None
     try:
-        async with AsyncDBSession() as session:
-            async with session.begin():
-                await session.execute(text("SET LOCAL lock_timeout = '3s'"))
-                await session.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': ADMISSION_LOCK})
-                previous = await session.scalar(select(ExportJob).where(ExportJob.client_id == client.id,
-                                                                        ExportJob.idempotency_key == key))
-                if previous:
-                    # request_document already canonicalizes every accepted
-                    # alias/default. Different versions describe different
-                    # datasets and must never reinterpret a saved request.
-                    if previous.request_sha256 != fingerprint:
-                        raise HTTPException(409, 'Idempotency key already belongs to a different request.')
-                    job = previous
-                else:
-                    active = select(ExportJob).where(ExportJob.status.in_(('queued', 'running')))
-                    total = await session.scalar(select(func.count()).select_from(active.subquery()))
-                    own = await session.scalar(select(func.count()).select_from(active.where(ExportJob.client_id == client.id).subquery()))
-                    if total >= 8 or own >= 2:
-                        raise HTTPException(429, 'Export queue is full. Retry later.', headers={'Retry-After': '30'})
-                    await asyncio.to_thread(files.ensure_space)
-                    job = ExportJob(id=uuid.uuid4().hex, client_id=client.id, idempotency_key=key,
-                        request_sha256=fingerprint, name=spec.name, source=spec.source, row_limit=spec.limit,
-                        expires_at=now()+timedelta(seconds=config.RETENTION))
-                    created = job.id
-                    files.job_dir(job.id).mkdir(mode=0o700)
-                    await asyncio.to_thread(files.write_json, files.job_dir(job.id)/'request.json', document)
-                    session.add(job)
-                    await session.flush()
+        async with write_transaction(AsyncDBSession) as session:
+            await session.execute(text("SET LOCAL lock_timeout = '3s'"))
+            await session.execute(text('SELECT pg_advisory_xact_lock(:key)'), {'key': ADMISSION_LOCK})
+            previous = await session.scalar(select(ExportJob).where(ExportJob.client_id == client.id,
+                                                                    ExportJob.idempotency_key == key))
+            if previous:
+                # request_document already canonicalizes every accepted
+                # alias/default. Different versions describe different
+                # datasets and must never reinterpret a saved request.
+                if previous.request_sha256 != fingerprint:
+                    raise HTTPException(409, 'Idempotency key already belongs to a different request.')
+                job = previous
+            else:
+                active = select(ExportJob).where(ExportJob.status.in_(('queued', 'running')))
+                total = await session.scalar(select(func.count()).select_from(active.subquery()))
+                own = await session.scalar(select(func.count()).select_from(active.where(ExportJob.client_id == client.id).subquery()))
+                if total >= 8 or own >= 2:
+                    raise HTTPException(429, 'Export queue is full. Retry later.', headers={'Retry-After': '30'})
+                await disk_work(files.ensure_space)
+                job = ExportJob(id=uuid.uuid4().hex, client_id=client.id, idempotency_key=key,
+                    request_sha256=fingerprint, name=spec.name, source=spec.source, row_limit=spec.limit,
+                    expires_at=now()+timedelta(seconds=config.RETENTION))
+                created = job.id
+                files.job_dir(job.id).mkdir(mode=0o700)
+                await disk_work(files.write_json, files.job_dir(job.id)/'request.json', document)
+                session.add(job)
+                await session.flush()
         # A queue outage must not lose a committed request: maintenance requeues
         # durable queued rows. Retrying the same key returns this identity.
         if job.status == 'queued':
@@ -96,14 +100,21 @@ async def submit(client, spec, key, redis):
     except BaseException:
         if created:
             # Check committed state before removing its immutable request.
-            async with AsyncDBSession() as check:
-                if await check.get(ExportJob, created) is None:
-                    await asyncio.to_thread(files.remove_files, created)
+            async def discard_uncommitted_request():
+                async with read_transaction(AsyncDBSession) as check:
+                    exists = await check.get(ExportJob, created)
+                if exists is None:
+                    await disk_work(files.remove_files, created)
+            try:
+                await finish_analysis_cleanup(discard_uncommitted_request())
+            except BaseException:
+                # Uncertain persistence preserves its request for later maintenance.
+                LOG.exception('Could not confirm request persistence; preserving the original error and request')
         raise
 
 
 async def owned_job(client, job_id, *, ready=False):
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         job = await session.get(ExportJob, job_id)
     if job is None or job.client_id != client.id:
         raise HTTPException(404, 'Export not found.')
@@ -116,21 +127,19 @@ async def owned_job(client, job_id, *, ready=False):
 
 async def cancel(client, job_id):
     await owned_job(client, job_id)
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         job = await session.get(ExportJob, job_id, with_for_update=True)
         if job.status in ('queued', 'running'):
             job.cancel_requested = True
             job.phase = 'cancelling'
-        await session.commit()
-        return payload(job)
+    return payload(job)
 
 
 async def delete(client, job_id):
     await owned_job(client, job_id)
-    async with AsyncDBSession() as session:
+    async with write_transaction(AsyncDBSession) as session:
         job = await session.get(ExportJob, job_id, with_for_update=True)
         if job.status not in config.TERMINAL:
             raise HTTPException(409, 'Cancel the running export and wait for it to stop before deleting it.')
         job.status = job.phase = 'deleted'
-        await asyncio.to_thread(files.remove_files, job.id)
-        await session.commit()
+        await disk_work(files.remove_files, job.id)

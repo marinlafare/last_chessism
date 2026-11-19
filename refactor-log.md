@@ -2140,3 +2140,38 @@ Approved key/types verified in SQL, JSON, Arrow and manifest; native self-play,
 zero-move scope, source filtering, errors and repeated cleanup cancellation pass.
 No application/test edits after gate. Local checkpoint follows. Stage A remains
 incomplete/unaccepted; export metadata/lifecycle and analytical-reader port next.
+
+### Canonical export lifecycle — started 2026-11-18
+
+Structured sources committed as 17d91de. Complete the required export persistence
+boundary next: canonical metadata plus guarded job/credential transactions and
+restricted analytical reads. Port the existing disposable lifecycle scenarios,
+preserving their assertions where canonical nonnull/numeric contracts permit.
+No actual role installer, credential CLI or live database operation is authorized.
+
+Prepared 99 schema/source/lifecycle/analytical + 30 workflow + 68 P1 = 197 checks.
+Includes 11 new lifecycle/cleanup/CLI checks and a new NULL date/result constraint
+case. All 16 old export lifecycle/security scenarios and all matrix fixture checks
+ported, not skipped. Canonical complete participant rows replace partial fixture
+rows; valid dates/ratings replace impossible NULLs with explicit constraint coverage.
+Isolated role changes are restricted to this disposable server; no public data.
+Evidence: /tmp/chessism-canonical-a3-export-lifecycle-20261118-01
+
+First lifecycle gate completed 99 checks: 98 passed, one assertion failure, zero
+errors/skips. The migrated year fixture added a valid 2019 date to game 106 but its
+expected search-year list omitted 2019. Corrected the exact oracle; no application
+or other test file changed. All 1777 pre-correction inputs verified. Three owned
+containers independently confirmed removed. Rerun all eight affected matrix tests,
+then 30 workflow/68 P1 checks; reuse the 91 unaffected passing checks. Original
+failure detail and both frozen snapshots retained. No test removed or weakened.
+
+Export lifecycle verification complete: 91 unchanged passing checks from run 1 plus
+8 affected matrix + 30 workflow + 68 P1 passing checks in run 2 = 197 verified,
+zero remaining failures/errors/skips. Retry took 12.07 seconds. First-run failure
+and exact correction retained. All 1777 hashes match; no post-gate source edits.
+All eight containers independently confirmed removed across both runs. Evidence
+archived and byte-checked at docs/architecture/evidence/stage-a-export-lifecycle-2026-11-18.tar.gz.
+Eleven new lifecycle/cleanup/credential checks and canonical date/result rejection
+pass, alongside all ported HTTP/security/matrix scenarios. Restricted role creation
+was confined to ephemeral PostgreSQL; source DB, checkpoint, real roles and services
+unchanged. No deployment or push. Stage A remains incomplete/unaccepted.

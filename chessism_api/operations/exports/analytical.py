@@ -10,7 +10,8 @@ from . import config, files
 from .analytical_reader import AnalyticalError, connection
 from .analytical_query import ColumnSelection, check_complete, check_scores, prepare, score_metadata, selection_metadata
 from .analytical_spec import MAX_ANALYTICAL_COLUMNS, MATRIX_CONTRACT_KEY, MATRIX_GAME_ORDER, MoveMatrixSpec
-from .catalog import public_catalog
+from .catalog import CATALOG_VERSION, public_catalog
+from chessism_api.database.postgresql.transactions import read_transaction
 from .move_matrix import SCORE_SEMANTICS
 from .service import now
 from .sql_policy import SCHEMA, FUNCTIONS, TYPES, OPERATORS
@@ -26,7 +27,7 @@ def catalog(client):
         ('moves','game_id','games','game_id'), ('moves','fen_id','positions','fen_id'),
         ('game_positions','game_id','games','game_id'), ('game_positions','fen_id','positions','fen_id'),
         ('player_games','game_id','games','game_id'), ('player_games','player_id','players','player_id')]
-    return {'version':1, 'enabled':bool(getattr(client,'allow_analytics',False)), 'schema':SCHEMA,
+    return {'version':CATALOG_VERSION, 'enabled':bool(getattr(client,'allow_analytics',False)), 'schema':SCHEMA,
         'relations':base['sources'], 'relationships':[{'from':f'{SCHEMA}.{a}.{b}', 'to':f'{SCHEMA}.{c}.{d}', 'cardinality':'many-to-one'}
                 for a,b,c,d in links if a in client.allowed_sources and c in client.allowed_sources],
         'functions':sorted(FUNCTIONS), 'expressions':['CASE','COALESCE','NULLIF','GREATEST','LEAST'],
@@ -78,7 +79,7 @@ async def construct(job, spec, document):
     from .auth import authorize_spec
     from .models import ExportClient
     from chessism_api.database.postgresql.engine import AsyncDBSession
-    async with AsyncDBSession() as session:
+    async with read_transaction(AsyncDBSession) as session:
         authorize_spec(await session.get(ExportClient,job.client_id),spec)
     directory=files.job_dir(job.id); temporary=directory/'data.parquet.building'
     if temporary.exists(): raise AnalyticalError('INTERRUPTED_EXPORT','Submit a new key after an interrupted export.')
@@ -127,7 +128,7 @@ async def construct(job, spec, document):
     source_definition={key:value for key,value in document.items() if key != MATRIX_CONTRACT_KEY}
     if isinstance(spec,MoveMatrixSpec):
         source_definition['player_win']=spec.player_win
-    manifest={'format':'parquet','format_version':1,'catalog_version':1,'query_schema':SCHEMA,
+    manifest={'format':'parquet','format_version':1,'catalog_version':CATALOG_VERSION,'query_schema':SCHEMA,
         'export_id':job.id,'source':spec.source,
         'source_definition':source_definition,
         'request_sha256':job.request_sha256,'executed_sql_sha256':hashlib.sha256(query.sql.encode()).hexdigest(),

@@ -943,3 +943,32 @@ installation in the next export step. Their imports now use the canonical compil
 they are not reported as executed by this source-only gate. Authentication/job
 ownership/publication and role installation are not certified by mocked checkpoint
 callbacks in these source tests. No production role, credential or data changes.
+
+
+### Export metadata, lifecycle and analytical reads (canonical version 12)
+
+The initializer now owns export_client/export_job with native credential ownership,
+per-client request-key uniqueness, nonnegative counters and positive row limits.
+Existing fields/files and public lifecycle states remain. No new job abstraction or
+JSON persistence. Credential lookup, admission, checkpoints, owner-only actions and
+maintenance own guarded database units. A cancelled admission confirms persistence
+before removing only its new request; uncertain commit keeps the recoverable file.
+Private credential creation applies the same rule after an ambiguous commit.
+
+Workers retain the advisory lock until construction/threads/streams and rollback
+finish. Repeated cancellation cannot race deletion against an active writer. Stop
+metadata is recorded in its own guarded unit. The analytical reader retains its
+separate restricted role and read-only snapshot, with guarded rollback/closure even
+when rollback fails. Role installation creates security views and grants on this
+canonical source; it does not create or alter public metadata tables. The existing
+exports_data_v1 namespace is an access-control projection, not a storage profile.
+The install CLI validates the canonical schema; credentials never print to logs.
+Production backup/restore role contracts are unchanged.
+
+Existing export lifecycle, matrix completeness/year selection, and role denial
+scenarios now use per-case canonical databases. Partial old participant fixtures
+become complete native sides (six instead of four for three games). Impossible
+NULL dates/results and NULL average ratings become concrete canonical fixtures;
+explicit constraint tests reject missing dates/results, while missing evaluations,
+NULL output handling and empty typed datasets remain covered. No scenario is skipped
+to accommodate the schema. One-time old fixture DDL/profile wiring is removed.

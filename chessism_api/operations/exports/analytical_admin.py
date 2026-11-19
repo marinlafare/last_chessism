@@ -5,7 +5,6 @@ from pathlib import Path
 import secrets
 
 from sqlalchemy import text
-from sqlalchemy.engine import make_url
 
 from .catalog import SOURCES
 from .sql_policy import SCHEMA
@@ -28,8 +27,8 @@ def view_select(source, tables):
 
 
 async def install(engine, tables, output=DEFAULT_CREDENTIAL):
-    """Add views/roles and two metadata columns; no copies or chess-data writes."""
-    url = make_url(os.environ['DATABASE_URL'])
+    """Install the restricted reader; canonical initialization owns public tables."""
+    url = engine.url
     path = Path(output)
     if path.exists():
         credential = json.loads(path.read_text())
@@ -38,7 +37,7 @@ async def install(engine, tables, output=DEFAULT_CREDENTIAL):
         password = credential['password']
     else:
         password = secrets.token_urlsafe(48)
-        credential = dict(host=url.host, port=url.port or 5432, database=url.database,
+        credential = dict(host=url.query.get('host', url.host), port=url.port or 5432, database=url.database,
                           user=READER, password=password)
     if any(char not in 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-' for char in password):
         raise ValueError('Invalid reader credential encoding.')
@@ -78,8 +77,6 @@ async def install(engine, tables, output=DEFAULT_CREDENTIAL):
                 await conn.execute(text(f'ALTER VIEW {SCHEMA}.{name} OWNER TO {OWNER}'))
                 await conn.execute(text(f'REVOKE ALL ON {SCHEMA}.{name} FROM PUBLIC'))
                 await conn.execute(text(f'GRANT SELECT ON {SCHEMA}.{name} TO {READER}'))
-            await conn.execute(text('ALTER TABLE public.export_client ADD COLUMN IF NOT EXISTS allow_analytics boolean NOT NULL DEFAULT false'))
-            await conn.execute(text('ALTER TABLE public.export_job ADD COLUMN IF NOT EXISTS error_code varchar(64)'))
     except Exception:
         # SQLAlchemy exceptions may include the administrative PASSWORD SQL.
         raise RuntimeError('Analytical installation failed; no changes from its transaction were committed. Check role/schema prerequisites without logging credentials.') from None
