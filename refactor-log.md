@@ -2175,3 +2175,18 @@ Eleven new lifecycle/cleanup/credential checks and canonical date/result rejecti
 pass, alongside all ported HTTP/security/matrix scenarios. Restricted role creation
 was confined to ephemeral PostgreSQL; source DB, checkpoint, real roles and services
 unchanged. No deployment or push. Stage A remains incomplete/unaccepted.
+
+### Verified local checkpoints — export approval implemented
+
+7d6d323: canonical FEN appearance snapshots (147 verified checks).
+17d91de: approved structured-export keys/types and canonical reads (112 checks).
+a5db4bc: canonical export metadata/lifecycle and analytical reader (197 verified
+checks, with exact one-fixture failure/correction preserved). Counts overlap.
+All associated disposable processes exited and containers were removed. No source
+changes after their passing evidence. This follow-up records local commit identity
+only. No push, deploy, source database or checkpoint modification.
+
+Stage A remains incomplete/unaccepted. Next implementation scope is canonical CUDA
+publication and its dependent chart/research readers, followed by remaining graph/
+admin consumers and A4 retirement. Read existing plan and source inventory; do not
+repeat the completed export gates. Full Stage A comparison remains at its boundary.

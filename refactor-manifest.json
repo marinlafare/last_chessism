@@ -6345,7 +6345,7 @@
     "fast_track": {
       "entry_commit": "b00885a576cef73fd98aeaa74f2095c1e7aebdc9",
       "input_integrity": "1744 unchanged inputs plus the recorded canonical-persistence.md handoff update",
-      "current_gate": "canonical export lifecycle \u2014 verified, local checkpoint pending",
+      "current_gate": "canonical export lifecycle verified and committed; next canonical CUDA publication and dependent readers",
       "policy": "focused gates; no historical compatibility/importer; one final Stage A independent review",
       "accepted": false,
       "current_verification": {
@@ -6434,7 +6434,8 @@
         "verified_total": 197,
         "source_integrity": "All 1777 frozen hashes match. After first run only the matrix selection expected-year oracle changed. 91 unaffected passing checks retained; all 8 affected plus 30 workflow and 68 P1 rerun/pass.",
         "evidence_archive": "docs/architecture/evidence/stage-a-export-lifecycle-2026-11-18.tar.gz",
-        "evidence_sha256": "bc83141c9c3194551ecc510d33c93b0b848bb86285d119d0926787a8408d4075"
+        "evidence_sha256": "bc83141c9c3194551ecc510d33c93b0b848bb86285d119d0926787a8408d4075",
+        "commit": "a5db4bc32c77ba5afc06a15e0f10a8e9a5549b65"
       },
       "verification_attempts": [
         {
@@ -8149,7 +8150,8 @@
         ],
         "source": "User asynchronous reply: Approve these export contract changes",
         "applies_to": "upcoming canonical dataset exports"
-      }
+      },
+      "next_scope": "Continue A3.2 canonical_blunders/cuda_summaries native schema, publication and dependent chart/research readers. GPU computation formulas remain unchanged; do not substitute CPU counts for unknown GPU results."
     }
   }
 }
