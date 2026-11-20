@@ -1,5 +1,5 @@
 import { pageStyleTarget } from '../appearance/styleCore.js'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './download-new-games/downloadNewGames.css'
 import Header from '../components/layout/Header'
 import SideRail from '../components/layout/SideRail'
@@ -9,9 +9,11 @@ import {
   UPDATE_JOB_STORAGE_KEY,
   isTerminalJobStatus,
   loadStoredJob,
+  beginJobRequest,
   storeJob
 } from '../services/gameJobService'
 import { watchStatus } from '../services/statusPolling.js'
+import { useStoredGameJob } from '../services/useStoredGameJob.js'
 import { jobStatusMessage } from '../services/jobOutcome.js'
 import { recoverableGameJobs, watchGameJob } from '../services/gameJobPolling'
 import {
@@ -24,14 +26,16 @@ function DownloadNewGames() {
   const [downloadPlayer, setDownloadPlayer] = useState('')
   const [downloadResult, setDownloadResult] = useState('')
   const [downloadLoading, setDownloadLoading] = useState(false)
-  const [downloadJob, setDownloadJob] = useState(() => loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY))
-  const [updateJob, setUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
-  const [downloadJobStatus, setDownloadJobStatus] = useState(null)
-  const [updateJobStatus, setUpdateJobStatus] = useState(null)
+  const downloadJob = useStoredGameJob(DOWNLOAD_JOB_STORAGE_KEY)
+  const updateJob = useStoredGameJob(UPDATE_JOB_STORAGE_KEY)
+  const mounted = useRef(true)
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
   const [recoveringJobs, setRecoveringJobs] = useState(true)
   const [recoveryMessage, setRecoveryMessage] = useState('')
-  const downloadJobActive = downloadJob?.jobId && !isTerminalJobStatus(downloadJobStatus)
-  const updateJobActive = updateJob?.jobId && !isTerminalJobStatus(updateJobStatus)
+  // Terminal callbacks release the shared identity. Old presentation status must
+  // never make a newly adopted identity look idle.
+  const downloadJobActive = Boolean(downloadJob?.jobId)
+  const updateJobActive = Boolean(updateJob?.jobId)
   const actionBusy = recoveringJobs || downloadLoading || downloadJobActive || updateJobActive
 
   useEffect(() => {
@@ -41,22 +45,16 @@ function DownloadNewGames() {
         const recovered = recoverableGameJobs(payload.jobs)
         if (recovered.download) {
           const { job, status } = recovered.download
-          setDownloadJob(current => {
-            if (current?.jobId) return current
+          if (!loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY)) {
             storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
-            setDownloadJobStatus(status)
-            return job
-          })
+          }
           setDownloadPlayer(current => current || job.playerName)
         }
         if (recovered.update) {
           const { job, status } = recovered.update
-          setUpdateJob(current => {
-            if (current?.jobId) return current
+          if (!loadStoredJob(UPDATE_JOB_STORAGE_KEY)) {
             storeJob(UPDATE_JOB_STORAGE_KEY, job)
-            setUpdateJobStatus(status)
-            return job
-          })
+          }
         }
         setRecoveringJobs(false)
         setRecoveryMessage('')
@@ -71,20 +69,20 @@ function DownloadNewGames() {
     return watchGameJob({
       jobId: downloadJob.jobId, fetchStatus: fetchGameJobStatus,
       onStatus: status => {
-        setDownloadJobStatus(status)
+        if (loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY)?.jobId !== downloadJob.jobId) return
         if (status.status === 'not_found') {
           setDownloadResult('The server no longer has this job’s status. Check the player’s games before starting another download.')
-          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
-          setDownloadJob(null)
+          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null, { expectedJobId: downloadJob.jobId })
         } else if (isTerminalJobStatus(status)) {
           setDownloadResult(jobStatusMessage(status, 'Games download'))
-          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null)
-          setDownloadJob(null)
+          storeJob(DOWNLOAD_JOB_STORAGE_KEY, null, { expectedJobId: downloadJob.jobId })
         } else {
           setDownloadResult(jobStatusMessage(status, 'Games download'))
         }
       },
-      onUnavailable: () => setDownloadResult('Status connection interrupted. The download may still be running; reconnecting automatically…'),
+      onUnavailable: () => {
+        if (loadStoredJob(DOWNLOAD_JOB_STORAGE_KEY)?.jobId === downloadJob.jobId) setDownloadResult('Status connection interrupted. The download may still be running; reconnecting automatically…')
+      },
     })
   }, [downloadJob?.jobId])
 
@@ -94,10 +92,9 @@ function DownloadNewGames() {
     return watchGameJob({
       jobId: updateJob.jobId, fetchStatus: fetchGameJobStatus,
       onStatus: status => {
-        setUpdateJobStatus(status)
+        if (loadStoredJob(UPDATE_JOB_STORAGE_KEY)?.jobId !== updateJob.jobId) return
         if (status.status === 'not_found' || isTerminalJobStatus(status)) {
-          storeJob(UPDATE_JOB_STORAGE_KEY, null)
-          setUpdateJob(null)
+          storeJob(UPDATE_JOB_STORAGE_KEY, null, { expectedJobId: updateJob.jobId })
         }
       },
       // A disconnected status request must not unblock another ingestion.
@@ -115,21 +112,20 @@ function DownloadNewGames() {
 
     setDownloadLoading(true)
     setDownloadResult('')
-    setDownloadJobStatus(null)
+    const request = beginJobRequest(DOWNLOAD_JOB_STORAGE_KEY)
     try {
       const payload = await downloadPlayerGames(player)
       if (payload.job_id) {
         const job = { jobId: payload.job_id, playerName: payload.player_name || player }
-        storeJob(DOWNLOAD_JOB_STORAGE_KEY, job)
-        setDownloadJob(job)
+        if (!storeJob(DOWNLOAD_JOB_STORAGE_KEY, job, { request }) || !mounted.current) return
         setDownloadResult(payload.message || 'Games download started.')
-      } else {
+      } else if (mounted.current) {
         setDownloadResult(payload.message || 'Games download started.')
       }
     } catch (error) {
-      setDownloadResult(error instanceof Error ? error.message : 'Request failed.')
+      if (mounted.current) setDownloadResult(error instanceof Error ? error.message : 'Request failed.')
     } finally {
-      setDownloadLoading(false)
+      if (mounted.current) setDownloadLoading(false)
     }
   }
 

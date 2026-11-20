@@ -1,4 +1,4 @@
-import React, { act, useState } from 'react'
+import React, { act, useState, useLayoutEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { usePositionsPage } from '/src/pages/positions/usePositionsPage.js'
 import { useJobCompletionPresentation } from '/src/pages/positions/useJobCompletionPresentation.js'
@@ -9,7 +9,7 @@ import PlayerWorkspace from '/src/pages/players/PlayerWorkspace.jsx'
 import DownloadNewGames from '/src/pages/DownloadNewGames.jsx'
 import { useTrackedGameJob } from '/src/services/useTrackedGameJob.js'
 import { fetchGameJobStatus } from '/src/pages/download-new-games/downloadNewGamesApi.js'
-import { UPDATE_JOB_STORAGE_KEY, PLAYER_DELETE_JOB_STORAGE_KEY } from '/src/services/gameJobService.js'
+import { UPDATE_JOB_STORAGE_KEY, PLAYER_DELETE_JOB_STORAGE_KEY, storeJob } from '/src/services/gameJobService.js'
 
 window.IS_REACT_ACT_ENVIRONMENT = true
 const results = window.stageC = { checks: [], errors: [], finished: false }
@@ -317,6 +317,97 @@ await test('Download recovery retries through the shared transport and does not 
     : response({ jobs: [{ job_id: 'other', status: 'queued', info: { function: 'run_update_player_games_job' } }] })) : null
   await mount(<DownloadNewGames />); await runDelay(5000)
   equal(JSON.parse(localStorage.getItem(UPDATE_JOB_STORAGE_KEY)).jobId, 'saved', 'restored identity preserved')
+})
+
+for (const destination of ['main', 'player', 'download']) await test(`late acknowledgment reaches an already-mounted ${destination} page`, async () => {
+  const pending = deferred(); let statusReads = 0
+  route = req => req.path === '/games/update' ? pending.promise
+    : req.path === '/jobs/late-observed' ? (++statusReads === 1 ? Promise.reject(new Error('offline')) : response(complete(true, { committed_games: 1, fen_extraction: { status: 'queued' } }))) : null
+  await mount(<MainCharacters />); await click('.games-mode-button'); await click('.main-character-update-btn')
+  await unmount()
+  await mount(destination === 'main' ? <MainCharacters /> : destination === 'player' ? <PlayerWorkspace playerName="alice" /> : <DownloadNewGames />)
+  if (destination === 'main') await click('.games-mode-button')
+  const profileReads = requests.filter(req => req.path.endsWith('/hero')).length
+  pending.resolve({ job_id: 'late-observed', player_name: 'alice' }); await flush()
+  equal(statusReads, 1, 'already-mounted consumer polls the late acknowledgment')
+  equal(JSON.parse(localStorage.getItem(UPDATE_JOB_STORAGE_KEY)).jobId, 'late-observed', 'outage retains persistent identity')
+  if (destination === 'main') assert(document.querySelector('.main-character-update-btn').disabled, 'replacement busy after late acknowledgment')
+  if (destination === 'download') assert(document.querySelector('.btn-primary').disabled, 'late update blocks overlapping download')
+  await runDelay(3000)
+  equal(statusReads, 2, 'polling retries normally')
+  equal(localStorage.getItem(UPDATE_JOB_STORAGE_KEY), null, 'confirmed success clears shared identity')
+  if (destination === 'player') equal(requests.filter(req => req.path.endsWith('/hero')).length, profileReads + 1, 'workspace refreshes matching player')
+  await unmount()
+  equal(timers.size, 0, 'unmounted consumers release polling timers')
+})
+for (const newerCompleted of [false, true]) await test(`old acknowledgment cannot replace a newer ${newerCompleted ? 'completed' : 'active'} request`, async () => {
+  const older = deferred(); let enqueues = 0
+  route = req => req.path === '/games/update' ? (++enqueues === 1 ? older.promise : response({ job_id: 'newer-request', player_name: 'alice' }, 202))
+    : req.path === '/jobs/newer-request' && newerCompleted ? response(complete(true, { committed_games: 1 })) : null
+  await mount(<MainCharacters />); await click('.games-mode-button'); await click('.main-character-update-btn')
+  await unmount(); await mount(<MainCharacters />); await click('.games-mode-button'); await click('.main-character-update-btn')
+  const before = localStorage.getItem(UPDATE_JOB_STORAGE_KEY)
+  older.resolve({ job_id: 'older-request', player_name: 'alice' }); await flush()
+  equal(localStorage.getItem(UPDATE_JOB_STORAGE_KEY), before, 'late old response cannot replace or revive newer tracking')
+  assert(!requests.some(req => req.path === '/jobs/older-request'), 'obsolete acknowledgment cannot start polling')
+})
+await test('a storage write during mounting is observed without a lost subscription notification', async () => {
+  function WriteDuringCommit() {
+    useLayoutEffect(() => { storeJob(UPDATE_JOB_STORAGE_KEY, { jobId: 'during-commit', playerName: 'alice' }) }, [])
+    return null
+  }
+  await mount(<><Tracked /><WriteDuringCommit /></>)
+  equal(tracker.job?.jobId, 'during-commit', 'snapshot changes between render and subscription are adopted')
+  assert(requests.some(req => req.path === '/jobs/during-commit'), 'adopted identity starts polling')
+})
+await test('unmounted storage consumers do not restart requests after shared writes', async () => {
+  await mount(<Tracked />); await act(async () => tracker.track({ jobId: 'first', playerName: 'alice' }))
+  await unmount(); const before = requests.length
+  await act(async () => storeJob(UPDATE_JOB_STORAGE_KEY, { jobId: 'after-unmount', playerName: 'bob' }))
+  equal(requests.length, before, 'unsubscribed component cannot restart polling')
+  equal(timers.size, 0, 'unmounted component has no timers')
+  await mount(<Tracked />)
+  equal(tracker.job.jobId, 'after-unmount', 'new subscriber reads latest storage')
+  assert(requests.some(req => req.path === '/jobs/after-unmount'), 'restored identity is polled')
+})
+await test('Main Characters shows incomplete archive failure without claiming games ready', async () => {
+  route = req => req.path === '/games/update' ? response({ job_id: 'incomplete', player_name: 'alice' }, 202)
+    : req.path === '/jobs/incomplete' ? response(complete(false, { type: 'RuntimeError', message: 'Incomplete archive download for alice: 1/2 archives downloaded; failed 2026-02: HTTP 503' })) : null
+  await mount(<MainCharacters />); await click('.games-mode-button')
+  const before = requests.filter(req => req.path.endsWith('/top')).length
+  await click('.main-character-update-btn')
+  equal(requests.filter(req => req.path.endsWith('/top')).length, before, 'incomplete ingestion cannot trigger successful refresh')
+  assert(document.body.textContent.includes('Incomplete archive download'), 'failed coverage is visible')
+  assert(!document.body.textContent.includes('all games ready'), 'failure cannot claim complete coverage')
+  equal(document.querySelector('.main-character-update-btn').textContent.trim(), 'retry', 'failed attempt remains retryable')
+  equal(localStorage.getItem(UPDATE_JOB_STORAGE_KEY), null, 'confirmed failure releases job tracking')
+})
+
+for (const source of ['workspace', 'download']) await test(`late ${source} enqueue acknowledgment is adopted by Main Characters`, async () => {
+  const pending = deferred()
+  route = req => req.path === (source === 'workspace' ? '/games/update' : '/games') ? pending.promise : null
+  await mount(source === 'workspace' ? <PlayerWorkspace playerName="alice" /> : <DownloadNewGames />)
+  if (source === 'workspace') await click('.players-update-button')
+  else {
+    const input = document.querySelector('.text-input')
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(input, 'alice')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await click('.btn-primary')
+  }
+  await unmount(); await mount(<MainCharacters />); await click('.games-mode-button')
+  pending.resolve({ job_id: `late-${source}`, player_name: 'alice' }); await flush()
+  assert(requests.some(req => req.path === `/jobs/late-${source}`), 'replacement polls another producer acknowledgment')
+  assert(document.querySelector('.main-character-update-btn').disabled, 'acknowledgment disables overlapping ingestion')
+})
+await test('newly adopted work stays busy after the preceding job completed', async () => {
+  route = req => req.path === '/jobs/preceding' ? response(complete()) : null
+  localStorage.setItem(UPDATE_JOB_STORAGE_KEY, JSON.stringify({ jobId: 'preceding', playerName: 'alice' }))
+  await mount(<DownloadNewGames />)
+  equal(localStorage.getItem(UPDATE_JOB_STORAGE_KEY), null, 'preceding work completed')
+  await act(async () => storeJob(UPDATE_JOB_STORAGE_KEY, { jobId: 'replacement', playerName: 'bob' }))
+  assert(document.querySelector('.btn-primary').disabled, 'previous terminal presentation cannot unblock a new job')
 })
 
 window.setTimeout = realTimeout; window.clearTimeout = realClear

@@ -16,9 +16,11 @@ import {
   UPDATE_JOB_STORAGE_KEY,
   isTerminalJobStatus,
   loadStoredJob,
+  beginJobRequest,
   storeJob
 } from '../../services/gameJobService'
 import { watchGameJob } from '../../services/gameJobPolling.js'
+import { useStoredGameJob } from '../../services/useStoredGameJob.js'
 import { jobPhase, jobStatusMessage } from '../../services/jobOutcome.js'
 import {
   deletePlayer,
@@ -85,7 +87,7 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const [playerMenuLoading, setPlayerMenuLoading] = useState(false)
   const [playerMenuError, setPlayerMenuError] = useState('')
   const [gamesUpdateLoading, setGamesUpdateLoading] = useState(false)
-  const [gamesUpdateJob, setGamesUpdateJob] = useState(() => loadStoredJob(UPDATE_JOB_STORAGE_KEY))
+  const gamesUpdateJob = useStoredGameJob(UPDATE_JOB_STORAGE_KEY)
   const [gamesUpdateStatus, setGamesUpdateStatus] = useState(null)
   const [gamesUpdateMessage, setGamesUpdateMessage] = useState('')
   const [deletePreview, setDeletePreview] = useState(null)
@@ -93,12 +95,16 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
   const [deleteConfirmation, setDeleteConfirmation] = useState('')
   const [deleteError, setDeleteError] = useState('')
   const [deleteSubmitting, setDeleteSubmitting] = useState(false)
-  const [deleteJob, setDeleteJob] = useState(() => loadStoredJob(PLAYER_DELETE_JOB_STORAGE_KEY))
+  const deleteJob = useStoredGameJob(PLAYER_DELETE_JOB_STORAGE_KEY)
   const [deleteStatus, setDeleteStatus] = useState(null)
   const [deleteMessage, setDeleteMessage] = useState('')
   const playerPickerRef = useRef(null)
   const workspaceRef = useRef(null)
   const profileRequest = useRef(null)
+  const mounted = useRef(true)
+  const selectedPlayer = useRef(playerName)
+  selectedPlayer.current = playerName
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false } }, [])
 
   useEffect(() => {
     if (!activePlayer || !playerHours?.summary_stale) return undefined
@@ -171,6 +177,8 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     setGamesUpdateLoading(true)
     setGamesUpdateMessage('')
     setGamesUpdateStatus(null)
+    const request = beginJobRequest(UPDATE_JOB_STORAGE_KEY)
+    const stillSelected = () => mounted.current && selectedPlayer.current === activePlayer
     try {
       const payload = await updatePlayerGames(activePlayer)
       if (payload.job_id) {
@@ -178,14 +186,13 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
           jobId: payload.job_id,
           playerName: payload.player_name || activePlayer
         }
-        storeJob(UPDATE_JOB_STORAGE_KEY, job)
-        setGamesUpdateJob(job)
+        if (!storeJob(UPDATE_JOB_STORAGE_KEY, job, { request })) return
       }
-      setGamesUpdateMessage(payload.message || `Games update started for ${activePlayer}.`)
+      if (stillSelected()) setGamesUpdateMessage(payload.message || `Games update started for ${activePlayer}.`)
     } catch (updateError) {
-      setGamesUpdateMessage(updateError instanceof Error ? updateError.message : 'Unable to start games update.')
+      if (stillSelected()) setGamesUpdateMessage(updateError instanceof Error ? updateError.message : 'Unable to start games update.')
     } finally {
-      setGamesUpdateLoading(false)
+      if (mounted.current) setGamesUpdateLoading(false)
     }
   }
 
@@ -215,6 +222,8 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     if (!deletePreview || deleteSubmitting) return
     setDeleteSubmitting(true)
     setDeleteError('')
+    const request = beginJobRequest(PLAYER_DELETE_JOB_STORAGE_KEY)
+    const stillSelected = () => mounted.current && selectedPlayer.current === activePlayer
     try {
       const payload = await deletePlayer(activePlayer, {
         confirmation: deleteConfirmation,
@@ -228,16 +237,15 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
         playerName: payload.player_name || activePlayer,
         redirectPlayer
       }
-      storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, job)
-      setDeleteJob(job)
+      if (!storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, job, { request }) || !stillSelected()) return
       setDeleteStatus(null)
       setDeleteMessage(payload.message || `Deletion queued for ${activePlayer}.`)
       setDeletePreview(null)
       setDeleteConfirmation('')
     } catch (deleteRequestError) {
-      setDeleteError(deleteRequestError instanceof Error ? deleteRequestError.message : 'Unable to queue player deletion.')
+      if (stillSelected()) setDeleteError(deleteRequestError instanceof Error ? deleteRequestError.message : 'Unable to queue player deletion.')
     } finally {
-      setDeleteSubmitting(false)
+      if (mounted.current) setDeleteSubmitting(false)
     }
   }
 
@@ -312,16 +320,18 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     return watchGameJob({
       jobId: job.jobId, fetchStatus: fetchPlayerJobStatus,
       onStatus(status) {
+        if (loadStoredJob(UPDATE_JOB_STORAGE_KEY)?.jobId !== job.jobId) return
         setGamesUpdateStatus(status)
         setGamesUpdateMessage(jobStatusMessage(status, 'Games update'))
         if (!isTerminalJobStatus(status)) return
-        storeJob(UPDATE_JOB_STORAGE_KEY, null)
-        setGamesUpdateJob(null)
+        storeJob(UPDATE_JOB_STORAGE_KEY, null, { expectedJobId: job.jobId })
         if (jobPhase(status) === 'complete' && activePlayer.toLowerCase() === String(job.playerName || '').toLowerCase()) {
           loadPlayer(job.playerName)
         }
       },
-      onUnavailable: () => setGamesUpdateMessage('Status connection interrupted; reconnecting automatically…'),
+      onUnavailable: () => {
+        if (loadStoredJob(UPDATE_JOB_STORAGE_KEY)?.jobId === job.jobId) setGamesUpdateMessage('Status connection interrupted; reconnecting automatically…')
+      },
     })
   }, [gamesUpdateJob?.jobId, activePlayer, loadPlayer])
 
@@ -331,11 +341,11 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
     return watchGameJob({
       jobId: job.jobId, fetchStatus: fetchPlayerJobStatus,
       onStatus(status) {
+        if (loadStoredJob(PLAYER_DELETE_JOB_STORAGE_KEY)?.jobId !== job.jobId) return
         setDeleteStatus(status)
         setDeleteMessage(jobStatusMessage(status, 'Player deletion'))
         if (!isTerminalJobStatus(status)) return
-        storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null)
-        setDeleteJob(null)
+        storeJob(PLAYER_DELETE_JOB_STORAGE_KEY, null, { expectedJobId: job.jobId })
         if (jobPhase(status) !== 'complete'
           || activePlayer.toLowerCase() !== String(job.playerName || '').toLowerCase()) return
         if (job.redirectPlayer) navigateToPlayer(job.redirectPlayer)
@@ -345,7 +355,9 @@ function PlayerWorkspace({ playerName, onSelectPlayer, onProfileLoaded }) {
           window.dispatchEvent(new PopStateEvent('popstate'))
         }
       },
-      onUnavailable: () => setDeleteMessage('Status connection interrupted; reconnecting automatically…'),
+      onUnavailable: () => {
+        if (loadStoredJob(PLAYER_DELETE_JOB_STORAGE_KEY)?.jobId === job.jobId) setDeleteMessage('Status connection interrupted; reconnecting automatically…')
+      },
     })
   }, [deleteJob?.jobId, activePlayer])
 

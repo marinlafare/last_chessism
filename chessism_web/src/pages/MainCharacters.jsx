@@ -2,7 +2,7 @@ import { pageStyleTarget } from '../appearance/styleCore.js'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import './main-characters/mainCharacters.css'
 import { useTrackedGameJob } from '../services/useTrackedGameJob.js'
-import { DOWNLOAD_JOB_STORAGE_KEY, UPDATE_JOB_STORAGE_KEY } from '../services/gameJobService.js'
+import { beginJobRequest, DOWNLOAD_JOB_STORAGE_KEY, UPDATE_JOB_STORAGE_KEY } from '../services/gameJobService.js'
 import { jobPhase, jobStatusMessage } from '../services/jobOutcome.js'
 import { fetchGameJobStatus } from './download-new-games/downloadNewGamesApi'
 import Header from '../components/layout/Header'
@@ -431,10 +431,11 @@ function MainCharacters() {
     setSubmitting(type)
     setUpdateMessage('')
     setUpdateStateByPlayer(previous => ({ ...previous, [normalized]: '' }))
+    const request = beginJobRequest(type === 'download' ? DOWNLOAD_JOB_STORAGE_KEY : UPDATE_JOB_STORAGE_KEY)
     try {
       const payload = await (type === 'download' ? createPlayerGames : updatePlayerGames)(normalized)
       const tracker = type === 'download' ? download : update
-      tracker.track({ jobId: payload.job_id, playerName: payload.player_name || normalized })
+      if (!tracker.track({ jobId: payload.job_id, playerName: payload.player_name || normalized }, request)) return
       if (!mounted.current) return
       if (type === 'download') {
         setAddPlayerName('')

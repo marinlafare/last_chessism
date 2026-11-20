@@ -2695,3 +2695,36 @@ interpretation. Error text includes failed months and downloaded/requested count
 Cancellation propagates. No HTTP retry policy, persistence or serializer change.
 Source hashes and red/green logs retained in the corrections evidence workspace.
 Next: correction B mounted reproductions and shared storage ownership.
+
+### Stage C correction B — verified
+Before production changes, 30 mounted checks reproduced six failures: late
+acknowledgments missed by each of Main Characters/Player Workspace/Download New
+Games; older acknowledgments replacing newer active/completed work; and a write
+between initial render and subscription. The other 24 checks passed.
+
+Added same-document notifications after persistence at gameJobService, per-key
+enqueue request ownership and identity-checked completion clearing. A small
+useSyncExternalStore hook reads stable serialized snapshots and closes the
+render/subscription race. All three consumers subscribe to the same storage.
+All enqueue producers obtain ownership before awaiting HTTP; old responses
+cannot publish after a newer request/write/completion. Unmounted producers may
+persist their still-owned acknowledgment without mutating their old UI. Normal
+polling, authoritative outcomes, deletion navigation and matching-player refresh
+remain distinct. Removed redundant Download presentation status as a busy flag.
+
+Final mounted checks: 33/33, no runtime errors. Frontend: 357 checks, 353 pass,
+the exact same four baseline appearance/navigation failures, zero skips or
+cancellations. All existing test identities retained; failure blocks identical
+except duration. Six new storage unit checks pass. Build, page boundaries,
+source size, whitespace, Python syntax and source integrity pass.
+
+The first broader comparison had two isolated-fixture setup problems: missing
+public engine assets and an inaccessible node_modules symlink in the container.
+Preserved that run, copied the unchanged public assets and mounted cached deps
+read-only, then repeated the identical suite. No tests/assertions were weakened
+or skipped; no application changes made to address those setup errors.
+
+Stage A/B database, engine, cancellation, scoring and cloud implementations are
+unchanged. No live services/data/backups touched. Local correction A: a6fa760.
+Correction B is ready for its local commit; then archive the correction evidence
+and hand off for the limited independent re-review. Stage C is not accepted.

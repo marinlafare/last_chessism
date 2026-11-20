@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_c_corrections_in_progress",
+  "status": "stage_c_corrections_verified_pending_independent_review",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -8555,7 +8555,7 @@
     "next_action": "Accepted by focused independent review; preserve guarantees during authorized later stages."
   },
   "stage_c": {
-    "status": "corrections_required",
+    "status": "corrections_verified_pending_independent_review",
     "baseline": "5c037d8ede820da423f9004941a90b874dfb7510",
     "authorization": "270262d3-33bd-4c1e-9857-de1eed4f0d1b/Pasted text.txt",
     "batches": {
@@ -8634,8 +8634,8 @@
   "stage_c_corrections": {
     "baseline": "0f3e1057570fbefba622e7371233bfc269454b6f",
     "authorization": "761b6345-124c-4345-b398-e1592c72b217/Pasted text.txt",
-    "status": "in_progress",
-    "current_chunk": "B",
+    "status": "verified_pending_independent_review",
+    "current_chunk": null,
     "chunks": {
       "A": {
         "status": "verified",
@@ -8646,10 +8646,25 @@
         "red_error_entries": 1,
         "green_failures": 0,
         "green_errors": 0,
-        "green_skips": 0
+        "green_skips": 0,
+        "commit_sha": "a6fa7607709d9ca97317c662aa6005ef5d95fc68"
       },
       "B": {
-        "status": "in_progress"
+        "status": "verified",
+        "mounted_checks": 33,
+        "mounted_failures": 0,
+        "runtime_errors": 0,
+        "red_mounted_checks": 30,
+        "red_failures": 6,
+        "frontend_checks": 357,
+        "frontend_passed": 353,
+        "existing_failures": 4,
+        "new_failures": 0,
+        "skips": 0,
+        "identical_baseline_failure_details": true,
+        "new_storage_unit_tests": 6,
+        "build": "passed",
+        "architecture": "passed"
       }
     },
     "workspace": "/tmp/chessism-stage-c-corrections-20261119",
