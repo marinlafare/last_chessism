@@ -2736,3 +2736,26 @@ Final hashes match; no live data access or active owned verification processes.
 Detailed contract choices, exact baseline debt and test limitations recorded in
 docs/architecture/stage-c-corrections.md. Stop after documentation checkpoint.
 Next action is the focused independent re-review; Stage C is not accepted.
+
+### 2026-11-19 — Stage D authorization and source preparation
+A/B/C are accepted; latest focused C verdict ACCEPT WITH DOCUMENTED LIMITATIONS.
+Verified clean 5e12a21, expected repository/branch and accepted ancestry; all 716
+recorded C source hashes match. Stage D authorizes isolated historical restore,
+canonical population, actual integration and PostgreSQL-only backups. Existing
+services, databases and checkpoint remain protected; no cutover/push/deployment.
+
+Checkpoint read through an exact read-only Docker bind (not mounted in agent FS).
+Archive 8.06 GB; recorded source 100.21 GB; verification.json confirms PostgreSQL
+restore and counts across 197 tables. Original manifest.restore_tested=false is
+a capture-time field; separate completed verification.json has restore_tested=true
+and matching SHA256. Selected scale includes 1,211,156 public games, 48,060,717
+moves, 77,981,967 FENs. Use resource-limited detached restore plus monitor before
+inspecting actual historical mappings. No application code changed yet.
+
+Source restore launched at 18:26 CST into new volume
+chessism_stage_d_source_20261119; container
+chessism-stage-d-source-restore-20261119, initial host PID 996540.
+Fresh streamed archive checksum matches. Seven supervisor safety checks pass.
+Confirmed active table loading, isolated network and read-only checkpoint mount.
+Return control for the requested 120-second live monitor; final counts and restore
+success remain unverified. Resume instructions: docs/architecture/stage-d-progress.md.

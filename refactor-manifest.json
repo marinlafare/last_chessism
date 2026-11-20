@@ -8,7 +8,7 @@
   "authorization": "User explicitly requested implementation of the attached design; no additional design approval is pending.",
   "total_chunks": 6,
   "current_chunk": 6,
-  "status": "stage_c_corrections_verified_pending_independent_review",
+  "status": "stage_d_in_progress",
   "preflight_passed": true,
   "initial_worktree_clean": true,
   "verification": {
@@ -1418,7 +1418,7 @@
     "unresolved_testing_debt": "Exactly the approved three API failures, ten API errors, four frontend failures and unchanged suite skips; none repaired, hidden or weakened.",
     "acceptance_source": "User consolidated roadmap and explicit Stage A Batch 1 authorization; historical implementation log retained."
   },
-  "active_work": "stage_b",
+  "active_work": "stage_d",
   "stage_a_batch_1": {
     "name": "Canonical schema and persistence contracts",
     "status": "accepted_with_documented_limitations",
@@ -8555,7 +8555,7 @@
     "next_action": "Accepted by focused independent review; preserve guarantees during authorized later stages."
   },
   "stage_c": {
-    "status": "corrections_verified_pending_independent_review",
+    "status": "accepted_with_documented_limitations",
     "baseline": "5c037d8ede820da423f9004941a90b874dfb7510",
     "authorization": "270262d3-33bd-4c1e-9857-de1eed4f0d1b/Pasted text.txt",
     "batches": {
@@ -8563,7 +8563,7 @@
       "C2": "completed",
       "C3": "completed"
     },
-    "independent_acceptance": false,
+    "independent_acceptance": true,
     "verification_workspace": "/tmp/chessism-stage-c-20261119",
     "implementation_commit": "d4e80765e1a1072491813916ac81408a43d80e4f",
     "documentation": "docs/architecture/stage-c-completion.md",
@@ -8634,7 +8634,7 @@
   "stage_c_corrections": {
     "baseline": "0f3e1057570fbefba622e7371233bfc269454b6f",
     "authorization": "761b6345-124c-4345-b398-e1592c72b217/Pasted text.txt",
-    "status": "verified_pending_independent_review",
+    "status": "accepted_with_documented_limitations",
     "current_chunk": null,
     "chunks": {
       "A": {
@@ -8669,12 +8669,52 @@
       }
     },
     "workspace": "/tmp/chessism-stage-c-corrections-20261119",
-    "independent_acceptance": false,
+    "independent_acceptance": true,
     "documentation": "docs/architecture/stage-c-corrections.md",
     "evidence": "docs/architecture/evidence/stage-c-corrections-2026-11-19.tar.gz",
     "evidence_sha256": "ed8ee6ff68d97039216e11b46cd9c49d5f50e25e54e827953ca39ba40eb5e1da",
     "active_owned_processes": 0,
     "source_hash_drift": 0,
-    "next_action": "Focused independent re-review of only archive failure and late acknowledgment corrections; no Stage D."
+    "next_action": "Preserve accepted guarantees during Stage D."
+  },
+  "stage_d": {
+    "status": "in_progress",
+    "baseline": "5e12a21938812bbaf33d9c18326117471fa84770",
+    "authorization": "f55539a2-1d81-4080-8b19-f69c24a7e2f2/Pasted text.txt",
+    "workspace": "/tmp/chessism-canonical-stage-d-20261119",
+    "current_activity": "D1 isolated historical source restore running",
+    "activities": {
+      "D1": "in_progress",
+      "D2": "pending",
+      "D3": "pending"
+    },
+    "independent_acceptance": false,
+    "source_checkpoint": "/main-monitor-db-backups/chessism/refactor-checkpoints/p1-20261110T213730Z-b72de27c9a69",
+    "restore_budget": {
+      "cpus": 4,
+      "memory_gib": 8,
+      "restore_jobs": 2,
+      "source_gib": 150,
+      "minimum_free_gib": 80,
+      "seconds": 7200
+    },
+    "baseline_evidence": "Accepted Stage C archive; all 713 frontend and 3 backend hashes match; accepted A/B ancestry present.",
+    "restore_safety_tests": {
+      "tests": 7,
+      "failures": 0,
+      "errors": 0,
+      "skips": 0
+    },
+    "pending_process": {
+      "container": "chessism-stage-d-source-restore-20261119",
+      "volume": "chessism_stage_d_source_20261119",
+      "initial_host_pid": 996540,
+      "monitor": "/tmp/chessism-canonical-stage-d-20261119/monitor.py",
+      "status_file": "/tmp/chessism-canonical-stage-d-20261119/evidence/restore-status.json",
+      "checkpoint_checksum_verified": true,
+      "completion_verified": false
+    },
+    "handoff": "docs/architecture/stage-d-progress.md",
+    "next_action": "After the user reports completion, review terminal status, all 197 exact counts and clean shutdown before source mapping or canonical import."
   }
 }

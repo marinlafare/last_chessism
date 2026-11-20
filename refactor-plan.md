@@ -1497,3 +1497,45 @@ Both Stage C corrections verified in local commits a6fa760 and 2675b00. Backend
 zero new errors/skips. Build/architecture/integrity pass. Evidence and limitations
 are in docs/architecture/stage-c-corrections.md. No owned processes remain. Stop
 for focused independent re-review; Stage C remains unaccepted.
+
+
+## Authorized Stage D — final integration and population (2026-11-19)
+Entry: clean accepted 5e12a21; A/B/C independently accepted. Authorization:
+f55539a2-1d81-4080-8b19-f69c24a7e2f2/Pasted text.txt. Prior stage stop notes are
+historical; implement D1/D2/D3 without further routine approval cycles.
+
+D1: restore the exact verified historical PostgreSQL archive into an isolated
+source, validate all 197 table counts, then make it read-only. Initialize a distinct
+fresh target through canonical.initialize; write an explicit one-time bounded
+importer with representative mappings before full selected-data population. Map
+players/games/moves/variants/custom starts/zero moves/FEN identities/evaluations
+and retained authoritative records; inventory unsupported records. No fabricated
+score provenance. Account policy: preserve necessary ownership identities but
+never reactivate historical sessions or copied credentials; use isolated synthetic
+accounts for integration, and explicit provisioning before any later cutover.
+Rebuild derived data where appropriate. Files: focused scripts/stage_d_* tools,
+import helpers if needed, fixtures, tests and concise docs/architecture/stage-d*.
+Gate: representative mappings, reproducible full import/counts/integrity within
+explicit budgets; failures leave source/evidence and report exact discrepancies.
+
+D2: isolated API/ARQ/Redis/Stockfish/frontend against canonical target. Exercise
+ingestion, FEN extraction, analysis, persistence/outcomes, errors/cancellation,
+preview confirmation, summaries/analytics/export/research/auth isolation and
+browser presentation. Demonstrated integration defects may be fixed in the
+affected operation/adapter/caller with focused regression coverage. Cloud is
+controlled simulation, never deployed GCP operation. Preserve A/B/C boundaries.
+
+D3: explicit PostgreSQL-only backup/restore, including empty/partial canonical
+databases and schema validation, retain legitimate combined backup behavior.
+One necessary broader comparison near completion, preserve known baseline debt.
+Provide reproducible dev setup, source integrity/evidence, local coherent commits
+and final acceptance handoff. No live service switch, push/merge or deployment.
+
+Initial historical restore budget: 4 CPUs, 8 GiB RAM, no extra swap, 2 restore
+workers, 150 GiB source database ceiling, at least 80 GiB filesystem free, two-hour
+wall-clock ceiling including validation. Source checkpoint is 8,064,595,505 bytes;
+historical database recorded as 100,211,055,975 bytes. Future canonical import gets
+a separate budget before launch (provisional target ceiling 140 GiB). Stop cleanly
+on budget exhaustion; preserve partial disposable data and evidence, never weaken
+integrity. Long operations use a detached supervisor and a 120-second single-screen
+monitor; return control after confirmed startup. No existing service is modified.
