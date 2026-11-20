@@ -1,6 +1,10 @@
 # Stage C — frontend state architecture
 
 Implementation complete and verified; **independent acceptance pending**.
+The initial independent review requested two corrections. Both are now implemented
+and verified; see [the correction handoff](stage-c-corrections.md) for the current
+state and focused re-review scope. Original implementation evidence below remains
+as the baseline record.
 Stage A and Stage B remain formally accepted. No Stage D work started.
 
 - Repository: `/home/jon/Desktop/workshop/last_chessism`

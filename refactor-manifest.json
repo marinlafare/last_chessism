@@ -8570,7 +8570,7 @@
     "evidence": "docs/architecture/evidence/stage-c-frontend-2026-11-19.tar.gz",
     "evidence_sha256": "47f9d46f9fb525143ed26105135347aef03a62b2fd534604b7795ed6f5737d15",
     "completed_at": "2026-11-19T22:38:54.575260+00:00",
-    "next_action": "Implement only authorized corrections A and B; then focused independent review.",
+    "next_action": "Focused independent re-review of only archive failure and late acknowledgment corrections; no Stage D.",
     "verification": {
       "frontend_baseline": {
         "tests": 346,
@@ -8664,10 +8664,17 @@
         "identical_baseline_failure_details": true,
         "new_storage_unit_tests": 6,
         "build": "passed",
-        "architecture": "passed"
+        "architecture": "passed",
+        "commit_sha": "2675b0013f98dc62e2ea7fc8bcf05e2c1ec9cb63"
       }
     },
     "workspace": "/tmp/chessism-stage-c-corrections-20261119",
-    "independent_acceptance": false
+    "independent_acceptance": false,
+    "documentation": "docs/architecture/stage-c-corrections.md",
+    "evidence": "docs/architecture/evidence/stage-c-corrections-2026-11-19.tar.gz",
+    "evidence_sha256": "ed8ee6ff68d97039216e11b46cd9c49d5f50e25e54e827953ca39ba40eb5e1da",
+    "active_owned_processes": 0,
+    "source_hash_drift": 0,
+    "next_action": "Focused independent re-review of only archive failure and late acknowledgment corrections; no Stage D."
   }
 }

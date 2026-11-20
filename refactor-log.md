@@ -2728,3 +2728,11 @@ Stage A/B database, engine, cancellation, scoring and cloud implementations are
 unchanged. No live services/data/backups touched. Local correction A: a6fa760.
 Correction B is ready for its local commit; then archive the correction evidence
 and hand off for the limited independent re-review. Stage C is not accepted.
+
+### Stage C corrections — final handoff
+Local correction commits: a6fa760 and 2675b0013f98dc62e2ea7fc8bcf05e2c1ec9cb63. Evidence archive
+stage-c-corrections-2026-11-19.tar.gz, SHA256 ed8ee6ff68d97039216e11b46cd9c49d5f50e25e54e827953ca39ba40eb5e1da.
+Final hashes match; no live data access or active owned verification processes.
+Detailed contract choices, exact baseline debt and test limitations recorded in
+docs/architecture/stage-c-corrections.md. Stop after documentation checkpoint.
+Next action is the focused independent re-review; Stage C is not accepted.

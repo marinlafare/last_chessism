@@ -1491,3 +1491,9 @@ Commit: fix: observe tracked job acknowledgments across navigation.
 Record both verified chunks, final source hashes and archived evidence. No live
 data/services, production, pushes, deployment or Stage D. Under-five-minute gates
 run directly. Stop pending a focused independent correction review.
+
+Both Stage C corrections verified in local commits a6fa760 and 2675b00. Backend
+70/70; mounted React 33/33; frontend 357/353/same four exact baseline failures,
+zero new errors/skips. Build/architecture/integrity pass. Evidence and limitations
+are in docs/architecture/stage-c-corrections.md. No owned processes remain. Stop
+for focused independent re-review; Stage C remains unaccepted.
